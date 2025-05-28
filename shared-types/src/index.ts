@@ -40,9 +40,10 @@ export interface PlayerState {
   pendingDrawnCardSource?: 'deck' | 'discard' | null; // Source of the pending drawn card
   pendingSpecialAbility?: {
     card: Card; // The K/Q/J card
-    source: 'draw' | 'discard'; // How it was triggered
+    source: 'draw' | 'discard' | 'stack'; // How it was triggered
     // Optionally, more fields for ability resolution
   } | null;
+  quickActionPenalty?: boolean; // True if player needs to draw a penalty card
   // We might add fields like: score: number etc. later
 }
 
@@ -50,6 +51,14 @@ export interface CheckGameState {
   deck: Card[];
   players: { [playerID: string]: PlayerState };
   discardPile: Card[];
+  specialAbilityStack?: { card: Card; playerID: string }[]; // Stack of special cards to resolve
+  stackActive?: boolean; // True if stacking is in progress
+  quickActionWindow?: {
+    active: boolean;
+    startTime: number; // Unix timestamp when window opened
+    duration: number; // Duration in milliseconds
+    topCard?: Card; // Card that can be matched
+  };
   // We will add currentPhase, etc. here or let boardgame.io manage it via ctx
 }
 

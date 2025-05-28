@@ -19,11 +19,20 @@
   - Server validates, performs swap, discards the special card, and ends the turn
   - Peeking is handled client-side but validated by the server
   - If a K/Q/J is drawn, the player may swap it into their hand (no ability triggered) or discard it immediately (ability is triggered)
+- Stacking special abilities:
+  - Allow consecutive discards of matching K/Q/J, with abilities resolved in reverse order (LIFO)
+  - Track stacks with `specialAbilityStack` and `stackActive` in game state
+  - Out-of-turn stacking through `stackSpecialCard` move
+  - Validate matching rank for stacking
+  - Resolve abilities in LIFO order using `resolveStack`
+- Quick action (matching card discard):
+  - Allow out-of-turn matching discards to form pairs
+  - 5-second window for quick actions after each non-special card discard
+  - Penalties (draw a card) for incorrect attempts
+  - Automatic "Check" trigger when a player's hand is emptied via quick action
 - Documentation: PROJECT_AI_NOTES.md is up to date with all rules, implementation details, and lessons learned
 
 ### ⏳ What is LEFT
-- Stacking special abilities: allow consecutive discards of matching K/Q/J, with abilities resolved in reverse order (LIFO)
-- Quick action (matching card discard): allow out-of-turn matching discards to form pairs, with penalties for incorrect discards
 - Calling "Check" and end-of-round: allow a player to call "Check" to end the round, lock their hand, and trigger final turns for others
 - Scoring: reveal all cards, calculate scores, and determine the winner at the end of the round
 - Player locking: lock a player's hand after calling "Check" or discarding all cards
@@ -285,6 +294,92 @@
 - If a K/Q/J is drawn, the player may swap it into their hand (no ability triggered) or discard it immediately (ability is triggered).
 
 **Next up:** Stacking (consecutive special card discards), quick action, or other advanced features.
+
+## 11. Special Ability Stacking Implementation
+
+The stacking mechanism for special abilities (K/Q/J) has been implemented with the following features:
+
+**Core Components:**
+- `specialAbilityStack`: Array in game state tracking stacked cards and their owners
+- `stackActive`: Boolean flag indicating when stacking is in progress
+- New moves: `stackSpecialCard` and `resolveStack`
+
+**Stacking Rules:**
+1. When a K/Q/J is discarded (via normal discard or drawn card discard):
+   - A new stack is started with this card
+   - Other players have the opportunity to add matching cards
+2. While a stack is active:
+   - Players can discard matching K/Q/J cards from their hand using `stackSpecialCard`
+   - Added cards must match the rank of the last stacked card
+   - Cards are added to the stack and removed from the player's hand
+
+**Stack Resolution:**
+1. When no more cards are added to the stack:
+   - Abilities are resolved in LIFO order (last in, first out)
+   - Each card's ability is set up as a `pendingSpecialAbility` for its owner
+   - The standard `resolveSpecialAbility` move handles the actual ability resolution
+2. After each ability resolution:
+   - If more cards are in the stack, `resolveStack` is called automatically
+   - If the stack is empty, the turn ends
+
+**Integration:**
+- Updated the normal discard paths (`swapAndDiscard`, `discardDrawnCard`) to initiate stacks
+- Modified `resolveSpecialAbility` to trigger `resolveStack` after ability resolution if more cards are in the stack
+- Added validation to ensure only matching cards can be stacked
+- Implemented proper state tracking for the entire stacking sequence
+
+**Next Steps:**
+- Implement quick action (matching card discard) feature
+- Add frontend UI for stacking interaction
+- Test edge cases and concurrent stack operations
+
+## 12. Quick Action Implementation
+
+The quick action mechanic (out-of-turn matching card discards) has been implemented with the following features:
+
+**Core Components:**
+- `quickActionWindow` in game state tracks:
+  - `active`: Whether quick actions are currently allowed
+  - `startTime`: When the window opened (timestamp)
+  - `duration`: How long the window stays open (5 seconds)
+  - `topCard`: The card that can be matched
+- `quickActionPenalty` flag in player state for tracking failed attempts
+
+**Quick Action Flow:**
+1. Window Opening:
+   - When a non-special card is discarded (via normal discard or drawn card discard)
+   - 5-second window opens for all players to attempt matches
+   - Only one successful match allowed per window
+
+2. Matching Attempts:
+   - Players can attempt to discard a matching card (same rank) using `attemptQuickAction`
+   - Successful match:
+     - Card is removed from hand and added to discard pile
+     - Quick action window closes
+     - If hand is emptied, triggers "Check" (TODO)
+   - Failed match:
+     - Player draws a penalty card immediately
+     - Quick action window remains open for other players
+
+**Integration:**
+- Updated `swapAndDiscard` and `discardDrawnCard` to open quick action windows
+- Added helper functions:
+  - `isQuickActionWindowOpen`: Validates window status
+  - `openQuickActionWindow`: Creates new windows
+  - `closeQuickActionWindow`: Closes after successful match
+- Enhanced game state initialization with quick action window defaults
+- Added to available moves in playPhase
+
+**Next Steps:**
+- Implement "Check" logic for empty hand wins
+- Add frontend UI components:
+  - Visual timer for quick action window
+  - Quick action attempt controls
+  - Feedback for successful/failed attempts
+- Test edge cases:
+  - Multiple simultaneous attempts
+  - Window timing accuracy
+  - Penalty card application
 
 ---
 *Last Updated: 2024-07-28* 
