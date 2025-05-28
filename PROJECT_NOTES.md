@@ -41,7 +41,14 @@
     - Both methods initiate `finalTurnsPhase` and reset `G.finalTurnsTaken = 0`.
     - `finalTurnsPhase` logic remains (gives other eligible players one final turn).
   - **Scoring Phase:** Logic remains (calculates scores, determines winner, ends game).
-- Documentation: PROJECT_AI_NOTES.md rules section is authoritative. This "What is DONE" section is being updated.
+  - **Server-Side Edge Case Refinements Implemented:**
+    - `attemptMatch`: Ensures special pair abilities (LIFO) are set up *before* auto-"Call Check" logic processes. If auto-"Check" occurs with pending LIFO abilities, transitions to `abilityResolutionStage` first, then to `finalTurnsPhase` after abilities resolve.
+    - `resolveSpecialAbility`:
+      - Skips ability execution if the player `isLocked`, ensuring state is cleaned (pending ability cleared, `lastResolvedAbilitySource` set for LIFO).
+      - Correctly handles "fizzled" abilities (e.g., due to invalid arguments from client) by always clearing `pendingSpecialAbility` and setting `G.lastResolvedAbilitySource` to maintain LIFO integrity.
+      - Removed an erroneous duplicate push of the special card to `G.discardPile`.
+    - `abilityResolutionStage.onEnd`: After LIFO sequence completion (or single ability resolution), correctly transitions to `finalTurnsPhase` if `G.playerWhoCalledCheck` is set (e.g., from an auto-"Check" during the ability sequence).
+- Documentation: PROJECT_NOTES.md rules section is authoritative. This "What is DONE" section is being updated.
 
 ### ⏳ What is LEFT
 - **Frontend Implementation:**
@@ -53,7 +60,7 @@
 - **Server-Side Refinements & Testing:**
   - Thorough playtesting of the new "Unified Matching/Stacking" and ability resolution flow.
   - Ensure robust turn management after `matchingStage` and `abilityResolutionStage` conclude (e.g., original player's turn correctly ends or continues).
-  - Consider edge cases for LIFO ability resolution (e.g., player involved in LIFO calls Check).
+  - Consider edge cases for LIFO ability resolution (e.g., player involved in LIFO calls Check). -> Largely addressed by recent refinements; minor specific scenarios might still warrant a quick check during playtesting.
 - CORS configuration for server (for frontend connection).
 - (Optional) User authentication, lobbies, persistent leaderboards.
 

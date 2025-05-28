@@ -107,45 +107,106 @@ const allGameMoves = {
     const player = G.players[playerID];
     if (!player || !player.pendingSpecialAbility) return;
     
-    const { card } = player.pendingSpecialAbility;
+    // Scenario 2: Locked player in abilityResolutionStage
+    if (player.isLocked) {
+      console.log(`Player ${playerID} is locked. Skipping resolveSpecialAbility for ${player.pendingSpecialAbility.card.rank}.`);
+      G.lastResolvedAbilitySource = player.pendingSpecialAbility.source;
+      player.pendingSpecialAbility = null;
+      events.endStage();
+      return;
+    }
+    
+    const { card, source } = player.pendingSpecialAbility; // Destructure source too for clarity
+    let abilityPerformed = false;
+
     // Ability logic
     if (card.rank === Rank.King) {
       // King: Peek at any two cards, then swap any two cards
-      if (!abilityArgs || !abilityArgs.peekTargets || abilityArgs.peekTargets.length !== 2 || !abilityArgs.swapA || !abilityArgs.swapB) return;
-      // Peeking is a client-side effect; server just validates
-      // Swap
-      const a = G.players[abilityArgs.swapA.playerID]?.hand[abilityArgs.swapA.cardIndex];
-      const b = G.players[abilityArgs.swapB.playerID]?.hand[abilityArgs.swapB.cardIndex];
-      if (a === undefined || b === undefined) return;
-      G.players[abilityArgs.swapA.playerID].hand[abilityArgs.swapA.cardIndex] = b;
-      G.players[abilityArgs.swapB.playerID].hand[abilityArgs.swapB.cardIndex] = a;
+      if (abilityArgs && abilityArgs.peekTargets && abilityArgs.peekTargets.length === 2 && abilityArgs.swapA && abilityArgs.swapB) {
+        // Peeking is a client-side effect; server just validates
+        // Swap
+        const aPlayer = G.players[abilityArgs.swapA.playerID];
+        const bPlayer = G.players[abilityArgs.swapB.playerID];
+        if (aPlayer && bPlayer) {
+            const aCard = aPlayer.hand[abilityArgs.swapA.cardIndex];
+            const bCard = bPlayer.hand[abilityArgs.swapB.cardIndex];
+            if (aCard !== undefined && bCard !== undefined) {
+              aPlayer.hand[abilityArgs.swapA.cardIndex] = bCard;
+              bPlayer.hand[abilityArgs.swapB.cardIndex] = aCard;
+              abilityPerformed = true;
+            } else {
+                console.warn("resolveSpecialAbility (King): Card(s) for swap not found at specified indices.");
+            }
+        } else {
+            console.warn("resolveSpecialAbility (King): Player(s) for swap not found.");
+        }
+      } else {
+        console.warn("resolveSpecialAbility (King): Invalid or missing arguments for King ability.");
+      }
     } else if (card.rank === Rank.Queen) {
       // Queen: Peek at any one card, then swap any two cards
-      if (!abilityArgs || !abilityArgs.peekTargets || abilityArgs.peekTargets.length !== 1 || !abilityArgs.swapA || !abilityArgs.swapB) return;
-      // Peeking is a client-side effect; server just validates
-      // Swap
-      const a = G.players[abilityArgs.swapA.playerID]?.hand[abilityArgs.swapA.cardIndex];
-      const b = G.players[abilityArgs.swapB.playerID]?.hand[abilityArgs.swapB.cardIndex];
-      if (a === undefined || b === undefined) return;
-      G.players[abilityArgs.swapA.playerID].hand[abilityArgs.swapA.cardIndex] = b;
-      G.players[abilityArgs.swapB.playerID].hand[abilityArgs.swapB.cardIndex] = a;
+      if (abilityArgs && abilityArgs.peekTargets && abilityArgs.peekTargets.length === 1 && abilityArgs.swapA && abilityArgs.swapB) {
+        // Peeking is a client-side effect; server just validates
+        // Swap
+        const aPlayer = G.players[abilityArgs.swapA.playerID];
+        const bPlayer = G.players[abilityArgs.swapB.playerID];
+        if (aPlayer && bPlayer) {
+            const aCard = aPlayer.hand[abilityArgs.swapA.cardIndex];
+            const bCard = bPlayer.hand[abilityArgs.swapB.cardIndex];
+            if (aCard !== undefined && bCard !== undefined) {
+              aPlayer.hand[abilityArgs.swapA.cardIndex] = bCard;
+              bPlayer.hand[abilityArgs.swapB.cardIndex] = aCard;
+              abilityPerformed = true;
+            } else {
+                console.warn("resolveSpecialAbility (Queen): Card(s) for swap not found at specified indices.");
+            }
+        } else {
+            console.warn("resolveSpecialAbility (Queen): Player(s) for swap not found.");
+        }
+      } else {
+        console.warn("resolveSpecialAbility (Queen): Invalid or missing arguments for Queen ability.");
+      }
     } else if (card.rank === Rank.Jack) {
       // Jack: Swap any two cards
-      if (!abilityArgs || !abilityArgs.swapA || !abilityArgs.swapB) return;
-      const a = G.players[abilityArgs.swapA.playerID]?.hand[abilityArgs.swapA.cardIndex];
-      const b = G.players[abilityArgs.swapB.playerID]?.hand[abilityArgs.swapB.cardIndex];
-      if (a === undefined || b === undefined) return;
-      G.players[abilityArgs.swapA.playerID].hand[abilityArgs.swapA.cardIndex] = b;
-      G.players[abilityArgs.swapB.playerID].hand[abilityArgs.swapB.cardIndex] = a;
+      if (abilityArgs && abilityArgs.swapA && abilityArgs.swapB) {
+        const aPlayer = G.players[abilityArgs.swapA.playerID];
+        const bPlayer = G.players[abilityArgs.swapB.playerID];
+        if (aPlayer && bPlayer) {
+            const aCard = aPlayer.hand[abilityArgs.swapA.cardIndex];
+            const bCard = bPlayer.hand[abilityArgs.swapB.cardIndex];
+            if (aCard !== undefined && bCard !== undefined) {
+              aPlayer.hand[abilityArgs.swapA.cardIndex] = bCard;
+              bPlayer.hand[abilityArgs.swapB.cardIndex] = aCard;
+              abilityPerformed = true;
+            } else {
+                console.warn("resolveSpecialAbility (Jack): Card(s) for swap not found at specified indices.");
+            }
+        } else {
+            console.warn("resolveSpecialAbility (Jack): Player(s) for swap not found.");
+        }
+      } else {
+        console.warn("resolveSpecialAbility (Jack): Invalid or missing arguments for Jack ability.");
+      }
     } else {
-      // Not a special card
-      return;
+      // Not a special card - should not happen if pendingSpecialAbility is set correctly
+      console.error(`resolveSpecialAbility called for non-special card: ${card.rank}`);
+      // Still ensure state is cleaned up
     }
-    // After resolving ability
-    G.discardPile.push(card);
-    G.lastResolvedAbilitySource = player.pendingSpecialAbility.source; // Store source before nullifying
+    
+    // After resolving ability (or attempting to)
+    // Scenario 3: Remove erroneous discardPile.push
+    // G.discardPile.push(card); // REMOVED - card is already on discard pile
+
+    // Scenario 4: Always set lastResolvedAbilitySource and nullify pendingSpecialAbility
+    G.lastResolvedAbilitySource = source; // Use destructured source
     player.pendingSpecialAbility = null;
     
+    if (abilityPerformed) {
+        console.log(`Player ${playerID} resolved ${card.rank} ability successfully.`);
+    } else {
+        console.log(`Player ${playerID} resolved ${card.rank} ability (fizzled or args invalid).`);
+    }
+
     // When called from abilityResolutionStage, this should end the player's turn *within the stage*.
     // The stage's onEnd will then decide what happens next (e.g., resolve another ability or end the stage).
     events.endStage(); // Changed from events.endTurn()
@@ -209,14 +270,30 @@ const allGameMoves = {
 
     if (cardY.rank === cardX.rank) {
       console.log(`Player ${playerID} successfully matched ${cardY.rank} with ${cardX.rank}`);
-      // 1. Update player's hand (remove cardY)
       player.hand.splice(handIndex, 1);
-      // 2. Add cardY to discardPile (on top of cardX)
       G.discardPile.push(cardY);
-      // 3. Set discardPileIsSealed = true
       G.discardPileIsSealed = true;
 
-      // 4. Handle auto-check if matcher's hand is empty
+      let isAutoCheck = false;
+      let abilityResolutionRequired = false;
+      let playerForAbilityResolution: string | null = playerID; // Default to matcher for their own ability
+
+      const isCardXSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardX.rank);
+      const isCardYSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardY.rank);
+
+      if (isCardXSpecial && isCardYSpecial) { // Both are special and of same rank
+        console.log(`Special pair matched: ${cardY.rank} on ${cardX.rank}. Setting up LIFO abilities.`);
+        // Scenario 1 refinement: Always set up abilities first
+        player.pendingSpecialAbility = { card: cardY, source: 'stack' }; // Matcher's card (Y)
+        if (G.players[originalPlayerID]) {
+          G.players[originalPlayerID].pendingSpecialAbility = { card: cardX, source: 'stackSecondOfPair' }; 
+        } else {
+            console.error(`Original discarder ${originalPlayerID} not found in G.players`);
+        }
+        abilityResolutionRequired = true;
+        playerForAbilityResolution = playerID; // Matcher (Y) resolves first
+      }
+      
       if (player.hand.length === 0) {
         console.log(`Player ${playerID} emptied their hand by matching and calls Check.`);
         player.hasCalledCheck = true;
@@ -225,35 +302,30 @@ const allGameMoves = {
           G.playerWhoCalledCheck = playerID;
         }
         G.finalTurnsTaken = 0; 
-        // Important: Clear matching opportunity before changing phase
-        G.matchingOpportunityInfo = null;
-        events.setPhase('finalTurnsPhase');
-        // No further action in this move if phase changes.
-        return; // Exit move explicitly
+        isAutoCheck = true;
       }
 
-      // 5. Special Card Matched Pair (LIFO abilities)
-      const isCardXSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardX.rank);
-      const isCardYSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardY.rank);
+      G.matchingOpportunityInfo = null; // Clear matching opportunity info as it's resolved by this match
 
-      if (isCardXSpecial && isCardYSpecial) { // Both are special and of same rank
-        console.log(`Special pair matched: ${cardY.rank} on ${cardX.rank}. Setting up LIFO abilities.`);
-        // Y's ability (matcher) first, then X's ability (original discarder)
-        player.pendingSpecialAbility = { card: cardY, source: 'stack' }; // Matcher's card (Y)
-        
-        if (G.players[originalPlayerID]) {
-          // Set pending ability for the original discarder (owner of Card X)
-          // It will be resolved *after* cardY's ability.
-          G.players[originalPlayerID].pendingSpecialAbility = { card: cardX, source: 'stackSecondOfPair' }; 
-        } else {
-            console.error(`Original discarder ${originalPlayerID} not found in G.players`);
-        }
-        // The abilityResolutionStage will need to identify who goes first (Y) then second (X).
+      if (isAutoCheck && abilityResolutionRequired) {
+        // Scenario 1 refinement: Auto-Check with abilities pending. Go to ability resolution.
+        console.log("Auto-Check with special pair. Transitioning to abilityResolutionStage first for matcher.");
+        events.setActivePlayers({ player: playerForAbilityResolution, stage: 'abilityResolutionStage'});
+        return; 
+      } else if (isAutoCheck && !abilityResolutionRequired) {
+        // Auto-Check, no special abilities from match. Go directly to final turns.
+        console.log("Auto-Check, no special abilities from match. Transitioning to finalTurnsPhase.");
+        events.setPhase('finalTurnsPhase');
+        return;
+      } else if (!isAutoCheck && abilityResolutionRequired) {
+        // Match made, abilities pending, but hand not empty. Go to ability resolution.
+        console.log("Match made with special pair, hand not empty. Transitioning to abilityResolutionStage for matcher.");
+        events.setActivePlayers({ player: playerForAbilityResolution, stage: 'abilityResolutionStage'});
+        return;
       }
       
-      // 6. Clear matching opportunity info - this signals a successful match occurred.
-      G.matchingOpportunityInfo = null; 
-      events.endStage(); // Or events.pass() - lets boardgame.io handle ending player's participation in stage
+      // If none of the above (e.g., normal match, no auto-check, no abilities), just end stage.
+      events.endStage();
 
     } else {
       console.log(`Player ${playerID} failed to match ${cardY.rank} with ${cardX.rank}. Invalid move.`);
@@ -630,35 +702,50 @@ const CheckGame: Game<SharedCheckGameState> = {
             const lastSource = G.lastResolvedAbilitySource;
             G.lastResolvedAbilitySource = null; // Clear it after reading
 
+            let nextStageTransitioned = false;
+
             if (G.players[resolvedPlayerID]?.pendingSpecialAbility) {
                 console.warn(`Player ${resolvedPlayerID} ended turn in abilityResolutionStage, but pendingSpecialAbility is still set. Ability not properly resolved by move?`);
-                // This might indicate an issue with resolveSpecialAbility move not clearing it, or player escaping the move.
             }
 
             if (lastSource === 'stack') { // Card Y (matcher's card) was just resolved
                 let playerX_ID: string | null = null;
-                for (const playerID in G.players) {
-                    if (G.players[playerID]?.pendingSpecialAbility?.source === 'stackSecondOfPair') {
-                        playerX_ID = playerID;
+                for (const pID in G.players) { // Changed playerID to pID to avoid conflict with outer scope
+                    if (G.players[pID]?.pendingSpecialAbility?.source === 'stackSecondOfPair') {
+                        playerX_ID = pID;
                         break;
                     }
                 }
                 if (playerX_ID) {
                     console.log(`Ability from source 'stack' resolved. Transitioning to player ${playerX_ID} for 'stackSecondOfPair' ability.`);
                     events.setActivePlayers({ player: playerX_ID, stage: 'abilityResolutionStage' });
-                    return; // Stay in abilityResolutionStage for the next player
+                    nextStageTransitioned = true; 
                 } else {
-                    console.log("Ability from source 'stack' resolved. No 'stackSecondOfPair' found. Ending stage.");
+                    console.log("Ability from source 'stack' resolved. No 'stackSecondOfPair' found.");
+                    // Proceed to check for G.playerWhoCalledCheck
                 }
             } else if (lastSource === 'discard' || lastSource === 'stackSecondOfPair') {
-                console.log(`Ability from source '${lastSource}' resolved. This is the end of this ability sequence. Ending stage.`);
-            } else if (lastSource) {
-                console.warn(`Ability resolved with unexpected source '${lastSource}'. Ending stage.`);
-            } else {
-                console.log("abilityResolutionStage.onEnd: No lastResolvedAbilitySource found. Likely ability was not resolved or first turn. Ending stage.");
+                console.log(`Ability from source '${lastSource}' resolved. This is the end of this ability sequence.`);
+                 // Proceed to check for G.playerWhoCalledCheck
+            } else if (lastSource) { // lastSource is not null, but not one of the expected ones
+                console.warn(`Ability resolved with unexpected source '${lastSource}'.`);
+                 // Proceed to check for G.playerWhoCalledCheck
+            } else { // lastSource is null (e.g. ability skipped due to lock, or first turn in stage where resolveSpecialAbility wasn't called yet for some reason)
+                console.log("abilityResolutionStage.onEnd: No lastResolvedAbilitySource. Current player's action in stage ended.");
+                // Proceed to check for G.playerWhoCalledCheck
             }
             
-            events.endStage(); // Default action: end the stage
+            // Scenario 1 refinement: Check if "Check" has been called (e.g., by an auto-check during ability resolution sequence)
+            if (!nextStageTransitioned && G.playerWhoCalledCheck) {
+                console.log(`Player ${G.playerWhoCalledCheck} has called Check. Transitioning to finalTurnsPhase from abilityResolutionStage.`);
+                events.setPhase('finalTurnsPhase');
+                nextStageTransitioned = true;
+            }
+
+            if (!nextStageTransitioned) {
+                console.log("Ending abilityResolutionStage. No further LIFO or Check-triggered phase change.");
+                events.endStage(); // Default action: end the stage if no other transitions occurred
+            }
         }
       }
     },
