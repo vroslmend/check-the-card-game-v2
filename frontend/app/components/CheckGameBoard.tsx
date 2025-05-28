@@ -1,6 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Ctx } from 'boardgame.io'; // Import Ctx type from boardgame.io
 import type { CheckGameState as ActualCheckGameState, Card, PlayerState } from 'shared-types'; // Import your specific game state and related types
+import { Rank } from 'shared-types'; // Import Rank separately as a value
+import PlayerHandComponent from './PlayerHandComponent';
+import DrawPileComponent from './DrawPileComponent';
+import DiscardPileComponent from './DiscardPileComponent';
+import CardComponent from './CardComponent'; // For displaying pendingDrawnCard
 
 // Define the props for the game board
 interface CheckGameBoardProps {
@@ -8,38 +13,328 @@ interface CheckGameBoardProps {
   ctx: Ctx;
   playerID: string | null;
   moves: any; // TODO: Define a proper type for moves based on your game's moves
-  // Add other props as needed, e.g., isActive, playerView, etc.
+  isActive: boolean; // True if it's the current player's turn for this client
+  // playerView: any; // boardgame.io provides this, might be useful later
+  // events: any; // For special events like endTurn, setStage, etc.
 }
 
-const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves }) => {
-  // Basic rendering to show some game state information
-  // This will be significantly expanded to render the actual game
+const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves, isActive }) => {
+  const [selectedHandCardIndex, setSelectedHandCardIndex] = useState<number | null>(null);
+  // Stores which of the current player's own cards should be temporarily shown face up
+  // e.g. for initial peek, or King/Queen ability peek result.
+  const [revealedCardLocations, setRevealedCardLocations] = useState<{ [playerID: string]: { [cardIndex: number]: boolean } }>({});
+  // State for multi-select, e.g. King ability peek targets
+  const [multiSelectedCardLocations, setMultiSelectedCardLocations] = useState<{ playerID: string, cardIndex: number }[]>([]);
+  // State for ability arguments if needed
+  const [abilityArgs, setAbilityArgs] = useState<any>(null);
 
-  if (!G) {
-    // G might be undefined before it's initialized or if there's an issue
+  useEffect(() => {
+    // Reset selections when phase or player changes
+    setSelectedHandCardIndex(null);
+    setMultiSelectedCardLocations([]);
+    setAbilityArgs(null);
+    // Potentially clear revealed cards if not sticky across turns/phases
+    // setRevealedCardLocations({});
+  }, [ctx.phase, ctx.currentPlayer]);
+
+  if (!G || G.players === undefined) {
     return <div className="p-4">Loading game state or error...</div>;
   }
 
+  const typedG = G as ActualCheckGameState; // Cast G to the full type
+  const currentPlayerFromG = typedG.players[ctx.currentPlayer];
+  const clientPlayerState = playerID ? typedG.players[playerID] : undefined;
+
+  // --- Move Handler Placeholders ---
+  const handleDrawFromDeck = () => {
+    if (isActive && moves.drawFromDeck) {
+      moves.drawFromDeck();
+      setSelectedHandCardIndex(null);
+    }
+  };
+
+  const handleDrawFromDiscard = () => {
+    if (isActive && moves.drawFromDiscard && !typedG.discardPileIsSealed) {
+      moves.drawFromDiscard();
+      setSelectedHandCardIndex(null);
+    }
+  };
+
+  const handleSwapAndDiscard = (handIndex: number) => {
+    if (isActive && moves.swapAndDiscard && clientPlayerState?.pendingDrawnCard) {
+      moves.swapAndDiscard(handIndex);
+      setSelectedHandCardIndex(null);
+    }
+  };
+
+  const handleDiscardDrawnCard = () => {
+    if (isActive && moves.discardDrawnCard && clientPlayerState?.pendingDrawnCard) {
+      moves.discardDrawnCard();
+      setSelectedHandCardIndex(null);
+    }
+  };
+
+  const handleAttemptMatch = (handIndex: number) => {
+    if (moves.attemptMatch && ctx.phase === 'matchingStage') {
+      // No isActive check for matchingStage, as any player can attempt
+      moves.attemptMatch(handIndex);
+      setSelectedHandCardIndex(null);
+    }
+  };
+
+  const handlePassMatch = () => {
+    if (moves.passMatch && ctx.phase === 'matchingStage') {
+      // No isActive check for matchingStage
+      moves.passMatch();
+    }
+  };
+
+  const handleCallCheck = () => {
+    if (isActive && moves.callCheck) {
+      moves.callCheck();
+    }
+  };
+
+  const handlePerformInitialPeek = () => {
+    if (isActive && moves.performPeek && multiSelectedCardLocations.length === 2 && playerID) {
+      const indicesToPeek = multiSelectedCardLocations.map(loc => loc.cardIndex);
+      moves.performPeek(indicesToPeek);
+      // Reveal these cards for the current player
+      const newReveals = { ...revealedCardLocations };
+      if (!newReveals[playerID]) newReveals[playerID] = {};
+      indicesToPeek.forEach(idx => { newReveals[playerID][idx] = true; });
+      setRevealedCardLocations(newReveals);
+      setMultiSelectedCardLocations([]);
+    }
+  };
+
+  const handleResolveSpecialAbility = () => {
+    if (isActive && moves.resolveSpecialAbility && clientPlayerState?.pendingSpecialAbility) {
+      // For now, pass the collected abilityArgs. This will need refinement based on specific ability.
+      moves.resolveSpecialAbility(abilityArgs);
+      setAbilityArgs(null);
+      setMultiSelectedCardLocations([]);
+      // Potentially clear some revealed cards if ability involved peeking then swapping to unknown spots.
+    }
+  };
+
+  // --- Card Click Handler ---
+  const handleCardClick = (clickedPlayerID: string, cardIndex: number) => {
+    if (!playerID || !clientPlayerState) return; // Spectator or no state
+
+    const isOwnCard = clickedPlayerID === playerID;
+    const currentPhase = ctx.phase;
+    const pendingAbility = clientPlayerState.pendingSpecialAbility?.card.rank;
+
+    // Initial Peek Phase: Select 2 cards from own hand
+    if (currentPhase === 'initialPeekPhase' && isActive && isOwnCard && !clientPlayerState.hasUsedInitialPeek) {
+      if (multiSelectedCardLocations.some(loc => loc.playerID === clickedPlayerID && loc.cardIndex === cardIndex)) {
+        setMultiSelectedCardLocations(prev => prev.filter(loc => !(loc.playerID === clickedPlayerID && loc.cardIndex === cardIndex)));
+      } else if (multiSelectedCardLocations.length < 2) {
+        setMultiSelectedCardLocations(prev => [...prev, { playerID: clickedPlayerID, cardIndex }]);
+      }
+      return;
+    }
+
+    // Player has drawn a card and needs to select one of their own to swap
+    if (clientPlayerState.pendingDrawnCard && isOwnCard && isActive) {
+      setSelectedHandCardIndex(cardIndex); // This card will be swapped out
+      return;
+    }
+
+    // Matching Stage: Player selects a card from their own hand to attempt a match
+    if (currentPhase === 'matchingStage' && isOwnCard) {
+      // Any player can attempt to match, isActive not strictly needed here for selection
+      setSelectedHandCardIndex(cardIndex);
+      return;
+    }
+
+    // Ability Resolution Stage (e.g., King, Queen, Jack)
+    if (currentPhase === 'abilityResolutionStage' && isActive && pendingAbility) {
+      const maxSelections = pendingAbility === Rank.King ? 2 : (pendingAbility === Rank.Queen ? 1 : 0); // Peek targets
+      // This simplified logic is for swap targets, peek targets selection should be distinct
+      // For now, let's assume King/Queen peek first, then this click is for swap
+      if (multiSelectedCardLocations.length < 2) { // Collect two cards for swap (A and B)
+        if (!multiSelectedCardLocations.some(loc => loc.playerID === clickedPlayerID && loc.cardIndex === cardIndex)) {
+          setMultiSelectedCardLocations(prev => [...prev, { playerID: clickedPlayerID, cardIndex }]);
+        }
+      }
+      // Update abilityArgs based on selection - this needs robust logic based on ability
+      if (multiSelectedCardLocations.length === 1 && pendingAbility === Rank.Queen) {
+        // Assume first click is peek target, if Q ability requires it
+        // For simplicity, we'll assume it has been peeked, and now we prepare for swap.
+        // This part is very rough and needs ability-specific UI states.
+      }
+      if (multiSelectedCardLocations.length === 2 && (pendingAbility === Rank.King || pendingAbility === Rank.Queen || pendingAbility === Rank.Jack)) {
+        setAbilityArgs({
+          // Example: these would be set based on a more complex UI flow
+          // peekTargets: pendingAbility === Rank.King ? [{...}, {...}] : (pendingAbility === Rank.Queen ? [{...}] : undefined),
+          swapA: multiSelectedCardLocations[0],
+          swapB: multiSelectedCardLocations[1],
+        });
+      }
+      return;
+    }
+    // Default: clear selection if clicking elsewhere or an invalid context
+    setSelectedHandCardIndex(null);
+    // setMultiSelectedCardLocations([]); // Decide if this should be cleared here
+  };
+
+  // Helper to determine if a card in the current player's hand should be shown face up
+  const getOwnCardsToShowFaceUp = () => {
+    if (!playerID || !clientPlayerState) return {};
+    const cardsToShow: { [cardIndex: number]: boolean } = {};
+    // Show during initial peek selection if it's one of the two allowed.
+    // In reality, initial peek is secret, so cards aren't turned face up on board.
+    // We use `revealedCardLocations` for cards player *knows* after peeking.
+    // This logic might need refinement: `performPeek` stores known cards, not makes them public.
+    if (clientPlayerState.hand) {
+      clientPlayerState.hand.forEach((_, index) => {
+        if (revealedCardLocations[playerID]?.[index]) {
+          cardsToShow[index] = true;
+        }
+        // Example: if game rules make certain cards always face-up for owner (not in Check rules)
+        // if (clientPlayerState.hand[index]?.somePublicProperty) cardsToShow[index] = true;
+      });
+    }
+    return cardsToShow;
+  };
+
+  // --- Render Game Board ---
   return (
-    <div className="game-board p-4 border border-gray-300 rounded-lg">
-      <h2 className="text-xl font-semibold mb-4">Check Game Board</h2>
+    <div className="game-board p-4 border border-gray-300 rounded-lg bg-gray-50 shadow-lg" style={{ fontFamily: 'Arial, sans-serif' }}>
+      <div className="text-center mb-4">
+        <h2 className="text-2xl font-bold mb-1">Check Game Board</h2>
+        <p className="text-sm text-gray-600">
+          Phase: <span className="font-semibold text-indigo-600">{ctx.phase}</span> | 
+          Current Turn: Player <span className="font-semibold text-red-600">{ctx.currentPlayer}</span>
+          {playerID && (
+            <span> | Your ID: <span className="font-semibold text-blue-600">{playerID}</span> {isActive ? "(Your Turn)" : ""}</span>
+          )}
+        </p>
+        {ctx.gameover && (
+          <div className="mt-2 p-2 bg-green-100 border border-green-600 text-green-800 rounded">
+            <strong>Round Over!</strong> Winner: {JSON.stringify(ctx.gameover?.winner)}
+            {/* TODO: Display scores properly */}
+          </div>
+        )}
+      </div>
+
+      {/* Player Hands Area */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {Object.keys(typedG.players).map(pID => (
+          <PlayerHandComponent
+            key={pID}
+            playerID={pID}
+            playerState={typedG.players[pID]}
+            isCurrentPlayerBoard={pID === playerID} // Is this hand for the viewing client's player?
+            onCardClick={handleCardClick} // Allow clicking on any card for abilities
+            selectedCardIndices={pID === playerID ? (selectedHandCardIndex !== null ? [selectedHandCardIndex] : []) : []}
+            currentPlayersCardsToShowFaceUp={pID === playerID ? getOwnCardsToShowFaceUp() : {}}
+          />
+        ))}
+      </div>
+
+      {/* Piles and Player Action Area */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 items-start">
+        <DrawPileComponent
+          canDraw={isActive && ctx.phase === 'playPhase' && !clientPlayerState?.pendingDrawnCard && !currentPlayerFromG?.pendingSpecialAbility}
+          onClick={handleDrawFromDeck}
+          numberOfCards={typedG.deck.length}
+        />
+
+        <DiscardPileComponent
+          topCard={typedG.discardPile.length > 0 ? typedG.discardPile[typedG.discardPile.length - 1] : null}
+          canDraw={isActive && ctx.phase === 'playPhase' && !clientPlayerState?.pendingDrawnCard && !typedG.discardPileIsSealed && !currentPlayerFromG?.pendingSpecialAbility}
+          onClick={handleDrawFromDiscard}
+          isSealed={typedG.discardPileIsSealed}
+          numberOfCards={typedG.discardPile.length}
+        />
+
+        {/* Current Player's Action Zone */}
+        {playerID && clientPlayerState && (
+          <div className="p-3 border border-blue-300 rounded-lg bg-blue-50">
+            <h4 className="text-lg font-semibold mb-2 text-blue-700">Your Actions (Player {playerID})</h4>
+            
+            {/* Displaying a drawn card before action */}
+            {clientPlayerState.pendingDrawnCard && (
+              <div className="mb-3 p-2 border border-dashed border-green-500 bg-green-50 rounded">
+                <p className="text-sm font-medium text-green-700">Drawn Card (from {clientPlayerState.pendingDrawnCardSource}):</p>
+                <div className="flex justify-center my-1">
+                  <CardComponent card={clientPlayerState.pendingDrawnCard} isFaceUp={true} />
+                </div>
+                {selectedHandCardIndex !== null && (
+                  <button 
+                    onClick={() => handleSwapAndDiscard(selectedHandCardIndex)} 
+                    className="w-full mt-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded text-sm">
+                    Swap with selected hand card (Pos: {selectedHandCardIndex})
+                  </button>
+                )}
+                {clientPlayerState.pendingDrawnCardSource === 'deck' && (
+                  <button 
+                    onClick={handleDiscardDrawnCard} 
+                    className="w-full mt-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-1 px-2 rounded text-sm">
+                    Discard Drawn Card
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Buttons for moves, conditional on phase and player state */}
+            {ctx.phase === 'initialPeekPhase' && isActive && !clientPlayerState.hasUsedInitialPeek && (
+              <div className="mb-2">
+                <p className="text-sm">Initial Peek: Select 2 of your cards to memorize.</p>
+                {multiSelectedCardLocations.length === 2 && (
+                  <button onClick={handlePerformInitialPeek} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-2 rounded text-sm">Confirm Peek</button>
+                )}
+              </div>
+            )}
+
+            {ctx.phase === 'playPhase' && isActive && !clientPlayerState.pendingDrawnCard && !clientPlayerState.pendingSpecialAbility && (
+              <button onClick={handleCallCheck} className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-sm mb-2">Call Check!</button>
+            )}
+
+            {ctx.phase === 'matchingStage' && (
+              <div className="mb-2">
+                <p className="text-sm font-medium">Matching Opportunity for: 
+                  <CardComponent card={typedG.matchingOpportunityInfo?.cardToMatch || null} isFaceUp={true} style={{display: 'inline-block', transform: 'scale(0.6)', margin: '0 5px'}}/> 
+                  (Rank: {typedG.matchingOpportunityInfo?.cardToMatch.rank})
+                </p>
+                {selectedHandCardIndex !== null && clientPlayerState.hand[selectedHandCardIndex] && (
+                  <button 
+                    onClick={() => handleAttemptMatch(selectedHandCardIndex)} 
+                    className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-2 rounded text-sm mb-1">
+                    Attempt Match with selected card (Rank: { (clientPlayerState.hand[selectedHandCardIndex] as Card)?.rank })
+                  </button>
+                )}
+                <button onClick={handlePassMatch} className="w-full bg-gray-400 hover:bg-gray-500 text-white font-bold py-1 px-2 rounded text-sm">Pass Match</button>
+              </div>
+            )}
+            
+            {ctx.phase === 'abilityResolutionStage' && isActive && clientPlayerState.pendingSpecialAbility && (
+              <div className="mb-2 p-2 border border-yellow-500 bg-yellow-50 rounded">
+                <p className="text-sm font-medium text-yellow-700">Resolve Ability: {clientPlayerState.pendingSpecialAbility.card.rank} (Source: {clientPlayerState.pendingSpecialAbility.source})</p>
+                <p className="text-xs">Selected for ability: {JSON.stringify(multiSelectedCardLocations)}</p>
+                <p className="text-xs">Args: {JSON.stringify(abilityArgs)}</p>
+                {/* TODO: More specific UI for selecting targets for K, Q, J based on abilityArgs state */} 
+                <button 
+                  onClick={handleResolveSpecialAbility} 
+                  disabled={!abilityArgs && !(clientPlayerState.pendingSpecialAbility.card.rank === Rank.Jack && multiSelectedCardLocations.length === 2) /* Basic disable, needs refinement*/}
+                  className="w-full mt-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-sm">
+                  Confirm Ability Action
+                </button>
+              </div>
+            )}
+
+          </div>
+        )}
+      </div>
       
-      <div className="mb-2">
-        <strong>Current Phase:</strong> {ctx.phase}
-      </div>
-      <div className="mb-2">
-        <strong>Current Player:</strong> {ctx.currentPlayer}
-      </div>
-      <div className="mb-4">
-        <strong>Your Player ID:</strong> {playerID || 'Spectator'}
-      </div>
-
-      <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
-        {JSON.stringify(G, null, 2)}
-      </pre>
-
-      {/* TODO: Add buttons for game moves here */}
-      {/* TODO: Render player hands, discard pile, deck etc. */}
+      {/* Debug Info - Can be removed for production */}
+      {/* <div className="mt-6 p-3 border border-gray-200 rounded bg-gray-100">
+        <h4 className="text-md font-semibold mb-1 text-gray-700">Debug State:</h4>
+        <pre className="text-xs overflow-x-auto">{JSON.stringify({ G: typedG, ctx, playerID, isActive, selectedHandCardIndex, multiSelectedCardLocations, revealedCardLocations, abilityArgs }, null, 2)}</pre>
+      </div> */}
     </div>
   );
 };

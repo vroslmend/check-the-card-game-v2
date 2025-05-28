@@ -24,7 +24,7 @@ export default function HomePage() {
         </div>
       </div>
       <div className="mt-8 p-4 border border-dashed border-gray-400 rounded-lg bg-gray-50 w-full">
-          <h2 className="text-xl font-semibold mb-2">Spectator View</h2>
+          <h2 className="text-xl font-semibold mb-2 text-green-500">Spectator View</h2>
           {/* Render a spectator client, ensure your CheckGameClient and Board can handle no playerID */}
           <CheckGameClient matchID="default-match" /> 
         </div>

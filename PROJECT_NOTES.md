@@ -36,6 +36,18 @@
     -   Basic `CheckGameBoard.tsx` and `CheckGameClient.tsx` components created.
     -   Client connects to `localhost:8000` and renders multiple player views.
     -   **Type Error Resolution:** `CheckGameBoardProps` updated to allow `G.players` to be `{}` during initial `boardgame.io` client setup, resolving type incompatibilities.
+    -   **New UI Components Created:**
+        -   `CardComponent.tsx`: Displays individual cards (face-up or face-down).
+        -   `PlayerHandComponent.tsx`: Renders a player's hand in a grid, handling card visibility.
+        -   `DrawPileComponent.tsx`: Displays the draw pile and handles draw interaction.
+        -   `DiscardPileComponent.tsx`: Displays the discard pile and handles interaction.
+    -   **`CheckGameBoard.tsx` Enhancements:**
+        -   Integrates `PlayerHandComponent`, `DrawPileComponent`, and `DiscardPileComponent`.
+        -   Displays game state (phase, current player), player hands, draw/discard piles.
+        -   Includes an "Action Zone" for the current player.
+        -   Basic state management for card selections (`selectedHandCardIndex`, `multiSelectedCardLocations`, `revealedCardLocations`, `abilityArgs`).
+        -   Placeholder move handlers and initial UI for different game phases (initial peek, play, matching, ability resolution).
+        -   `Rank` enum import fixed for value usage.
 -   **Frontend Build & Bundling (Webpack & Turbopack):**
     -   **Path Aliases:**
         -   `frontend/tsconfig.json` defines `server-game` alias pointing to `../server/dist/game-definition.js`.
@@ -53,11 +65,17 @@
 
 ### ⏳ What is LEFT
 -   **Frontend Implementation (Major Focus):**
-    -   Develop comprehensive React components for game display: visual card grid, player hands, discard pile, draw pile, game messages, turn indicators.
-    -   Implement UI for all game actions: drawing, selecting cards for swap/discard, peek/swap targets for abilities, making matching attempts, passing.
-    -   Visually represent `matchingStage` (e.g., highlighting discard, options to match/pass for all players).
-    -   Visually represent `abilityResolutionStage` (e.g., prompts for ability targets).
-    -   Handle and display game state updates dynamically.
+    -   **Refine UI Interactivity & Move Handlers:**
+        -   Connect placeholder move handlers in `CheckGameBoard.tsx` to `boardgame.io` moves.
+        -   Implement robust UI logic for complex actions (e.g., King/Queen ability target selection: peek targets, then swap targets).
+        -   Manage UI state for multi-step actions effectively.
+    -   **Game Visuals & User Experience:**
+        -   Improve overall styling and layout for a polished look and feel.
+        -   Add a dedicated game messages/log area.
+        -   Visually enhance representation of `matchingStage` and `abilityResolutionStage`.
+        -   Display scores clearly at the end of the round.
+    -   **Type Safety:** Define a proper TypeScript interface for the `moves` prop in `CheckGameBoardProps`.
+    -   Handle and display game state updates dynamically and smoothly.
 -   **Server-Side Refinements & Testing:**
     -   Thorough playtesting of all game phases and interactions.
     -   Verify turn management robustness after complex stage transitions.
