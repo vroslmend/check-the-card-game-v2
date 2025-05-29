@@ -53,7 +53,7 @@ const allGameMoves = {
       cardToMatch: discardedCard,
       originalPlayerID: playerID,
     };
-    events.setActivePlayers({ others: 'matchingStage', currentPlayer: 'matchingStage' });
+    events.setPhase('matchingStage');
   },
   discardDrawnCard: ({ G, playerID, events, ctx }: { G: SharedCheckGameState; playerID?: string; events: any, ctx: Ctx }) => {
     if (!playerID) return;
@@ -68,7 +68,7 @@ const allGameMoves = {
       cardToMatch: discardedCard,
       originalPlayerID: playerID,
     };
-    events.setActivePlayers({ others: 'matchingStage', currentPlayer: 'matchingStage' });
+    events.setPhase('matchingStage');
   },
   resolveSpecialAbility: ({ G, playerID, events }: { G: SharedCheckGameState; playerID?: string; events: any }, abilityArgs?: any) => {
     if (!playerID) return;
@@ -137,7 +137,20 @@ const allGameMoves = {
     if (G.deck.length > 0) {
       const card = G.deck.pop();
       if (card) {
-        if (!G.players[playerID]) G.players[playerID] = { hand: [], hasUsedInitialPeek: false, pendingDrawnCard: null, pendingDrawnCardSource: null, pendingSpecialAbility: null, hasCalledCheck: false, isLocked: false, score: 0 };
+        if (!G.players[playerID]) {
+          G.players[playerID] = {
+            hand: [],
+            hasUsedInitialPeek: false,
+            isReadyForInitialPeek: false,
+            hasCompletedInitialPeek: false,
+            pendingDrawnCard: null,
+            pendingDrawnCardSource: null,
+            pendingSpecialAbility: null,
+            hasCalledCheck: false,
+            isLocked: false,
+            score: 0
+          };
+        }
         G.players[playerID].hand.push(card);
       }
     }
@@ -152,7 +165,10 @@ const allGameMoves = {
     if (!playerID) return 'INVALID_MOVE';
     const player = G.players[playerID];
     if (!player || handIndex < 0 || handIndex >= player.hand.length) return 'INVALID_MOVE';
-    if (ctx.phase !== 'matchingStage' && (!ctx.activePlayers || ctx.activePlayers[playerID] !== 'matchingStage')) return 'INVALID_MOVE';
+    if (ctx.phase !== 'matchingStage' || !ctx.activePlayers || !ctx.activePlayers[playerID!]) {
+        console.error(`[Server] attemptMatch INVALID_MOVE for player ${playerID}. Conditions: playerID=${playerID}, ctx.phase=${ctx.phase}, activeInSomeStage=${ctx.activePlayers ? !!ctx.activePlayers[playerID!] : false}`);
+        return 'INVALID_MOVE';
+    }
     const { cardToMatch, originalPlayerID } = G.matchingOpportunityInfo || {};
     if (!cardToMatch || !originalPlayerID) return 'INVALID_MOVE';
     const cardY = player.hand[handIndex];
@@ -194,8 +210,15 @@ const allGameMoves = {
     }
   },
   passMatch: ({ G, playerID, events, ctx }: { G: SharedCheckGameState; playerID?: string; events: any; ctx: Ctx }) => {
-    if (!playerID || (ctx.phase !== 'matchingStage' && (!ctx.activePlayers || ctx.activePlayers[playerID] !== 'matchingStage'))) return 'INVALID_MOVE';
-    events.endStage();
+    console.log(`[Server] Attempting passMatch for player ${playerID}. Current phase: ${ctx.phase}, Current activePlayers: ${JSON.stringify(ctx.activePlayers)}, player's stage: ${ctx.activePlayers ? ctx.activePlayers[playerID!] : 'N/A'}`);
+
+    if (!playerID || ctx.phase !== 'matchingStage' || !ctx.activePlayers || !ctx.activePlayers[playerID!]) {
+      console.error(`[Server] passMatch INVALID_MOVE for player ${playerID}. Conditions: playerID=${playerID}, ctx.phase=${ctx.phase}, activeInSomeStage=${ctx.activePlayers ? !!ctx.activePlayers[playerID!] : false}`);
+      return 'INVALID_MOVE';
+    }
+    // If player is in matchingStage phase and active, proceed
+    console.log(`[Server] Player ${playerID} successfully called passMatch. Ending stage for this player.`);
+    events.endStage(); // This will trigger matchingStage.turn.onEnd when all players in the stage have made their moveLimit: 1 move
   },
   callCheck: ({ G, playerID, events, ctx }: { G: SharedCheckGameState; playerID?: string; events: any; ctx: Ctx }) => {
     if (!playerID) return;
@@ -207,6 +230,70 @@ const allGameMoves = {
     G.finalTurnsTaken = 0;
     events.endTurn();
     events.setPhase('finalTurnsPhase');
+  },
+  declareReadyForPeek: ({ G, playerID, events, ctx }: { G: SharedCheckGameState; playerID?: string; events: any; ctx: Ctx }) => {
+    if (!playerID || !G.players[playerID] || G.players[playerID].isReadyForInitialPeek) return 'INVALID_MOVE';
+    if (ctx.phase !== 'initialPeekPhase' || ctx.activePlayers?.[playerID!] !== 'waitingForReadyStage') return 'INVALID_MOVE';
+
+    G.players[playerID].isReadyForInitialPeek = true;
+
+    let allPlayersReady = true;
+    for (const pID in G.players) {
+      if (!G.players[pID].isReadyForInitialPeek) {
+        allPlayersReady = false;
+        break;
+      }
+    }
+
+    if (allPlayersReady) {
+      G.initialPeekAllReadyTimestamp = Date.now();
+      console.log(`[Server] All players ready for peek. Timestamp: ${G.initialPeekAllReadyTimestamp}`);
+      const nextStagesConfig: Record<string, string> = {};
+      Object.keys(G.players).forEach(pID => {
+        nextStagesConfig[pID] = 'revealingCardsStage';
+      });
+      events.setActivePlayers({ value: nextStagesConfig });
+    }
+  },
+  checkInitialPeekTimer: ({G, playerID, events, ctx}: { G: SharedCheckGameState; playerID?: string; events: any; ctx: Ctx }) => {
+    if (ctx.phase !== 'initialPeekPhase' || !G.initialPeekAllReadyTimestamp) return;
+
+    let allRelevantPlayersInRevealStage = true;
+    if (!ctx.activePlayers) {
+        allRelevantPlayersInRevealStage = false;
+    } else {
+        let inRevealStageCount = 0;
+        let readyForPeekCount = 0;
+        for(const pID_ctx in ctx.activePlayers) { 
+            if (G.players[pID_ctx]?.isReadyForInitialPeek) {
+                readyForPeekCount++;
+                if (ctx.activePlayers[pID_ctx] === 'revealingCardsStage') {
+                    inRevealStageCount++;
+                }
+            }
+        }
+        if (readyForPeekCount === 0 || inRevealStageCount < readyForPeekCount) {
+             allRelevantPlayersInRevealStage = false;
+        }
+    }
+    
+    if (!allRelevantPlayersInRevealStage) {
+        return; 
+    }
+
+    const PEEK_COUNTDOWN_MS = 3 * 1000; 
+    const PEEK_REVEAL_MS = 5 * 1000;   
+    const phaseEndTime = G.initialPeekAllReadyTimestamp + PEEK_COUNTDOWN_MS + PEEK_REVEAL_MS;
+
+    if (Date.now() >= phaseEndTime) {
+      for (const pID_g in G.players) { 
+        if (G.players[pID_g].isReadyForInitialPeek && !G.players[pID_g].hasCompletedInitialPeek) {
+          G.players[pID_g].hasCompletedInitialPeek = true;
+          G.players[pID_g].hasUsedInitialPeek = true;
+          console.log(`[Server] Auto-completed initial peek for player ${pID_g} via checkInitialPeekTimer`);
+        }
+      }
+    }
   },
 };
 
@@ -222,6 +309,8 @@ export const CheckGame: Game<SharedCheckGameState> = {
       initialPlayers[playerID] = {
         hand: shuffledDeck.splice(0, 4),
         hasUsedInitialPeek: false,
+        isReadyForInitialPeek: false,
+        hasCompletedInitialPeek: false,
         pendingDrawnCard: null,
         pendingDrawnCardSource: null,
         pendingSpecialAbility: null,
@@ -240,16 +329,45 @@ export const CheckGame: Game<SharedCheckGameState> = {
       roundWinner: null,
       finalTurnsTaken: 0,
       lastResolvedAbilitySource: null,
+      initialPeekAllReadyTimestamp: null,
+      lastPlayerToResolveAbility: null,
+      lastResolvedAbilityCardForCleanup: null,
     } as SharedCheckGameState;
   },
   moves: allGameMoves,
   phases: {
     initialPeekPhase: {
-      turn: {},
-      moves: { performPeek: allGameMoves.performPeek },
-      endIf: ({ ctx }) => ctx.turn > ctx.numPlayers,
-      next: 'playPhase',
       start: true,
+      turn: {
+        activePlayers: { all: 'waitingForReadyStage' },
+        stages: {
+          waitingForReadyStage: {
+            moves: { declareReadyForPeek: allGameMoves.declareReadyForPeek },
+          },
+          revealingCardsStage: {
+            moves: { checkInitialPeekTimer: allGameMoves.checkInitialPeekTimer },
+          },
+        }
+      },
+      endIf: ({ G, ctx }: { G: SharedCheckGameState, ctx: Ctx }) => {
+        if (!G.initialPeekAllReadyTimestamp) {
+            return false; 
+        }
+        for (const playerID_g in G.players) { 
+          if (G.players[playerID_g].isReadyForInitialPeek && !G.players[playerID_g].hasCompletedInitialPeek) {
+            return false;
+          }
+        }
+        console.log('[Server] initialPeekPhase endIf: All relevant players have completed. Ending phase.');
+        return { next: 'playPhase' };
+      },
+      onEnd: ({ G }: { G: SharedCheckGameState }) => { 
+        G.initialPeekAllReadyTimestamp = null; 
+        for (const playerID_g in G.players) { 
+            G.players[playerID_g].isReadyForInitialPeek = false; 
+        }
+        console.log('[Server] initialPeekPhase.onEnd executed. isReadyForInitialPeek flags reset.');
+      },
     },
     playPhase: {
       turn: {},
@@ -328,76 +446,169 @@ export const CheckGame: Game<SharedCheckGameState> = {
         attemptMatch: allGameMoves.attemptMatch,
         passMatch: allGameMoves.passMatch,
       },
-      turn: {
-        activePlayers: { all: 'stage', moveLimit: 1 },
-        onEnd: ({G, ctx, events}) => {
+      onBegin: ({ G, ctx, events }) => {
+        console.log(`[Server] matchingStage.onBegin: ctx.phase=${ctx.phase}, ctx.currentPlayer=${ctx.currentPlayer}, ctx.activePlayers=${JSON.stringify(ctx.activePlayers)}`);
+        // Explicitly set all players to the 'stage' with a move limit.
+        // This is an attempt to ensure activePlayers is set before allowedMoves might be calculated or checked.
+        const allPlayersStage: Record<string, string> = {};
+        Object.keys(G.players).forEach(pID => allPlayersStage[pID] = 'stage');
+        events.setActivePlayers({ value: allPlayersStage, moveLimit: 1 });
+        console.log(`[Server] matchingStage.onBegin: Explicitly called setActivePlayers. New ctx.activePlayers should be (but might not be immediately visible in this log): ${JSON.stringify(allPlayersStage)}`);
+      },
+      turn: { 
+        activePlayers: { all: 'stage', moveLimit: 1 }, // All players are active in a generic 'stage'
+        onEnd: ({G, ctx, events}) => { 
+            console.log(`[Server] matchingStage.turn.onEnd triggered. currentPlayer at turn end: ${ctx.currentPlayer}`);
             const originalMatchingInfo = G.matchingOpportunityInfo;
             const cardX = originalMatchingInfo?.cardToMatch;
             const originalDiscarderID = originalMatchingInfo?.originalPlayerID;
+
             if (G.matchingOpportunityInfo === null && originalMatchingInfo !== null) { 
+                console.log("[Server] matchingStage.onEnd: Successful match detected or opportunity cleared.");
                 let nextPlayerForAbility: string | null = null;
                 let abilitySourcePriority: 'stack' | 'stackSecondOfPair' | null = null;
-                for (const playerID in G.players) {
-                    const playerState = G.players[playerID];
+
+                for (const playerID_loop in G.players) {
+                    const playerState = G.players[playerID_loop];
                     if (playerState.pendingSpecialAbility) {
                         if (playerState.pendingSpecialAbility.source === 'stack') {
-                            nextPlayerForAbility = playerID; abilitySourcePriority = 'stack'; break;
+                            nextPlayerForAbility = playerID_loop; abilitySourcePriority = 'stack'; break;
                         } else if (playerState.pendingSpecialAbility.source === 'stackSecondOfPair' && !abilitySourcePriority) {
-                            nextPlayerForAbility = playerID; abilitySourcePriority = 'stackSecondOfPair';
+                            nextPlayerForAbility = playerID_loop; abilitySourcePriority = 'stackSecondOfPair';
                         }
                     }
                 }
+
                 if (nextPlayerForAbility) {
-                    events.setActivePlayers({ [nextPlayerForAbility]: 'abilityResolutionStage' }); return;
+                    console.log(`[Server] matchingStage.onEnd: Transitioning to abilityResolutionStage for player ${nextPlayerForAbility}`);
+                    G.lastPlayerToResolveAbility = null;
+                    events.setPhase('abilityResolutionStage'); 
+                    return;
                 }
-            } else if (originalMatchingInfo !== null) { 
+            } 
+            
+            if (originalMatchingInfo !== null) { 
+                console.log("[Server] matchingStage.onEnd: No stack abilities, checking for discard ability.");
                 G.discardPileIsSealed = false;
-                if (cardX && originalDiscarderID && [Rank.King, Rank.Queen, Rank.Jack].includes(cardX.rank)) {
+                if (cardX && originalDiscarderID && G.players[originalDiscarderID]?.pendingSpecialAbility?.card.rank === cardX.rank && G.players[originalDiscarderID]?.pendingSpecialAbility?.source === 'discard') {
+                    console.log(`[Server] matchingStage.onEnd: Discard ability for ${originalDiscarderID} already set. Transitioning to abilityResolutionStage.`);
+                    G.lastPlayerToResolveAbility = null;
+                    events.setPhase('abilityResolutionStage');
+                    G.matchingOpportunityInfo = null;
+                    return;
+                } else if (cardX && originalDiscarderID && [Rank.King, Rank.Queen, Rank.Jack].includes(cardX.rank) && !G.players[originalDiscarderID]?.pendingSpecialAbility) {
+                    console.log(`[Server] matchingStage.onEnd: Setting discard ability for ${originalDiscarderID} and transitioning.`);
                     G.players[originalDiscarderID].pendingSpecialAbility = { card: cardX, source: 'discard' };
-                    events.setActivePlayers({ [originalDiscarderID]: 'abilityResolutionStage' });
-                    G.matchingOpportunityInfo = null; return;
+                    G.lastPlayerToResolveAbility = null;
+                    events.setPhase('abilityResolutionStage');
+                    G.matchingOpportunityInfo = null; 
+                    return;
                 }
             }
+
+            console.log("[Server] matchingStage.onEnd: No abilities to resolve, or opportunity passed. Transitioning to playPhase.");
             G.matchingOpportunityInfo = null;
-            events.endStage();
+            G.discardPileIsSealed = false;
+            events.setPhase('playPhase'); 
         }
       }
     },
     abilityResolutionStage: {
       moves: { resolveSpecialAbility: allGameMoves.resolveSpecialAbility },
-      turn: { /* activePlayers set by transition */ },
+      turn: {
+        onBegin: ({G, ctx, events}) => {
+            let playerWithAbility: string | null = null;
+            const sources: Array<'stack' | 'stackSecondOfPair' | 'discard'> = ['stack', 'stackSecondOfPair', 'discard'];
+            for (const source of sources) {
+                for (const pID in G.players) {
+                    if (G.players[pID].pendingSpecialAbility?.source === source && pID !== G.lastPlayerToResolveAbility) {
+                        playerWithAbility = pID;
+                        break;
+                    }
+                }
+                if (playerWithAbility) break;
+            }
+
+            if (playerWithAbility) {
+                console.log(`[Server] abilityResolutionStage.onBegin: Setting active player to ${playerWithAbility} for ability resolution.`);
+                events.setActivePlayers({ currentPlayer: playerWithAbility });
+            } else {
+                console.error("[Server] abilityResolutionStage.onBegin: No player found with a pending ability! Transitioning to playPhase.");
+                events.setPhase('playPhase');
+            }
+        },
+      },
       onEnd: ({G, ctx, events}) => {
           const resolvedPlayerID = ctx.currentPlayer;
-          const lastSource = G.lastResolvedAbilitySource;
+          console.log(`[Server] abilityResolutionStage.onEnd for player ${resolvedPlayerID}. Last source: ${G.lastResolvedAbilitySource}`);
+          G.lastPlayerToResolveAbility = resolvedPlayerID;
+
+          if (G.players[resolvedPlayerID]?.pendingSpecialAbility && G.players[resolvedPlayerID]?.pendingSpecialAbility?.card.rank === G.lastResolvedAbilityCardForCleanup?.rank) {
+          }
+          G.lastResolvedAbilityCardForCleanup = null;
+
+          let nextPlayerForAbility: string | null = null;
+          const sources: Array<'stack' | 'stackSecondOfPair' | 'discard'> = ['stack', 'stackSecondOfPair', 'discard'];
+            for (const source of sources) {
+                for (const pID in G.players) {
+                    if (G.players[pID].pendingSpecialAbility && pID !== G.lastPlayerToResolveAbility) {
+                        nextPlayerForAbility = pID;
+                        break;
+                    }
+                    if (G.players[pID].pendingSpecialAbility && pID === G.lastPlayerToResolveAbility && G.players[pID].pendingSpecialAbility?.source !== G.lastResolvedAbilitySource ) {
+                        nextPlayerForAbility = pID;
+                        break;
+                    }
+                }
+                if (nextPlayerForAbility) break;
+            }
+
+          if (nextPlayerForAbility) {
+              console.log(`[Server] abilityResolutionStage.onEnd: Found next player ${nextPlayerForAbility} for ability. Staying in phase.`);
+              events.endTurn();
+              return;
+          }
+          
+          console.log("[Server] abilityResolutionStage.onEnd: No more abilities to resolve.");
           G.lastResolvedAbilitySource = null;
-          let nextStageTransitioned = false;
-          if (G.players[resolvedPlayerID]?.pendingSpecialAbility) { /* Warn unresolved */ }
-          if (lastSource === 'stack') {
-              let playerX_ID: string | null = null;
-              for (const pID in G.players) {
-                  if (G.players[pID]?.pendingSpecialAbility?.source === 'stackSecondOfPair') { playerX_ID = pID; break; }
-              }
-              if (playerX_ID) {
-                  events.setActivePlayers({ [playerX_ID]: 'abilityResolutionStage' });
-                  nextStageTransitioned = true;
-              }
-          }
-          if (!nextStageTransitioned && G.playerWhoCalledCheck) {
+          G.lastPlayerToResolveAbility = null;
+
+          if (G.playerWhoCalledCheck) {
+              console.log("[Server] abilityResolutionStage.onEnd: Player has called Check. Transitioning to finalTurnsPhase.");
               events.setPhase('finalTurnsPhase');
-              nextStageTransitioned = true;
+          } else {
+              console.log("[Server] abilityResolutionStage.onEnd: No Check called. Transitioning to playPhase.");
+              events.setPhase('playPhase');
           }
-          if (!nextStageTransitioned) events.endStage();
       }
     },
   },
   playerView: ({ G, playerID, ctx }) => {
-    if (!playerID) return G;
-    const filteredG: any = { ...G };
-    delete filteredG.deck;
+    const filteredG: any = { ...G }; 
+
+    if (G.deck) {
+      filteredG.deck = G.deck.map(() => ({ isHidden: true } as unknown as Card));
+    } else {
+      filteredG.deck = [];
+    }
+
     filteredG.players = {};
     for (const pID in G.players) {
       if (pID === playerID) {
-        filteredG.players[pID] = G.players[pID];
+        if (ctx.phase === 'initialPeekPhase' && ctx.activePlayers?.[playerID] === 'revealingCardsStage') {
+          const specificHandReveal = G.players[playerID].hand.map((card, index) => {
+            if (index === 2 || index === 3) {
+              return card;
+            }
+            return { isHidden: true } as unknown as Card;
+          });
+          filteredG.players[pID] = {
+            ...G.players[pID],
+            hand: specificHandReveal,
+          };
+        } else {
+          filteredG.players[pID] = G.players[pID];
+        }
       } else {
         filteredG.players[pID] = {
           ...G.players[pID],
@@ -407,6 +618,7 @@ export const CheckGame: Game<SharedCheckGameState> = {
         };
       }
     }
+
     return filteredG;
   },
 }; 

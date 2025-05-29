@@ -33,40 +33,8 @@ export interface Card {
   // id: string;
 }
 
-export interface PlayerState {
-  hand: Card[];
-  hasUsedInitialPeek: boolean;
-  pendingDrawnCard?: Card | null; // Card drawn but not yet swapped/discarded
-  pendingDrawnCardSource?: 'deck' | 'discard' | null; // Source of the pending drawn card
-  pendingSpecialAbility?: {
-    card: Card; // The K/Q/J card
-    source: 'draw' | 'discard' | 'stack' | 'stackSecondOfPair'; // How it was triggered
-    // Optionally, more fields for ability resolution
-  } | null;
-  hasCalledCheck?: boolean; // True if the player has called "Check"
-  isLocked?: boolean; // True if the player's hand is locked (after calling Check or emptying hand)
-  score?: number; // Player's score for the round
-  // We might add fields like: score: number etc. later
-}
-
-export interface CheckGameState {
-  deck: Card[];
-  players: { [playerID: string]: PlayerState };
-  discardPile: Card[];
-  discardPileIsSealed: boolean; // True if the top of the discard is the second card of a matched pair
-  matchingOpportunityInfo?: {
-    cardToMatch: Card; // The card on top of the discard pile that can be matched
-    originalPlayerID: string; // The player who discarded the cardToMatch
-  } | null;
-  playerWhoCalledCheck?: string | null; // ID of the player who called "Check"
-  roundWinner?: string | null; // ID(s) of the player(s) who won the round
-  finalTurnsTaken?: number; // Counter for players who have taken their turn in finalTurnsPhase
-  lastResolvedAbilitySource?: 'draw' | 'discard' | 'stack' | 'stackSecondOfPair' | null;
-  // We will add currentPhase, etc. here or let boardgame.io manage it via ctx
-}
-
 export const cardValues: { [key in Rank]: number } = {
-  [Rank.Ace]: -1,
+  [Rank.Ace]: 1,
   [Rank.Two]: 2,
   [Rank.Three]: 3,
   [Rank.Four]: 4,
@@ -76,10 +44,47 @@ export const cardValues: { [key in Rank]: number } = {
   [Rank.Eight]: 8,
   [Rank.Nine]: 9,
   [Rank.Ten]: 10,
-  [Rank.Jack]: 11,
-  [Rank.Queen]: 12,
-  [Rank.King]: 13,
+  [Rank.Jack]: 10,
+  [Rank.Queen]: 10,
+  [Rank.King]: 0, // Or 10, depending on rules for King value if not checking
 };
 
 // Example of how you might represent a specific card:
 // const aceOfSpades: Card = { suit: Suit.Spades, rank: Rank.Ace }; 
+
+export interface SpecialAbilityInfo {
+  card: Card;
+  source: 'deck' | 'discard' | 'stack' | 'stackSecondOfPair'; // 'deck' implies drawn for ability
+}
+
+export interface PlayerState {
+  hand: Card[];
+  hasUsedInitialPeek: boolean;
+  isReadyForInitialPeek: boolean;      // New: Player has clicked "Ready" for initial peek
+  hasCompletedInitialPeek: boolean;    // New: Player has seen the peek and acknowledged
+  pendingDrawnCard: Card | null;
+  pendingDrawnCardSource: 'deck' | 'discard' | null;
+  pendingSpecialAbility: SpecialAbilityInfo | null;
+  hasCalledCheck: boolean;
+  isLocked: boolean; // Player is locked after calling Check or emptying hand
+  score: number; // Score for the current round
+  // id: string; // playerID is the key in G.players, not stored here
+}
+
+export interface CheckGameState {
+  deck: Card[];
+  players: { [playerID: string]: PlayerState };
+  discardPile: Card[];
+  discardPileIsSealed: boolean;
+  matchingOpportunityInfo: {
+    cardToMatch: Card;
+    originalPlayerID: string;
+  } | null;
+  playerWhoCalledCheck: string | null;
+  roundWinner: string | null;
+  finalTurnsTaken: number;
+  lastResolvedAbilitySource: SpecialAbilityInfo['source'] | null; // Use the source type from SpecialAbilityInfo
+  initialPeekAllReadyTimestamp: number | null;
+  lastPlayerToResolveAbility: string | null;
+  lastResolvedAbilityCardForCleanup: Card | null;
+} 

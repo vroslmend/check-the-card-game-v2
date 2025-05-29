@@ -6,13 +6,14 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc"
+    "build": "rimraf ./dist ./tsconfig.tsbuildinfo && tsc"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "rimraf": "^6.0.1",
     "typescript": "^5.8.3"
   }
 }

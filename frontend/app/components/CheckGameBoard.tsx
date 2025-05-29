@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Ctx } from 'boardgame.io'; // Import Ctx type from boardgame.io
 import type { CheckGameState as ActualCheckGameState, Card, PlayerState } from 'shared-types'; // Import your specific game state and related types
 import { Rank } from 'shared-types'; // Import Rank separately as a value
@@ -6,6 +6,9 @@ import PlayerHandComponent from './PlayerHandComponent';
 import DrawPileComponent from './DrawPileComponent';
 import DiscardPileComponent from './DiscardPileComponent';
 import CardComponent from './CardComponent'; // For displaying pendingDrawnCard
+
+const PEEK_COUNTDOWN_SECONDS = 3;
+const PEEK_REVEAL_SECONDS = 5;
 
 // Define the props for the game board
 interface CheckGameBoardProps {
@@ -19,6 +22,11 @@ interface CheckGameBoardProps {
 }
 
 const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves, isActive }) => {
+  // Moved these declarations before useEffect hooks
+  const typedG = G as ActualCheckGameState;
+  const clientPlayerState = playerID && typedG?.players ? typedG.players[playerID] : undefined;
+  const currentStage = playerID && ctx.activePlayers ? ctx.activePlayers[playerID] : null;
+
   const [selectedHandCardIndex, setSelectedHandCardIndex] = useState<number | null>(null);
   // Stores which of the current player's own cards should be temporarily shown face up
   // e.g. for initial peek, or King/Queen ability peek result.
@@ -28,22 +36,137 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
   // State for ability arguments if needed
   const [abilityArgs, setAbilityArgs] = useState<any>(null);
 
-  useEffect(() => {
-    // Reset selections when phase or player changes
-    setSelectedHandCardIndex(null);
-    setMultiSelectedCardLocations([]);
-    setAbilityArgs(null);
-    // Potentially clear revealed cards if not sticky across turns/phases
-    // setRevealedCardLocations({});
-  }, [ctx.phase, ctx.currentPlayer]);
+  // State for the new initial peek flow
+  const [peekCountdown, setPeekCountdown] = useState<number>(PEEK_COUNTDOWN_SECONDS);
+  const [isPeekRevealActive, setIsPeekRevealActive] = useState<boolean>(false);
 
-  if (!G || G.players === undefined) {
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const revealTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const serverTimerCheckIntervalRef = useRef<NodeJS.Timeout | null>(null); // For new interval
+
+  // Memoize the move function if it's part of the moves object
+  const checkInitialPeekTimerMove = moves?.checkInitialPeekTimer;
+
+  useEffect(() => {
+    console.log('[PeekEffect] Running:', { phase: ctx.phase, playerID, currentStage, ts: typedG?.initialPeekAllReadyTimestamp, countdown: peekCountdown, revealActive: isPeekRevealActive, completedPeek: clientPlayerState?.hasCompletedInitialPeek });
+
+    // Clear previous server check interval first
+    if (serverTimerCheckIntervalRef.current) {
+      clearInterval(serverTimerCheckIntervalRef.current);
+      serverTimerCheckIntervalRef.current = null;
+    }
+
+    if (ctx.phase === 'initialPeekPhase' && playerID && clientPlayerState && !clientPlayerState.hasCompletedInitialPeek) {
+      if (currentStage === 'revealingCardsStage' && typedG.initialPeekAllReadyTimestamp) {
+        // Countdown visual logic (client-side)
+        if (peekCountdown > 0) {
+          console.log('[PeekEffect] Setting CLIENT COUNTDOWN timer for', peekCountdown);
+          countdownTimerRef.current = setTimeout(() => {
+            setPeekCountdown(prev => prev - 1);
+          }, 1000);
+        } else { // peekCountdown is 0
+          if (countdownTimerRef.current) { clearTimeout(countdownTimerRef.current); countdownTimerRef.current = null; }
+
+          // Visual reveal logic (client-side)
+          if (!isPeekRevealActive && !revealTimerRef.current) {
+            console.log('[PeekEffect] Setting CLIENT REVEAL timer');
+            setIsPeekRevealActive(true);
+            revealTimerRef.current = setTimeout(() => {
+              console.log('[PeekEffect] CLIENT REVEAL timer FIRED');
+              setIsPeekRevealActive(false);
+              revealTimerRef.current = null; 
+            }, PEEK_REVEAL_SECONDS * 1000);
+          }
+        }
+        
+        // Start polling the server with checkInitialPeekTimer
+        if (isActive && checkInitialPeekTimerMove && !clientPlayerState.hasCompletedInitialPeek) { 
+            console.log('[PeekEffect] Starting server check interval for active player', playerID);
+            serverTimerCheckIntervalRef.current = setInterval(() => {
+                if (typedG?.players[playerID]?.hasCompletedInitialPeek || ctx.phase !== 'initialPeekPhase' || (ctx.activePlayers && ctx.activePlayers[playerID] !== 'revealingCardsStage')) {
+                    if(serverTimerCheckIntervalRef.current) clearInterval(serverTimerCheckIntervalRef.current);
+                    serverTimerCheckIntervalRef.current = null;
+                    console.log('[PeekEffect] Server check interval: conditions no longer met, clearing for player', playerID);
+                    return;
+                }
+                console.log('[PeekEffect] Calling memoized checkInitialPeekTimer() for player', playerID);
+                checkInitialPeekTimerMove(); // Call the memoized version
+            }, 1000); 
+        }
+
+      } else if (currentStage === 'waitingForReadyStage') {
+        console.log('[PeekEffect] In waiting stage. Resetting client visuals.');
+        setPeekCountdown(PEEK_COUNTDOWN_SECONDS);
+        setIsPeekRevealActive(false);
+        if (revealTimerRef.current) { clearTimeout(revealTimerRef.current); revealTimerRef.current = null; }
+        if (countdownTimerRef.current) { clearTimeout(countdownTimerRef.current); countdownTimerRef.current = null; }
+        // Server check interval should have been cleared by the top of useEffect or by its own conditions
+      }
+    } else {
+      console.log('[PeekEffect] Not in active peek or conditions unmet. Resetting client visuals.');
+      setPeekCountdown(PEEK_COUNTDOWN_SECONDS);
+      setIsPeekRevealActive(false);
+      if (revealTimerRef.current) { clearTimeout(revealTimerRef.current); revealTimerRef.current = null; }
+      if (countdownTimerRef.current) { clearTimeout(countdownTimerRef.current); countdownTimerRef.current = null; }
+      // Server check interval cleared at the top of useEffect
+    }
+
+    return () => {
+      console.log('[PeekEffect] CLEANUP executing for player', playerID);
+      if (countdownTimerRef.current) { clearTimeout(countdownTimerRef.current); countdownTimerRef.current = null; }
+      if (revealTimerRef.current) { clearTimeout(revealTimerRef.current); revealTimerRef.current = null; }
+      if (serverTimerCheckIntervalRef.current) { clearInterval(serverTimerCheckIntervalRef.current); serverTimerCheckIntervalRef.current = null; }
+    };
+  }, [
+    ctx.phase, playerID, clientPlayerState?.hasCompletedInitialPeek, 
+    currentStage, typedG?.initialPeekAllReadyTimestamp, peekCountdown, 
+    isPeekRevealActive, checkInitialPeekTimerMove, isActive
+  ]);
+
+  if (!G || G.players === undefined || !typedG) {
     return <div className="p-4">Loading game state or error...</div>;
   }
 
-  const typedG = G as ActualCheckGameState; // Cast G to the full type
-  const currentPlayerFromG = typedG.players[ctx.currentPlayer];
-  const clientPlayerState = playerID ? typedG.players[playerID] : undefined;
+  // currentPlayerFromG is used further down, ensure it's defined after G/typedG checks
+  const currentPlayerFromG = ctx.currentPlayer && typedG.players ? typedG.players[ctx.currentPlayer] : undefined;
+
+  // It would be good practice to also memoize other move calls if `moves` object itself is unstable.
+  // For example:
+  const declareReadyForPeekMove = moves?.declareReadyForPeek;
+  const handleDeclareReadyForPeek = useCallback(() => {
+    if (declareReadyForPeekMove && clientPlayerState && !clientPlayerState.isReadyForInitialPeek) {
+      declareReadyForPeekMove();
+    }
+  }, [declareReadyForPeekMove, clientPlayerState]);
+
+  // --- Action Conditionals ---
+  const isInMatchingStage = !!(playerID && ctx.phase === 'matchingStage' && ctx.activePlayers?.[playerID]);
+
+  useEffect(() => {
+    if (isInMatchingStage) {
+      // Log full ctx when entering matching stage for debugging allowedMoves
+      console.log(`[Client] Player ${playerID} detected isInMatchingStage.`);
+      console.log(`[Client] ctx.phase for useEffect: ${ctx.phase}`);
+      console.log(`[Client] ctx.allowedMoves for useEffect:`, (ctx as any).allowedMoves);
+      console.log(`[Client] ctx.hasOwnProperty('allowedMoves') in useEffect:`, ctx.hasOwnProperty('allowedMoves'));
+    }
+  }, [isInMatchingStage, playerID, ctx]);
+
+  const isInAbilityResolutionStage = !!(isActive && playerID && ctx.activePlayers?.[playerID] === 'abilityResolutionStage' && clientPlayerState?.pendingSpecialAbility);
+
+  const canPerformStandardPlayPhaseActions = isActive &&
+                                        ctx.phase === 'playPhase' &&
+                                        !isInMatchingStage &&
+                                        !isInAbilityResolutionStage && // Ensure not in ability stage
+                                        !clientPlayerState?.pendingDrawnCard &&
+                                        !clientPlayerState?.pendingSpecialAbility;
+
+  const canDrawFromDeck = canPerformStandardPlayPhaseActions;
+  const canDrawFromDiscard = canPerformStandardPlayPhaseActions && !typedG.discardPileIsSealed;
+
+  const canCallCheck = canPerformStandardPlayPhaseActions &&
+                       ctx.currentPlayer === playerID && // Explicitly check if it's their turn for callCheck
+                       !clientPlayerState?.hasCalledCheck;
 
   // --- Move Handler Placeholders ---
   const handleDrawFromDeck = () => {
@@ -82,12 +205,28 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
     }
   };
 
-  const handlePassMatch = () => {
-    if (moves.passMatch && ctx.phase === 'matchingStage') {
-      // No isActive check for matchingStage
+  const handlePassMatch = useCallback(() => {
+    console.log(`[Client] handlePassMatch by ${playerID}. Phase: ${ctx.phase}`);
+    console.log(`[Client] ctx.allowedMoves for handlePassMatch:`, (ctx as any).allowedMoves);
+    console.log(`[Client] ctx.hasOwnProperty('allowedMoves') in handlePassMatch:`, ctx.hasOwnProperty('allowedMoves'));
+
+    // The condition for calling the move:
+    // 1. The move must exist.
+    // 2. We must have a playerID for this client.
+    // 3. The current phase must be 'matchingStage'.
+    // 4. This player must be active in a stage within matchingStage.
+    if (moves.passMatch && 
+        playerID && 
+        ctx.phase === 'matchingStage' && 
+        ctx.activePlayers && 
+        ctx.activePlayers[playerID] // This ensures player is active in *some* stage of matchingStage
+       ) {
+      console.log(`[Client] Player ${playerID} attempting to call moves.passMatch() as conditions seem met.`);
       moves.passMatch();
+    } else {
+      console.warn(`[Client] Player ${playerID} WILL NOT call passMatch. Conditions: moveExists=${!!moves.passMatch}, playerID=${playerID}, phase=${ctx.phase}, activeInPhaseStage=${ctx.activePlayers ? !!ctx.activePlayers[playerID!] : false}`);
     }
-  };
+  }, [moves, playerID, ctx, isActive]);
 
   const handleCallCheck = () => {
     if (isActive && moves.callCheck) {
@@ -126,14 +265,14 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
     const currentPhase = ctx.phase;
     const pendingAbility = clientPlayerState.pendingSpecialAbility?.card.rank;
 
-    // Initial Peek Phase: Select 2 cards from own hand
-    if (currentPhase === 'initialPeekPhase' && isActive && isOwnCard && !clientPlayerState.hasUsedInitialPeek) {
-      if (multiSelectedCardLocations.some(loc => loc.playerID === clickedPlayerID && loc.cardIndex === cardIndex)) {
-        setMultiSelectedCardLocations(prev => prev.filter(loc => !(loc.playerID === clickedPlayerID && loc.cardIndex === cardIndex)));
-      } else if (multiSelectedCardLocations.length < 2) {
-        setMultiSelectedCardLocations(prev => [...prev, { playerID: clickedPlayerID, cardIndex }]);
-      }
-      return;
+    // Disable card clicks during the automated peek reveal
+    if (currentPhase === 'initialPeekPhase' && currentStage === 'revealingCardsStage' && isPeekRevealActive) {
+      return; 
+    }
+    // Disable card clicks if it's not the player's turn (unless specific phase/action allows)
+    // and also if they have completed their initial peek already for this phase
+    if (currentPhase === 'initialPeekPhase' && (clientPlayerState.hasCompletedInitialPeek || !isActive)){
+        return;
     }
 
     // Player has drawn a card and needs to select one of their own to swap
@@ -181,35 +320,65 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
   };
 
   // Helper to determine if a card in the current player's hand should be shown face up
-  const getOwnCardsToShowFaceUp = () => {
+  const getOwnCardsToShowFaceUp = useCallback(() => {
     if (!playerID || !clientPlayerState) return {};
     const cardsToShow: { [cardIndex: number]: boolean } = {};
-    // Show during initial peek selection if it's one of the two allowed.
-    // In reality, initial peek is secret, so cards aren't turned face up on board.
-    // We use `revealedCardLocations` for cards player *knows* after peeking.
-    // This logic might need refinement: `performPeek` stores known cards, not makes them public.
+
+    if (ctx.phase === 'initialPeekPhase' && currentStage === 'revealingCardsStage' && isPeekRevealActive) {
+      // During automated peek reveal, show bottom two cards (indices 2 and 3)
+      cardsToShow[2] = true;
+      cardsToShow[3] = true;
+      return cardsToShow;
+    }
+    // For other scenarios (e.g., King/Queen ability resolution that might use revealedCardLocations)
     if (clientPlayerState.hand) {
       clientPlayerState.hand.forEach((_, index) => {
         if (revealedCardLocations[playerID]?.[index]) {
           cardsToShow[index] = true;
         }
-        // Example: if game rules make certain cards always face-up for owner (not in Check rules)
-        // if (clientPlayerState.hand[index]?.somePublicProperty) cardsToShow[index] = true;
       });
     }
     return cardsToShow;
-  };
+  }, [playerID, clientPlayerState, ctx.phase, currentStage, isPeekRevealActive, revealedCardLocations]);
 
   // --- Render Game Board ---
+  let initialPeekPhaseUI = null;
+  if (ctx.phase === 'initialPeekPhase' && playerID && clientPlayerState) {
+    if (currentStage === 'waitingForReadyStage') {
+      if (!clientPlayerState.isReadyForInitialPeek) {
+        initialPeekPhaseUI = (
+          <button onClick={handleDeclareReadyForPeek} className="m-2 p-2 bg-green-500 text-white rounded">
+            Ready for Initial Peek
+          </button>
+        );
+      } else if (!typedG.initialPeekAllReadyTimestamp) {
+        initialPeekPhaseUI = <p className="text-center p-2">Waiting for other players to get ready...</p>;
+      }
+    } else if (currentStage === 'revealingCardsStage') {
+      if (peekCountdown > 0 && !clientPlayerState.hasCompletedInitialPeek) {
+        initialPeekPhaseUI = <p className="text-center p-2">Get ready! Revealing your bottom two cards in: {peekCountdown}...</p>;
+      } else if (isPeekRevealActive && !clientPlayerState.hasCompletedInitialPeek) {
+        initialPeekPhaseUI = <p className="text-center p-2 text-blue-600 font-bold">MEMORIZE YOUR BOTTOM TWO CARDS!</p>;
+      } else if (clientPlayerState.hasCompletedInitialPeek) {
+        initialPeekPhaseUI = <p className="text-center p-2">Peek complete. Waiting for game to start...</p>;
+      } else {
+        initialPeekPhaseUI = <p className="text-center p-2">Preparing for peek...</p>;
+      }
+    }
+  }
+  
   return (
-    <div className="game-board p-4 border border-gray-300 rounded-lg bg-gray-50 shadow-lg" style={{ fontFamily: 'Arial, sans-serif' }}>
+    <div className="game-board p-4 border border-gray-300 rounded-lg bg-gray-50 shadow-lg text-gray-800" style={{ fontFamily: 'Arial, sans-serif' }}>
       <div className="text-center mb-4">
         <h2 className="text-2xl font-bold mb-1">Check Game Board</h2>
         <p className="text-sm text-gray-600">
           Phase: <span className="font-semibold text-indigo-600">{ctx.phase}</span> | 
-          Current Turn: Player <span className="font-semibold text-red-600">{ctx.currentPlayer}</span>
+          Current Player: <span className="font-semibold text-red-600">{ctx.currentPlayer}</span>
           {playerID && (
-            <span> | Your ID: <span className="font-semibold text-blue-600">{playerID}</span> {isActive ? "(Your Turn)" : ""}</span>
+            <span> | Your ID: <span className="font-semibold text-blue-600">{playerID}</span> 
+            {isActive && ctx.phase !== 'initialPeekPhase' ? "(Your Turn)" : ""} 
+            {/* Custom active message for initial peek phase stages may be needed if isActive isn't intuitive */} 
+            </span>
           )}
         </p>
         {ctx.gameover && (
@@ -219,6 +388,8 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
           </div>
         )}
       </div>
+
+      {initialPeekPhaseUI && <div className="initial-peek-status my-4">{initialPeekPhaseUI}</div>}
 
       {/* Player Hands Area */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -238,14 +409,14 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
       {/* Piles and Player Action Area */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 items-start">
         <DrawPileComponent
-          canDraw={isActive && ctx.phase === 'playPhase' && !clientPlayerState?.pendingDrawnCard && !currentPlayerFromG?.pendingSpecialAbility}
+          canDraw={canDrawFromDeck}
           onClick={handleDrawFromDeck}
           numberOfCards={typedG.deck.length}
         />
 
         <DiscardPileComponent
           topCard={typedG.discardPile.length > 0 ? typedG.discardPile[typedG.discardPile.length - 1] : null}
-          canDraw={isActive && ctx.phase === 'playPhase' && !clientPlayerState?.pendingDrawnCard && !typedG.discardPileIsSealed && !currentPlayerFromG?.pendingSpecialAbility}
+          canDraw={canDrawFromDiscard}
           onClick={handleDrawFromDiscard}
           isSealed={typedG.discardPileIsSealed}
           numberOfCards={typedG.discardPile.length}
@@ -257,7 +428,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
             <h4 className="text-lg font-semibold mb-2 text-blue-700">Your Actions (Player {playerID})</h4>
             
             {/* Displaying a drawn card before action */}
-            {clientPlayerState.pendingDrawnCard && (
+            {clientPlayerState.pendingDrawnCard && isActive && (
               <div className="mb-3 p-2 border border-dashed border-green-500 bg-green-50 rounded">
                 <p className="text-sm font-medium text-green-700">Drawn Card (from {clientPlayerState.pendingDrawnCardSource}):</p>
                 <div className="flex justify-center my-1">
@@ -281,25 +452,17 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
             )}
 
             {/* Buttons for moves, conditional on phase and player state */}
-            {ctx.phase === 'initialPeekPhase' && isActive && !clientPlayerState.hasUsedInitialPeek && (
-              <div className="mb-2">
-                <p className="text-sm">Initial Peek: Select 2 of your cards to memorize.</p>
-                {multiSelectedCardLocations.length === 2 && (
-                  <button onClick={handlePerformInitialPeek} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-2 rounded text-sm">Confirm Peek</button>
-                )}
-              </div>
-            )}
-
-            {ctx.phase === 'playPhase' && isActive && !clientPlayerState.pendingDrawnCard && !clientPlayerState.pendingSpecialAbility && (
+            {canCallCheck && (
               <button onClick={handleCallCheck} className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded text-sm mb-2">Call Check!</button>
             )}
 
-            {ctx.phase === 'matchingStage' && (
+            {isInMatchingStage && (
               <div className="mb-2">
-                <p className="text-sm font-medium">Matching Opportunity for: 
-                  <CardComponent card={typedG.matchingOpportunityInfo?.cardToMatch || null} isFaceUp={true} style={{display: 'inline-block', transform: 'scale(0.6)', margin: '0 5px'}}/> 
+                <div className="text-sm font-medium mb-1">
+                  Matching Opportunity for: 
+                  <CardComponent card={typedG.matchingOpportunityInfo?.cardToMatch || null} isFaceUp={true} style={{display: 'inline-block', verticalAlign: 'middle', transform: 'scale(0.7)', margin: '0 3px'}}/> 
                   (Rank: {typedG.matchingOpportunityInfo?.cardToMatch.rank})
-                </p>
+                </div>
                 {selectedHandCardIndex !== null && clientPlayerState.hand[selectedHandCardIndex] && (
                   <button 
                     onClick={() => handleAttemptMatch(selectedHandCardIndex)} 
@@ -311,15 +474,15 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
               </div>
             )}
             
-            {ctx.phase === 'abilityResolutionStage' && isActive && clientPlayerState.pendingSpecialAbility && (
+            {isInAbilityResolutionStage && (
               <div className="mb-2 p-2 border border-yellow-500 bg-yellow-50 rounded">
-                <p className="text-sm font-medium text-yellow-700">Resolve Ability: {clientPlayerState.pendingSpecialAbility.card.rank} (Source: {clientPlayerState.pendingSpecialAbility.source})</p>
+                <p className="text-sm font-medium text-yellow-700">Resolve Ability: {clientPlayerState.pendingSpecialAbility!.card.rank} (Source: {clientPlayerState.pendingSpecialAbility!.source})</p>
                 <p className="text-xs">Selected for ability: {JSON.stringify(multiSelectedCardLocations)}</p>
                 <p className="text-xs">Args: {JSON.stringify(abilityArgs)}</p>
                 {/* TODO: More specific UI for selecting targets for K, Q, J based on abilityArgs state */} 
                 <button 
                   onClick={handleResolveSpecialAbility} 
-                  disabled={!abilityArgs && !(clientPlayerState.pendingSpecialAbility.card.rank === Rank.Jack && multiSelectedCardLocations.length === 2) /* Basic disable, needs refinement*/}
+                  disabled={!abilityArgs && !(clientPlayerState.pendingSpecialAbility!.card.rank === Rank.Jack && multiSelectedCardLocations.length === 2) /* Basic disable, needs refinement*/}
                   className="w-full mt-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded text-sm">
                   Confirm Ability Action
                 </button>
@@ -331,10 +494,10 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ G, ctx, playerID, moves
       </div>
       
       {/* Debug Info - Can be removed for production */}
-      {/* <div className="mt-6 p-3 border border-gray-200 rounded bg-gray-100">
+       <div className="mt-6 p-3 border border-gray-200 rounded bg-gray-100">
         <h4 className="text-md font-semibold mb-1 text-gray-700">Debug State:</h4>
         <pre className="text-xs overflow-x-auto">{JSON.stringify({ G: typedG, ctx, playerID, isActive, selectedHandCardIndex, multiSelectedCardLocations, revealedCardLocations, abilityArgs }, null, 2)}</pre>
-      </div> */}
+      </div>
     </div>
   );
 };
