@@ -1,12 +1,12 @@
 import React from 'react';
-import type { Card } from 'shared-types';
+import type { Card, ClientCard } from 'shared-types';
 
 interface CardComponentProps {
-  card: Card | null; // Card can be null if it's a face-down card or an empty slot
+  card: ClientCard | null;
   isFaceUp?: boolean;
   onClick?: () => void;
   isSelected?: boolean;
-  style?: React.CSSProperties; // For dynamic styling (e.g., position in a grid)
+  style?: React.CSSProperties;
 }
 
 const CardComponent: React.FC<CardComponentProps> = ({
@@ -27,10 +27,10 @@ const CardComponent: React.FC<CardComponentProps> = ({
     alignItems: 'center',
     padding: '5px',
     cursor: onClick ? 'pointer' : 'default',
-    backgroundColor: isSelected ? '#a0d2eb' : '#fff', // Highlight if selected
+    backgroundColor: isSelected ? '#a0d2eb' : '#fff',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    position: 'relative', // For potential absolute positioning of elements within or for grid layout
-    ...style, // Spread any additional styles passed via props
+    position: 'relative',
+    ...style,
   };
 
   const cardTextStyle: React.CSSProperties = {
@@ -39,20 +39,23 @@ const CardComponent: React.FC<CardComponentProps> = ({
   };
 
   const suitSymbols: { [key: string]: string } = {
-    H: '♥', // Hearts
-    D: '♦', // Diamonds
-    C: '♣', // Clubs
-    S: '♠', // Spades
+    H: '♥',
+    D: '♦',
+    C: '♣',
+    S: '♠',
   };
 
-  if (!card || !isFaceUp) {
+  const shouldShowBack = !card || !isFaceUp || ('isHidden' in card && card.isHidden);
+
+  if (shouldShowBack) {
     return (
-      <div style={{ ...cardBaseStyle, backgroundColor: '#b0b0b0' }} onClick={onClick}>
-        {/* Basic representation of a face-down card */}
+      <div style={{ ...cardBaseStyle, backgroundColor: isSelected ? '#a0d2eb' : '#b0b0b0' }} onClick={onClick}>
         <span style={{ fontSize: '24px', color: '#fff' }}>?</span>
       </div>
     );
   }
+
+  const actualCard = card as Card;
 
   const getSuitColor = (suit: string) => {
     return suit === 'H' || suit === 'D' ? 'red' : 'black';
@@ -60,16 +63,16 @@ const CardComponent: React.FC<CardComponentProps> = ({
 
   return (
     <div style={cardBaseStyle} onClick={onClick}>
-      <div style={{ alignSelf: 'flex-start', color: getSuitColor(card.suit) }}>
-        <span style={cardTextStyle}>{card.rank}</span>
-        <span style={{ fontSize: '12px' }}>{suitSymbols[card.suit]}</span>
+      <div style={{ alignSelf: 'flex-start', color: getSuitColor(actualCard.suit) }}>
+        <span style={cardTextStyle}>{actualCard.rank}</span>
+        <span style={{ fontSize: '12px' }}>{suitSymbols[actualCard.suit]}</span>
       </div>
-      <div style={{ fontSize: '24px', color: getSuitColor(card.suit) }}>
-        {suitSymbols[card.suit]}
+      <div style={{ fontSize: '24px', color: getSuitColor(actualCard.suit) }}>
+        {suitSymbols[actualCard.suit]}
       </div>
-      <div style={{ alignSelf: 'flex-end', transform: 'rotate(180deg)', color: getSuitColor(card.suit) }}>
-        <span style={cardTextStyle}>{card.rank}</span>
-        <span style={{ fontSize: '12px' }}>{suitSymbols[card.suit]}</span>
+      <div style={{ alignSelf: 'flex-end', transform: 'rotate(180deg)', color: getSuitColor(actualCard.suit) }}>
+        <span style={cardTextStyle}>{actualCard.rank}</span>
+        <span style={{ fontSize: '12px' }}>{suitSymbols[actualCard.suit]}</span>
       </div>
     </div>
   );

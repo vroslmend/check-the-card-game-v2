@@ -12,6 +12,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "_moduleAliases": {
+    "shared-types": "../shared-types/dist"
+  },
   "devDependencies": {
     "@types/module-alias": "^2.0.4",
     "@types/node": "^22.15.23",

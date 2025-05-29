@@ -20,7 +20,7 @@ export enum Rank {
   Seven = '7',
   Eight = '8',
   Nine = '9',
-  Ten = 'T',
+  Ten = '10',
   Jack = 'J',
   Queen = 'Q',
   King = 'K',
@@ -62,6 +62,8 @@ export interface PlayerState {
   hasUsedInitialPeek: boolean;
   isReadyForInitialPeek: boolean;      // New: Player has clicked "Ready" for initial peek
   hasCompletedInitialPeek: boolean;    // New: Player has seen the peek and acknowledged
+  cardsToPeek?: Card[] | null;         // Server sends these to the specific player during their peek turn
+  peekAcknowledgeDeadline?: number | null; // Server sets this deadline for the player to acknowledge
   pendingDrawnCard: Card | null;
   pendingDrawnCardSource: 'deck' | 'discard' | null;
   pendingSpecialAbility: PendingSpecialAbility | null;
@@ -79,6 +81,7 @@ export interface CheckGameState {
   matchingOpportunityInfo: {
     cardToMatch: Card;
     originalPlayerID: string;
+    potentialMatchers: string[]; // Players who can attempt a match
   } | null;
   playerWhoCalledCheck: string | null;
   roundWinner: string | null;
@@ -94,7 +97,8 @@ export interface CheckGameState {
   turnOrder: string[];
   gameMasterId?: string; // Optional game master
   activePlayers: { [playerID: string]: string }; // Tracks active players and their current stage
-  // gameover?: any; // We'll need to define a gameover structure later
+  pendingAbilities?: PendingSpecialAbility[] | null; // Abilities waiting for resolution
+  gameover?: { winner?: string; scores?: { [playerId: string]: number } } | null; // Standardized gameover structure
 
   // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
   matchResolvedDetails: {
@@ -111,6 +115,7 @@ export interface InitialPlayerSetupData {
 }
 
 export interface PendingSpecialAbility {
+  playerId: string; // The ID of the player whose ability this is
   card: Card;
   source: 'deck' | 'discard' | 'stack' | 'stackSecondOfPair'; // 'stack' for matcher, 'stackSecondOfPair' for original discarder
   pairTargetId?: string; // ID of the other player involved in a stack, if applicable
@@ -131,10 +136,13 @@ export type ClientCard = Card | HiddenCard;
 
 export interface ClientPlayerState {
   // Fields from PlayerState, but with redacted hand
+  name?: string; // Player's display name
   hand: ClientCard[];
   hasUsedInitialPeek: boolean;
   isReadyForInitialPeek: boolean;
   hasCompletedInitialPeek: boolean;
+  cardsToPeek?: Card[] | null; // Viewer sees their cards to peek
+  peekAcknowledgeDeadline?: number | null; // Relevant for the viewer
   // pendingDrawnCard for the viewing player should be Card | null
   // for others, it should effectively be null or an indication of hidden card if that state is even sent to others
   pendingDrawnCard: ClientCard | null; // Viewer sees their card, others see null or HiddenCard
@@ -156,6 +164,7 @@ export interface ClientCheckGameState {
   matchingOpportunityInfo: {
     cardToMatch: Card; // Card to match is public
     originalPlayerID: string;
+    potentialMatchers: string[]; // Public info on who can match
   } | null;
   playerWhoCalledCheck: string | null;
   roundWinner: string | null;
@@ -172,6 +181,8 @@ export interface ClientCheckGameState {
   turnOrder: string[];
   gameMasterId?: string;
   activePlayers: { [playerID: string]: string };
+  pendingAbilities?: PendingSpecialAbility[] | null; // List of abilities pending, card details might be sensitive if not for viewing player
+  gameover?: { winner?: string; scores?: { [playerId: string]: number } } | null;
   
   // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
   // This might be okay to send as is, as it reflects outcomes.

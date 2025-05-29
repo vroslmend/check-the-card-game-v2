@@ -1,5 +1,5 @@
-import moduleAlias from 'module-alias';
-import path from 'path';
+import 'module-alias/register';
+// import path from 'path'; // No longer needed here
 import http from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { 
@@ -19,12 +19,6 @@ import {
     handleResolveSpecialAbility
 } from './game-manager';
 import { InitialPlayerSetupData, CheckGameState as ServerCheckGameState, ClientCheckGameState } from 'shared-types';
-
-// Correct path for runtime: from server/dist to shared-types/dist/index.js
-const sharedTypesPath = path.resolve(__dirname, '../../shared-types/dist/index.js');
-
-moduleAlias.addAlias('shared-types', sharedTypesPath);
-// Ensure this is done before any other imports that might use the alias
 
 console.log('Server starting with Socket.IO...');
 
