@@ -167,3 +167,203 @@ Followed by **Server-Side Testing & Refinement**.
 *   The game was "stuck" because it was correctly waiting for *both* players to make their move (`attemptMatch` or `passMatch`) within the `matchingStage`, as per `moveLimit: 1`. The next step was for the user to have both players click "Pass Match" to see if `matchingStage.onEnd` executes correctly, which led to discovering the non-functional buttons.
 
 Throughout the process, `console.log` statements were added to both client and server, and client-side debug state was frequently inspected to diagnose issues.
+
+## Socket.IO Backend Refactor (Current Focus)
+
+This section details the ongoing effort to refactor the game's backend from `boardgame.io` to a custom Node.js server using `Socket.IO` and a Next.js frontend for the client.
+
+### ✅ What is DONE (Socket.IO Refactor)
+
+**Server-Side (`server/`)**
+*   **Socket.IO Setup:**
+    *   Dependencies: `socket.io` installed, `boardgame.io` removed from `server/package.json`.
+    *   `server/src/index.ts` reconfigured:
+        *   Uses Node.js `http` server and `socket.io` `Server`.
+        *   Basic `socket.io` connection/disconnection handlers.
+        *   CORS configured for `localhost:3000`.
+*   **Game State Management (`server/src/game-manager.ts`):**
+    *   `GameManager` concept established to handle game rooms and state.
+    *   `createDeck()` function implemented.
+    *   `simpleShuffle()` placeholder for card shuffling.
+    *   `GameRoom` interface defined (stores `gameId`, `players`, `gameState`).
+    *   `activeGames`: In-memory store for game rooms.
+    *   `initializeNewGame()`:
+        *   Takes `gameId` and `playerSetupData`.
+        *   Creates initial `PlayerState` for each player (dealing 4 cards).
+        *   Creates initial `ServerCheckGameState` including deck, players, discard pile, and new state fields: `currentPhase`, `currentPlayerId`, `turnOrder`, `activePlayers`.
+    *   `getGameRoom()`: Retrieves a game room by ID.
+    *   `addPlayerToGame()`:
+        *   Adds a new player to an existing game room.
+        *   Initializes `PlayerState` for the new player (empty hand for now).
+        *   Updates `turnOrder`.
+*   **Socket Event Handlers (`server/src/index.ts`):**
+    *   `createGame`:
+        *   Client provides `InitialPlayerSetupData`.
+        *   Calls `initializeNewGame()`.
+        *   Socket joins a room for `gameId`.
+        *   Responds with `gameId` and initial `gameState`.
+    *   `joinGame`:
+        *   Client provides `gameId` and `InitialPlayerSetupData`.
+        *   Uses `addPlayerToGame()` from `game-manager.ts`.
+        *   Socket joins the room.
+        *   Notifies other players via `playerJoined` event.
+        *   Responds with `gameId` and current `gameState`.
+    *   `playerAction` (generic handler):
+        *   Receives `{ gameId, playerId, type, payload }`.
+        *   Broadcasts `gameStateUpdate` to the room on successful action.
+*   **Ported Game Moves (in `game-manager.ts` and `index.ts`):**
+    *   `handleDrawFromDeck`:
+        *   Checks `pendingDrawnCard`, `pendingSpecialAbility`, deck empty.
+        *   Updates player's `pendingDrawnCard` and `pendingDrawnCardSource`.
+    *   `handleDrawFromDiscard`:
+        *   Checks `pendingDrawnCard`, `pendingSpecialAbility`, discard pile empty/sealed.
+        *   Updates player's `pendingDrawnCard` and `pendingDrawnCardSource`.
+    *   `handleSwapAndDiscard`:
+        *   Takes `handIndex`.
+        *   Performs swap, updates `discardPile`.
+        *   Sets `matchingOpportunityInfo`.
+        *   **Phase Transition:** Sets `currentPhase` to `matchingStage`, sets all players active.
+    *   `handleDiscardDrawnCard`:
+        *   Checks `pendingDrawnCardSource === 'deck'`.
+        *   Updates `discardPile`.
+        *   Sets `matchingOpportunityInfo`.
+        *   **Phase Transition:** Sets `currentPhase` to `matchingStage`, sets all players active.
+    *   `handleAttemptMatch`:
+        *   Takes `handIndex`.
+        *   Checks card rank match.
+        *   If match: splices hand, updates `discardPile`, sets `discardPileIsSealed`.
+        *   Sets `pendingSpecialAbility` for K,Q,J pairs (`stack`, `stackSecondOfPair`).
+        *   Handles auto-Check if hand empties.
+        *   Clears `matchingOpportunityInfo`.
+        *   Removes player from `activePlayers` for matching.
+        *   **Simplified Phase Transition:** Directly attempts to set next phase (`abilityResolutionStage`, `finalTurnsPhase`, or `playPhase`). (Needs refinement for full `matchingStage` lifecycle).
+    *   `handlePassMatch`:
+        *   Removes player from `activePlayers` for matching.
+        *   Calls `checkMatchingStageEnd()`.
+    *   `checkMatchingStageEnd()` (helper):
+        *   If `matchingOpportunityInfo` is null (match already happened), returns.
+        *   If no more active matchers: clears `matchingOpportunityInfo`.
+        *   Checks original discarder for K,Q,J ability (source: `discard`).
+        *   Transitions to `abilityResolutionStage` or `playPhase`. (Needs refinement & phase setup helpers).
+    *   `handleCallCheck`:
+        *   Rule checks (phase, turn, pending actions).
+        *   Sets `player.hasCalledCheck`, `player.isLocked`, `G.playerWhoCalledCheck`.
+        *   **Phase Transition:** Calls `setupFinalTurnsPhase`.
+    *   `resolveSpecialAbility` (ported as `handleResolveSpecialAbility`):
+        *   Takes `gameId`, `playerId`, and `abilityArgs` (for K,Q,J swaps).
+        *   Performs card swaps based on ability card (King, Queen, Jack).
+        *   Handles locked players (ability "fizzles" but still counts for LIFO).
+        *   Sets `G.lastPlayerToResolveAbility`, `G.lastResolvedAbilitySource`, and `G.lastResolvedAbilityCardForCleanup`.
+        *   Clears the acting player's `pendingSpecialAbility`.
+        *   Calls `setupAbilityResolutionPhase` to manage LIFO or transition to the next phase.
+*   **Phase Setup Helper Functions (in `game-manager.ts`):**
+    *   `setupNextPlayTurn(gameId)`: Finds next non-locked player for `playPhase`.
+    *   `setupFinalTurnsPhase(gameId, checkerPlayerId)`: Sets up for final turns.
+    *   `setupAbilityResolutionPhase(gameId)`:
+        *   Finds the player with the highest priority pending ability.
+        *   **Enhanced for LIFO:** Prioritizes the `'stackSecondOfPair'` ability if the `G.lastResolvedAbilitySource` was `'stack'`, using `pairTargetId`.
+        *   Clears `G.lastResolvedAbilitySource`, `G.lastPlayerToResolveAbility`, `G.lastResolvedAbilityCardForCleanup` if no more abilities.
+        *   Transitions to `finalTurnsPhase` (if check occurred) or `playPhase` if all abilities resolved.
+    *   `setupScoringPhase(gameId)`: Calculates scores and determines `roundWinner`.
+    *   These helpers are integrated into move handlers to manage game flow.
+
+**Shared Types (`shared-types/`)**
+*   `boardgame.io` types (`Ctx`, `Game`) removed/no longer primary.
+*   `CheckGameState` updated:
+    *   Added `currentPhase: string`.
+    *   Added `currentPlayerId: string`.
+    *   Added `turnOrder: string[]`.
+    *   Added `gameMasterId?: string`.
+    *   Added `activePlayers: { [playerID: string]: string }`.
+*   `InitialPlayerSetupData` interface defined and moved here.
+*   `PendingSpecialAbility` interface updated to include an optional `pairTargetId` for LIFO resolution of stacked abilities.
+
+**Build & Dependencies**
+*   `frontend/package.json`: `socket.io-client` added, `boardgame.io` removed.
+*   `server/package.json`: `socket.io` added, `boardgame.io` removed.
+*   NPM installs run for both.
+
+---
+
+### ⏳ What is LEFT (Socket.IO Refactor)
+
+**Server-Side (`server/`)**
+*   **Game Logic & Phase Management (Major):**
+    *   **Phase Setup Helper Functions:** Implement robust helpers (e.g., in `game-manager.ts`):
+        *   `setupNextPlayTurn(gameId)`: Determine next player, handle locked players, set `currentPlayerId`, `activePlayers`.
+        *   `setupFinalTurnsPhase(gameId, checkerPlayerId)`: Set up for final turns, determine first player, manage `finalTurnsTaken`.
+        *   `setupAbilityResolutionPhase(gameId)`: Determine player order for LIFO ability resolution, set `currentPlayerId` and `activePlayers`.
+        *   `setupScoringPhase(gameId)`: Calculate scores, determine winner, set `roundWinner`.
+        *   `setupInitialPeekPhase(gameId)`: (If porting this phase fully) Manage readiness and timed reveal.
+    *   **Refine `matchingStage` Lifecycle:**
+        *   Ensure all active players in `matchingStage` can `passMatch` even after another player successfully matches (unless the match ends the game/round immediately). - Rule clarified: match ends opportunity for others.
+        *   `handleAttemptMatch` should likely not transition phase directly but rather update state for `checkMatchingStageEnd` to evaluate. - ✅ Implemented. `handleAttemptMatch` now sets `G.matchResolvedDetails`.
+        *   `checkMatchingStageEnd` needs to correctly use the phase setup helpers. - ✅ Refactored. `checkMatchingStageEnd` is now the sole decider for phase transitions out of `matchingStage`, using `G.matchResolvedDetails` or all-players-passed logic.
+    *   **Port Remaining Game Moves/Logic:**
+        *   `resolveSpecialAbility`: Core logic for King, Queen, Jack abilities. Needs to interact with `setupAbilityResolutionPhase` and `setupNextPlayTurn` or `setupScoringPhase` after abilities resolve. - ✅ Largely ported as `handleResolveSpecialAbility`
+        *   `initialPeekPhase` moves: `declareReadyForPeek`, `checkInitialPeekTimer` (if this timed server logic is kept). - ✅ `handleDeclareReadyForPeek` and `handleAcknowledgePeek` implemented.
+    *   **End-of-Round/Game:**
+        *   `finalTurnsPhase` needs to correctly count turns and transition to `scoringPhase`. - Partially covered by `setupFinalTurnsPhase` and its call to `setupScoringPhase`. - ✅ Refined: `setupFinalTurnsPhase` now resets `finalTurnsTaken`. New `continueOrEndFinalTurns` helper manages progression. `setupNextPlayTurn` and `setupAbilityResolutionPhase` correctly call these helpers to ensure proper turn-by-turn advancement or transition to scoring during `finalTurnsPhase`.
+        *   **Card Values:** Corrected `cardValues` in `shared-types` to match `GAME_OVERVIEW.md`. - ✅ Corrected.
+*   **Player View / State Redaction:**
+    *   Implement logic to tailor `gameStateUpdate` for each client (e.g., in `server/src/index.ts` before `io.to(gameId).emit(...)`). Hide other players' hands, deck contents, etc. - ✅ Implemented.
+        *   `shared-types/src/index.ts` updated with `HiddenCard`, `ClientCard`, `ClientPlayerState`, `ClientCheckGameState`.
+        *   `server/src/game-manager.ts` now includes `generatePlayerView(fullGameState, viewingPlayerId)`.
+        *   `server/src/index.ts` updated to use `generatePlayerView` for `createGame`, `joinGame`, and all `playerAction` broadcasts, sending tailored state to each client. Player ID is now stored on the socket object for mapping.
+*   **Error Handling & Edge Cases:**
+    *   Robust error handling for all game manager functions and socket events.
+    *   Consider player disconnection/reconnection during various game states. (`disconnect` event in `server/src/index.ts` now logs player ID).
+*   **Persistence (Optional):**
+    *   Replace in-memory `activeGames` with a database (e.g., Redis) for persistent game rooms if needed.
+*   **Testing:**
+    *   Unit tests for game logic functions.
+    *   Integration tests for socket event flows.
+
+**Client-Side (`frontend/`)**
+*   **Socket.IO Connection:**
+    *   Remove `boardgame.io/react` Client (`CheckGameClient.tsx`).
+    *   Establish connection to the `socket.io` server (`localhost:8000`).
+    *   Manage socket connection state (e.g., using React Context or a custom hook).
+*   **Game Interaction:**
+    *   Implement UI for `createGame` and `joinGame` (e.g., forms for game ID, player name).
+    *   Emit `createGame`/`joinGame` socket events with `InitialPlayerSetupData`.
+    *   Handle `gameCreated`, `playerJoined`, and `gameStateUpdate` events from the server.
+*   **`CheckGameBoard.tsx` Refactor:**
+    *   Remove `G`, `ctx`, `moves`, `isActive` props from `boardgame.io`.
+    *   Receive game state from the new `socket.io` managed state.
+    *   Player actions (button clicks, card selections) should emit `playerAction` socket events with appropriate `type` and `payload`.
+    *   Update UI based on `gameStateUpdate` from the server.
+*   **UI for New Game Flow:**
+    *   Display game ID, player list.
+    *   Handle UI for all ported game actions (`drawFromDeck`, `drawFromDiscard`, `swapAndDiscard`, `discardDrawnCard`, `attemptMatch`, `passMatch`, `callCheck`).
+    *   Display `currentPhase`, `currentPlayerId`, `activePlayers` information.
+    *   Render `pendingDrawnCard` for the player.
+    *   Show `matchingOpportunityInfo`.
+*   **Lobby System (Basic):**
+    *   Allow users to see available games or enter a game ID to join.
+
+**Build & Dependencies:**
+*   Ensure `shared-types` are correctly used and compiled for both server and client under the new setup.
+
+---
+## Previous Implementation (boardgame.io - Historical Context)
+
+### ✅ What is DONE (boardgame.io)
+(Content from the original "What is DONE" section remains here for historical reference)
+-   **Project Structure:** `frontend/`, `server/`, `shared-types/` using npm.
+-   **Core Game Logic (Server-Side with `boardgame.io`):**
+    -   Game setup (deck creation, shuffle, deal), initial peek phase (`performPeek`).
+    -   **New Initial Peek Flow Implemented (Server-Side):**
+        -   Players must click "Ready" to start a countdown.
+// ... (rest of the original "DONE" section) ...
+-   **Debugging Steps Taken:**
+    *   Added detailed console logs to the client-side `handlePassMatch` function in `frontend/app/components/CheckGameBoard.tsx` to verify if the `moves.passMatch()` call is being made and under what conditions. This included logging `ctx.allowedMoves`.
+    *   Added detailed console logs to the server-side `passMatch` move in `server/src/game-definition.ts` to check if the move is received and if it's considered valid by the server.
+
+**Previous Issue (Resolved): Stuck in `matchingStage` due to waiting for both players**
+*   The game was "stuck" because it was correctly waiting for *both* players to make their move (`attemptMatch` or `passMatch`) within the `matchingStage`, as per `moveLimit: 1`. The next step was for the user to have both players click "Pass Match" to see if `matchingStage.onEnd` executes correctly, which led to discovering the non-functional buttons.
+
+Throughout the process, `console.log` statements were added to both client and server, and client-side debug state was frequently inspected to diagnose issues.
+
+---
+*Last Updated: (Current Date) - Refactoring to Socket.IO in progress*

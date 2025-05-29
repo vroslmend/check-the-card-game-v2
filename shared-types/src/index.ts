@@ -34,7 +34,7 @@ export interface Card {
 }
 
 export const cardValues: { [key in Rank]: number } = {
-  [Rank.Ace]: 1,
+  [Rank.Ace]: -1,
   [Rank.Two]: 2,
   [Rank.Three]: 3,
   [Rank.Four]: 4,
@@ -44,9 +44,9 @@ export const cardValues: { [key in Rank]: number } = {
   [Rank.Eight]: 8,
   [Rank.Nine]: 9,
   [Rank.Ten]: 10,
-  [Rank.Jack]: 10,
-  [Rank.Queen]: 10,
-  [Rank.King]: 0, // Or 10, depending on rules for King value if not checking
+  [Rank.Jack]: 11,
+  [Rank.Queen]: 12,
+  [Rank.King]: 13,
 };
 
 // Example of how you might represent a specific card:
@@ -64,7 +64,7 @@ export interface PlayerState {
   hasCompletedInitialPeek: boolean;    // New: Player has seen the peek and acknowledged
   pendingDrawnCard: Card | null;
   pendingDrawnCardSource: 'deck' | 'discard' | null;
-  pendingSpecialAbility: SpecialAbilityInfo | null;
+  pendingSpecialAbility: PendingSpecialAbility | null;
   hasCalledCheck: boolean;
   isLocked: boolean; // Player is locked after calling Check or emptying hand
   score: number; // Score for the current round
@@ -87,4 +87,100 @@ export interface CheckGameState {
   initialPeekAllReadyTimestamp: number | null;
   lastPlayerToResolveAbility: string | null;
   lastResolvedAbilityCardForCleanup: Card | null;
+
+  // New fields to replace boardgame.io context
+  currentPhase: string;
+  currentPlayerId: string;
+  turnOrder: string[];
+  gameMasterId?: string; // Optional game master
+  activePlayers: { [playerID: string]: string }; // Tracks active players and their current stage
+  // gameover?: any; // We'll need to define a gameover structure later
+
+  // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
+  matchResolvedDetails: {
+    byPlayerId: string; // Who made the successful match
+    isAutoCheck: boolean;
+    abilityResolutionRequired: boolean;
+  } | null;
+}
+
+// Data structure for players joining a game or being set up initially
+export interface InitialPlayerSetupData {
+  id: string; // Unique player identifier (e.g., socket.id or a persistent user ID)
+  name?: string; // Optional display name for the player
+}
+
+export interface PendingSpecialAbility {
+  card: Card;
+  source: 'deck' | 'discard' | 'stack' | 'stackSecondOfPair'; // 'stack' for matcher, 'stackSecondOfPair' for original discarder
+  pairTargetId?: string; // ID of the other player involved in a stack, if applicable
+}
+
+export interface MatchingOpportunityInfo {
+  // ... existing code ...
+} 
+
+// --- Client-Specific Types for Redaction ---
+
+export interface HiddenCard {
+  isHidden: true;
+  id: string; // For React keys, e.g., "hidden-0", "hidden-1"
+}
+
+export type ClientCard = Card | HiddenCard;
+
+export interface ClientPlayerState {
+  // Fields from PlayerState, but with redacted hand
+  hand: ClientCard[];
+  hasUsedInitialPeek: boolean;
+  isReadyForInitialPeek: boolean;
+  hasCompletedInitialPeek: boolean;
+  // pendingDrawnCard for the viewing player should be Card | null
+  // for others, it should effectively be null or an indication of hidden card if that state is even sent to others
+  pendingDrawnCard: ClientCard | null; // Viewer sees their card, others see null or HiddenCard
+  // pendingDrawnCardSource is probably fine to send to all, or nullify for others
+  pendingDrawnCardSource: 'deck' | 'discard' | null;
+  // pendingSpecialAbility: source might be okay, card details might need redaction if complex
+  pendingSpecialAbility: PendingSpecialAbility | null; // Or a redacted version for others
+  hasCalledCheck: boolean;
+  isLocked: boolean;
+  score: number;
+}
+
+export interface ClientCheckGameState {
+  // Fields from CheckGameState, but with redactions
+  deckSize: number; // Instead of the full deck array
+  players: { [playerID: string]: ClientPlayerState };
+  discardPile: Card[]; // Discard pile is usually public
+  discardPileIsSealed: boolean;
+  matchingOpportunityInfo: {
+    cardToMatch: Card; // Card to match is public
+    originalPlayerID: string;
+  } | null;
+  playerWhoCalledCheck: string | null;
+  roundWinner: string | null;
+  finalTurnsTaken: number;
+  lastResolvedAbilitySource: SpecialAbilityInfo['source'] | null;
+  initialPeekAllReadyTimestamp: number | null; 
+  // lastPlayerToResolveAbility might be sensitive or not, TBD.
+  // lastResolvedAbilityCardForCleanup definitely should not be sent to all.
+  // For simplicity, these can be omitted from ClientCheckGameState initially
+  // or handled carefully if needed by client logic beyond display.
+
+  currentPhase: string;
+  currentPlayerId: string;
+  turnOrder: string[];
+  gameMasterId?: string;
+  activePlayers: { [playerID: string]: string };
+  
+  // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
+  // This might be okay to send as is, as it reflects outcomes.
+  matchResolvedDetails: {
+    byPlayerId: string; 
+    isAutoCheck: boolean;
+    abilityResolutionRequired: boolean;
+  } | null;
+
+  // Specific to the client receiving this state
+  viewingPlayerId: string; 
 } 
