@@ -2,6 +2,7 @@ import { Card, Suit, Rank, PlayerState, CheckGameState as ServerCheckGameState, 
 
 const PEEK_COUNTDOWN_SECONDS = 5; // Define based on typical client value or make configurable
 const PEEK_REVEAL_SECONDS = 5;    // Define based on typical client value or make configurable
+const PEEK_TOTAL_DURATION_MS = (PEEK_COUNTDOWN_SECONDS + PEEK_REVEAL_SECONDS) * 1000;
 
 // Placeholder for playerSetupData structure, will be moved to shared-types
 // export interface InitialPlayerSetupData {
@@ -134,8 +135,26 @@ export const addPlayerToGame = (
     return { success: false, message: "Game is full." };
   }
 
+  // Deal 4 cards to the new player from the game deck
+  const newPlayerHand: Card[] = [];
+  if (gameRoom.gameState.deck.length >= 4) {
+    for (let i = 0; i < 4; i++) {
+      const card = gameRoom.gameState.deck.pop();
+      if (card) {
+        newPlayerHand.push(card);
+      } else {
+        // This should not happen if deck.length >= 4 check passed
+        console.error(`[GameManager] Deck unexpectedly empty while dealing to player ${playerInfo.id} in game ${gameId}`);
+        return { success: false, message: "Error dealing cards: deck empty mid-deal." };
+      }
+    }
+  } else {
+    console.error(`[GameManager] Not enough cards in deck to deal to new player ${playerInfo.id} in game ${gameId}. Deck size: ${gameRoom.gameState.deck.length}`);
+    return { success: false, message: "Not enough cards in deck to deal to new player." };
+  }
+
   const newPlayerState: PlayerState = {
-    hand: [], 
+    hand: newPlayerHand, 
     hasUsedInitialPeek: false,
     isReadyForInitialPeek: false,
     hasCompletedInitialPeek: false,
@@ -919,10 +938,10 @@ export const handleResolveSpecialAbility = (
 };
 
 
-export const handleDeclareReadyForPeek = (
+export const handleDeclareReadyForPeek = async (
   gameId: string,
   playerId: string
-): { success: boolean; message?: string; updatedGameState?: ServerCheckGameState } => {
+): Promise<{ success: boolean; message?: string; updatedGameState?: ServerCheckGameState }> => {
   const gameRoom = getGameRoom(gameId);
   if (!gameRoom) return { success: false, message: "Game not found." };
   const G = gameRoom.gameState;
@@ -930,7 +949,7 @@ export const handleDeclareReadyForPeek = (
 
   if (!player) return { success: false, message: "Player not found." };
   if (G.currentPhase !== 'initialPeekPhase') return { success: false, message: "Not in initial peek phase." };
-  if (player.isReadyForInitialPeek) return { success: true, message: "Player already ready." };
+  if (player.isReadyForInitialPeek) return { success: true, message: "Player already ready.", updatedGameState: G }; // Return current G if already ready
 
   player.isReadyForInitialPeek = true;
   if (G.activePlayers[playerId]) G.activePlayers[playerId] = 'readyForPeek';
@@ -945,67 +964,66 @@ export const handleDeclareReadyForPeek = (
     G.turnOrder.forEach(pId => {
       if (G.activePlayers[pId]) G.activePlayers[pId] = 'revealingCardsStage';
       const pState = G.players[pId];
-      if (pState && pState.hand.length >= 2) {
-          const cardsToPeek = [pState.hand[2], pState.hand[3]].filter(Boolean);
-          if (cardsToPeek.length > 0) {
-            pState.cardsToPeek = cardsToPeek;
-            pState.peekAcknowledgeDeadline = Date.now() + (PEEK_COUNTDOWN_SECONDS + PEEK_REVEAL_SECONDS + 2) * 1000;
-             console.log(`[GameManager] Player ${pId} cardsToPeek set for initial peek.`);
+      if (pState && pState.hand.length >= 2) { // Ensure player has cards to peek
+          // Determine cards to peek (e.g., bottom two: indices 2 and 3 for a 4-card hand)
+          const cardsToPeekIndices = [2, 3]; // Assuming 0-indexed hand
+          const actualCardsToPeek: Card[] = [];
+          cardsToPeekIndices.forEach(index => {
+            if (pState.hand[index]) {
+              actualCardsToPeek.push(pState.hand[index]);
+            }
+          });
+
+          if (actualCardsToPeek.length > 0) {
+            pState.cardsToPeek = actualCardsToPeek;
+            // peekAcknowledgeDeadline could represent the time client shows cards until
+            pState.peekAcknowledgeDeadline = Date.now() + PEEK_TOTAL_DURATION_MS; 
+            console.log(`[GameManager] Player ${pId} cardsToPeek set for initial peek:`, actualCardsToPeek.map(c=>c.rank+c.suit));
+          } else {
+            console.log(`[GameManager] Player ${pId} has fewer than required cards for standard peek.`);
+            // If player has fewer than 2 cards in positions 2,3, they effectively peek what they have or nothing.
+            // Server will still mark them as completed peek after duration.
+             pState.cardsToPeek = []; // Or null, depending on how client handles it
           }
+      } else {
+         console.log(`[GameManager] Player ${pId} has too few cards in hand (${pState?.hand?.length}) to perform initial peek.`);
+         pState.cardsToPeek = []; // Or null
       }
     });
-  }
-  
-  activeGames[gameId] = gameRoom;
-  return { success: true, updatedGameState: G };
-};
+    activeGames[gameId] = gameRoom; // Save intermediate state with cardsToPeek visible
 
-
-export const handleAcknowledgePeek = (
-  gameId: string,
-  playerId: string
-): { success: boolean; message?: string; updatedGameState?: ServerCheckGameState } => {
-  const gameRoom = getGameRoom(gameId);
-  if (!gameRoom) return { success: false, message: "Game not found." };
-  const G = gameRoom.gameState;
-  const player = G.players[playerId];
-
-  if (!player) return { success: false, message: "Player not found." };
-  if (G.currentPhase !== 'initialPeekPhase') return { success: false, message: "Not in initial peek phase." };
-
-  player.hasCompletedInitialPeek = true;
-  player.cardsToPeek = null; 
-  player.peekAcknowledgeDeadline = null;
-
-  if (G.activePlayers[playerId]) G.activePlayers[playerId] = 'peekAcknowledged';
-  
-  console.log(`[GameManager] Player ${playerId} acknowledged initial peek in game ${gameId}.`);
-
-  const allPlayersAcknowledged = G.turnOrder.every(pId => G.players[pId]?.hasCompletedInitialPeek);
-
-  if (allPlayersAcknowledged) {
-    console.log(`[GameManager] All players acknowledged peek in game ${gameId}. Transitioning to playPhase.`);
-    G.initialPeekAllReadyTimestamp = null; 
-    G.currentPlayerId = G.turnOrder[0]; 
-    G.currentPhase = 'playPhase';
-    G.turnOrder.forEach(pId => { 
-        if (pId === G.currentPlayerId) {
-            G.activePlayers[pId] = 'playPhaseActive';
-        } else {
-            delete G.activePlayers[pId]; 
+    // Return a promise that resolves after the peek duration
+    await new Promise<void>(resolve => {
+      setTimeout(() => {
+        console.log(`[GameManager] Peek duration ended for game ${gameId}. Finalizing peek phase.`);
+        const currentRoom = getGameRoom(gameId); // Re-fetch to ensure we have the latest G
+        if (currentRoom) {
+          const currentG = currentRoom.gameState;
+          currentG.turnOrder.forEach(pId => {
+            const pState = currentG.players[pId];
+            if (pState) {
+              pState.cardsToPeek = null;
+              pState.hasCompletedInitialPeek = true;
+              pState.peekAcknowledgeDeadline = null;
+              if (currentG.activePlayers[pId]) currentG.activePlayers[pId] = 'peekCompleted';
+            }
+          });
+          currentG.initialPeekAllReadyTimestamp = null;
+          // setupNextPlayTurn will set currentPhase, currentPlayerId, and activePlayers
+          setupNextPlayTurn(currentRoom.gameId); 
+          activeGames[gameId] = currentRoom; // Save final state
         }
+        resolve();
+      }, PEEK_TOTAL_DURATION_MS + 500); // Add a small buffer
     });
+    // After the timeout, G has been updated to the post-peek state.
+    return { success: true, message: "All players peeked, phase transitioned.", updatedGameState: G };
+
+  } else {
+    // Not all players are ready yet, just return the current state
     activeGames[gameId] = gameRoom;
-    const nextState = setupNextPlayTurn(gameId);
-    if (nextState) {
-        return { success: true, message: "Peek acknowledged, next turn started.", updatedGameState: nextState };
-    } else {
-        return { success: false, message: "Peek acknowledged, but failed to set up next turn." };
-    }
+    return { success: true, updatedGameState: G };
   }
-  
-  activeGames[gameId] = gameRoom;
-  return { success: true, updatedGameState: G };
 };
 
 export const generatePlayerView = (

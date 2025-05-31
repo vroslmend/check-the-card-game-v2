@@ -1,5 +1,10 @@
 # Project AI Notes: "Check" - Online Multiplayer Card Game
 
+## Framework & Core Technologies (DO NOT OVERWRITE)
+*   **Backend:** Node.js, Express.js (implicitly via Socket.IO's HTTP server), Socket.IO, TypeScript
+*   **Frontend:** Next.js (with React), TypeScript, Tailwind CSS
+*   **Shared Logic/Types:** TypeScript (in `shared-types/` directory)
+
 ## Current Status: Major Refactor - `boardgame.io` to Socket.IO Backend
 
 The project has undergone a significant refactor to replace the `boardgame.io` library with a custom backend using Node.js, Express, and `socket.io`, while retaining the Next.js frontend.
@@ -24,7 +29,7 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
     *   **Game Initialization & Player Management:**
         *   `initializeNewGame(gameId, playerSetupData)`: Creates a new game, deals initial hands, sets up initial `ServerCheckGameState` (including `currentPhase: 'initialPeekPhase'`, `currentPlayerId`, `turnOrder`, `activePlayers` for peek, `matchResolvedDetails: null`, `pendingAbilities: []`, `gameover: null`).
         *   `getGameRoom(gameId)`: Retrieves an active game room.
-        *   `addPlayerToGame(gameId, playerInfo)`: Adds a player to an existing game, initializes their state.
+        *   `addPlayerToGame(gameId, playerInfo)`: Adds a player to an existing game, deals their initial 4 cards, and initializes their state.
     *   **Player View / State Redaction:**
         *   `generatePlayerView(fullGameState, viewingPlayerId)` function created to redact sensitive information (other players' hands, full deck state) and produce `ClientCheckGameState`.
 *   **Socket Event Handlers (`server/src/index.ts` integrating with `game-manager.ts`):**
@@ -51,7 +56,8 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
         *   Fizzles for locked players (implicit, as abilities are on `G` not player).
         *   Sets `G.lastPlayerToResolveAbility` and `G.lastResolvedAbilitySource`.
         *   Calls `setupAbilityResolutionPhase` or next phase setup if no more abilities.
-    *   `handleDeclareReadyForPeek(gameId, playerId)` and `handleAcknowledgePeek(gameId, playerId)`: Manage initial peek flow, including setting `player.cardsToPeek` and `player.peekAcknowledgeDeadline`.
+    *   `handleDeclareReadyForPeek(gameId, playerId)`: Now an `async` function. When all players are ready, it sets `player.cardsToPeek` (bottom two cards: indices 2 and 3) and `player.peekAcknowledgeDeadline`. After a server-side timeout (`PEEK_TOTAL_DURATION_MS`), it automatically clears peek state, marks peek as completed for all players, and transitions the game to `playPhase` via `setupNextPlayTurn`.
+    *   `handleAcknowledgePeek(gameId, playerId)`: Removed. The peek completion is now automated by a server-side timer triggered in `handleDeclareReadyForPeek`.
 *   **Phase Setup Helper Functions (in `game-manager.ts`):**
     *   `setupNextPlayTurn(gameId)`: Finds next non-locked player for `playPhase`. Transitions to scoring if check called and no one else can play.
     *   `setupFinalTurnsPhase(gameId, checkerPlayerId)`: Sets up for final turns, resets `finalTurnsTaken`. Determines first player for final turns.
@@ -95,13 +101,15 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
         *   Removed internal `boardgame.io` specific logic (`G`, `ctx`, `moves`, `isActive`).
         *   Action handlers (e.g., for draw, discard, match, pass, ability resolution) now call `onPlayerAction`.
         *   UI conditionals and data display updated to use `gameState` and `playerId`.
-        *   Initial peek flow UI (ready button, countdown, card reveal, acknowledge) adapted for server-driven state (`player.cardsToPeek`, `player.peekAcknowledgeDeadline`).
+        *   Initial peek flow UI (ready button, countdown, card reveal) adapted for server-driven state (`player.cardsToPeek`, `player.peekAcknowledgeDeadline`). The "Acknowledge Peek" button and its corresponding client-side handler (`handleAcknowledgePeek`) have been removed, as peek completion is now automated by the server.
+        *   Corrected logic for passing `cardsToForceShowFaceUp` to `PlayerHandComponent`, ensuring it targets the correct cards (from `handToShow`) during initial peek reveal.
         *   UI for matching stage, ability resolution (target selection for King/Queen/Jack), and calling "Check" implemented/updated.
         *   Debug output updated.
     *   `frontend/app/components/CardComponent.tsx`: Prop `card` changed to `ClientCard | null`. Renders hidden cards as placeholders. `id` property added to `ClientCard` where appropriate.
     *   `frontend/app/components/PlayerHandComponent.tsx`:
         *   Props changed to use `ClientPlayerState`, `ClientCard[]`.
         *   Logic for determining card visibility (face-up/down) updated for `ClientCard` and peek scenarios (`cardsToForceShowFaceUp`, `handToShow`).
+        *   Refined `showFaceUp` logic to ensure player's own cards are face-down by default, only showing face-up if `cardsToForceShowFaceUp` dictates (e.g., during initial peek reveal or ability peeks). This fixed an issue where all of the player's own cards were incorrectly visible by default.
 *   **Linter Error Resolution (Frontend):**
     *   Resolved numerous TypeScript errors in `CheckGameBoard.tsx`, `CardComponent.tsx`, `PlayerHandComponent.tsx` related to new prop types and state structure.
     *   Addressed React specific errors (e.g. `ReactNode` type issues for button content).

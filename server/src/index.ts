@@ -14,7 +14,6 @@ import {
     handleCallCheck, 
     generatePlayerView,
     handleDeclareReadyForPeek,
-    handleAcknowledgePeek,
     AbilityArgs,
     handleResolveSpecialAbility
 } from './game-manager';
@@ -131,8 +130,7 @@ io.on('connection', (socket: Socket) => {
       case 'passMatch': result = handlePassMatch(gameId, playerId); break;
       case 'callCheck': result = handleCallCheck(gameId, playerId); break;
       case 'resolveSpecialAbility': result = handleResolveSpecialAbility(gameId, playerId, payload as AbilityArgs); break;
-      case 'declareReadyForPeek': result = handleDeclareReadyForPeek(gameId, playerId); break;
-      case 'acknowledgePeek': result = handleAcknowledgePeek(gameId, playerId); break;
+      case 'declareReadyForPeek': result = await handleDeclareReadyForPeek(gameId, playerId); break;
       default:
         console.warn(`[Server] Unknown action type: ${type}`);
         result = { success: false, message: "Unknown action type." }; break;

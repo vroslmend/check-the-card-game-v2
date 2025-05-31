@@ -33,15 +33,17 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = ({
     return <div>Loading player ({playerName || playerID}) data...</div>;
   }
 
-  const currentHand = handToShow || playerState.hand;
+  const actualHandCards = handToShow || playerState.hand;
 
-  if (!currentHand) {
+  if (!actualHandCards) {
     return <div>Player ({playerName || playerID}) hand data is missing.</div>;
   }
 
-  const numCards = currentHand.length;
-  const numCols = numCards <= 2 ? numCards : (numCards <= 4 ? 2 : Math.ceil(numCards / 2));
-  const numRows = Math.ceil(numCards / numCols);
+  const numActualCards = actualHandCards.length;
+
+  const displaySlots = 4;
+  const numCols = displaySlots < 2 ? displaySlots : 2;
+  const numRows = numCols > 0 ? Math.ceil(displaySlots / numCols) : 0;
 
   const gridStyle: React.CSSProperties = {
     display: 'grid',
@@ -65,13 +67,13 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = ({
         {hasCalledCheck && !isLocked && " (Called Check)"}
       </h4>
       <div style={gridStyle}>
-        {currentHand.map((clientCard, index) => {
+        {actualHandCards.map((clientCard, index) => {
           let cardForDisplay: ClientCard | null = clientCard;
           let showFaceUp = false;
 
           if (isViewingPlayer) {
-            showFaceUp = !!cardsToForceShowFaceUp[index];
-            if (!showFaceUp && !('isHidden' in clientCard && clientCard.isHidden)) {
+            if (cardsToForceShowFaceUp[index]) {
+              showFaceUp = true;
             }
           } else {
             if (!('isHidden' in clientCard && clientCard.isHidden)) {
@@ -82,10 +84,6 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = ({
             }
           }
           
-          if (handToShow && isViewingPlayer) {
-            showFaceUp = true;
-          }
-
           return (
             <CardComponent
               key={`${playerID}-card-${index}`}
@@ -96,8 +94,8 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = ({
             />
           );
         })}
-        {numCards < 4 && Array.from({ length: 4 - numCards }).map((_, i) => (
-             <CardComponent key={`${playerID}-empty-${i}`} card={null} />
+        {numActualCards < displaySlots && Array.from({ length: displaySlots - numActualCards }).map((_, i) => (
+             <CardComponent key={`${playerID}-empty-${numActualCards + i}`} card={null} />
         ))}
       </div>
     </div>

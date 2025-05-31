@@ -126,13 +126,13 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
     }
   }, [onPlayerAction, clientPlayerState, gameState.currentPhase]);
   
-  const handleAcknowledgePeek = useCallback(() => {
-    if (clientPlayerState?.cardsToPeek && !clientPlayerState.hasCompletedInitialPeek && gameState.currentPhase === 'initialPeekPhase') {
-        onPlayerAction('acknowledgePeek');
-        setIsPeekRevealActive(false); // Hide cards immediately after acknowledging
-        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current); // Stop any client countdown
-    }
-  }, [onPlayerAction, clientPlayerState, gameState.currentPhase]);
+  // const handleAcknowledgePeek = useCallback(() => { // REMOVE THIS FUNCTION
+  //   if (clientPlayerState?.cardsToPeek && !clientPlayerState.hasCompletedInitialPeek && gameState.currentPhase === 'initialPeekPhase') {
+  //       onPlayerAction('acknowledgePeek');
+  //       setIsPeekRevealActive(false); // Hide cards immediately after acknowledging
+  //       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current); // Stop any client countdown
+  //   }
+  // }, [onPlayerAction, clientPlayerState, gameState.currentPhase]);
 
 
   // --- Action Conditionals ---
@@ -445,12 +445,12 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
           <p className="mb-1">Peek at your cards! They will be hidden again in:</p>
           <p className="text-2xl font-bold mb-2">{peekCountdown}s</p>
           <p className="text-xs mb-2">(Cards {clientPlayerState.cardsToPeek.map(c => `${c.rank}${c.suit}`).join(', ')} are revealed below in your hand)</p>
-          <button 
+          {/* <button 
             onClick={handleAcknowledgePeek} 
             className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm"
           >
             Acknowledge Peek
-          </button>
+          </button> */}
         </div>
       );
     } else if (clientPlayerState.hasCompletedInitialPeek) {
@@ -613,7 +613,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
               onCardClick={handleCardClick}
               selectedCardIndices={pID === playerId ? (selectedHandCardIndex !== null ? [selectedHandCardIndex] : []) : []}
               // currentPlayersCardsToShowFaceUp is for general purpose reveals, not the initial peek full reveal
-              cardsToForceShowFaceUp={ (pID === playerId && forceShowAll) ? Object.fromEntries(pState.hand.map((_,i) => [i, true])) : getOwnCardsToShowFaceUp() }
+              cardsToForceShowFaceUp={ (pID === playerId && forceShowAll) ? Object.fromEntries(handToShow.map((_,i) => [i, true])) : getOwnCardsToShowFaceUp() }
               // Pass multi-select state if this player is the one making selections (e.g. for King ability)
               multiSelectedCardIndices={pID === playerId ? multiSelectedCardLocations.map(loc => loc.cardIndex) : []}
               isLocked={pState.isLocked}
