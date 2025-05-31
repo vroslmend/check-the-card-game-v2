@@ -37,7 +37,7 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
     *   `joinGame`: Calls `addPlayerToGame`, client joins room, notifies others with `playerJoined`, sends player-specific `gameState` to all clients in the room.
     *   `playerAction` (generic handler for `{ gameId, playerId, type, payload }`):
         *   Calls corresponding game logic functions from `game-manager.ts` based on `type`.
-        *   Broadcasts player-specific `gameStateUpdate` views (via `generatePlayerView`) to all clients in the room.
+        *   Broadcasts player-specific `gameStateUpdate` views (via `generatePlayerView`) to all clients in the room. For `declareReadyForPeek`, this handles the first broadcast (peek start), while the second (peek end) is triggered by `game-manager` via an injected broadcast function.
 *   **Ported & Refactored Game Moves/Logic (in `game-manager.ts`):**
     *   `handleDrawFromDeck(gameId, playerId)`
     *   `handleDrawFromDiscard(gameId, playerId)`
@@ -58,6 +58,7 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
         *   Calls `setupAbilityResolutionPhase` or next phase setup if no more abilities.
     *   `handleDeclareReadyForPeek(gameId, playerId)`: Now an `async` function. When all players are ready, it sets `player.cardsToPeek` (bottom two cards: indices 2 and 3) and `player.peekAcknowledgeDeadline`. After a server-side timeout (`PEEK_TOTAL_DURATION_MS`), it automatically clears peek state, marks peek as completed for all players, and transitions the game to `playPhase` via `setupNextPlayTurn`.
     *   `handleAcknowledgePeek(gameId, playerId)`: Removed. The peek completion is now automated by a server-side timer triggered in `handleDeclareReadyForPeek`.
+    *   **Peek Broadcast Fix**: Modified `handleDeclareReadyForPeek` in `game-manager.ts` to be synchronous for its immediate return. It now sets `cardsToPeek` and returns the state for an immediate broadcast when all players are ready (peek starts). A `setTimeout` is scheduled, and its callback (after peek duration) updates the game state (clears `cardsToPeek`, advances phase) and then calls a new `triggerBroadcast` function (passed from `index.ts`) to send a second broadcast with the post-peek state. `index.ts` was updated to provide this broadcast function to `game-manager.ts` and correctly handle the immediate broadcast from `handleDeclareReadyForPeek`.
 *   **Phase Setup Helper Functions (in `game-manager.ts`):**
     *   `setupNextPlayTurn(gameId)`: Finds next non-locked player for `playPhase`. Transitions to scoring if check called and no one else can play.
     *   `setupFinalTurnsPhase(gameId, checkerPlayerId)`: Sets up for final turns, resets `finalTurnsTaken`. Determines first player for final turns.
@@ -136,6 +137,9 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
 *   **Deployment Considerations:**
     *   The user noted Vercel's lack of WebSocket support. If deploying there, an alternative hosting solution for the Socket.IO server will be needed, or a different communication method (e.g., long polling, though less ideal for real-time games).
 *   (Optional) User authentication, lobbies, multi-round game sessions, persistent leaderboards.
+*   **Check Call**
+    *  Check the functionality for game ending as currently thats not working properly.
+    * Improve ui
 
 ---
 *Last Updated: (Current Date)*

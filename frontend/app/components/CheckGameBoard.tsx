@@ -174,7 +174,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
 
   const canDrawFromDeck = canPerformStandardPlayPhaseActions;
   // const canDrawFromDiscard = canPerformStandardPlayPhaseActions && !typedG.discardPileIsSealed; // REPLACED typedG
-  const canDrawFromDiscard = canPerformStandardPlayPhaseActions && !gameState.discardPileIsSealed;
+  const canDrawFromDiscard = canPerformStandardPlayPhaseActions && !gameState.topDiscardIsSpecialOrUnusable;
 
   // const canCallCheck = canPerformStandardPlayPhaseActions && // isActive is part of canPerformStandardPlayPhaseActions
   //                      ctx.currentPlayer === playerID && // Explicitly check if it's their turn for callCheck // Already handled by isCurrentPlayer
@@ -471,36 +471,42 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
             <p className="font-bold text-purple-800 text-lg">
                 Matching Opportunity!
             </p>
-            <p className="mb-2 text-sm">{originalPlayer?.name || gameState.matchingOpportunityInfo.originalPlayerID} discarded a <CardComponent card={cardToMatch} isFaceUp={true} style={{display: 'inline-block', transform: 'scale(0.9)', verticalAlign:'middle'}} /> ({cardToMatch.rank}).
-            </p>
-            {gameState.matchingOpportunityInfo.potentialMatchers.includes(playerId) ? (
-                <div className="mt-2 space-y-2"> {/* Grouped buttons */}
-                    <p className="text-sm font-semibold">Select a card from your hand to match.</p>
-                    {selectedHandCardIndex !== null && clientPlayerState?.hand[selectedHandCardIndex!] && (
-                        <button 
-                            onClick={() => handleAttemptMatch(selectedHandCardIndex!)} 
-                            className="w-full bg-purple-600 hover:bg-purple-800 text-white font-bold py-2 px-4 rounded text-sm shadow hover:shadow-lg transition-all"
-                        >
-                            Attempt Match with { 
-                                (() => {
-                                    const cardDisplay = clientPlayerState.hand[selectedHandCardIndex!];
-                                    if ('isHidden' in cardDisplay && cardDisplay.isHidden) return 'Hidden Card';
-                                    else if ('rank' in cardDisplay) return `${cardDisplay.rank}${cardDisplay.suit}`;
-                                    return 'Card';
-                                })()
-                            }
-                        </button>
-                    )}
+            <div className="mb-2 text-sm"> 
+              {originalPlayer?.name || gameState.matchingOpportunityInfo.originalPlayerID} discarded a <CardComponent card={cardToMatch} isFaceUp={true} style={{display: 'inline-block', transform: 'scale(0.9)', verticalAlign:'middle'}} /> ({cardToMatch.rank}).
+            </div>
+            {gameState.matchingOpportunityInfo.potentialMatchers.includes(playerId) && gameState.activePlayers && gameState.activePlayers[playerId] === 'awaitingMatchAction' ? (
+              <div className="mt-2 space-y-2"> {/* Grouped buttons */}
+                  <p className="text-sm font-semibold">Select a card from your hand to match.</p>
+                  {selectedHandCardIndex !== null && clientPlayerState?.hand[selectedHandCardIndex!] && (
                     <button 
-                        onClick={handlePassMatch} 
-                        className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded text-sm shadow hover:shadow-lg transition-all"
+                        onClick={() => handleAttemptMatch(selectedHandCardIndex!)} 
+                        className="w-full bg-purple-600 hover:bg-purple-800 text-white font-bold py-2 px-4 rounded text-sm shadow hover:shadow-lg transition-all"
                     >
-                        Pass Match
+                        Attempt Match with { 
+                            (() => {
+                                const cardDisplay = clientPlayerState.hand[selectedHandCardIndex!];
+                                if ('isHidden' in cardDisplay && cardDisplay.isHidden) return 'Hidden Card';
+                                else if ('rank' in cardDisplay) return `${cardDisplay.rank}${cardDisplay.suit}`;
+                                return 'Card';
+                            })()
+                        }
                     </button>
-                </div>
-            ) : (
-                <p className="text-sm text-gray-600 italic">Waiting for others to match or pass.</p>
-            )}
+                  )}
+                  <button 
+                      onClick={handlePassMatch} 
+                      className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded text-sm shadow hover:shadow-lg transition-all"
+                  >
+                      Pass Match
+                  </button>
+              </div>
+          ) : (
+              <p className="text-sm text-gray-600 italic">
+                {/* Check if the player was ever a potential matcher to distinguish messages */}
+                {gameState.matchingOpportunityInfo.potentialMatchers.includes(playerId) 
+                  ? "You have passed or already acted. Waiting for others." 
+                  : "Waiting for others to match or pass."}
+              </p>
+          )}
         </div>
     );
   }
@@ -537,10 +543,16 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
   // For more opponents, we'd need a more complex mapping to positions (e.g. left/right of center)
   const otherOpponentIds = opponentPlayerIds.slice(1);
 
+  // Determine if the initial peek is active for the viewing player (used by PlayerHandComponent)
+  const isViewingPlayerInitialPeekActive = gameState.currentPhase === 'initialPeekPhase' && 
+                                        !!clientPlayerState?.cardsToPeek && 
+                                        isPeekRevealActive && 
+                                        !clientPlayerState.hasCompletedInitialPeek;
+
   return (
     <div className="flex flex-col h-screen bg-green-700 text-white p-2 space-y-2 antialiased"> {/* Added antialiasing */}
       {/* ======== TOP AREA: Opponent(s) ======== */}
-      <div className="h-1/5 flex justify-around items-center bg-green-600 p-2 rounded-lg shadow-md min-h-[120px]"> {/* Added min-height */}
+      <div className="flex-none max-h-1/4 flex justify-around items-center bg-green-600 p-2 rounded-lg shadow-md min-h-[150px]"> {/* Adjusted height, added flex-none, max-h-1/4 */}
         {opponentPlayerIds.length === 0 && <div className="italic text-gray-400">Waiting for opponents...</div>}
         {opponentPlayerIds.map(opId => {
           const pState = gameState.players[opId];
@@ -553,7 +565,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
                     playerName={pState.name || opId}
                     playerID={opId}
                     playerState={pState}
-                    handToShow={pState.hand} 
+                    actualHandForDisplay={pState.hand}
                     isViewingPlayer={false}
                     onCardClick={handleCardClick}
                     selectedCardIndices={multiSelectedCardLocations.filter(s => s.playerID === opId).map(s => s.cardIndex)}
@@ -570,9 +582,9 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
       {/* ======== MIDDLE AREA: Game Piles, Info/Log, Main Prompts ======== */}
       <div className="flex-grow flex space-x-2 min-h-0"> {/* min-h-0 for flex-grow to work in Firefox */}
         {/* Left Info/Log Panel */}
-        <div className="w-1/4 p-3 bg-green-800 rounded-lg shadow-xl flex flex-col space-y-2 overflow-y-auto"> {/* Made scrollable */}
+        <div className="w-1/4 p-3 bg-green-800 rounded-lg shadow-xl flex flex-col space-y-2 overflow-y-auto custom-scrollbar"> {/* Made scrollable */}
           <h3 className="text-xl font-bold mb-2 border-b border-green-600 pb-1 text-teal-300">Game Info</h3>
-          <div className="space-y-1 text-sm flex-grow"> {/* flex-grow for log */}
+          <div className="space-y-1 text-sm flex-grow min-h-0"> {/* flex-grow for log, added min-h-0 */}
             <p><strong>Phase:</strong> <span className="font-semibold text-indigo-300">{gameState.currentPhase}</span></p>
             <p><strong>Turn:</strong> <span className="font-semibold text-red-300 truncate">{gameState.players[gameState.currentPlayerId]?.name || gameState.currentPlayerId}</span></p>
             {turnIndicatorText && <p className={`font-semibold ${isCurrentPlayer ? 'text-yellow-300 animate-pulse' : 'text-gray-400'}`}>{turnIndicatorText}</p>}
@@ -587,12 +599,12 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
               </div>
             )}
             <h4 className="text-lg font-semibold mt-3 pt-2 border-t border-green-600 text-teal-300">Game Log</h4>
-            <div className="text-xs text-gray-400 italic flex-grow bg-black/20 p-1 rounded custom-scrollbar">Game log coming soon...</div>
+            <div className="text-xs text-gray-400 italic flex-grow bg-black/20 p-1 rounded custom-scrollbar min-h-[50px]">Game log coming soon...</div> {/* Added min-h to ensure it's visible */}
           </div>
         </div>
 
         {/* Center: Deck, Discard, Main Game Prompts */}
-        <div className="w-1/2 flex flex-col items-center justify-center p-3 bg-green-600/70 backdrop-blur-sm rounded-lg shadow-md space-y-3 overflow-y-auto custom-scrollbar"> {/* Added scroll */}
+        <div className="w-1/2 flex flex-col items-center justify-center p-3 bg-green-600/70 backdrop-blur-sm rounded-lg shadow-md space-y-3 overflow-y-auto custom-scrollbar min-h-0"> {/* Added min-h-0 */}
           <div className="flex space-x-6 items-center"> {/* Aligned items */}
             <DrawPileComponent
               canDraw={canDrawFromDeck}
@@ -616,17 +628,17 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
         </div>
 
         {/* Right Action Panel (Current Player's actions) */}
-        <div className="w-1/4 p-3 bg-green-800 rounded-lg shadow-xl flex flex-col space-y-3 overflow-y-auto custom-scrollbar"> 
+        <div className="w-1/4 p-3 bg-green-800 rounded-lg shadow-xl flex flex-col space-y-3 overflow-y-auto custom-scrollbar min-h-0">  {/* Added min-h-0 */}
             <h4 className="text-xl font-bold mb-1 border-b border-green-600 pb-1 text-yellow-300">Your Actions</h4>
             {isCurrentPlayer && gameState.currentPhase !== 'initialPeekPhase' && !gameState.gameover && (
               <>
                 {clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase') && (
                     <div className="p-2 border border-dashed border-yellow-400 bg-black/20 rounded-md space-y-2"> {/* Styling */}
-                      <p className="text-sm font-medium text-yellow-200 flex items-center justify-between">
+                      <div className="text-sm font-medium text-yellow-200 flex items-center justify-between"> {/* Changed p to div */}
                         <span>Drawn Card:</span> 
                         <CardComponent card={clientPlayerState.pendingDrawnCard} isFaceUp={true} style={{transform: 'scale(0.8)'}}/>
                         <span>(from {clientPlayerState.pendingDrawnCardSource})</span>
-                      </p>
+                      </div>
                       <div className="flex flex-col space-y-2"> {/* Buttons column */}
                           {selectedHandCardIndex !== null && (
                           <button 
@@ -673,7 +685,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
       </div>
 
       {/* ======== BOTTOM AREA: Current Player's Hand ======== */}
-      <div className="h-1/5 p-2 bg-green-800 rounded-lg shadow-xl flex flex-col justify-center items-center min-h-[150px]"> {/* min-height */}
+      <div className="flex-none max-h-1/4 p-2 bg-green-800 rounded-lg shadow-xl flex flex-col justify-center items-center min-h-[150px]"> {/* Adjusted height, added flex-none, max-h-1/4 */}
         <h3 className="text-lg font-semibold mb-1 text-teal-300">{clientPlayerState?.name || playerId} (Your Hand)</h3>
         {clientPlayerState && (
             <PlayerHandComponent
@@ -681,28 +693,16 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
                 playerName={clientPlayerState.name || playerId}
                 playerID={playerId}
                 playerState={clientPlayerState}
-                handToShow={
-                    (gameState.currentPhase === 'initialPeekPhase' && 
-                     clientPlayerState?.cardsToPeek && 
-                     isPeekRevealActive && 
-                     !clientPlayerState.hasCompletedInitialPeek
-                    ) ? clientPlayerState.cardsToPeek.map((card, index) => card ? card : {isHidden: true, id: `peek-hidden-${index}`})
-                    : clientPlayerState.hand
-                }
+                actualHandForDisplay={clientPlayerState.hand}
                 isViewingPlayer={true}
                 onCardClick={handleCardClick}
                 selectedCardIndices={selectedHandCardIndex !== null ? [selectedHandCardIndex] : []}
                 multiSelectedCardIndices={multiSelectedCardLocations.filter(s => s.playerID === playerId).map(loc => loc.cardIndex)}
-                cardsToForceShowFaceUp={
-                    (gameState.currentPhase === 'initialPeekPhase' && 
-                     clientPlayerState?.cardsToPeek && 
-                     isPeekRevealActive && 
-                     !clientPlayerState.hasCompletedInitialPeek
-                    ) ? Object.fromEntries((clientPlayerState.cardsToPeek || []).map((_,i) => [i, true])) 
-                    : getOwnCardsToShowFaceUp()
-                }
+                cardsToForceShowFaceUp={getOwnCardsToShowFaceUp()}
                 isLocked={clientPlayerState.isLocked}
                 hasCalledCheck={clientPlayerState.hasCalledCheck}
+                cardsBeingPeeked={clientPlayerState.cardsToPeek}
+                isInitialPeekActive={isViewingPlayerInitialPeekActive}
             />
         )}
       </div>

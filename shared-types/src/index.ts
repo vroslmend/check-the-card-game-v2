@@ -71,6 +71,7 @@ export interface PlayerState {
   isLocked: boolean; // Player is locked after calling Check or emptying hand
   score: number; // Score for the current round
   // id: string; // playerID is the key in G.players, not stored here
+  name?: string; // Added for player identification
 }
 
 export interface CheckGameState {
@@ -97,7 +98,7 @@ export interface CheckGameState {
   turnOrder: string[];
   gameMasterId?: string; // Optional game master
   activePlayers: { [playerID: string]: string }; // Tracks active players and their current stage
-  pendingAbilities?: PendingSpecialAbility[] | null; // Abilities waiting for resolution
+  pendingAbilities: PendingSpecialAbility[]; // Abilities waiting for resolution (non-optional, init to [])
   gameover?: { winner?: string; scores?: { [playerId: string]: number } } | null; // Standardized gameover structure
 
   // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
@@ -121,9 +122,10 @@ export interface PendingSpecialAbility {
   pairTargetId?: string; // ID of the other player involved in a stack, if applicable
 }
 
-export interface MatchingOpportunityInfo {
-  // ... existing code ...
-} 
+// This interface is currently empty and unused, as CheckGameState.matchingOpportunityInfo defines its structure inline.
+// export interface MatchingOpportunityInfo {
+//   // ... existing code ...
+// } 
 
 // --- Client-Specific Types for Redaction ---
 
@@ -181,7 +183,7 @@ export interface ClientCheckGameState {
   turnOrder: string[];
   gameMasterId?: string;
   activePlayers: { [playerID: string]: string };
-  pendingAbilities?: PendingSpecialAbility[] | null; // List of abilities pending, card details might be sensitive if not for viewing player
+  pendingAbilities: PendingSpecialAbility[]; // List of abilities pending, card details might be sensitive if not for viewing player
   gameover?: { winner?: string; scores?: { [playerId: string]: number } } | null;
   
   // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
@@ -194,4 +196,5 @@ export interface ClientCheckGameState {
 
   // Specific to the client receiving this state
   viewingPlayerId: string; 
+  topDiscardIsSpecialOrUnusable?: boolean; // True if discard pile top card is K,Q,J OR if discardPileIsSealed
 } 

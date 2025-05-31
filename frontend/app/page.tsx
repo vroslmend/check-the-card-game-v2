@@ -127,8 +127,13 @@ export default function HomePage() {
             // The server will broadcast gameStateUpdate to all clients, including this one.
             // So, we might not strictly need to setGameState from this callback if 'gameStateUpdate' listener is robust.
             // However, it can be useful for immediate feedback or if server broadcast is delayed.
-            // For now, rely on the broadcast via 'gameStateUpdate' listener.
             console.log(`Action ${type} acknowledged by server.`, response);
+            if (response.message && type === 'attemptMatch') { // Specifically for failed match attempts with a message
+              alert(`Match Attempt: ${response.message}`); // Use alert for now, replace with toast later
+            } else if (response.message) {
+              // Potentially handle other success messages differently if needed
+              console.log('Server message:', response.message);
+            }
         } else {
             console.error(`Action ${type} failed:`, response.message);
             setError(response.message || `Action ${type} failed.`);
@@ -137,7 +142,20 @@ export default function HomePage() {
   };
 
   if (error) {
-    return <div className="text-red-500 text-center p-8">Error: {error}</div>;
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative shadow-lg max-w-md w-full">
+          <strong className="font-bold">Error!</strong>
+          <span className="block sm:inline ml-2">{error}</span>
+          <button 
+            onClick={() => setError(null)} 
+            className="absolute top-0 bottom-0 right-0 px-4 py-3 text-red-500 hover:text-red-700 font-bold"
+          >
+            X
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (!gameState || !gameId || !playerId) {

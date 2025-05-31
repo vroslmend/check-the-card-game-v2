@@ -37,10 +37,11 @@ Turns proceed in a chosen direction. A player's turn consists of a primary draw 
             *   **Discard Drawn Card:** Immediately place the drawn card (Card X) face-up onto the Discard Pile. This does not affect the player's hand grid. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7).
             *   *(Note: If a K, Q, or J is drawn and the player chooses to swap it into their hand, its ability does NOT trigger at this point. It only triggers when later discarded from the hand to the Discard Pile).*\
     *   **Draw from the Discard Pile (Face Up):**
-        1.  This is only possible if `G.discardPileIsSealed` is `false` (i.e., the top card is not the second card of a just-completed matched pair).\
-        2.  If drawable, take the top card from the Discard Pile.
-        3.  The player **must** swap this card with one card from their hand grid. The drawn card is placed face-down into the selected grid position. The card originally in that grid position (Card X) is then placed face-up onto the Discard Pile. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7).
-        4.  A player cannot draw from the Discard Pile and then immediately discard that same card without swapping.
+        1.  This is only possible if `G.discardPileIsSealed` is `false` (i.e., the top card is not the second card of a just-completed matched pair).
+        2.  Additionally, a player **cannot draw a special ability card (King, Queen, or Jack)** from the discard pile.
+        3.  If drawable, take the top card from the Discard Pile.
+        4.  The player **must** swap this card with one card from their hand grid. The drawn card is placed face-down into the selected grid position. The card originally in that grid position (Card X) is then placed face-up onto the Discard Pile. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7).
+        5.  A player cannot draw from the Discard Pile and then immediately discard that same card without swapping.
 
 **7. Matching/Stacking Opportunity (Unified Rule):**
 *   Triggered immediately after the current player discards a card (Card X) to the top of the Discard Pile, setting `G.matchingOpportunityInfo`. The game enters the `matchingStage`.

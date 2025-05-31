@@ -5,8 +5,8 @@ import CardComponent from './CardComponent';
 interface PlayerHandComponentProps {
   playerID: string;
   playerName?: string;
-  playerState: ClientPlayerState | undefined;
-  handToShow?: ClientCard[];
+  playerState: ClientPlayerState | undefined; // Full player state for context if needed
+  actualHandForDisplay: ClientCard[]; // The hand to render (usually playerState.hand)
   isViewingPlayer: boolean;
   onCardClick?: (playerID: string, cardIndex: number) => void;
   selectedCardIndices?: number[];
@@ -14,13 +14,16 @@ interface PlayerHandComponentProps {
   cardsToForceShowFaceUp?: { [cardIndex: number]: boolean };
   isLocked?: boolean;
   hasCalledCheck?: boolean;
+  // New props for initial peek handling for the viewing player
+  cardsBeingPeeked?: Card[] | null; 
+  isInitialPeekActive?: boolean;
 }
 
 const PlayerHandComponent: React.FC<PlayerHandComponentProps> = ({
   playerID,
   playerName,
-  playerState,
-  handToShow,
+  playerState, // Keep for context like name, score, status, but not primary hand source here
+  actualHandForDisplay, // Use this as the source for cards in the grid
   isViewingPlayer,
   onCardClick,
   selectedCardIndices = [],
@@ -28,18 +31,17 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = ({
   cardsToForceShowFaceUp = {},
   isLocked = false,
   hasCalledCheck = false,
+  cardsBeingPeeked,
+  isInitialPeekActive,
 }) => {
   if (!playerState) {
     return <div>Loading player ({playerName || playerID}) data...</div>;
   }
 
-  const actualHandCards = handToShow || playerState.hand;
-
-  if (!actualHandCards) {
+  // actualHandCards is now actualHandForDisplay, passed directly
+  if (!actualHandForDisplay) {
     return <div>Player ({playerName || playerID}) hand data is missing.</div>;
   }
-
-  const numActualCards = actualHandCards.length;
 
   const displaySlots = 4;
   const numCols = displaySlots < 2 ? displaySlots : 2;
@@ -60,27 +62,35 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = ({
 
   return (
     <div style={{ marginBottom: '20px', opacity: isLocked ? 0.7 : 1 }}>
+      {/* Player name and status display can use playerState directly */}
       <h4 style={{ textAlign: 'center', fontWeight: isViewingPlayer ? 'bold' : 'normal' }}>
-        {playerName || playerID} 
+        {playerState.name || playerName || playerID} 
         {isViewingPlayer && " (Your Hand)"}
         {isLocked && " (Locked)"}
         {hasCalledCheck && !isLocked && " (Called Check)"}
       </h4>
       <div style={gridStyle}>
-        {actualHandCards.map((clientCard, index) => {
-          let cardForDisplay: ClientCard | null = clientCard;
+        {Array.from({ length: displaySlots }).map((_, index) => {
+          const clientCard = actualHandForDisplay[index]; 
+          let cardForDisplay: ClientCard | null = clientCard || null;
           let showFaceUp = false;
 
           if (isViewingPlayer) {
-            if (cardsToForceShowFaceUp[index]) {
-              showFaceUp = true;
-            }
-          } else {
-            if (!('isHidden' in clientCard && clientCard.isHidden)) {
-                 showFaceUp = true;
-            }
-            if (cardsToForceShowFaceUp[index]) {
+            if (cardForDisplay && !('isHidden' in cardForDisplay && cardForDisplay.isHidden)) { 
+              const actualCard = cardForDisplay as Card;
+              if (isInitialPeekActive && cardsBeingPeeked) {
+                showFaceUp = cardsBeingPeeked.some(peekedCard => 
+                  peekedCard.rank === actualCard.rank && peekedCard.suit === actualCard.suit
+                );
+              } else if (cardsToForceShowFaceUp[index]) {
                 showFaceUp = true;
+              }
+            } 
+          } else { // Opponent's hand
+            if (cardForDisplay && cardsToForceShowFaceUp[index] && !('isHidden' in cardForDisplay && cardForDisplay.isHidden)) {
+              showFaceUp = true;
+            } else {
+              showFaceUp = false;
             }
           }
           
@@ -89,14 +99,11 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = ({
               key={`${playerID}-card-${index}`}
               card={cardForDisplay}
               isFaceUp={showFaceUp}
-              onClick={onCardClick ? () => onCardClick(playerID, index) : undefined}
+              onClick={onCardClick && clientCard ? () => onCardClick(playerID, index) : undefined}
               isSelected={selectedCardIndices.includes(index) || multiSelectedCardIndices.includes(index)}
             />
           );
         })}
-        {numActualCards < displaySlots && Array.from({ length: displaySlots - numActualCards }).map((_, i) => (
-             <CardComponent key={`${playerID}-empty-${numActualCards + i}`} card={null} />
-        ))}
       </div>
     </div>
   );

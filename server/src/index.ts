@@ -15,7 +15,8 @@ import {
     generatePlayerView,
     handleDeclareReadyForPeek,
     AbilityArgs,
-    handleResolveSpecialAbility
+    handleResolveSpecialAbility,
+    setTriggerBroadcastFunction
 } from './game-manager';
 import { InitialPlayerSetupData, CheckGameState as ServerCheckGameState, ClientCheckGameState } from 'shared-types';
 
@@ -28,6 +29,32 @@ const io = new SocketIOServer(httpServer, {
     methods: ["GET", "POST"]
   }
 });
+
+// Define the broadcast function that game-manager will use
+const broadcastGameStateUpdate = async (gameId: string, fullGameState: ServerCheckGameState) => {
+  const socketsInRoom = await io.in(gameId).allSockets();
+  if (socketsInRoom.size === 0) {
+    console.log(`[Server-BroadcastFn] No sockets in room ${gameId} to broadcast to.`);
+    return;
+  }
+  console.log(`[Server-BroadcastFn] Broadcasting to ${socketsInRoom.size} socket(s) in room ${gameId}.`);
+  socketsInRoom.forEach(socketIdInRoom => {
+    const targetSocket = io.sockets.sockets.get(socketIdInRoom) as Socket & { data: { playerId?: string } };
+    const gamePlayerIdForSocket = targetSocket?.data?.playerId;
+
+    if (gamePlayerIdForSocket) {
+      const playerSpecificView = generatePlayerView(fullGameState, gamePlayerIdForSocket);
+      io.to(socketIdInRoom).emit('gameStateUpdate', { gameId, gameState: playerSpecificView });
+      // console.log(`[Server-BroadcastFn] Sent gameStateUpdate to ${gamePlayerIdForSocket} (${socketIdInRoom}) in game ${gameId}`);
+    } else {
+      console.warn(`[Server-BroadcastFn] Could not find game player ID for socket ${socketIdInRoom} in game ${gameId}. Cannot send tailored state.`);
+    }
+  });
+  console.log(`[Server-BroadcastFn] Broadcast complete for game ${gameId}.`);
+};
+
+// Pass the broadcast function to the game-manager
+setTriggerBroadcastFunction(broadcastGameStateUpdate);
 
 io.on('connection', (socket: Socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -111,7 +138,8 @@ io.on('connection', (socket: Socket) => {
         setSocketPlayerId(playerId);
     }
 
-    let result: { success: boolean; message?: string; updatedGameState?: ServerCheckGameState };
+    let result: { success: boolean; message?: string; updatedGameState?: ServerCheckGameState; [key: string]: any; }; // Allow extra fields like peekJustStarted
+    let shouldBroadcastGeneral = true; // Default to true for most actions that return updatedGameState
 
     switch (type) {
       case 'drawFromDeck': result = handleDrawFromDeck(gameId, playerId); break;
@@ -130,32 +158,32 @@ io.on('connection', (socket: Socket) => {
       case 'passMatch': result = handlePassMatch(gameId, playerId); break;
       case 'callCheck': result = handleCallCheck(gameId, playerId); break;
       case 'resolveSpecialAbility': result = handleResolveSpecialAbility(gameId, playerId, payload as AbilityArgs); break;
-      case 'declareReadyForPeek': result = await handleDeclareReadyForPeek(gameId, playerId); break;
+      case 'declareReadyForPeek': 
+        result = handleDeclareReadyForPeek(gameId, playerId); 
+        // The immediate broadcast of result.updatedGameState (if peek starts or player just readies)
+        // will be handled by the generic logic below. The second broadcast (peek ends)
+        // is triggered internally by game-manager via the setTriggerBroadcastFunction.
+        break;
       default:
         console.warn(`[Server] Unknown action type: ${type}`);
-        result = { success: false, message: "Unknown action type." }; break;
+        result = { success: false, message: "Unknown action type." }; 
+        shouldBroadcastGeneral = false; // Don't broadcast for unknown action
+        break;
     }
 
-    if (result.success && result.updatedGameState) {
-      const fullGameState = result.updatedGameState;
-      const socketsInRoom = await io.in(gameId).allSockets();
+    if (result.success && result.updatedGameState && shouldBroadcastGeneral) {
+      // Use the broadcastGameStateUpdate function for the immediate response
+      broadcastGameStateUpdate(gameId, result.updatedGameState);
       
-      socketsInRoom.forEach(socketIdInRoom => {
-        const targetSocket = io.sockets.sockets.get(socketIdInRoom) as Socket & { data: { playerId?: string } };
-        const gamePlayerIdForSocket = targetSocket?.data?.playerId;
-
-        if (gamePlayerIdForSocket) {
-          const playerSpecificView = generatePlayerView(fullGameState, gamePlayerIdForSocket);
-          io.to(socketIdInRoom).emit('gameStateUpdate', { gameId, gameState: playerSpecificView });
-        } else {
-          console.warn(`[Server] Could not find game player ID for socket ${socketIdInRoom} in game ${gameId}. Cannot send tailored state.`);
-        }
-      });
-      
-      console.log(`[Server] Action ${type} successful for ${playerId} in ${gameId}. Player-specific states broadcasted.`);
-      const initiatorPlayerView = generatePlayerView(fullGameState, playerId);
-      if (callback) callback({ success: true, gameState: initiatorPlayerView }); 
-    } else {
+      console.log(`[Server] Action ${type} successful for ${playerId} in ${gameId}. Player-specific states broadcasted by general handler.`);
+      const initiatorPlayerView = generatePlayerView(result.updatedGameState, playerId);
+      if (callback) callback({ success: true, gameState: initiatorPlayerView, message: result.message }); 
+    } else if (result.success && !result.updatedGameState && shouldBroadcastGeneral) {
+        // Action was successful but didn't result in a state change that needs immediate broadcast by this general handler
+        console.log(`[Server] Action ${type} successful for ${playerId} in ${gameId}, but no immediate state update from this action to broadcast generally (may be handled internally or no state change).`);
+        if (callback) callback({ success: true, message: result.message });
+    }
+    else if (!result.success) {
       console.warn(`[Server] Action ${type} failed for ${playerId} in ${gameId}. Reason: ${result.message}`);
       if (callback) callback({ success: false, message: result.message });
     }

@@ -2,7 +2,7 @@ import { Card, Suit, Rank, PlayerState, CheckGameState as ServerCheckGameState, 
 
 const PEEK_COUNTDOWN_SECONDS = 5; // Define based on typical client value or make configurable
 const PEEK_REVEAL_SECONDS = 5;    // Define based on typical client value or make configurable
-const PEEK_TOTAL_DURATION_MS = (PEEK_COUNTDOWN_SECONDS + PEEK_REVEAL_SECONDS) * 1000;
+const PEEK_TOTAL_DURATION_MS = 10 * 1000; // Simplified to 10 seconds total for server timer. Client handles its own countdown visuals.
 
 // Placeholder for playerSetupData structure, will be moved to shared-types
 // export interface InitialPlayerSetupData {
@@ -43,6 +43,28 @@ interface GameRoom {
 // In-memory store for active games.
 // In a production scenario, you might replace this with a database (e.g., Redis) for scalability.
 const activeGames: { [gameId: string]: GameRoom } = {};
+
+// This is a placeholder for how game-manager would trigger a broadcast
+// In reality, `io` would be passed or a more robust event system used.
+// Encapsulated within an object to allow GameRoom methods to access it if they were class methods.
+const broadcastService = {
+    triggerBroadcast: (gameId: string, gameState: ServerCheckGameState) => {
+        console.warn("[GameManager] broadcastService.triggerBroadcast called but not implemented. This should be set by index.ts");
+    }
+};
+
+export const setTriggerBroadcastFunction = (fn: (gameId: string, gameState: ServerCheckGameState) => void) => {
+    broadcastService.triggerBroadcast = fn;
+    console.log("[GameManager] triggerBroadcast function has been set.");
+};
+
+// Define an explicit return type for handleDeclareReadyForPeek
+interface HandlePeekResult {
+  success: boolean;
+  message?: string;
+  updatedGameState?: ServerCheckGameState;
+  peekJustStarted?: boolean; 
+}
 
 // Function to initialize a new game - adapting from boardgame.io's setup
 // We'll need numPlayers and playerSetupData (e.g., their self-assigned IDs or we assign them)
@@ -245,6 +267,11 @@ export const handleDrawFromDiscard = (
     return { success: false, message: "Discard pile is sealed." };
   }
 
+  const topCard = gameRoom.gameState.discardPile[gameRoom.gameState.discardPile.length - 1];
+  if (topCard && (topCard.rank === Rank.King || topCard.rank === Rank.Queen || topCard.rank === Rank.Jack)) {
+    return { success: false, message: "Cannot draw special ability cards (K, Q, J) from the discard pile." };
+  }
+
   const card = gameRoom.gameState.discardPile.pop();
   if (!card) {
     return { success: false, message: "Failed to draw card (discard pile might be unexpectedly empty)." };
@@ -281,7 +308,7 @@ export const handleSwapAndDiscard = (
 
   const potentialMatchers = Object.keys(gameRoom.gameState.players).filter(pId => {
     const p = gameRoom.gameState.players[pId];
-    return pId !== playerId && p && !p.isLocked && !p.hasCalledCheck;
+    return p && !p.isLocked && !p.hasCalledCheck;
   });
 
   gameRoom.gameState.matchingOpportunityInfo = {
@@ -292,13 +319,13 @@ export const handleSwapAndDiscard = (
 
   gameRoom.gameState.currentPhase = 'matchingStage';
   const newActivePlayers: { [playerID: string]: string } = {};
-  for (const pId in gameRoom.gameState.players) {
-    newActivePlayers[pId] = 'awaitingMatchAction'; 
-  }
+  potentialMatchers.forEach(pId => {
+    newActivePlayers[pId] = 'awaitingMatchAction';
+  });
   gameRoom.gameState.activePlayers = newActivePlayers;
 
   activeGames[gameId] = gameRoom;
-  console.log(`[GameManager] Player ${playerId} swapped and discarded in ${gameId}. Card: ${discardedCard.rank}${discardedCard.suit}. Phase -> matchingStage.`);
+  console.log(`[GameManager] Player ${playerId} swapped and discarded in ${gameId}. Card: ${discardedCard.rank}${discardedCard.suit}. Phase -> matchingStage. Active matchers: ${Object.keys(newActivePlayers).join(', ')}`);
   return { success: true, updatedGameState: gameRoom.gameState };
 };
 
@@ -323,7 +350,7 @@ export const handleDiscardDrawnCard = (
 
   const potentialMatchers = Object.keys(gameRoom.gameState.players).filter(pId => {
     const p = gameRoom.gameState.players[pId];
-    return pId !== playerId && p && !p.isLocked && !p.hasCalledCheck;
+    return p && !p.isLocked && !p.hasCalledCheck;
   });
   
   gameRoom.gameState.matchingOpportunityInfo = {
@@ -334,13 +361,13 @@ export const handleDiscardDrawnCard = (
 
   gameRoom.gameState.currentPhase = 'matchingStage';
   const newActivePlayers: { [playerID: string]: string } = {};
-  for (const pId in gameRoom.gameState.players) {
+  potentialMatchers.forEach(pId => {
     newActivePlayers[pId] = 'awaitingMatchAction';
-  }
+  });
   gameRoom.gameState.activePlayers = newActivePlayers;
 
   activeGames[gameId] = gameRoom;
-  console.log(`[GameManager] Player ${playerId} discarded drawn card in ${gameId}. Card: ${discardedCard.rank}${discardedCard.suit}. Phase -> matchingStage.`);
+  console.log(`[GameManager] Player ${playerId} discarded drawn card in ${gameId}. Card: ${discardedCard.rank}${discardedCard.suit}. Phase -> matchingStage. Active matchers: ${Object.keys(newActivePlayers).join(', ')}`);
   return { success: true, updatedGameState: gameRoom.gameState };
 };
 
@@ -368,6 +395,10 @@ export const handleAttemptMatch = (
 
   const cardY = player.hand[handIndex]; 
   const cardX = cardToMatch; 
+
+  console.log(`[GameManager] handleAttemptMatch: Player ${playerId} attempting to match.`);
+  console.log(`[GameManager] Card from Hand (cardY at index ${handIndex}): ${cardY ? cardY.rank + cardY.suit : 'undefined'}`);
+  console.log(`[GameManager] Card to Match (cardX from discard): ${cardX ? cardX.rank + cardX.suit : 'undefined'}`);
 
   if (cardY.rank === cardX.rank) {
     player.hand.splice(handIndex, 1); 
@@ -413,7 +444,31 @@ export const handleAttemptMatch = (
     return { success: true, updatedGameState: finalGameState };
 
   } else {
-    return { success: false, message: "Cards do not match." };
+    // Cards do not match. Player incurs a penalty and their attempt for this opportunity is over.
+    console.log(`[GameManager] Player ${playerId} failed match attempt in game ${gameId}. Cards ${cardY.rank} and ${cardX.rank} do not match.`);
+    
+    // Penalty: Draw a card from the deck
+    if (G.deck.length > 0) {
+      const penaltyCard = G.deck.pop();
+      if (penaltyCard) {
+        player.hand.push(penaltyCard);
+        console.log(`[GameManager] Player ${playerId} drew a penalty card: ${penaltyCard.rank}${penaltyCard.suit}. Hand size: ${player.hand.length}. Deck size: ${G.deck.length}`);
+      } else {
+        console.warn(`[GameManager] Penalty card draw failed for ${playerId} in game ${gameId} - deck pop returned undefined despite length > 0.`);
+      }
+    } else {
+      console.warn(`[GameManager] Player ${playerId} should receive a penalty card in game ${gameId}, but deck is empty.`);
+      // Potentially handle game-specific rules for empty deck penalties if any.
+    }
+
+    // Treat them as if they passed for this specific opportunity.
+    if (G.activePlayers && G.activePlayers[playerId]) {
+        delete G.activePlayers[playerId];
+    }
+    const updatedGameState = checkMatchingStageEnd(gameId);
+    if (!updatedGameState) return {success: false, message: "Error processing after failed match attempt and penalty."}; 
+    
+    return { success: true, message: "The cards did not match. Penalty card drawn.", updatedGameState };
   }
 };
 
@@ -938,12 +993,14 @@ export const handleResolveSpecialAbility = (
 };
 
 
-export const handleDeclareReadyForPeek = async (
+export const handleDeclareReadyForPeek = (
   gameId: string,
   playerId: string
-): Promise<{ success: boolean; message?: string; updatedGameState?: ServerCheckGameState }> => {
+): HandlePeekResult => {
   const gameRoom = getGameRoom(gameId);
-  if (!gameRoom) return { success: false, message: "Game not found." };
+  if (!gameRoom) {
+    return { success: false, message: "Game not found." };
+  }
   const G = gameRoom.gameState;
   const player = G.players[playerId];
 
@@ -951,79 +1008,98 @@ export const handleDeclareReadyForPeek = async (
   if (G.currentPhase !== 'initialPeekPhase') return { success: false, message: "Not in initial peek phase." };
   if (player.isReadyForInitialPeek) return { success: true, message: "Player already ready.", updatedGameState: G }; // Return current G if already ready
 
-  player.isReadyForInitialPeek = true;
-  if (G.activePlayers[playerId]) G.activePlayers[playerId] = 'readyForPeek';
-  
-  console.log(`[GameManager] Player ${playerId} declared ready for initial peek in game ${gameId}.`);
-
-  const allPlayersReady = G.turnOrder.every(pId => G.players[pId]?.isReadyForInitialPeek);
-
-  if (allPlayersReady) {
-    console.log(`[GameManager] All players ready for peek in game ${gameId}. Setting timestamp and revealing cards.`);
-    G.initialPeekAllReadyTimestamp = Date.now();
-    G.turnOrder.forEach(pId => {
-      if (G.activePlayers[pId]) G.activePlayers[pId] = 'revealingCardsStage';
-      const pState = G.players[pId];
-      if (pState && pState.hand.length >= 2) { // Ensure player has cards to peek
-          // Determine cards to peek (e.g., bottom two: indices 2 and 3 for a 4-card hand)
-          const cardsToPeekIndices = [2, 3]; // Assuming 0-indexed hand
-          const actualCardsToPeek: Card[] = [];
-          cardsToPeekIndices.forEach(index => {
-            if (pState.hand[index]) {
-              actualCardsToPeek.push(pState.hand[index]);
-            }
-          });
-
-          if (actualCardsToPeek.length > 0) {
-            pState.cardsToPeek = actualCardsToPeek;
-            // peekAcknowledgeDeadline could represent the time client shows cards until
-            pState.peekAcknowledgeDeadline = Date.now() + PEEK_TOTAL_DURATION_MS; 
-            console.log(`[GameManager] Player ${pId} cardsToPeek set for initial peek:`, actualCardsToPeek.map(c=>c.rank+c.suit));
-          } else {
-            console.log(`[GameManager] Player ${pId} has fewer than required cards for standard peek.`);
-            // If player has fewer than 2 cards in positions 2,3, they effectively peek what they have or nothing.
-            // Server will still mark them as completed peek after duration.
-             pState.cardsToPeek = []; // Or null, depending on how client handles it
-          }
-      } else {
-         console.log(`[GameManager] Player ${pId} has too few cards in hand (${pState?.hand?.length}) to perform initial peek.`);
-         pState.cardsToPeek = []; // Or null
-      }
-    });
-    activeGames[gameId] = gameRoom; // Save intermediate state with cardsToPeek visible
-
-    // Return a promise that resolves after the peek duration
-    await new Promise<void>(resolve => {
-      setTimeout(() => {
-        console.log(`[GameManager] Peek duration ended for game ${gameId}. Finalizing peek phase.`);
-        const currentRoom = getGameRoom(gameId); // Re-fetch to ensure we have the latest G
-        if (currentRoom) {
-          const currentG = currentRoom.gameState;
-          currentG.turnOrder.forEach(pId => {
-            const pState = currentG.players[pId];
-            if (pState) {
-              pState.cardsToPeek = null;
-              pState.hasCompletedInitialPeek = true;
-              pState.peekAcknowledgeDeadline = null;
-              if (currentG.activePlayers[pId]) currentG.activePlayers[pId] = 'peekCompleted';
-            }
-          });
-          currentG.initialPeekAllReadyTimestamp = null;
-          // setupNextPlayTurn will set currentPhase, currentPlayerId, and activePlayers
-          setupNextPlayTurn(currentRoom.gameId); 
-          activeGames[gameId] = currentRoom; // Save final state
-        }
-        resolve();
-      }, PEEK_TOTAL_DURATION_MS + 500); // Add a small buffer
-    });
-    // After the timeout, G has been updated to the post-peek state.
-    return { success: true, message: "All players peeked, phase transitioned.", updatedGameState: G };
-
-  } else {
-    // Not all players are ready yet, just return the current state
-    activeGames[gameId] = gameRoom;
-    return { success: true, updatedGameState: G };
+  // If player has already declared ready and peek is ongoing, or completed,
+  // we might just return current state.
+  // However, if they are clicking ready again, it implies they want to ensure they are marked.
+  if (player.isReadyForInitialPeek && gameRoom.gameState.initialPeekAllReadyTimestamp) {
+    console.log(`[GameManager] Player ${playerId} already ready and peek is/was active in game ${gameId}.`);
+    // Optionally, could return a specific message or just the current state.
+    // If cardsToPeek is still set on player, they will see them.
+    return { success: true, updatedGameState: gameRoom.gameState, peekJustStarted: false };
   }
+
+  player.isReadyForInitialPeek = true;
+  console.log(`[GameManager] Player ${playerId} marked as ready for peek in game ${gameId}.`);
+
+  let allPlayersReady = true;
+  // Check against turnOrder to ensure we consider all expected players
+  for (const pid of gameRoom.gameState.turnOrder) {
+    const p = gameRoom.gameState.players[pid];
+    if (!p || !p.isReadyForInitialPeek) { // Added check for p existence
+      allPlayersReady = false;
+      break;
+    }
+  }
+
+  if (allPlayersReady && !gameRoom.gameState.initialPeekAllReadyTimestamp) {
+    console.log(`[GameManager] All players are now ready for peek in game ${gameId}. Initiating peek sequence.`);
+    gameRoom.gameState.initialPeekAllReadyTimestamp = Date.now(); // Mark that the peek sequence has started
+    const deadline = Date.now() + PEEK_TOTAL_DURATION_MS;
+
+    for (const pid of gameRoom.gameState.turnOrder) {
+      const p = gameRoom.gameState.players[pid];
+      if (p) {
+        // Peek the bottom two cards (indices 2 and 3 of a 4-card hand)
+        if (p.hand.length === 4) {
+          p.cardsToPeek = [p.hand[2], p.hand[3]];
+        } else {
+          // Fallback or error if hand size is not 4, though it should be.
+          console.warn(`[GameManager] Player ${pid} in game ${gameId} has ${p.hand.length} cards, expected 4 for initial peek. Peeking last available cards or empty.`);
+          p.cardsToPeek = p.hand.slice(-2); // Peek last two if not 4, or fewer if hand is small
+        }
+        p.peekAcknowledgeDeadline = deadline;
+        console.log(`[GameManager] Set cardsToPeek for player ${pid} in game ${gameId}:`, p.cardsToPeek?.map(c=>c.rank+c.suit));
+      }
+    }
+    
+    // Schedule the actions for after the peek duration
+    setTimeout(() => {
+      const currentRoom = getGameRoom(gameId);
+      // Check if peek was indeed active for this game (initialPeekAllReadyTimestamp was set and not cleared by another process)
+      if (currentRoom && currentRoom.gameState.initialPeekAllReadyTimestamp) { 
+        console.log(`[GameManager] Peek timer expired for game ${gameId}. Clearing peek state and advancing.`);
+        for (const pid of currentRoom.gameState.turnOrder) {
+          const p = currentRoom.gameState.players[pid];
+          if (p) {
+            p.cardsToPeek = null;
+            p.hasCompletedInitialPeek = true;
+            p.peekAcknowledgeDeadline = null; // Clear deadline
+          }
+        }
+        currentRoom.gameState.initialPeekAllReadyTimestamp = null; // Clear the timestamp to prevent re-entry
+        
+        // Transition to the next phase
+        const nextPhaseState = setupNextPlayTurn(gameId); 
+        if (nextPhaseState) {
+            // IMPORTANT: Trigger a broadcast for the state *after* peek ends
+            broadcastService.triggerBroadcast(gameId, nextPhaseState); 
+            console.log(`[GameManager] Peek duration ended for game ${gameId}. State updated, broadcast triggered for next phase.`);
+        } else {
+            // This case should ideally not happen if setupNextPlayTurn always returns a state or handles errors
+            console.error(`[GameManager] setupNextPlayTurn did not return a valid state for game ${gameId} after peek.`);
+            // Fallback: broadcast current state, though it might be inconsistent
+            broadcastService.triggerBroadcast(gameId, currentRoom.gameState);
+        }
+      } else {
+        console.log(`[GameManager] Peek timer expired for game ${gameId}, but peek was not active or already processed.`);
+      }
+    }, PEEK_TOTAL_DURATION_MS);
+
+    console.log(`[GameManager] All players ready for peek in game ${gameId}. cardsToPeek set. Timeout scheduled.`);
+    // This state (with cardsToPeek populated) is returned immediately.
+    // index.ts will broadcast this, allowing clients to see the cards.
+    return { success: true, updatedGameState: gameRoom.gameState, peekJustStarted: true };
+  } else if (allPlayersReady && gameRoom.gameState.initialPeekAllReadyTimestamp) {
+    // This case means all players were already set to ready, and the peek process has started (timestamp is set).
+    // This can happen if a player sends 'declareReadyForPeek' again while peek is active.
+    // We send them the current state which should include their cardsToPeek.
+    console.log(`[GameManager] Player ${playerId} declared ready, but peek already in progress for ${gameId}. Sending current peek state.`);
+    return { success: true, updatedGameState: gameRoom.gameState, peekJustStarted: true }; // Indicate peek is active
+  }
+
+  // If not all players are ready yet, but this player is now ready
+  console.log(`[GameManager] Player ${playerId} is ready for peek in game ${gameId}. Waiting for other players.`);
+  return { success: true, updatedGameState: gameRoom.gameState, peekJustStarted: false };
 };
 
 export const generatePlayerView = (
@@ -1053,7 +1129,6 @@ export const generatePlayerView = (
         cardsToPeekForClient = serverPlayerState.cardsToPeek;
     }
 
-
     clientPlayers[pId] = {
       hand: clientHand,
       hasUsedInitialPeek: serverPlayerState.hasUsedInitialPeek,
@@ -1075,10 +1150,21 @@ export const generatePlayerView = (
     };
   }
 
+  // Calculate topDiscardIsSpecialOrUnusable for the entire game state view
+  const topDiscardCard = fullGameState.discardPile.length > 0 ? fullGameState.discardPile[fullGameState.discardPile.length - 1] : null;
+  let isTopDiscardActuallySpecial = false; // Default to false
+  if (topDiscardCard) {
+    isTopDiscardActuallySpecial = (topDiscardCard.rank === Rank.King || 
+                                   topDiscardCard.rank === Rank.Queen || 
+                                   topDiscardCard.rank === Rank.Jack);
+  }
+  const topDiscardFlagForClient = fullGameState.discardPileIsSealed || isTopDiscardActuallySpecial;
+
   const clientGameState: ClientCheckGameState = {
     ...fullGameState,
     deckSize: fullGameState.deck.length, 
     players: clientPlayers, 
+    topDiscardIsSpecialOrUnusable: topDiscardFlagForClient,
 
     discardPile: fullGameState.discardPile, 
     discardPileIsSealed: fullGameState.discardPileIsSealed,
