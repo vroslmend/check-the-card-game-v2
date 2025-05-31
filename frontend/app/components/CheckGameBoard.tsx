@@ -170,7 +170,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
   const canPerformStandardPlayPhaseActions = isCurrentPlayer &&
                                         gameState.currentPhase === 'playPhase' &&
                                         !clientPlayerState?.pendingDrawnCard &&
-                                        !gameState.pendingAbilities; // Simplified: if any abilities are pending, probably not standard play. Check server logic.
+                                        ! (gameState.pendingAbilities && gameState.pendingAbilities.length > 0); // check if any abilities are pending.
 
   const canDrawFromDeck = canPerformStandardPlayPhaseActions;
   // const canDrawFromDiscard = canPerformStandardPlayPhaseActions && !typedG.discardPileIsSealed; // REPLACED typedG
@@ -203,7 +203,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
 
   const handleSwapAndDiscard = (handIndex: number) => {
     // if (isActive && moves.swapAndDiscard && clientPlayerState?.pendingDrawnCard) { // REPLACED
-    if (isCurrentPlayer && clientPlayerState?.pendingDrawnCard && gameState.currentPhase === 'playPhase') { // Added currentPhase check
+    if (isCurrentPlayer && clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase')) {
       // moves.swapAndDiscard(handIndex); // REPLACED
       onPlayerAction('swapAndDiscard', { handIndex });
       setSelectedHandCardIndex(null);
@@ -212,7 +212,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
 
   const handleDiscardDrawnCard = () => {
     // if (isActive && moves.discardDrawnCard && clientPlayerState?.pendingDrawnCard) { // REPLACED
-    if (isCurrentPlayer && clientPlayerState?.pendingDrawnCard && gameState.currentPhase === 'playPhase') { // Added currentPhase check
+    if (isCurrentPlayer && clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase')) {
       // moves.discardDrawnCard(); // REPLACED
       onPlayerAction('discardDrawnCard');
       setSelectedHandCardIndex(null);
@@ -342,7 +342,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
 
     // Player has drawn a card and needs to select one of their own to swap
     // if (clientPlayerState.pendingDrawnCard && isOwnCard && isActive) { // REPLACED isActive
-    if (clientPlayerState.pendingDrawnCard && isOwnCard && isCurrentPlayer && currentPhase === 'playPhase') {
+    if (clientPlayerState.pendingDrawnCard && isOwnCard && isCurrentPlayer && (currentPhase === 'playPhase' || currentPhase === 'finalTurnsPhase')) {
       setSelectedHandCardIndex(cardIndex); // This card will be swapped out
       // The actual swap action is triggered by a button like "Swap with Selected" or "Discard Drawn Card"
       console.log(`[CardClick] Selected own card at index ${cardIndex} to swap with pending drawn card.`);
@@ -425,11 +425,11 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
     
     if (!clientPlayerState.isReadyForInitialPeek) {
       initialPeekPhaseUI = (
-        <div className="text-center p-3 bg-yellow-100 border border-yellow-400 rounded">
-          <p className="mb-2">Your first two cards will be revealed to you for a short time.</p>
+        <div className="text-center p-3 bg-yellow-200 border border-yellow-500 rounded text-black shadow-md"> {/* Changed text color for visibility */}
+          <p className="mb-2 font-semibold">Your first two cards will be revealed to you for a short time.</p>
           <button 
             onClick={handleDeclareReadyForPeek} 
-            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded shadow hover:shadow-lg transition-all"
           >
             I'm Ready for Initial Peek
           </button>
@@ -437,34 +437,28 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
       );
     // } else if (!typedG.initialPeekAllReadyTimestamp) { // REPLACED, server sends cardsToPeek
     } else if (!clientPlayerState.cardsToPeek && clientPlayerState.isReadyForInitialPeek && !clientPlayerState.hasCompletedInitialPeek) {
-      initialPeekPhaseUI = <p className="text-center p-2 text-blue-600">Waiting for server to reveal cards for peek...</p>;
+      initialPeekPhaseUI = <p className="text-center p-2 text-blue-300 font-semibold">Waiting for server to reveal cards for peek...</p>;
     } else if (clientPlayerState.cardsToPeek && !clientPlayerState.hasCompletedInitialPeek) {
       // Display countdown and cards to peek (PlayerHandComponent will handle actual card display based on cardsToPeek)
       initialPeekPhaseUI = (
-        <div className="text-center p-3 bg-blue-100 border border-blue-400 rounded">
-          <p className="mb-1">Peek at your cards! They will be hidden again in:</p>
-          <p className="text-2xl font-bold mb-2">{peekCountdown}s</p>
-          <p className="text-xs mb-2">(Cards {clientPlayerState.cardsToPeek.map(c => `${c.rank}${c.suit}`).join(', ')} are revealed below in your hand)</p>
-          {/* <button 
-            onClick={handleAcknowledgePeek} 
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm"
-          >
-            Acknowledge Peek
-          </button> */}
+        <div className="text-center p-3 bg-blue-200 border border-blue-500 rounded text-black shadow-md"> {/* Changed text color */}
+          <p className="mb-1 font-semibold">Peek at your cards! They will be hidden again in:</p>
+          <p className="text-3xl font-bold mb-2 text-blue-700">{peekCountdown}s</p>
+          <p className="text-sm mb-2">(Cards {clientPlayerState.cardsToPeek.map(c => `${c.rank}${c.suit}`).join(', ')} are revealed in your hand)</p>
         </div>
       );
     } else if (clientPlayerState.hasCompletedInitialPeek) {
-        initialPeekPhaseUI = <p className="text-center p-2 text-gray-500">Initial peek completed. Waiting for others.</p>;
+        initialPeekPhaseUI = <p className="text-center p-2 text-gray-500 font-semibold">Initial peek completed. Waiting for others.</p>;
     }
   }
 
   // --- Other UI Elements based on Game State ---
-  let turnIndicator = null;
+  let turnIndicatorText = "";
   if (gameState.currentPhase !== 'initialPeekPhase' && gameState.currentPhase !== 'scoringPhase' && gameState.currentPhase !== 'gameOver') {
     if (isCurrentPlayer) {
-      turnIndicator = <span className="font-semibold text-lg text-green-600 ml-2">It's your turn!</span>;
+      turnIndicatorText = "It's your turn!";
     } else {
-      turnIndicator = <span className="text-md text-gray-600 ml-2">Waiting for {gameState.players[gameState.currentPlayerId]?.name || gameState.currentPlayerId}</span>;
+      turnIndicatorText = `Waiting for ${gameState.players[gameState.currentPlayerId]?.name || gameState.currentPlayerId}`;
     }
   }
   
@@ -473,40 +467,39 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
     const cardToMatch = gameState.matchingOpportunityInfo.cardToMatch;
     const originalPlayer = gameState.players[gameState.matchingOpportunityInfo.originalPlayerID];
     matchOpportunityUI = (
-        <div className="my-3 p-3 border border-purple-500 bg-purple-100 rounded text-center">
-            <p className="font-semibold text-purple-700">
-                Matching Opportunity! {originalPlayer?.name || gameState.matchingOpportunityInfo.originalPlayerID} discarded a <CardComponent card={cardToMatch} isFaceUp={true} style={{display: 'inline-block', transform: 'scale(0.8)'}} /> ({cardToMatch.rank}).
+        <div className="my-3 p-4 border-2 border-purple-500 bg-purple-200 rounded-lg text-center text-black shadow-xl"> {/* Enhanced styling */}
+            <p className="font-bold text-purple-800 text-lg">
+                Matching Opportunity!
+            </p>
+            <p className="mb-2 text-sm">{originalPlayer?.name || gameState.matchingOpportunityInfo.originalPlayerID} discarded a <CardComponent card={cardToMatch} isFaceUp={true} style={{display: 'inline-block', transform: 'scale(0.9)', verticalAlign:'middle'}} /> ({cardToMatch.rank}).
             </p>
             {gameState.matchingOpportunityInfo.potentialMatchers.includes(playerId) ? (
-                <>
-                    <p className="text-sm">Select a card from your hand to match.</p>
+                <div className="mt-2 space-y-2"> {/* Grouped buttons */}
+                    <p className="text-sm font-semibold">Select a card from your hand to match.</p>
                     {selectedHandCardIndex !== null && clientPlayerState?.hand[selectedHandCardIndex!] && (
                         <button 
                             onClick={() => handleAttemptMatch(selectedHandCardIndex!)} 
-                            className="mt-1 bg-purple-500 hover:bg-purple-700 text-white font-bold py-1 px-3 rounded text-sm mr-2"
+                            className="w-full bg-purple-600 hover:bg-purple-800 text-white font-bold py-2 px-4 rounded text-sm shadow hover:shadow-lg transition-all"
                         >
-                            Attempt Match with {
+                            Attempt Match with { 
                                 (() => {
                                     const cardDisplay = clientPlayerState.hand[selectedHandCardIndex!];
-                                    if ('isHidden' in cardDisplay && cardDisplay.isHidden) {
-                                        return 'Hidden Card';
-                                    } else if ('rank' in cardDisplay) {
-                                        return `${cardDisplay.rank}${cardDisplay.suit}`;
-                                    }
-                                    return 'Card'; // Fallback, should not happen if types are correct
+                                    if ('isHidden' in cardDisplay && cardDisplay.isHidden) return 'Hidden Card';
+                                    else if ('rank' in cardDisplay) return `${cardDisplay.rank}${cardDisplay.suit}`;
+                                    return 'Card';
                                 })()
                             }
                         </button>
                     )}
                     <button 
                         onClick={handlePassMatch} 
-                        className="mt-1 bg-gray-400 hover:bg-gray-600 text-white font-bold py-1 px-3 rounded text-sm"
+                        className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded text-sm shadow hover:shadow-lg transition-all"
                     >
                         Pass Match
                     </button>
-                </>
+                </div>
             ) : (
-                <p className="text-sm text-gray-500">Waiting for others to match or pass.</p>
+                <p className="text-sm text-gray-600 italic">Waiting for others to match or pass.</p>
             )}
         </div>
     );
@@ -516,20 +509,18 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
   if (isResolvingPlayerForAbility && gameState.pendingAbilities && gameState.pendingAbilities[0]) {
     const ability = gameState.pendingAbilities[0];
     abilityResolutionUI = (
-        <div className="my-3 p-3 border border-yellow-500 bg-yellow-100 rounded text-center">
-            <p className="font-semibold text-yellow-700">Resolve your {ability.card.rank} of {ability.card.suit} ability (from {ability.source}):</p>
-            {/* Add specific instructions or selection UIs based on ability.card.rank */}
-            {(ability.card.rank === Rank.King) && <p className="text-sm">Select up to 2 cards from any player to peek.</p>}
-            {(ability.card.rank === Rank.Queen || ability.card.rank === Rank.Jack) && <p className="text-sm">Select 1 card to swap with.</p>}
+        <div className="my-3 p-4 border-2 border-yellow-500 bg-yellow-200 rounded-lg text-center text-black shadow-xl"> {/* Enhanced styling */}
+            <p className="font-bold text-yellow-800 text-lg">Resolve your {ability.card.rank} of {ability.card.suit} ability (from {ability.source}):</p>
+            {(ability.card.rank === Rank.King) && <p className="text-sm my-1">Select up to 2 cards from any player to peek.</p>}
+            {(ability.card.rank === Rank.Queen || ability.card.rank === Rank.Jack) && <p className="text-sm my-1">Select 1 card to swap with.</p>}
             {multiSelectedCardLocations.length > 0 && (
-                <p className="text-xs">Selected: {multiSelectedCardLocations.map(loc => `${gameState.players[loc.playerID]?.name || loc.playerID} Card ${loc.cardIndex + 1}`).join(', ')}</p>
+                <p className="text-xs my-1">Selected: {multiSelectedCardLocations.map(loc => `${gameState.players[loc.playerID]?.name || loc.playerID} Card ${loc.cardIndex + 1}`).join(', ')}</p>
             )}
             <button 
                 onClick={handleResolveSpecialAbility} 
-                className="mt-1 bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-3 rounded text-sm"
-                // Disable if required selections for ability not met
+                className="mt-2 w-full bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded text-sm shadow hover:shadow-lg transition-all"
                 disabled={(
-                    (ability.card.rank === Rank.King && multiSelectedCardLocations.length === 0) || // King needs at least one, server handles if more than 2 are sent
+                    (ability.card.rank === Rank.King && multiSelectedCardLocations.length === 0) || 
                     ((ability.card.rank === Rank.Queen || ability.card.rank === Rank.Jack) && multiSelectedCardLocations.length !== 1)
                 )}
             >
@@ -539,95 +530,70 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
     );
   }
 
+  // --- Player Data Segregation ---
+  const opponentPlayerIds = gameState.turnOrder.filter(pId => pId !== playerId);
+  // Simple layout: first opponent top-center, others could be added to sides or a gallery
+  const topOpponentId = opponentPlayerIds.length > 0 ? opponentPlayerIds[0] : null;
+  // For more opponents, we'd need a more complex mapping to positions (e.g. left/right of center)
+  const otherOpponentIds = opponentPlayerIds.slice(1);
+
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <div className="mb-4 p-3 border border-gray-300 rounded-lg bg-gray-50 shadow">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold mb-1">Check Game Board</h2>
-          <p className="text-sm text-gray-500">Player: {clientPlayerState?.name || playerId}</p>
-        </div>
-        <p className="text-sm text-gray-600">
-          Phase: <span className="font-semibold text-indigo-600">{gameState.currentPhase}</span> |
-          Current Turn: <span className="font-semibold text-red-600">{gameState.players[gameState.currentPlayerId]?.name || gameState.currentPlayerId}</span>
-          {/* {playerID && ( // REPLACED playerID
-            <span> | Your ID: <span className="font-semibold text-blue-600">{playerId}</span>
-            {isCurrentPlayer && gameState.currentPhase !== 'initialPeekPhase' ? "(Your Turn)" : ""}
-            </span>
-          )} */}
-          {turnIndicator}
-        </p>
-        {gameState.gameover && (
-          <div className="mt-2 p-2 bg-green-100 border border-green-600 text-green-800 rounded">
-            <strong>Round Over!</strong> 
-            {gameState.gameover.winner ? `Winner: ${gameState.players[gameState.gameover.winner]?.name || gameState.gameover.winner}` : 'No winner declared (Draw?)'}
-            {/* TODO: Display scores properly from gameState.gameover.scores */}
-            {gameState.gameover.scores && (
-                <ul className="text-xs">{Object.entries(gameState.gameover.scores).map(([pId, score]) => 
-                    <li key={pId}>{gameState.players[pId]?.name || pId}: {score}</li>)}</ul>
-            )}
-          </div>
-        )}
-      </div>
-
-      {initialPeekPhaseUI}
-      {matchOpportunityUI}
-      {abilityResolutionUI}
-
-      {/* Player Hands Area - Needs to pass isPeekRevealActive and cardsToPeek for initial peek */} 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {gameState.turnOrder.map(pID => {
-          const pState = gameState.players[pID];
-          if (!pState) return <div key={pID}>Player {pID} data missing...</div>;
-          
-          let handToShow = pState.hand; // Default hand (ClientCard[])
-          let forceShowAll = false; // For abilities like King peek result
-
-          // For initial peek phase, use cardsToPeek for the current player
-          if (gameState.currentPhase === 'initialPeekPhase' && 
-              pID === playerId && 
-              clientPlayerState?.cardsToPeek && 
-              isPeekRevealActive && // Client-side visual timer for reveal
-              !clientPlayerState.hasCompletedInitialPeek
-            ) {
-                handToShow = clientPlayerState.cardsToPeek.map((card, index) => card ? card : {isHidden: true, id: `peek-hidden-${index}`}); // Ensure it's Card[] for PlayerHandComponent
-                forceShowAll = true; // Temporarily show these cards face up
-          }
-
-          // For King ability reveal on other players (or self if targeted)
-          // This relies on `revealedCardLocations` being correctly populated by the `handleResolveSpecialAbility` response
-          // or a separate server event that updates client state about what's revealed.
-          // If `revealedCardLocations` is used, `PlayerHandComponent` needs to respect it.
-          // For now, `getOwnCardsToShowFaceUp` handles *own* general reveals.
-          // `forceShowAll` is specific for initial peek server-sent cards or potential King peek result visualization.
-          // Example: If King peek revealed cards for pID, `revealedCardLocations[pID]` would be set.
-          // This is an area that might need more robust state management for temporary reveals on other players.
-
+    <div className="flex flex-col h-screen bg-green-700 text-white p-2 space-y-2 antialiased"> {/* Added antialiasing */}
+      {/* ======== TOP AREA: Opponent(s) ======== */}
+      <div className="h-1/5 flex justify-around items-center bg-green-600 p-2 rounded-lg shadow-md min-h-[120px]"> {/* Added min-height */}
+        {opponentPlayerIds.length === 0 && <div className="italic text-gray-400">Waiting for opponents...</div>}
+        {opponentPlayerIds.map(opId => {
+          const pState = gameState.players[opId];
+          if (!pState) return <div key={opId} className="text-red-400">Error loading {opId}</div>;
           return (
-            <PlayerHandComponent
-              key={pID}
-              playerName={pState.name || pID} // Pass player name
-              playerID={pID}
-              playerState={pState} // Pass the full ClientPlayerState
-              handToShow={handToShow} // Pass the hand to show (could be actual hand or peek cards)
-              isViewingPlayer={pID === playerId}
-              onCardClick={handleCardClick}
-              selectedCardIndices={pID === playerId ? (selectedHandCardIndex !== null ? [selectedHandCardIndex] : []) : []}
-              // currentPlayersCardsToShowFaceUp is for general purpose reveals, not the initial peek full reveal
-              cardsToForceShowFaceUp={ (pID === playerId && forceShowAll) ? Object.fromEntries(handToShow.map((_,i) => [i, true])) : getOwnCardsToShowFaceUp() }
-              // Pass multi-select state if this player is the one making selections (e.g. for King ability)
-              multiSelectedCardIndices={pID === playerId ? multiSelectedCardLocations.map(loc => loc.cardIndex) : []}
-              isLocked={pState.isLocked}
-              hasCalledCheck={pState.hasCalledCheck}
-            />
+            <div key={opId} className="text-center p-1 transform scale-90"> {/* Scaled down opponent view slightly */}
+                <h4 className="font-semibold text-sm truncate max-w-[100px]">{pState.name || opId} {pState.isLocked ? '(Locked)': ''} {pState.hasCalledCheck ? '(Checked)':''}</h4>
+                <PlayerHandComponent
+                    key={opId}
+                    playerName={pState.name || opId}
+                    playerID={opId}
+                    playerState={pState}
+                    handToShow={pState.hand} 
+                    isViewingPlayer={false}
+                    onCardClick={handleCardClick}
+                    selectedCardIndices={multiSelectedCardLocations.filter(s => s.playerID === opId).map(s => s.cardIndex)}
+                    multiSelectedCardIndices={multiSelectedCardLocations.filter(s => s.playerID === opId).map(s => s.cardIndex)}
+                    cardsToForceShowFaceUp={revealedCardLocations[opId] || {}} 
+                    isLocked={pState.isLocked}
+                    hasCalledCheck={pState.hasCalledCheck}
+                />
+            </div>
           );
         })}
       </div>
 
-      {/* Game Piles & Player Action Zone (only if not in peek phase and game not over) */}
-      {gameState.currentPhase !== 'initialPeekPhase' && !gameState.gameover && (
-        <div className="flex flex-col md:flex-row gap-6 mb-6">
-          {/* Piles column */}
-          <div className="flex-none w-full md:w-1/4">
+      {/* ======== MIDDLE AREA: Game Piles, Info/Log, Main Prompts ======== */}
+      <div className="flex-grow flex space-x-2 min-h-0"> {/* min-h-0 for flex-grow to work in Firefox */}
+        {/* Left Info/Log Panel */}
+        <div className="w-1/4 p-3 bg-green-800 rounded-lg shadow-xl flex flex-col space-y-2 overflow-y-auto"> {/* Made scrollable */}
+          <h3 className="text-xl font-bold mb-2 border-b border-green-600 pb-1 text-teal-300">Game Info</h3>
+          <div className="space-y-1 text-sm flex-grow"> {/* flex-grow for log */}
+            <p><strong>Phase:</strong> <span className="font-semibold text-indigo-300">{gameState.currentPhase}</span></p>
+            <p><strong>Turn:</strong> <span className="font-semibold text-red-300 truncate">{gameState.players[gameState.currentPlayerId]?.name || gameState.currentPlayerId}</span></p>
+            {turnIndicatorText && <p className={`font-semibold ${isCurrentPlayer ? 'text-yellow-300 animate-pulse' : 'text-gray-400'}`}>{turnIndicatorText}</p>}
+            {gameState.gameover && (
+              <div className="my-2 p-2 bg-green-900 border border-green-500 text-green-200 rounded-md"> 
+                <strong className="block text-center text-lg">Round Over!</strong> 
+                <p className="text-center">{gameState.gameover.winner ? `Winner: ${gameState.players[gameState.gameover.winner]?.name || gameState.gameover.winner}` : 'No winner declared'}</p>
+                {gameState.gameover.scores && (
+                    <ul className="text-xs mt-1 space-y-0.5">{Object.entries(gameState.gameover.scores).map(([pId, score]) => 
+                        <li key={pId} className="flex justify-between"><span className="truncate">{gameState.players[pId]?.name || pId}:</span> <span className="font-bold">{score}</span></li>)}</ul>
+                )}
+              </div>
+            )}
+            <h4 className="text-lg font-semibold mt-3 pt-2 border-t border-green-600 text-teal-300">Game Log</h4>
+            <div className="text-xs text-gray-400 italic flex-grow bg-black/20 p-1 rounded custom-scrollbar">Game log coming soon...</div>
+          </div>
+        </div>
+
+        {/* Center: Deck, Discard, Main Game Prompts */}
+        <div className="w-1/2 flex flex-col items-center justify-center p-3 bg-green-600/70 backdrop-blur-sm rounded-lg shadow-md space-y-3 overflow-y-auto custom-scrollbar"> {/* Added scroll */}
+          <div className="flex space-x-6 items-center"> {/* Aligned items */}
             <DrawPileComponent
               canDraw={canDrawFromDeck}
               onClick={handleDrawFromDeck}
@@ -641,81 +607,130 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
               numberOfCards={gameState.discardPile.length}
             />
           </div>
-
-          {/* Current Player's Action Zone - only for the current player & relevant phases */}
-          {isCurrentPlayer && (
-            <div className="flex-grow p-3 border border-blue-300 rounded-lg bg-blue-50">
-              <h4 className="text-lg font-semibold mb-2 text-blue-700">Your Actions ({clientPlayerState?.name || playerId})</h4>
-
-              {/* Displaying a drawn card before action */}
-              {clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase') && (
-                <div className="mb-3 p-2 border border-dashed border-green-500 bg-green-50 rounded">
-                  <p className="text-sm font-medium text-green-700">Drawn Card (from {clientPlayerState.pendingDrawnCardSource}):</p>
-                  <div className="flex items-center justify-center my-1">
-                    <CardComponent card={clientPlayerState.pendingDrawnCard} isFaceUp={true} />
-                  </div>
-                  {selectedHandCardIndex !== null && (
-                    <button 
-                      onClick={() => handleSwapAndDiscard(selectedHandCardIndex)} 
-                      className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded text-sm mr-2"
-                    >
-                      Swap with Selected (Hand Card {selectedHandCardIndex + 1})
-                    </button>
-                  )}
-                  <button 
-                    onClick={handleDiscardDrawnCard} 
-                    className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
-                  >
-                    Discard Drawn Card
-                  </button>
-                </div>
-              )}
-
-              {/* Standard play phase actions (not when card is pending discard/swap) */}
-              {!clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase') && (
-                <div className="space-x-2">
-                  {canCallCheck && (
-                    <button 
-                      onClick={handleCallCheck} 
-                      className="bg-yellow-600 hover:bg-yellow-800 text-white font-bold py-2 px-4 rounded"
-                    >
-                      Call Check!
-                    </button>
-                  )}
-                </div>
-              )}
-              
-              {/* UI for other phases can be added here, e.g., specific buttons for scoring if needed */}
-              {gameState.currentPhase === 'scoringPhase' && <p>Scoring in progress...</p>}
-            </div>
-          )}
+          {/* Conditional UI elements - these are now primary focus of center panel */}
+          <div className="w-full max-w-md"> {/* Constrain width of prompt UIs */}
+            {initialPeekPhaseUI}
+            {matchOpportunityUI}
+            {abilityResolutionUI}
+          </div>
         </div>
-      )}
 
-      {/* Debug State */}
-      <div className="mt-6 p-3 border border-gray-300 rounded bg-gray-100 shadow">
-        <h4 className="text-md font-semibold mb-1 text-gray-700">Debug State:</h4>
+        {/* Right Action Panel (Current Player's actions) */}
+        <div className="w-1/4 p-3 bg-green-800 rounded-lg shadow-xl flex flex-col space-y-3 overflow-y-auto custom-scrollbar"> 
+            <h4 className="text-xl font-bold mb-1 border-b border-green-600 pb-1 text-yellow-300">Your Actions</h4>
+            {isCurrentPlayer && gameState.currentPhase !== 'initialPeekPhase' && !gameState.gameover && (
+              <>
+                {clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase') && (
+                    <div className="p-2 border border-dashed border-yellow-400 bg-black/20 rounded-md space-y-2"> {/* Styling */}
+                      <p className="text-sm font-medium text-yellow-200 flex items-center justify-between">
+                        <span>Drawn Card:</span> 
+                        <CardComponent card={clientPlayerState.pendingDrawnCard} isFaceUp={true} style={{transform: 'scale(0.8)'}}/>
+                        <span>(from {clientPlayerState.pendingDrawnCardSource})</span>
+                      </p>
+                      <div className="flex flex-col space-y-2"> {/* Buttons column */}
+                          {selectedHandCardIndex !== null && (
+                          <button 
+                              onClick={() => handleSwapAndDiscard(selectedHandCardIndex)} 
+                              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded text-xs shadow hover:shadow-lg transition-all w-full"
+                          >
+                              Swap with Hand Card {selectedHandCardIndex + 1}
+                          </button>
+                          )}
+                          <button 
+                          onClick={handleDiscardDrawnCard} 
+                          className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded text-xs shadow hover:shadow-lg transition-all w-full"
+                          >
+                          Discard Drawn Card
+                          </button>
+                      </div>
+                    </div>
+                )}
+                
+                {!clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase') && (
+                    <div className="flex flex-col space-y-2"> 
+                    {canCallCheck && ( 
+                        <button 
+                        onClick={handleCallCheck} 
+                        className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-3 rounded shadow hover:shadow-lg transition-all w-full"
+                        >
+                        Call Check!
+                        </button>
+                    )}
+                    </div>
+                )}
+                
+                {gameState.currentPhase === 'scoringPhase' && <p className="text-center text-gray-400 italic">Scoring in progress...</p>}
+              </>
+            )}
+            {/* Placeholder if not current player's turn or invalid phase for actions */}
+            {(!isCurrentPlayer || gameState.currentPhase === 'initialPeekPhase' || gameState.gameover) && gameState.currentPhase !== 'scoringPhase' && (
+                <div className="flex-grow flex items-center justify-center text-gray-400 italic text-center">
+                    {(gameState.currentPhase === 'initialPeekPhase' && !clientPlayerState?.hasCompletedInitialPeek) ? "Initial Peek..." : 
+                     gameState.gameover ? "Game Over" : isCurrentPlayer ? "No actions available." : "Waiting for opponent..." }
+                </div>
+            )}
+        </div>
+      </div>
+
+      {/* ======== BOTTOM AREA: Current Player's Hand ======== */}
+      <div className="h-1/5 p-2 bg-green-800 rounded-lg shadow-xl flex flex-col justify-center items-center min-h-[150px]"> {/* min-height */}
+        <h3 className="text-lg font-semibold mb-1 text-teal-300">{clientPlayerState?.name || playerId} (Your Hand)</h3>
+        {clientPlayerState && (
+            <PlayerHandComponent
+                key={playerId}
+                playerName={clientPlayerState.name || playerId}
+                playerID={playerId}
+                playerState={clientPlayerState}
+                handToShow={
+                    (gameState.currentPhase === 'initialPeekPhase' && 
+                     clientPlayerState?.cardsToPeek && 
+                     isPeekRevealActive && 
+                     !clientPlayerState.hasCompletedInitialPeek
+                    ) ? clientPlayerState.cardsToPeek.map((card, index) => card ? card : {isHidden: true, id: `peek-hidden-${index}`})
+                    : clientPlayerState.hand
+                }
+                isViewingPlayer={true}
+                onCardClick={handleCardClick}
+                selectedCardIndices={selectedHandCardIndex !== null ? [selectedHandCardIndex] : []}
+                multiSelectedCardIndices={multiSelectedCardLocations.filter(s => s.playerID === playerId).map(loc => loc.cardIndex)}
+                cardsToForceShowFaceUp={
+                    (gameState.currentPhase === 'initialPeekPhase' && 
+                     clientPlayerState?.cardsToPeek && 
+                     isPeekRevealActive && 
+                     !clientPlayerState.hasCompletedInitialPeek
+                    ) ? Object.fromEntries((clientPlayerState.cardsToPeek || []).map((_,i) => [i, true])) 
+                    : getOwnCardsToShowFaceUp()
+                }
+                isLocked={clientPlayerState.isLocked}
+                hasCalledCheck={clientPlayerState.hasCalledCheck}
+            />
+        )}
+      </div>
+
+      {/* Debug State (can be toggled or moved) - kept for now but styled to be less intrusive */}
+      <div className="absolute bottom-1 right-1 p-1 bg-black/50 backdrop-blur-sm rounded max-h-32 overflow-y-auto text-xs shadow-2xl z-50">
         <details>
-            <summary className="cursor-pointer text-xs">Toggle Details</summary>
-            <pre className="text-xs overflow-x-auto bg-white p-2 rounded">
+            <summary className="cursor-pointer text-gray-400 hover:text-white transition-colors">Debug</summary>
+            <pre className="text-gray-300 overflow-x-auto p-1 rounded custom-scrollbar" style={{backgroundColor: 'rgba(0,0,0,0.7)'}}>
                 {JSON.stringify({ 
-                    clientPlayerId: playerId, 
-                    isCurrentPlayer,
-                    gameState,
-                    clientPlayerState,
-                    selectedHandCardIndex, 
-                    multiSelectedCardLocations, 
-                    revealedCardLocations, 
-                    abilityArgs,
-                    peekCountdown,
-                    isPeekRevealActive
-                }, (key, value) => {
-                  // Prevent excessively long hand arrays from bloating the JSON string for 'gameState.players.X.hand'
-                  if (key === 'hand' && Array.isArray(value) && value.length > 5) { 
-                      return `Array(${value.length})`;
-                  }
-                  return value;
-              }, 2)}
+                    clientPID: playerId.slice(-4), 
+                    isCurrent: isCurrentPlayer,
+                    phase: gameState.currentPhase,
+                    turn: (gameState.players[gameState.currentPlayerId]?.name || gameState.currentPlayerId).slice(-6),
+                    deck: gameState.deckSize,
+                    discard: gameState.discardPile.length,
+                    myHand: clientPlayerState.hand.length,
+                    myStatus: {
+                        readyPeek: clientPlayerState.isReadyForInitialPeek,
+                        donePeek: clientPlayerState.hasCompletedInitialPeek,
+                        hasCalledCheck: clientPlayerState.hasCalledCheck,
+                        isLocked: clientPlayerState.isLocked,
+                        pendingCard: !!clientPlayerState.pendingDrawnCard,
+                    },
+                    // opponentPlayerIds,
+                    // topOpponentId,
+                    // otherOpponentIds
+                }, null, 1)}
             </pre>
         </details>
       </div>

@@ -1,4 +1,4 @@
-# Project AI Notes: "Check" - Online Multiplayer Card Game
+# Project Notes: "Check" - Online Multiplayer Card Game
 
 ## Framework & Core Technologies (DO NOT OVERWRITE)
 *   **Backend:** Node.js, Express.js (implicitly via Socket.IO's HTTP server), Socket.IO, TypeScript
