@@ -205,40 +205,49 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
 
 ---
 
-## Session Notes (Recent Updates - YYYY-MM-DD)
+## Session Notes (YYYY-MM-DD) - UI/UX Refinements & Visual Cues
 
-This session focused on further refining special ability logic, improving UI/UX for game flow and presentation, and enhancing the project's overall aesthetic.
+This session focused on significant UI/UX enhancements, particularly around visual feedback for player actions and game state changes.
 
-*   **Special Card Abilities (King, Queen, Jack) - Stage & UI Synchronization:**
-    *   **Problem:** Players sometimes received multiple ability resolutions for a single card discard (e.g., multiple King swaps). Ability UI on the client (buttons/prompts) sometimes showed incorrect stages like "Finalize (Stage: undefined)".
-    *   **Fixes (Server - `server/src/game-manager.ts`):**
-        *   Ensured `G.matchingOpportunityInfo` is correctly nullified in `handleResolveSpecialAbility` after a discard-sourced ability (`'discard'` or `'stackSecondOfPair'`) is fully resolved, preventing it from being re-processed.
-        *   Modified `handleAttemptMatch` (for paired K/Q/J matches) and `checkMatchingStageEnd` (for discard-sourced K/Q/J abilities) to initialize the `currentAbilityStage` property on `PendingSpecialAbility` objects to `'peek'` (for K/Q) or `'swap'` (for J) when they are first added to `G.pendingAbilities`.
-    *   **Fixes (Client - `frontend/app/components/CheckGameBoard.tsx`):**
-        *   Refactored `getActions` (button labels), `actionBarPrompt` (instructional text), `canPlayerPerformAbilityAction` (action validation), and `handleResolveSpecialAbility` (action dispatch) to consistently use the server-authoritative `currentAbilityStage` from the `gameState.pendingAbilities[0]` object.
-        *   Updated the `useEffect` hook responsible for resetting local ability-related state (`abilityArgs`, `multiSelectedCardLocations`) to include `currentAbilityStage` in its dependency signature. This ensures client state is correctly reset when the server advances an ability's stage (e.g., from peek to swap).
-*   **UI - Card Selection for Abilities:**
-    *   **Problem:** Players could not correctly select two cards simultaneously for an ability's swap stage; selecting a second card would often deselect the first.
-    *   **Fix (Client - `frontend/app/components/CheckGameBoard.tsx`):**
-        *   Refactored the `setMultiSelectedCardLocations` updater logic within the `handleCardClick` function. It now correctly uses the server-provided `currentAbilityStage` to manage selections:
-            *   King peek: up to 2 cards.
-            *   Queen peek: 1 card.
-            *   King/Queen/Jack swap: up to 2 cards (if a 3rd is selected, the oldest is replaced).
-            *   Clicking an already selected card deselects it.
-*   **UI/UX - "Play Again" Functionality:**
-    *   **Change:** The "Play Again" button in the `EndOfGameModal` now returns the user to the main lobby/landing page.
+*   **Global Ability Target Icons (Peek/Swap):**
+    *   **Initial Problem:** Icons for peek/swap abilities were not showing correctly for all players or were persisting incorrectly.
+    *   **Fixes (Client & Server):**
+        *   Numerous iterations on server-side logic (`server/src/game-manager.ts`) for setting and clearing `globalAbilityTargets` in `ServerCheckGameState`.
+        *   Refined `handleResolveSpecialAbility` to manage GATs for peek vs. swap stages, ensuring they are present for the immediate broadcast after an action and correctly cleared by subsequent phase/turn setups.
+        *   Added `clearGlobalAbilityTargetsIfNeeded` calls to `handleDrawFromDeck` and `handleDrawFromDiscard` to ensure GATs from previous turns are cleared when a new player starts their draw action.
+        *   Updated client-side logic (`frontend/app/components/CheckGameBoard.tsx`) to correctly interpret and display these icons, including hiding them from the player who initiated the ability or just resolved a swap (using `lastPlayerToResolveAbility`).
+*   **Empty Pile Styling (Draw & Discard):**
+    *   **Problem:** The empty state UI for the discard pile was inconsistent with the draw pile and the overall dark theme.
+    *   **Fix (Client - `DiscardPileComponent.tsx`, `DrawPileComponent.tsx`):**
+        *   Updated the placeholder for empty discard and draw piles to use a dark theme (`bg-neutral-700`, `text-neutral-300`, `border-neutral-600`).
+        *   Removed the redundant "Cards: 0" text from the `DiscardPileComponent` when empty, as the "Empty" placeholder implies this.
+*   **Discard Pile Interactivity:**
+    *   **Problem:** The "Draw From Discard" action button was clickable even when the discard pile was empty.
+    *   **Fix (Client - `CheckGameBoard.tsx`):**
+        *   Modified the `canDrawFromDiscard` constant to include a check for `gameState.discardPile.length > 0`, ensuring the action button is disabled if the pile is empty.
+*   **Card Selection Restrictions:**
+    *   **Problem:** Players could select cards in their hand or opponents' hands even when no relevant action (like an ability or pending swap) was active.
+    *   **Fix (Client - `CheckGameBoard.tsx`):**
+        *   Removed fallback logic in `handleCardClick` that allowed selecting one's own card for general feedback. Card clicks are now only processed if a specific action context (pending drawn card, matching stage, ability resolution) is active.
+*   **Visual Cue for Regular Swaps (Non-Ability):**
+    *   **Goal:** Provide a visual highlight on a player's hand to indicate to *other* players which card slot was just affected by a regular swap (drawing a card and swapping it into their hand).
     *   **Implementation:**
-        *   Added a `handleReturnToLobby` function in `frontend/app/page.tsx` that resets client-side game state (`gameId`, `playerId`, `gameState`, etc.) and clears relevant `localStorage` entries (`gameId`, `playerId`).
-        *   Passed `handleReturnToLobby` as a prop to `CheckGameBoard.tsx` and subsequently to `EndOfGameModal.tsx` (via the `useEndModal` hook) to be called by the "Play Again" button.
-*   **UI - Main Page (Lobby) Enhancements:**
-    *   **Change:** Updated the styling of the main page (when no game is active) in `frontend/app/page.tsx` for a more modern, sleek, and minimal appearance using Tailwind CSS.
-    *   **Details:** Improved layout, centering, typography, input field styles, button styles, and the "OR" separator.
-*   **Project Font Update:**
-    *   **Change:** Replaced the "Inter" font with "Plus Jakarta Sans" across the project for a more unique and modern aesthetic.
-    *   **Implementation (`frontend/app/layout.tsx`):**
-        *   Imported `Plus_Jakarta_Sans` from `next/font/google`.
-        *   Applied its `className` to the `<body>` tag, making it the default font.
-        *   Included weights `400, 500, 600, 700` for styling flexibility.
-        *   Updated default metadata (title, description).
+        *   **Shared Types (`shared-types/src/index.ts`):**
+            *   Added `LastRegularSwapInfo { playerId: string; handIndex: number; timestamp: number; }` interface.
+            *   Added `lastRegularSwapInfo: LastRegularSwapInfo | null` to `CheckGameState` and `ClientCheckGameState`.
+        *   **Server (`server/src/game-manager.ts`):**
+            *   Populated `lastRegularSwapInfo` in `handleSwapAndDiscard` with the `playerId`, `handIndex`, and `Date.now()`.
+            *   Added a new helper `clearTransientVisualCues` (which clears `lastRegularSwapInfo`) and called it in phase/turn setup functions (`setupNextPlayTurn`, `setupFinalTurnsPhase`, `setupAbilityResolutionPhase`, `setupScoringPhase`, `continueOrEndFinalTurns`) to ensure the highlight is temporary.
+        *   **Client (`PlayerHandComponent.tsx`, `CheckGameBoard.tsx`):**
+            *   Passed `gameState.lastRegularSwapInfo` as a prop to `PlayerHandComponent`.
+            *   In `PlayerHandComponent`, used `useEffect` to watch for changes to `lastRegularSwapInfo`.
+            *   When `lastRegularSwapInfo` updates for the displayed player (and it's not the viewing player), a `highlightedSwapIndex` state is set.
+            *   A `setTimeout` clears `highlightedSwapIndex` after 2 seconds, making the highlight temporary.
+            *   A `lastProcessedSwapTimestampRef` was added to the `useEffect` to ensure the highlight only triggers for new swap events and not due to unrelated re-renders if `lastRegularSwapInfo` hasn't changed its timestamp.
+        *   **Animation:**
+            *   The highlighted card slot initially used a yellow ring.
+            *   This was enhanced with a Framer Motion animation:
+                *   First attempt: A keyframe-based "pulse" for the ring.
+                *   Second attempt (current): A "shimmer" or "glint" effect where a semi-transparent white band sweeps across the card. This involves animating the `backgroundPosition` of a `linear-gradient` on a `motion.div`.
 
 *Overall, this session involved deep debugging of special ability logic on both client and server, culminating in a critical fix for argument passing on the server, and a separate fix for discard pile ordering to resolve visual inconsistencies.*
