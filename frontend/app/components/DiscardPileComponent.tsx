@@ -17,60 +17,39 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
   isSealed,
   numberOfCards
 }) => {
-  const pileStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '10px',
-    border: `2px solid ${isSealed ? '#ff6b6b' : '#86dc86'}`,
-    borderRadius: '8px',
-    minHeight: '150px',
-    justifyContent: 'center',
-    backgroundColor: isSealed ? '#ffe0e0' : '#e6ffe6',
-  };
-
-  const countStyle: React.CSSProperties = {
-    marginTop: '5px',
-    fontSize: '12px',
-    color: '#555',
-  };
-
-  const sealedTextStyle: React.CSSProperties = {
-    color: '#c0392b',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    marginBottom: '5px',
-  }
+  const cardWrapperClasses = "w-12 md:w-14 relative";
+  const effectiveCanDraw = canDraw && !isSealed;
 
   return (
-    <div style={pileStyle}>
-      <h4>Discard Pile</h4>
-      {isSealed && <div style={sealedTextStyle}>Sealed</div>}
-      {topCard ? (
-        <CardComponent
-          card={topCard}
-          isFaceUp={true} // Top card of discard is always face up
-          onClick={canDraw && !isSealed ? onClick : undefined}
-          style={{ 
-            cursor: canDraw && !isSealed ? 'pointer' : 'not-allowed',
-            opacity: isSealed ? 0.7 : 1,
-          }}
-        />
-      ) : (
-        <div style={{ 
-            width: '70px', 
-            height: '100px', 
-            border: '1px solid #ccc', 
-            borderRadius: '8px', 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            backgroundColor: '#f0f0f0' 
-        }}>
+    <div className="flex flex-col items-center justify-center p-1">
+      <span className="mb-0.5 text-[0.65rem] text-gray-500 font-medium">Discard Pile</span>
+      <div className={`${cardWrapperClasses}`}>
+        {topCard ? (
+          <>
+            <CardComponent
+              card={topCard}
+              isFaceUp={true}
+              onClick={effectiveCanDraw ? onClick : undefined}
+            />
+            {isSealed && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-md md:rounded-lg p-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+            )}
+          </>
+        ) : (
+          <div
+            className="w-full aspect-[2.5/3.5] rounded-md md:rounded-lg bg-gray-100/80 flex items-center justify-center text-gray-400 text-xs font-sans shadow-inner border border-gray-200/80"
+            aria-label="Empty discard pile"
+          >
             Empty
-        </div>
-      )}
-      <div style={countStyle}>Cards: {numberOfCards}</div>
+          </div>
+        )}
+      </div>
+      <span className="mt-0.5 text-[0.6rem] text-gray-400">Cards: {numberOfCards}</span>
     </div>
   );
 };

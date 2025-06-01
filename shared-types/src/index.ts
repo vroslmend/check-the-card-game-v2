@@ -72,6 +72,8 @@ export interface PlayerState {
   score: number; // Score for the current round
   // id: string; // playerID is the key in G.players, not stored here
   name?: string; // Added for player identification
+  isConnected: boolean; // Tracks if player is currently connected via a socket
+  socketId: string;     // Stores the current socket ID of the player
 }
 
 export interface CheckGameState {
@@ -113,6 +115,7 @@ export interface CheckGameState {
 export interface InitialPlayerSetupData {
   id: string; // Unique player identifier (e.g., socket.id or a persistent user ID)
   name?: string; // Optional display name for the player
+  socketId?: string; // For server to associate player with initial socket during game creation
 }
 
 export interface PendingSpecialAbility {
@@ -155,6 +158,8 @@ export interface ClientPlayerState {
   hasCalledCheck: boolean;
   isLocked: boolean;
   score: number;
+  isConnected: boolean; // Client needs to know connection status
+  // socketId is server-internal, so it's NOT included here
 }
 
 export interface ClientCheckGameState {

@@ -115,6 +115,22 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
     *   Resolved numerous TypeScript errors in `CheckGameBoard.tsx`, `CardComponent.tsx`, `PlayerHandComponent.tsx` related to new prop types and state structure.
     *   Addressed React specific errors (e.g. `ReactNode` type issues for button content).
 
+**Reconnection Logic (Client + Server)**
+*   **Client-Side (`frontend/app/page.tsx`):**
+    *   Stores `gameId`, `playerId`, and `playerName` in `localStorage`.
+    *   On load, attempts to retrieve session info and emits `attemptRejoin` to the server.
+    *   Handles server response for rejoin (success/failure), updates state accordingly.
+    *   `createGame` and `joinGame` updated to store session info and use server-provided `playerId`.
+*   **Server-Side (`server/src/index.ts`, `server/src/game-manager.ts`):**
+    *   `PlayerState` in `shared-types` updated with `isConnected: boolean` and `socketId: string`.
+    *   `game-manager` updated to initialize and manage `isConnected` and `socketId` for players.
+    *   New `markPlayerAsDisconnected` and `attemptRejoinGame` methods in `game-manager`.
+    *   `index.ts` (main server file) handles new `attemptRejoin` socket event.
+    *   On socket `disconnect`, player is marked as disconnected in `game-manager`.
+    *   `socketId` passed correctly during game creation and joining.
+    *   Game state broadcasts now include player connection status implicitly through `PlayerState` updates.
+    *   Basic session tracking (`socketSessionMap`) added to `index.ts` to map `socket.id` to `gameId` and `playerId`.
+
 ### ⏳ What is LEFT / Next Steps
 
 *   **Thorough Runtime Testing & Debugging (Client + Server):**
@@ -142,4 +158,75 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
     * Improve ui
 
 ---
-*Last Updated: (Current Date)*
+
+## UI Redesign Implementation Plan (Minimal & Sleek, Richio-inspired)
+
+**Goal:** Transform the game's UI to a minimal, modern, and sleek look inspired by Richio and similar card games.
+
+### Step-by-Step Plan
+
+1. **Design Foundation**
+   - ✅ Minimal color palette, modern font, Tailwind v4 ready.
+2. **Layout Refactor**
+   - ✅ Centered board, responsive flex/grid, whitespace-based separation.
+3. **Card Component Redesign**
+   - ✅ Minimal, modern CardComponent (white, rounded, accent border, smooth hover, suit color, responsive size).
+4. **Player Hand Component**
+   - ✅ Minimal, modern PlayerHandComponent (clean grid, status badges, soft backgrounds, responsive, accessible).
+5. **Board Layout & Piles**
+   - ✅ Minimal DrawPileComponent and DiscardPileComponent (white, shadow, subtle labels, responsive, accessible).
+6. **Action Bar & Buttons**
+   - ✅ Floating, pill-shaped ActionBarComponent for all in-game actions (draw, discard, match, check, pass, ability, etc.).
+7. **Game State & Info**
+   - ✅ Minimal phase banner, turn indicator, and floating GameLogComponent (collapsible, recent events, mobile-friendly).
+8. **End-of-Game Experience**
+   - ✅ EndOfGameModal: modern, celebratory modal with winner(s), scores, and Play Again button.
+9. **Accessibility & Polish**
+   - In progress: Keyboard navigation, colorblind icons, loading states, further polish.
+10. **Testing & Iteration**
+   - In progress: Cross-device testing, feedback, and UI/UX tweaks.
+
+### New Components Summary
+- **ActionBarComponent:** Floating, pill-shaped action bar for all player actions, responsive and minimal.
+- **EndOfGameModal:** Modern modal overlay for round end, showing winner(s), scores, and Play Again.
+- **GameLogComponent:** Floating, collapsible panel for recent game events, mobile-friendly, minimal.
+
+### ⏳ What is LEFT / Next Steps
+- Further polish: animations (e.g., card draw/discard, confetti), ability resolution UI, player badges, and visual cues.
+- Accessibility: keyboard navigation, colorblind support, loading/waiting states.
+- Optional: Game log enhancements, player avatars, sound effects, advanced end-of-game experience.
+- Cross-device testing and feedback-driven iteration.
+
+*Last Updated: 2024-06-10*
+
+---
+
+## Session Notes (YYYY-MM-DD)
+
+This session focused on addressing several issues related to game logic, UI presentation, and stability, building upon the major Socket.IO refactor and UI redesign efforts.
+
+*   **Special Card Abilities (King, Queen, Jack) - Debugging & Refinement:**
+    *   **Initial Problem:** Infinite loops and incorrect behavior reported with Queen and King abilities.
+    *   **Investigation & Fixes (Client & Server):**
+        *   Reviewed `GAME_OVERVIEW.md` to confirm K/Q/J ability mechanics (peek stages, swap stages).
+        *   **Client (`CheckGameBoard.tsx`):**
+            *   Refined `handleResolveSpecialAbility` to correctly manage multi-stage abilities (peek then swap for K/Q, direct swap for J), including storing `peekTargets` in `abilityArgs` and clearing selections between stages.
+            *   Adjusted `handleCardClick` for correct maximum selections during different ability stages.
+            *   Updated `getActions` (button labels) and `actionBarPrompt` (instructional text) to provide clear guidance for multi-stage abilities and selection counts (e.g., "King: Confirm Peek (1/2)").
+            *   Added a `useEffect` hook to reset `abilityArgs` and `multiSelectedCardLocations` when `pendingAbilities` change or the player is no longer the one actively resolving an ability. This involved fixing an "Invalid hook call" by moving a `useRef` to the top level and refining reset conditions.
+            *   Added stricter client-side validation in `handleResolveSpecialAbility` for King/Queen swap stages to ensure `abilityArgs.peekTargets` was correctly structured before sending to the server.
+        *   **Server (`game-manager.ts` & `index.ts`):**
+            *   Modified `AbilityArgs` interface: `swapTarget` changed to `swapTargets` (array of 2 card locations).
+            *   Refactored `handleResolveSpecialAbility` (server) to correctly validate `peekTargets` (2 for King, 1 for Queen) and `swapTargets` (array of 2 locations for K, Q, J), and perform card swaps.
+            *   Corrected phase transition logic within `handleResolveSpecialAbility` to ensure smooth progression to the next ability, final turns, or next play turn.
+            *   **Key Discovery & Fix:** Identified that the server's `handleResolveSpecialAbility` was receiving the entire event `payload` instead of just the `args` object. Corrected the call in `server/src/index.ts` to pass `payload.args as AbilityArgs`, which resolved the persistent infinite loops with King and Queen abilities.
+    *   **Remaining Issue (Visual):** User reported ability cards sometimes appearing "stuck" as the top discard card visually, even if not logically the top card. Added `console.log(gameState.discardPile)` in `CheckGameBoard.tsx` to aid further diagnosis if the client's state is stale.
+
+*   **Discard Pile Order & Visual Glitch (Server-Side Fix):**
+    *   **Issue (Related to above):** The primary visual glitch where the discard pile didn't update correctly was traced to the server.
+    *   **Root Cause:** Server-side logic in `server/src/game-manager.ts` was appending new cards to the `discardPile` array using `Array.prototype.push()` instead of prepending.
+    *   **Fix:** Modified `handleSwapAndDiscard`, `handleDiscardDrawnCard`, and `handleAttemptMatch` in `server/src/game-manager.ts` to use `Array.prototype.unshift()` to add cards to the beginning of `gameState.discardPile`.
+    *   **Side Effects:** Ensured `discardPileIsSealed` flag is correctly set (`false` for simple discards, `true` for matches) in the modified functions.
+    *   **Status:** Fix applied. Awaiting testing to confirm this resolves the primary discard pile visual issue.
+
+*Overall, this session involved deep debugging of special ability logic on both client and server, culminating in a critical fix for argument passing on the server, and a separate fix for discard pile ordering to resolve visual inconsistencies.*
