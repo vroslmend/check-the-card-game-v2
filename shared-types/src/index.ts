@@ -29,8 +29,7 @@ export enum Rank {
 export interface Card {
   suit: Suit;
   rank: Rank;
-  // Potentially add an 'id' if needed for unique identification on the client, e.g., for React keys
-  // id: string;
+  id?: string; // Make id optional for React keys, added by server when sending to client
 }
 
 export const cardValues: { [key in Rank]: number } = {
@@ -101,7 +100,11 @@ export interface CheckGameState {
   gameMasterId?: string; // Optional game master
   activePlayers: { [playerID: string]: string }; // Tracks active players and their current stage
   pendingAbilities: PendingSpecialAbility[]; // Abilities waiting for resolution (non-optional, init to [])
-  gameover?: { winner?: string; scores?: { [playerId: string]: number } } | null; // Standardized gameover structure
+  gameover?: { 
+    winner?: string; 
+    scores?: { [playerId: string]: number };
+    finalHands?: { [playerId: string]: Card[] }; // Added final hands
+  } | null; // Standardized gameover structure
 
   // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
   matchResolvedDetails: {
@@ -119,10 +122,11 @@ export interface InitialPlayerSetupData {
 }
 
 export interface PendingSpecialAbility {
-  playerId: string; // The ID of the player whose ability this is
+  playerId: string;
   card: Card;
-  source: 'deck' | 'discard' | 'stack' | 'stackSecondOfPair'; // 'stack' for matcher, 'stackSecondOfPair' for original discarder
-  pairTargetId?: string; // ID of the other player involved in a stack, if applicable
+  source: 'deck' | 'discard' | 'stack' | 'stackSecondOfPair';
+  pairTargetId?: string; // For 'stackSecondOfPair', who was the other player in the stack
+  currentAbilityStage?: 'peek' | 'swap'; // Added to track K/Q multi-stage abilities
 }
 
 // This interface is currently empty and unused, as CheckGameState.matchingOpportunityInfo defines its structure inline.
@@ -189,10 +193,13 @@ export interface ClientCheckGameState {
   gameMasterId?: string;
   activePlayers: { [playerID: string]: string };
   pendingAbilities: PendingSpecialAbility[]; // List of abilities pending, card details might be sensitive if not for viewing player
-  gameover?: { winner?: string; scores?: { [playerId: string]: number } } | null;
+  gameover?: { 
+    winner?: string; 
+    scores?: { [playerId: string]: number };
+    finalHands?: { [playerId: string]: Card[] }; // Added final hands for client view
+  } | null;
   
   // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
-  // This might be okay to send as is, as it reflects outcomes.
   matchResolvedDetails: {
     byPlayerId: string; 
     isAutoCheck: boolean;

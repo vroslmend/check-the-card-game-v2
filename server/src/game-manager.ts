@@ -282,12 +282,12 @@ export const handleDrawFromDiscard = (
     return { success: false, message: "Discard pile is sealed." };
   }
 
-  const topCard = gameRoom.gameState.discardPile[gameRoom.gameState.discardPile.length - 1];
+  const topCard = gameRoom.gameState.discardPile[0];
   if (topCard && (topCard.rank === Rank.King || topCard.rank === Rank.Queen || topCard.rank === Rank.Jack)) {
     return { success: false, message: "Cannot draw special ability cards (K, Q, J) from the discard pile." };
   }
 
-  const card = gameRoom.gameState.discardPile.pop();
+  const card = gameRoom.gameState.discardPile.shift();
   if (!card) {
     return { success: false, message: "Failed to draw card (discard pile might be unexpectedly empty)." };
   }
@@ -432,24 +432,33 @@ export const handleAttemptMatch = (
     const isCardYSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardY.rank);
 
     if (isCardXSpecial && isCardYSpecial) {
+      let stageForCardY: 'peek' | 'swap' | undefined = undefined;
+      let stageForCardX: 'peek' | 'swap' | undefined = undefined;
+
       if (G.players[playerId]) {
         G.pendingAbilities = G.pendingAbilities || [];
-        G.pendingAbilities.push({ playerId: playerId, card: cardY, source: 'stack', pairTargetId: originalPlayerID });
+        if (cardY.rank === Rank.King || cardY.rank === Rank.Queen) stageForCardY = 'peek';
+        else if (cardY.rank === Rank.Jack) stageForCardY = 'swap';
+        G.pendingAbilities.push({ playerId: playerId, card: cardY, source: 'stack', pairTargetId: originalPlayerID, currentAbilityStage: stageForCardY });
       }
       if (G.players[originalPlayerID]) {
         G.pendingAbilities = G.pendingAbilities || [];
-        G.pendingAbilities.push({ playerId: originalPlayerID, card: cardX, source: 'stackSecondOfPair', pairTargetId: playerId });
+        if (cardX.rank === Rank.King || cardX.rank === Rank.Queen) stageForCardX = 'peek';
+        else if (cardX.rank === Rank.Jack) stageForCardX = 'swap';
+        G.pendingAbilities.push({ playerId: originalPlayerID, card: cardX, source: 'stackSecondOfPair', pairTargetId: playerId, currentAbilityStage: stageForCardX });
       }
       abilityResolutionRequired = true;
-      console.log(`[GameManager] Special match pair: ${cardX.rank} & ${cardY.rank}. Abilities added for ${originalPlayerID} and ${playerId}.`);
+      console.log(`[GameManager] Special match pair: ${cardX.rank} & ${cardY.rank}. Abilities added for ${originalPlayerID} and ${playerId}. Stages: Y=${stageForCardY}, X=${stageForCardX}`);
     }
 
     let isAutoCheck = false;
     if (player.hand.length === 0) {
       player.hasCalledCheck = true;
       player.isLocked = true;
-      if (!G.playerWhoCalledCheck) G.playerWhoCalledCheck = playerId;
+      if (!G.playerWhoCalledCheck) {
+        G.playerWhoCalledCheck = playerId;
       G.finalTurnsTaken = 0; 
+      }
       isAutoCheck = true;
       console.log(`[GameManager] Player ${playerId} emptied hand on match. Auto-Check!`);
     }
@@ -524,8 +533,20 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
       console.log("[GameManager] checkMatchingStageEnd (after match): Match resulted in auto-check. Transitioning to finalTurnsPhase.");
       setupFinalTurnsPhase(gameId, byPlayerId);
     } else {
-      console.log("[GameManager] checkMatchingStageEnd (after match): Match successful, no abilities/autocheck. Returning to playPhase.");
-      setupNextPlayTurn(gameId);
+      // Match successful, no abilities/autocheck
+      if (G.playerWhoCalledCheck) { // If final turns ARE active
+        console.log(`[GameManager] checkMatchingStageEnd (after match in final turns): Match by ${byPlayerId} successful. Phase remains finalTurnsPhase. Player's final turn action complete.`);
+        G.currentPhase = 'finalTurnsPhase'; // Explicitly ensure it stays finalTurnsPhase
+        G.currentPlayerId = byPlayerId;   // Player who made the match
+        // This player's "active" part of the turn is done. They don't get to do more actions.
+        // The next call to setupNextPlayTurn/setupAbilityResolutionPhase from a higher level will trigger continueOrEndFinalTurns.
+        G.activePlayers = {}; // Clear active players for this specific part.
+      } else { // Final turns are NOT active
+        console.log("[GameManager] checkMatchingStageEnd (after match, not in final turns): Match successful. Player's turn continues in playPhase.");
+        G.currentPhase = 'playPhase';
+        G.currentPlayerId = byPlayerId;
+        G.activePlayers = { [byPlayerId]: 'playPhaseActive' };
+      }
     }
     activeGames[gameId] = gameRoom; 
     return G;
@@ -547,15 +568,32 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
       if (!hasOtherPending) {
         console.log(`[GameManager] checkMatchingStageEnd (all passed): Original discarder ${originalPlayerID} has ${cardToMatch.rank} ability from discard.`);
         G.pendingAbilities = G.pendingAbilities || [];
-        G.pendingAbilities.push({ playerId: originalPlayerID, card: cardToMatch, source: 'discard' });
+        let stageForDiscardedCard: 'peek' | 'swap' | undefined = undefined;
+        if (cardToMatch.rank === Rank.King || cardToMatch.rank === Rank.Queen) stageForDiscardedCard = 'peek';
+        else if (cardToMatch.rank === Rank.Jack) stageForDiscardedCard = 'swap';
+        G.pendingAbilities.push({ playerId: originalPlayerID, card: cardToMatch, source: 'discard', currentAbilityStage: stageForDiscardedCard });
+        console.log(`[GameManager] Added discard ability for ${cardToMatch.rank} to ${originalPlayerID} with stage: ${stageForDiscardedCard}`);
         setupAbilityResolutionPhase(gameId);
       } else {
         console.log(`[GameManager] checkMatchingStageEnd (all passed): Original discarder ${originalPlayerID} already has other pending abilities. ${cardToMatch.rank} from discard not added.`);
+        if (G.playerWhoCalledCheck) {
+          console.log(`[GameManager] checkMatchingStageEnd (all passed, no new ability, check called): Restoring phase to finalTurnsPhase and proceeding.`);
+          G.currentPhase = 'finalTurnsPhase'; // Ensure phase is correct before continuing final turns
+          continueOrEndFinalTurns(gameId);
+        } else {
         setupNextPlayTurn(gameId);
+        }
       }
     } else {
-      console.log(`[GameManager] checkMatchingStageEnd (all passed): No further abilities from discard. Returning to playPhase.`);
+      console.log(`[GameManager] checkMatchingStageEnd (all passed): No further abilities from discard.`);
+      if (G.playerWhoCalledCheck) {
+        console.log(`[GameManager] checkMatchingStageEnd (all passed, no ability, check called): Restoring phase to finalTurnsPhase and proceeding.`);
+        G.currentPhase = 'finalTurnsPhase'; // Ensure phase is correct before continuing final turns
+        continueOrEndFinalTurns(gameId);
+      } else {
+        console.log(`[GameManager] checkMatchingStageEnd (all passed, no ability, no check called): Returning to playPhase.`);
       setupNextPlayTurn(gameId);
+      }
     }
     activeGames[gameId] = gameRoom;
     return G;
@@ -708,14 +746,16 @@ const setupFinalTurnsPhase = (gameId: string, checkerPlayerId: string): ServerCh
   const G = gameRoom.gameState;
 
   G.currentPhase = 'finalTurnsPhase';
-  if (!G.playerWhoCalledCheck) G.playerWhoCalledCheck = checkerPlayerId; 
+  if (!G.playerWhoCalledCheck) {
+    G.playerWhoCalledCheck = checkerPlayerId; 
   G.finalTurnsTaken = 0; 
+  }
 
-  console.log(`[GameManager] setupFinalTurnsPhase: Game ${gameId} entering final turns. Checker: ${checkerPlayerId}.`);
+  console.log(`[GameManager] setupFinalTurnsPhase: Game ${gameId} entering/re-evaluating final turns. Original Checker: ${G.playerWhoCalledCheck}. Initial/Current turns taken: ${G.finalTurnsTaken}. Player who triggered this call: ${checkerPlayerId}.`);
     
-  let checkerIndex = G.turnOrder.indexOf(checkerPlayerId);
+  let checkerIndex = G.turnOrder.indexOf(G.playerWhoCalledCheck);
   if (checkerIndex === -1) {
-    console.error(`[GameManager] setupFinalTurnsPhase: Checker ${checkerPlayerId} not in turn order for game ${gameId}.`);
+    console.error(`[GameManager] setupFinalTurnsPhase: Original checker ${G.playerWhoCalledCheck} not in turn order for game ${gameId}.`);
     G.currentPhase = 'error'; G.activePlayers = {}; G.currentPlayerId = "";
     activeGames[gameId] = gameRoom; return G;
   }
@@ -728,9 +768,11 @@ const setupFinalTurnsPhase = (gameId: string, checkerPlayerId: string): ServerCh
   do {
     currentTurnIdx = (currentTurnIdx + 1) % G.turnOrder.length;
     const candidateId = G.turnOrder[currentTurnIdx];
-    if (candidateId !== checkerPlayerId && !G.players[candidateId]?.isLocked) {
+    console.log(`[DEBUG_FinalTurns] Attempt ${attempts + 1}: Candidate is ${candidateId} (index ${currentTurnIdx}). Is locked: ${G.players[candidateId]?.isLocked}. Is checker: ${candidateId === G.playerWhoCalledCheck}`);
+    if (candidateId !== G.playerWhoCalledCheck && !G.players[candidateId]?.isLocked) {
       nextPlayerId = candidateId;
       foundNextPlayer = true;
+      console.log(`[DEBUG_FinalTurns] Found next player: ${nextPlayerId}`);
       break;
     }
     attempts++;
@@ -799,43 +841,50 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
   if (!gameRoom) { console.error(`[GameManager] continueOrEndFinalTurns: Game room ${gameId} not found.`); return null; }
   const G = gameRoom.gameState;
 
+  console.log(`[DEBUG_FinalTurns] Entering continueOrEndFinalTurns. Current player (turn just ended): ${G.currentPlayerId}, Current Phase: ${G.currentPhase}, Player Who Called Check: ${G.playerWhoCalledCheck}`);
+
   if (G.currentPhase !== 'finalTurnsPhase' || !G.playerWhoCalledCheck) {
     console.error(`[GameManager] continueOrEndFinalTurns: Not in final turns phase or no checker defined for game ${gameId}. Current phase: ${G.currentPhase}`);
     return setupNextPlayTurn(gameId); 
   }
 
-  // Count how many eligible (non-locked, non-checker) players have taken their final turn
+  const playerWhoseTurnJustEnded = G.currentPlayerId;
+  console.log(`[DEBUG_FinalTurns] finalTurnsTaken (before increment): ${G.finalTurnsTaken === undefined ? 'undefined' : G.finalTurnsTaken}`);
   if (!G.finalTurnsTaken) G.finalTurnsTaken = 0;
   G.finalTurnsTaken += 1;
-  console.log(`[GameManager] continueOrEndFinalTurns: Player ${G.currentPlayerId} completed final turn ${G.finalTurnsTaken} for game ${gameId}.`);
+  console.log(`[GameManager] continueOrEndFinalTurns: Player ${playerWhoseTurnJustEnded} completed final turn. finalTurnsTaken (after increment): ${G.finalTurnsTaken} for game ${gameId}.`);
 
-  // Calculate the number of eligible players (excluding checker and locked)
   const eligiblePlayerIds = G.turnOrder.filter(pid => pid !== G.playerWhoCalledCheck && !G.players[pid]?.isLocked);
   const numEligiblePlayers = eligiblePlayerIds.length;
-  console.log(`[GameManager] continueOrEndFinalTurns: Eligible players for final turns: ${eligiblePlayerIds.join(', ')}. Total: ${numEligiblePlayers}`);
+  console.log(`[DEBUG_FinalTurns] Eligible players for final turns: ${eligiblePlayerIds.join(', ') || 'NONE'}. Total numEligiblePlayers: ${numEligiblePlayers}`);
 
-  if (G.finalTurnsTaken >= numEligiblePlayers) {
+  const allTurnsTaken = G.finalTurnsTaken >= numEligiblePlayers;
+  console.log(`[DEBUG_FinalTurns] Comparison: finalTurnsTaken (${G.finalTurnsTaken}) >= numEligiblePlayers (${numEligiblePlayers})? Result: ${allTurnsTaken}`);
+
+  if (allTurnsTaken) {
     console.log(`[GameManager] continueOrEndFinalTurns: All eligible players (${numEligiblePlayers}) have taken their final turn in game ${gameId}. Proceeding to scoring.`);
     return setupScoringPhase(gameId);
   } else {
-    // Find the next eligible player (skipping checker and locked players)
-    let currentPlayerIndex = G.turnOrder.indexOf(G.currentPlayerId);
+    let lastTurnPlayerIndex = G.turnOrder.indexOf(playerWhoseTurnJustEnded);
     let attempts = 0;
     let nextPlayerId = "";
     let foundNextPlayer = false;
+    console.log(`[DEBUG_FinalTurns] Finding next player. Starting search after player ${playerWhoseTurnJustEnded} (index ${lastTurnPlayerIndex}).`);
     do {
-      currentPlayerIndex = (currentPlayerIndex + 1) % G.turnOrder.length;
-      const candidateId = G.turnOrder[currentPlayerIndex];
+      lastTurnPlayerIndex = (lastTurnPlayerIndex + 1) % G.turnOrder.length;
+      const candidateId = G.turnOrder[lastTurnPlayerIndex];
+      console.log(`[DEBUG_FinalTurns] Attempt ${attempts + 1}: Candidate is ${candidateId} (index ${lastTurnPlayerIndex}). Is locked: ${G.players[candidateId]?.isLocked}. Is checker: ${candidateId === G.playerWhoCalledCheck}`);
       if (candidateId !== G.playerWhoCalledCheck && !G.players[candidateId]?.isLocked) {
         nextPlayerId = candidateId;
         foundNextPlayer = true;
+        console.log(`[DEBUG_FinalTurns] Found next player: ${nextPlayerId}`);
         break;
       }
       attempts++;
     } while (attempts < G.turnOrder.length);
 
     if (!foundNextPlayer) {
-      console.error(`[GameManager] continueOrEndFinalTurns: Logic error - could not find next eligible player for final turn in game ${gameId}, but not all turns taken. Forcing scoring phase as fallback.`);
+      console.error(`[GameManager] continueOrEndFinalTurns: Logic error - could not find next eligible player for final turn in game ${gameId}, but not all turns taken (finalTurnsTaken: ${G.finalTurnsTaken}, numEligiblePlayers: ${numEligiblePlayers}). Forcing scoring phase as fallback.`);
       return setupScoringPhase(gameId);
     }
 
@@ -863,6 +912,7 @@ const setupScoringPhase = (gameId: string): ServerCheckGameState | null => {
   let minScore = Infinity;
   let roundWinnerIds: string[] = [];
   const scores: { [playerId: string]: number } = {};
+  const finalHands: { [playerId: string]: Card[] } = {};
 
   for (const playerId in G.players) {
     const player = G.players[playerId];
@@ -872,6 +922,7 @@ const setupScoringPhase = (gameId: string): ServerCheckGameState | null => {
     });
     player.score = playerScore;
     scores[playerId] = playerScore;
+    finalHands[playerId] = [...player.hand];
 
     if (playerScore < minScore) {
       minScore = playerScore;
@@ -886,6 +937,7 @@ const setupScoringPhase = (gameId: string): ServerCheckGameState | null => {
 G.gameover = {
     winner: G.roundWinner === null ? undefined : G.roundWinner,
     scores: scores,
+    finalHands: finalHands,
   };
   G.currentPhase = 'gameOver';
 
@@ -903,147 +955,163 @@ export interface AbilityArgs {
 export const handleResolveSpecialAbility = (
   gameId: string,
   playerId: string,
-  abilityResolutionArgs?: AbilityArgs 
+  abilityResolutionArgs?: AbilityArgs & { skipAbility?: boolean; skipType?: 'peek' | 'swap' | 'full' }
 ): { success: boolean; message?: string; updatedGameState?: ServerCheckGameState } => {
   console.log(`[GameManager-handleResolveSpecialAbility] Received for player ${playerId}, game ${gameId}. Args:`, JSON.stringify(abilityResolutionArgs, null, 2));
 
   const gameRoom = getGameRoom(gameId);
   if (!gameRoom) { return { success: false, message: "Game not found." }; }
-  if (!gameRoom.gameState.pendingAbilities || gameRoom.gameState.pendingAbilities.length === 0) {
+  const G = gameRoom.gameState;
+  if (!G.pendingAbilities || G.pendingAbilities.length === 0) {
     return { success: false, message: "No pending abilities to resolve." };
   }
-  const pendingAbility = gameRoom.gameState.pendingAbilities[0];
+  // Do not shift yet, we might modify it for multi-stage
+  let pendingAbility = G.pendingAbilities[0]; 
+
   if (pendingAbility.playerId !== playerId) {
     return { success: false, message: "Not your turn to resolve an ability." };
   }
 
-  const player = gameRoom.gameState.players[playerId];
+  const player = G.players[playerId];
+  const abilityRank = pendingAbility.card.rank;
+  let message = `${abilityRank} ability action.`;
+
+  // Handle player being locked (fizzles entire ability)
   if (!player || player.isLocked) {
-    // Fizzle: Remove ability, set last resolved, and move to next phase/turn
-    gameRoom.gameState.lastResolvedAbilityCardForCleanup = pendingAbility.card;
-    gameRoom.gameState.lastResolvedAbilitySource = pendingAbility.source;
-    gameRoom.gameState.lastPlayerToResolveAbility = pendingAbility.playerId;
-    gameRoom.gameState.pendingAbilities.shift(); // Remove the fizzled ability
-    
+    G.lastResolvedAbilityCardForCleanup = pendingAbility.card;
+    G.lastResolvedAbilitySource = pendingAbility.source;
+    G.lastPlayerToResolveAbility = pendingAbility.playerId;
+    G.pendingAbilities.shift(); // Remove the fizzled ability
+    message = `Ability ${abilityRank} fizzled: Player locked.`;
+    // ... (standard phase transition logic) ...
     let nextState = setupAbilityResolutionPhase(gameId);
     if (!nextState) nextState = setupNextPlayTurn(gameId);
-    if (!nextState) nextState = continueOrEndFinalTurns(gameId);
-    if (!nextState) nextState = setupScoringPhase(gameId);
-
-    return { success: true, message: "Ability fizzled due to player being locked.", updatedGameState: nextState ?? gameRoom.gameState };
+    if (!nextState && G.playerWhoCalledCheck) nextState = continueOrEndFinalTurns(gameId);
+    if (!nextState && !G.gameover) nextState = setupScoringPhase(gameId);
+    activeGames[gameId] = gameRoom;
+    return { success: true, message, updatedGameState: nextState ?? G };
   }
 
-  // Argument validation
-  if (!abilityResolutionArgs) return { success: false, message: "Ability arguments missing." };
+  // Initialize stage if not present (e.g. first time K/Q is processed)
+  if ((abilityRank === Rank.King || abilityRank === Rank.Queen) && !pendingAbility.currentAbilityStage) {
+    pendingAbility.currentAbilityStage = 'peek';
+  }
 
+  // Handle skips
+  if (abilityResolutionArgs?.skipAbility) {
+    const skipType = abilityResolutionArgs.skipType || 'full';
+    message = `Player chose to skip ${abilityRank} ability stage: ${skipType}.`;
+    console.log(`[GameManager] Player ${playerId} skipping ${abilityRank}, type: ${skipType}`);
+
+    if ((abilityRank === Rank.King || abilityRank === Rank.Queen) && skipType === 'peek' && pendingAbility.currentAbilityStage === 'peek') {
+      pendingAbility.currentAbilityStage = 'swap'; // Advance to swap stage
+      // DO NOT remove from G.pendingAbilities yet.
+      // The game should re-enter ability resolution for this same player and ability.
+      G.lastPlayerToResolveAbility = playerId; // Ensure this player gets to act again for the swap part
+      activeGames[gameId] = gameRoom;
+      // We need to trigger a state update that leads to setupAbilityResolutionPhase being called again
+      // For now, returning the current G. The client should react to the change in pendingAbility.currentAbilityStage.
+      // Or, we explicitly call setupAbilityResolutionPhase here. Let's try the latter for more direct control.
+      const nextStateAfterPeekSkip = setupAbilityResolutionPhase(gameId); 
+      return { success: true, message, updatedGameState: nextStateAfterPeekSkip ?? G };
+    } else {
+      // Full skip, or skipping swap stage, or skipping Jack's only stage
+      G.lastResolvedAbilityCardForCleanup = pendingAbility.card;
+      G.lastResolvedAbilitySource = pendingAbility.source;
+      G.lastPlayerToResolveAbility = pendingAbility.playerId;
+      G.pendingAbilities.shift(); // Remove the ability
+
+      // If the resolved ability was from a discard, clear the matching opportunity that might have created it.
+      if (pendingAbility.source === 'discard' || pendingAbility.source === 'stackSecondOfPair') {
+        if (G.matchingOpportunityInfo && G.matchingOpportunityInfo.cardToMatch.rank === G.lastResolvedAbilityCardForCleanup?.rank && G.matchingOpportunityInfo.cardToMatch.suit === G.lastResolvedAbilityCardForCleanup?.suit) {
+          console.log(`[GameManager] Clearing matchingOpportunityInfo for ${G.lastResolvedAbilityCardForCleanup?.rank}${G.lastResolvedAbilityCardForCleanup?.suit} after its discard-sourced ability was resolved.`);
+          G.matchingOpportunityInfo = null;
+        }
+      }
+
+      // ... (standard phase transition logic) ...
+      let nextState = setupAbilityResolutionPhase(gameId);
+      if (!nextState) nextState = setupNextPlayTurn(gameId);
+      if (!nextState && G.playerWhoCalledCheck) nextState = continueOrEndFinalTurns(gameId);
+      if (!nextState && !G.gameover) nextState = setupScoringPhase(gameId);
+      activeGames[gameId] = gameRoom;
+      return { success: true, message, updatedGameState: nextState ?? G };
+    }
+  }
+
+  // --- Main ability logic (if not skipped) ---
+  if (!abilityResolutionArgs) return { success: false, message: "Ability arguments missing for resolution." };
   const { peekTargets, swapTargets } = abilityResolutionArgs;
-  const abilityRank = pendingAbility.card.rank;
 
-  // Validate peekTargets based on ability
-  if (abilityRank === Rank.King) {
-    if (!peekTargets || peekTargets.length !== 2) {
-      return { success: false, message: "King ability requires 2 peek targets." };
+  // PEEK STAGE for King/Queen
+  if ((abilityRank === Rank.King || abilityRank === Rank.Queen) && pendingAbility.currentAbilityStage === 'peek') {
+    if (abilityRank === Rank.King && (!peekTargets || peekTargets.length !== 2)) return { success: false, message: "King PEEK requires 2 targets." };
+    if (abilityRank === Rank.Queen && (!peekTargets || peekTargets.length !== 1)) return { success: false, message: "Queen PEEK requires 1 target." };
+    for (const target of peekTargets!) {
+      if (G.players[target.playerID]?.isLocked) return { success: false, message: `PEEK: Cannot target locked player ${target.playerID}.` };
     }
-  } else if (abilityRank === Rank.Queen) {
-    if (!peekTargets || peekTargets.length !== 1) {
-      return { success: false, message: "Queen ability requires 1 peek target." };
-    }
+    // Peek is conceptual for server; client handles display. Server acknowledges to proceed.
+    pendingAbility.currentAbilityStage = 'swap'; // Advance to swap stage
+    message = `${abilityRank} PEEK stage complete. Ready for SWAP stage.`;
+    G.lastPlayerToResolveAbility = playerId; // Ensure this player gets to act again for the swap part
+    activeGames[gameId] = gameRoom;
+    const nextStateAfterPeek = setupAbilityResolutionPhase(gameId); // Re-enter for swap
+    return { success: true, message, updatedGameState: nextStateAfterPeek ?? G };
   }
 
-  // Validate swapTargets (all abilities that swap need 2 targets)
-  if (abilityRank === Rank.King || abilityRank === Rank.Queen || abilityRank === Rank.Jack) {
-    if (!swapTargets || swapTargets.length !== 2) {
-      return { success: false, message: `${abilityRank} ability requires 2 swap targets.` };
-    }
-    // Further validation for swapTargets (e.g., valid playerIDs, cardIndices)
+  // SWAP STAGE for King/Queen (after peek/peekSkip) or Jack (direct swap)
+  if (pendingAbility.currentAbilityStage === 'swap' || abilityRank === Rank.Jack) {
+    if (!swapTargets || swapTargets.length !== 2) return { success: false, message: `${abilityRank} SWAP requires 2 targets.` };
     for (const target of swapTargets) {
-      if (!gameRoom.gameState.players[target.playerID] || 
-          target.cardIndex < 0 || 
-          target.cardIndex >= gameRoom.gameState.players[target.playerID].hand.length) {
-        return { success: false, message: `Invalid swap target: ${target.playerID} at index ${target.cardIndex}.` };
+      if (!G.players[target.playerID] || target.cardIndex < 0 || target.cardIndex >= G.players[target.playerID].hand.length) {
+        return { success: false, message: `SWAP: Invalid target ${target.playerID}[${target.cardIndex}].` };
+      }
+      if (G.players[target.playerID]?.isLocked) return { success: false, message: `SWAP: Cannot target locked player ${target.playerID}.` };
+    }
+    if (swapTargets[0].playerID === swapTargets[1].playerID && swapTargets[0].cardIndex === swapTargets[1].cardIndex) {
+      return { success: false, message: "SWAP: Targets must be two different cards." };
+    }
+
+    const p1State = G.players[swapTargets[0].playerID];
+    const p2State = G.players[swapTargets[1].playerID];
+    const card1 = p1State.hand[swapTargets[0].cardIndex];
+    const card2 = p2State.hand[swapTargets[1].cardIndex];
+    p1State.hand[swapTargets[0].cardIndex] = card2;
+    p2State.hand[swapTargets[1].cardIndex] = card1;
+    console.log(`[GameManager] ${abilityRank} SWAPPED ${swapTargets[0].playerID}[${swapTargets[0].cardIndex}] with ${swapTargets[1].playerID}[${swapTargets[1].cardIndex}]`);
+    message = `${abilityRank} SWAP stage complete.`;
+
+    // Ability fully resolved, remove it
+    G.lastResolvedAbilityCardForCleanup = pendingAbility.card;
+    G.lastResolvedAbilitySource = pendingAbility.source;
+    G.lastPlayerToResolveAbility = pendingAbility.playerId;
+    const resolvedAbilitySource = pendingAbility.source; // Store before shift
+    G.pendingAbilities.shift(); 
+
+    // If the resolved ability was from a discard, clear the matching opportunity that might have created it.
+    if (resolvedAbilitySource === 'discard' || resolvedAbilitySource === 'stackSecondOfPair') {
+      if (G.matchingOpportunityInfo && G.matchingOpportunityInfo.cardToMatch.rank === G.lastResolvedAbilityCardForCleanup?.rank && G.matchingOpportunityInfo.cardToMatch.suit === G.lastResolvedAbilityCardForCleanup?.suit) {
+        console.log(`[GameManager] Clearing matchingOpportunityInfo for ${G.lastResolvedAbilityCardForCleanup?.rank}${G.lastResolvedAbilityCardForCleanup?.suit} after its discard-sourced ability was resolved.`);
+        G.matchingOpportunityInfo = null;
       }
     }
-    // Ensure swap targets are distinct if they are different cards (can be same card if swapping with self is intended, but rules imply 2 distinct cards)
-    if (swapTargets[0].playerID === swapTargets[1].playerID && swapTargets[0].cardIndex === swapTargets[1].cardIndex) {
-        return { success: false, message: "Swap targets must be two different cards." };
-    }
+
+    // ... (standard phase transition logic) ...
+    let nextState = setupAbilityResolutionPhase(gameId);
+    if (!nextState) nextState = setupNextPlayTurn(gameId);
+    if (!nextState && G.playerWhoCalledCheck) nextState = continueOrEndFinalTurns(gameId);
+    if (!nextState && !G.gameover) nextState = setupScoringPhase(gameId);
+    activeGames[gameId] = gameRoom;
+    return { success: true, message, updatedGameState: nextState ?? G };
   }
 
-  // --- Perform Peeking (server doesn't send peeked cards, client handles display based on args) ---
-  // For King/Queen, the client already handled showing peeked cards based on the peekTargets argument
-  // that it determined in the first stage of the ability resolution on the client-side.
-  // The server just needs to acknowledge these were provided to proceed with the swap.
-
-  // --- Perform Swapping ---
-  if (swapTargets && swapTargets.length === 2) {
-    const target1 = swapTargets[0];
-    const target2 = swapTargets[1];
-
-    const player1State = gameRoom.gameState.players[target1.playerID];
-    const player2State = gameRoom.gameState.players[target2.playerID];
-
-    if (!player1State || !player2State) {
-        return { success: false, message: "One or both players for swap not found." }; // Should be caught by earlier validation
-    }
-
-    const card1 = player1State.hand[target1.cardIndex];
-    const card2 = player2State.hand[target2.cardIndex];
-
-    if (!card1 || !card2) {
-        return { success: false, message: "One or both cards for swap not found." }; // Should be caught by earlier validation
-    }
-
-    // Perform the swap
-    player1State.hand[target1.cardIndex] = card2;
-    player2State.hand[target2.cardIndex] = card1;
-    
-    console.log(`[GameManager] Swapped card for ${target1.playerID}[${target1.cardIndex}] with ${target2.playerID}[${target2.cardIndex}]`);
-  }
-
-  // Cleanup and transition
-  gameRoom.gameState.lastResolvedAbilityCardForCleanup = pendingAbility.card;
-  gameRoom.gameState.lastResolvedAbilitySource = pendingAbility.source;
-  gameRoom.gameState.lastPlayerToResolveAbility = pendingAbility.playerId;
-  gameRoom.gameState.pendingAbilities.shift(); // Remove the resolved ability
-
-  let finalGameState: ServerCheckGameState | null = null;
-
-  if (gameRoom.gameState.pendingAbilities.length > 0) {
-    // Still abilities left, set up for the next one
-    finalGameState = setupAbilityResolutionPhase(gameId);
-  } else {
-    // No abilities left, determine next game phase
-    if (gameRoom.gameState.playerWhoCalledCheck) {
-      finalGameState = setupFinalTurnsPhase(gameId, gameRoom.gameState.playerWhoCalledCheck);
-    } 
-    // If still no specific phase (e.g. final turns didn't result in scoring yet, or no check was called)
-    if (!finalGameState) { 
-        finalGameState = setupNextPlayTurn(gameId);
-    }
-    // If after trying to set up the next turn, it's still not resolved (e.g., all players locked, no valid next turn)
-    // and check was called, then score. (This condition might be redundant if setupFinalTurnsPhase/setupNextPlayTurn handle it)
-    if (!finalGameState && gameRoom.gameState.playerWhoCalledCheck) {
-        finalGameState = setupScoringPhase(gameId);
-    }
-  }
-  
-  // If finalGameState is STILL null (e.g., setupNextPlayTurn found no one to play and no check for scoring)
-  if (!finalGameState) {
-      console.error(`[GameManager] CRITICAL: Could not determine valid next state after ability resolution in game ${gameId}. Current phase: ${gameRoom.gameState.currentPhase}. Pending abilities: ${gameRoom.gameState.pendingAbilities.length}`);
-      // Fallback to the current game state, though it might lead to issues if not properly transitioned.
-      // Ideally, a game should always progress or end cleanly.
-      finalGameState = gameRoom.gameState; 
-  }
-  
-  activeGames[gameId] = gameRoom; // Ensure gameRoom state is up-to-date (G is modified by setup funcs)
-
-  return { 
-    success: true, 
-    message: `${abilityRank} ability resolved.`, 
-    updatedGameState: finalGameState 
-  };
+  // Fallback if somehow no stage matched
+  console.warn(`[GameManager] handleResolveSpecialAbility: Ability ${abilityRank} for player ${playerId} did not match any processing stage. Current stage on ability: ${pendingAbility.currentAbilityStage}`);
+  G.pendingAbilities.shift(); // Remove to prevent loop
+  let fallbackState = setupAbilityResolutionPhase(gameId) ?? setupNextPlayTurn(gameId) ?? G; 
+  activeGames[gameId] = gameRoom;
+  return { success: false, message: "Error processing ability stage.", updatedGameState: fallbackState };
 };
-
 
 export const handleDeclareReadyForPeek = (
   gameId: string,
@@ -1205,7 +1273,7 @@ export const generatePlayerView = (
   }
 
   // Calculate topDiscardIsSpecialOrUnusable for the entire game state view
-  const topDiscardCard = fullGameState.discardPile.length > 0 ? fullGameState.discardPile[fullGameState.discardPile.length - 1] : null;
+  const topDiscardCard = fullGameState.discardPile.length > 0 ? fullGameState.discardPile[0] : null;
   let isTopDiscardActuallySpecial = false; // Default to false
   if (topDiscardCard) {
     isTopDiscardActuallySpecial = (topDiscardCard.rank === Rank.King || 
@@ -1213,6 +1281,21 @@ export const generatePlayerView = (
                                    topDiscardCard.rank === Rank.Jack);
   }
   const topDiscardFlagForClient = fullGameState.discardPileIsSealed || isTopDiscardActuallySpecial;
+
+  let clientGameOverData: ClientCheckGameState['gameover'] = null;
+  if (fullGameState.gameover) {
+    clientGameOverData = {
+      ...fullGameState.gameover,
+      finalHands: fullGameState.gameover.finalHands 
+        ? Object.fromEntries(
+            Object.entries(fullGameState.gameover.finalHands).map(([pId, hand]) => [
+              pId,
+              hand.map((card, index) => ({ ...card, id: `${pId}-finalhand-${index}` }))
+            ])
+          )
+        : undefined,
+    };
+  }
 
   const clientGameState: ClientCheckGameState = {
     ...fullGameState,
@@ -1234,7 +1317,7 @@ export const generatePlayerView = (
     gameMasterId: fullGameState.gameMasterId,
     activePlayers: fullGameState.activePlayers, 
     pendingAbilities: fullGameState.pendingAbilities, 
-    gameover: fullGameState.gameover,
+    gameover: clientGameOverData, // Use the processed gameover data
     matchResolvedDetails: fullGameState.matchResolvedDetails, 
 
     viewingPlayerId: viewingPlayerId, 

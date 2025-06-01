@@ -11,24 +11,29 @@ import EndOfGameModal from './EndOfGameModal';
 const PEEK_COUNTDOWN_SECONDS = 3; 
 const PEEK_REVEAL_SECONDS = 5;    
 
+interface AbilityClientArgs {
+  peekTargets?: Array<{ playerID: string; cardIndex: number }>;
+  // swapTargets are typically built from multiSelectedCardLocations right before sending
+  peekSkipped?: boolean; 
+}
+
 interface CheckGameBoardProps {
   gameState: ClientCheckGameState;
   playerId: string; 
   onPlayerAction: (type: string, payload?: any) => void; 
   gameId: string; 
   showDebugPanel: boolean;
+  onReturnToLobby: () => void;
 }
 
-const useEndModal = (gameover: ClientCheckGameState['gameover'], onPlayerAction: (type: string, payload?: any) => void, gameId: string) => {
+const useEndModal = (gameover: ClientCheckGameState['gameover'], onReturnToLobby: () => void) => {
     const [showEndModal, setShowEndModal] = useState(false);
     useEffect(() => {
         setShowEndModal(!!gameover);
     }, [gameover]); 
 
     const handlePlayAgain = () => {
-        if (onPlayerAction && gameId) {
-            onPlayerAction('requestNewRound', { gameId: gameId });
-        }
+        onReturnToLobby();
         setShowEndModal(false);
     };
     return { showEndModal, setShowEndModal, handlePlayAgain };
@@ -41,39 +46,94 @@ const suitSymbols: { [key: string]: string } = {
   S: '♠',
 };
 
-const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, onPlayerAction, gameId, showDebugPanel }) => {
+const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, onPlayerAction, gameId, showDebugPanel, onReturnToLobby }) => {
   const clientPlayerState = gameState.players[playerId]; 
   const [selectedHandCardIndex, setSelectedHandCardIndex] = useState<number | null>(null);
   const [revealedCardLocations, setRevealedCardLocations] = useState<{ [playerID: string]: { [cardIndex: number]: boolean } }>({});
   const [multiSelectedCardLocations, setMultiSelectedCardLocations] = useState<{ playerID: string, cardIndex: number }[]>([]);
-  const [abilityArgs, setAbilityArgs] = useState<any>(null); 
+  const [abilityArgs, setAbilityArgs] = useState<AbilityClientArgs | null>(null); 
   const [peekCountdown, setPeekCountdown] = useState<number>(PEEK_COUNTDOWN_SECONDS); 
   const [isPeekRevealActive, setIsPeekRevealActive] = useState<boolean>(false); 
 
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const prevSignatureRef = React.useRef<string | null>(null);
   
-  const { showEndModal, setShowEndModal, handlePlayAgain } = useEndModal(gameState.gameover, onPlayerAction, gameId);
+  const { showEndModal, setShowEndModal, handlePlayAgain } = useEndModal(gameState.gameover, onReturnToLobby);
 
-  // Moved this declaration earlier as it's used in useEffect hooks
   const isResolvingPlayerForAbility = gameState.currentPhase === 'abilityResolutionPhase' && 
                                    gameState.pendingAbilities && 
                                    gameState.pendingAbilities.length > 0 &&
                                    gameState.pendingAbilities[0].playerId === playerId;
 
-  // Effect to reset ability selection state if the pending ability changes
+  const canPlayerPerformAbilityAction = useCallback(() => {
+    if (!isResolvingPlayerForAbility || !gameState.pendingAbilities || !gameState.pendingAbilities[0]) {
+      return false; 
+    }
+    const abilityToResolve = gameState.pendingAbilities[0];
+    const abilityCard = abilityToResolve.card;
+    const serverStage = abilityToResolve.currentAbilityStage;
+    const currentSelectionsCount = multiSelectedCardLocations.length;
+
+    switch (abilityCard.rank) {
+      case Rank.King:
+        if (serverStage === 'peek') { 
+          return currentSelectionsCount === 2;
+        } else if (serverStage === 'swap') { 
+          return currentSelectionsCount === 2;
+        }
+        return false; // Should have a stage
+      case Rank.Queen:
+        if (serverStage === 'peek') { 
+          return currentSelectionsCount === 1;
+        } else if (serverStage === 'swap') { 
+          return currentSelectionsCount === 2;
+        }
+        return false; // Should have a stage
+      case Rank.Jack: // Jack is implicitly 'swap' or serverStage will be 'swap'
+        return currentSelectionsCount === 2; 
+      default:
+        return false; 
+    }
+  }, [isResolvingPlayerForAbility, gameState.pendingAbilities, multiSelectedCardLocations]);
+
+  const handleSkipAbility = useCallback(() => {
+    if (isResolvingPlayerForAbility && gameState.pendingAbilities && gameState.pendingAbilities.length > 0) {
+      const abilityToResolve = gameState.pendingAbilities[0];
+      const abilityRank = abilityToResolve.card.rank;
+      const serverStage = abilityToResolve.currentAbilityStage;
+      let skipType = 'full'; 
+
+      if ((abilityRank === Rank.King || abilityRank === Rank.Queen) && serverStage === 'peek') {
+        skipType = 'peek';
+      } 
+      // If serverStage is 'swap' (for K/Q) or it's a Jack, skipType remains 'full' (which server handles as skipping current/final stage)
+      
+      console.log(`[Client] Skipping ability: ${abilityRank}, Server Stage: ${serverStage}, Effective Skip Type: ${skipType}`);
+      onPlayerAction('resolveSpecialAbility', {
+        abilityCard: abilityToResolve.card,
+        args: { skipAbility: true, skipType: skipType } 
+      });
+      // Rely on useEffect to clear local states upon gameState update
+    }
+  }, [isResolvingPlayerForAbility, gameState.pendingAbilities, onPlayerAction]);
+
+  // Effect to reset ability selection state if the pending ability changes OR player changes
   useEffect(() => {
     const currentPendingAbility = gameState.pendingAbilities && gameState.pendingAbilities.length > 0 ? gameState.pendingAbilities[0] : null;
-    const pendingAbilitySignature = currentPendingAbility 
-      ? `${currentPendingAbility.playerId}-${currentPendingAbility.card.rank}-${currentPendingAbility.card.suit}-${currentPendingAbility.source}` 
+    const pendingAbilitySignature = currentPendingAbility
+      ? `${currentPendingAbility.playerId}-${currentPendingAbility.card.rank}-${currentPendingAbility.card.suit}-${currentPendingAbility.source}-${currentPendingAbility.currentAbilityStage || 'initial'}`
       : null;
 
-    // Also consider if the player is no longer the one resolving an ability
     const shouldReset = prevSignatureRef.current !== pendingAbilitySignature || !isResolvingPlayerForAbility;
 
-    if (shouldReset && (abilityArgs !== null || multiSelectedCardLocations.length > 0)) { // Only log/reset if there's something to reset
-      console.log('[AbilityResetEffect] Conditions met for resetting ability selections.', 
-        { prevSig: prevSignatureRef.current, newSig: pendingAbilitySignature, isResolving: isResolvingPlayerForAbility });
+    if (shouldReset && (abilityArgs !== null || multiSelectedCardLocations.length > 0)) {
+      console.log('[AbilityResetEffect] Conditions met for resetting ability selections.', { 
+        prevSig: prevSignatureRef.current, 
+        newSig: pendingAbilitySignature, 
+        isResolving: isResolvingPlayerForAbility,
+        oldAbilityArgs: JSON.stringify(abilityArgs),
+        oldMultiSelect: JSON.stringify(multiSelectedCardLocations) 
+      });
       setAbilityArgs(null);
       setMultiSelectedCardLocations([]);
     }
@@ -208,57 +268,43 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
   const handleResolveSpecialAbility = () => {
     if (isResolvingPlayerForAbility && gameState.pendingAbilities && gameState.pendingAbilities.length > 0) {
       const abilityToResolve = gameState.pendingAbilities[0];
+      const serverStage = abilityToResolve.currentAbilityStage; // authoritative stage from server
       const currentSelections = multiSelectedCardLocations;
-      const hasPeekTargetsInArgs = !!abilityArgs?.peekTargets && abilityArgs.peekTargets.length > 0;
-
+      let finalArgs: any = {};
       let actionToSend = false;
-      let finalArgs = { ...abilityArgs };
 
       if (abilityToResolve.card.rank === Rank.King) {
-        if (!hasPeekTargetsInArgs && currentSelections.length === 2) { // Completing Peek Stage
-          console.log('[KingPeekStage] Setting abilityArgs.peekTargets with currentSelections:', JSON.stringify(currentSelections));
-          setAbilityArgs({ peekTargets: currentSelections });
-          setMultiSelectedCardLocations([]); // Clear for swap stage
-        } else if (hasPeekTargetsInArgs && currentSelections.length === 2) { // Completing Swap Stage
-          if (!abilityArgs || !abilityArgs.peekTargets || !Array.isArray(abilityArgs.peekTargets) || abilityArgs.peekTargets.length !== 2) {
-            console.error("[ClientKingArgs] Critical Error: Missing or invalid peekTargets (expected 2) in abilityArgs for King swap stage.", abilityArgs);
-            actionToSend = false; // Explicitly prevent sending action
-          } else {
-            // Ensure peekTargets sent to server is correctly structured as an array with two items for King
-            // Explicitly reconstruct the array from its known-good elements
-            const kingPeekTargets = [abilityArgs.peekTargets[0], abilityArgs.peekTargets[1]]; 
-            finalArgs = { peekTargets: kingPeekTargets, swapTargets: currentSelections };
-            actionToSend = true;
-          }
+        if (serverStage === 'peek' && currentSelections.length === 2) {
+          finalArgs = { peekTargets: currentSelections };
+          actionToSend = true;
+        } else if (serverStage === 'swap' && currentSelections.length === 2) {
+          finalArgs = { swapTargets: currentSelections };
+          actionToSend = true;
         }
       } else if (abilityToResolve.card.rank === Rank.Queen) {
-        if (!hasPeekTargetsInArgs && currentSelections.length === 1) { // Completing Peek Stage
-          console.log('[QueenPeekStage] Setting abilityArgs.peekTargets with currentSelections:', JSON.stringify(currentSelections));
-          setAbilityArgs({ peekTargets: currentSelections });
-          setMultiSelectedCardLocations([]); // Clear for swap stage
-        } else if (hasPeekTargetsInArgs && currentSelections.length === 2) { // Completing Swap Stage
-          if (!abilityArgs || !abilityArgs.peekTargets || !Array.isArray(abilityArgs.peekTargets) || abilityArgs.peekTargets.length !== 1) {
-            console.error("[ClientQueenArgs] Critical Error: Missing or invalid peekTargets (expected 1) in abilityArgs for Queen swap stage.", abilityArgs);
-            actionToSend = false; // Explicitly prevent sending action
-          } else {
-            // abilityArgs.peekTargets is already expected to be an array of one object: [{pID, cIdx}]
-            finalArgs = { peekTargets: abilityArgs.peekTargets, swapTargets: currentSelections };
-            actionToSend = true;
-          }
+        if (serverStage === 'peek' && currentSelections.length === 1) {
+          finalArgs = { peekTargets: currentSelections };
+          actionToSend = true;
+        } else if (serverStage === 'swap' && currentSelections.length === 2) {
+          finalArgs = { swapTargets: currentSelections };
+          actionToSend = true;
         }
-      } else if (abilityToResolve.card.rank === Rank.Jack) {
-        if (currentSelections.length === 2) { // Completing Swap Stage
+      } else if (abilityToResolve.card.rank === Rank.Jack) { 
+        // Jacks are implicitly 'swap' or server might set currentAbilityStage to 'swap'
+        // Server-side, Jack abilities are processed in one go, expecting swapTargets.
+        if (currentSelections.length === 2) { 
           finalArgs = { swapTargets: currentSelections };
           actionToSend = true;
         }
       }
       
       if (actionToSend) {
-        console.log('[Client] Resolving ability:', abilityToResolve.card, 'with args:', finalArgs);
-        console.log('[Client] SENDING resolveSpecialAbility. finalArgs STRUCTURE:', JSON.stringify(finalArgs, null, 2));
+        console.log(`[Client] Resolving ability: ${abilityToResolve.card.rank} (Server Stage: ${serverStage}). Sending args:`, finalArgs);
         onPlayerAction('resolveSpecialAbility', { abilityCard: abilityToResolve.card, args: finalArgs });
-        setAbilityArgs(null); 
-        setMultiSelectedCardLocations([]); 
+        // Local selection state (multiSelectedCardLocations and abilityArgs)
+        // will be cleared by the useEffect when the new gameState arrives.
+      } else {
+        console.warn(`[Client] handleResolveSpecialAbility: Action NOT sent. Conditions not met. ServerStage: ${serverStage}, Selections: ${currentSelections.length}, Ability: ${abilityToResolve.card.rank}`);
       }
     }
   };
@@ -289,57 +335,47 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
 
     // Scenario 3: Ability resolution stage, selecting targets
     if (currentPhase === 'abilityResolutionPhase' && isResolvingPlayerForAbility && pendingAbilityRank) {
-      const ability = currentPlayerPendingAbilityDetails.card;
+      const ability = currentPlayerPendingAbilityDetails.card; // This is just the card, not the full pendingAbility object
+      const serverStage = currentPlayerPendingAbilityDetails.currentAbilityStage;
       const selection = { playerID: clickedPlayerID, cardIndex };
       const alreadySelected = multiSelectedCardLocations.some(s => s.playerID === clickedPlayerID && s.cardIndex === cardIndex);
       
-      let maxPeekSelections = 0;
-      let maxSwapSelectionsAfterPeek = 0;
-      let maxDirectSwapSelections = 0;
-
-      if (ability.rank === Rank.King) {
-        maxPeekSelections = 2;
-        // After peeking, King needs to select 2 cards for swap
-        if (abilityArgs?.peekTargets) maxSwapSelectionsAfterPeek = 2; 
-        maxDirectSwapSelections = 2; 
-      } else if (ability.rank === Rank.Queen) {
-        maxPeekSelections = 1;
-        // After peeking, Queen needs to select 2 cards for swap
-        if (abilityArgs?.peekTargets) maxSwapSelectionsAfterPeek = 2; 
-        maxDirectSwapSelections = 2; 
-      } else if (ability.rank === Rank.Jack) {
-        maxDirectSwapSelections = 2; 
+      if (gameState.players[clickedPlayerID]?.isLocked) {
+        console.warn(`[CardClick] Attempted to select card from locked player ${clickedPlayerID}. Selection prevented.`);
+        return;
       }
 
       setMultiSelectedCardLocations(prev => {
-        let newState;
+        let newState: Array<{ playerID: string; cardIndex: number }> = [...prev]; // Start with a copy
+
         if (alreadySelected) {
-          newState = prev.filter(s => !(s.playerID === clickedPlayerID && s.cardIndex === cardIndex)); // Toggle off
-        }
-        // Logic for King/Queen peek stage
-        else if ((ability.rank === Rank.King || ability.rank === Rank.Queen) && !abilityArgs?.peekTargets) {
-          if (prev.length < maxPeekSelections) newState = [...prev, selection];
-          else newState = [...prev.slice(1), selection]; // Keep last N for peek
-        }
-        // Logic for King/Queen swap stage (after peek)
-        else if ((ability.rank === Rank.King || ability.rank === Rank.Queen) && abilityArgs?.peekTargets) {
-          // Max 2 for swap targets
-          if (prev.length < maxSwapSelectionsAfterPeek) newState = [...prev, selection];
-          else if (maxSwapSelectionsAfterPeek === 2) newState = [...prev.slice(1), selection]; // Keep last 2 for swap
-          else newState = [selection]; // Should not happen if maxSwapSelectionsAfterPeek is 2, but as fallback
-        }
-        // Logic for Jack
-        else if (ability.rank === Rank.Jack) {
-          if (prev.length < maxDirectSwapSelections) newState = [...prev, selection];
-          else if (maxDirectSwapSelections === 2) newState = [...prev.slice(1), selection]; // Keep last 2 for swap
-          else newState = [selection]; // Should not happen if maxDirectSwapSelections is 2
+          newState = prev.filter(s => !(s.playerID === clickedPlayerID && s.cardIndex === cardIndex));
         } else {
-          newState = prev; // Should not reach here if conditions are exhaustive
+          if (pendingAbilityRank === Rank.King) {
+            if (serverStage === 'peek') {
+              if (prev.length < 2) newState = [...prev, selection];
+              else newState = [...prev.slice(1), selection]; 
+            } else if (serverStage === 'swap') {
+              if (prev.length < 2) newState = [...prev, selection];
+              else newState = [...prev.slice(1), selection]; 
+            } 
+          } else if (pendingAbilityRank === Rank.Queen) {
+            if (serverStage === 'peek') {
+              if (prev.length < 1) newState = [...prev, selection];
+              else newState = [selection]; 
+            } else if (serverStage === 'swap') {
+              if (prev.length < 2) newState = [...prev, selection];
+              else newState = [...prev.slice(1), selection]; 
+            }
+          } else if (pendingAbilityRank === Rank.Jack) {
+            // Jack is always effectively in 'swap' stage for selection purposes
+            if (prev.length < 2) newState = [...prev, selection];
+            else newState = [...prev.slice(1), selection]; 
+          }
         }
-        console.log('[CardClickMultiSelect] prev:', JSON.stringify(prev), 'selection:', JSON.stringify(selection), 'newState:', JSON.stringify(newState));
+        console.log('[CardClickMultiSelect] Ability:', pendingAbilityRank, 'ServerStage:', serverStage, 'prev:', JSON.stringify(prev), 'selection:', JSON.stringify(selection), 'newState:', JSON.stringify(newState));
         return newState;
       });
-      console.log(`[CardClick] Updated multiSelectedCardLocations for ability ${pendingAbilityRank}:`, multiSelectedCardLocations);
       return;
     }
     
@@ -459,11 +495,15 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
       const drawnCardDetails = !('isHidden' in drawnCard) && drawnCard.rank && drawnCard.suit
         ? `${drawnCard.rank}${suitSymbols[drawnCard.suit]}` 
         : 'Card';
-      currentActions.push({ 
-        label: `Discard Drawn ${drawnCardDetails}`, 
-        onClick: handleDiscardDrawnCard, 
-        className: 'bg-red-700/70 hover:bg-red-600/80 text-red-100 border border-red-600/50 text-xs px-2.5 py-1.5 md:px-3 md:py-2'
-      });
+      
+      // Only allow discarding if the card was drawn from the deck
+      if (clientPlayerState.pendingDrawnCardSource === 'deck') {
+        currentActions.push({ 
+          label: `Discard Drawn ${drawnCardDetails}`, 
+          onClick: handleDiscardDrawnCard, 
+          className: 'bg-red-700/70 hover:bg-red-600/80 text-red-100 border border-red-600/50 text-xs px-2.5 py-1.5 md:px-3 md:py-2'
+        });
+      }
     } else if (isCurrentPlayer && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase') && !(gameState.pendingAbilities && gameState.pendingAbilities.length > 0)) {
       currentActions.push(createDrawDeckAction(handleDrawFromDeck, !canDrawFromDeck));
       currentActions.push(createDrawDiscardAction(handleDrawFromDiscard, !canDrawFromDiscard));
@@ -474,34 +514,53 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
     }
 
     if (isResolvingPlayerForAbility) {
-      const ability = gameState.pendingAbilities?.[0];
-      if (ability) {
-        let actionLabel = "Resolve Ability";
-        let disabled = true;
+      const abilityDetails = gameState.pendingAbilities?.[0];
+      if (abilityDetails) {
+        const abilityRank = abilityDetails.card.rank;
+        const serverStage = abilityDetails.currentAbilityStage; // Use server stage for UI
+        console.log(`[CheckGameBoard-getActions] Rendering actions for ${abilityRank}. Server stage: ${serverStage}`);
+        const mainActionEnabled = canPlayerPerformAbilityAction();
+        let mainActionLabel = "Resolve Ability";
         const currentSelections = multiSelectedCardLocations.length;
-        const hasPeekTargetsInArgs = !!abilityArgs?.peekTargets && abilityArgs.peekTargets.length > 0;
 
-        if (ability.card.rank === Rank.King) {
-          if (!hasPeekTargetsInArgs) { // Peek stage
-            actionLabel = `King - PEEK: Select ${2 - currentSelections} more card(s).`;
-            disabled = currentSelections !== 2;
-          } else { // Swap stage
-            actionLabel = `King - SWAP: Select ${2 - currentSelections} more card(s) to swap.`;
-            disabled = currentSelections !== 2;
-          }
-        } else if (ability.card.rank === Rank.Queen) {
-          if (!hasPeekTargetsInArgs) { // Peek stage
-            actionLabel = `Queen - PEEK: Select ${1 - currentSelections} more card.`;
-            disabled = currentSelections !== 1;
-          } else { // Swap stage
-            actionLabel = `Queen - SWAP: Select ${2 - currentSelections} more card(s) to swap.`;
-            disabled = currentSelections !== 2;
-          }
-        } else if (ability.card.rank === Rank.Jack) { // Jack only has swap stage
-          actionLabel = `Jack - SWAP: Select ${2 - currentSelections} more card(s) to swap.`;
-          disabled = currentSelections !== 2;
+        // Determine Main Action Button Label and Disabled State based on serverStage
+        if (abilityRank === Rank.King) {
+          if (serverStage === 'peek') {
+            mainActionLabel = `King - PEEK: Confirm ${2 - currentSelections} selections`;
+          } else if (serverStage === 'swap') {
+            mainActionLabel = `King - SWAP: Confirm ${2 - currentSelections} selections`;
+          } else { mainActionLabel = `King: Finalize (Stage: ${serverStage || 'undefined'})`; } // More specific fallback
+        } else if (abilityRank === Rank.Queen) {
+          if (serverStage === 'peek') {
+            mainActionLabel = `Queen - PEEK: Confirm ${1 - currentSelections} selection`;
+          } else if (serverStage === 'swap') {
+            mainActionLabel = `Queen - SWAP: Confirm ${2 - currentSelections} selections`;
+          } else { mainActionLabel = `Queen: Finalize (Stage: ${serverStage || 'undefined'})`; } // More specific fallback
+        } else if (abilityRank === Rank.Jack) { // Jack only has swap stage implicitly
+          mainActionLabel = `Jack - SWAP: Confirm ${2 - currentSelections} selections`;
         }
-        currentActions.push({ label: actionLabel, onClick: handleResolveSpecialAbility, disabled, className: 'bg-purple-500/80 hover:bg-purple-600/90 text-white' });
+
+        currentActions.push({
+          label: mainActionLabel,
+          onClick: handleResolveSpecialAbility,
+          disabled: !mainActionEnabled,
+          className: 'bg-purple-500/80 hover:bg-purple-600/90 text-white text-xs px-2.5 py-1.5 md:px-3 md:py-2'
+        });
+
+        // Determine Skip Button Label based on serverStage
+        let skipLabel = `Skip Full ${abilityRank} Ability`;
+        if ((abilityRank === Rank.King || abilityRank === Rank.Queen)) {
+          if (serverStage === 'peek') {
+            skipLabel = `Skip ${abilityRank} PEEK Stage`;
+          } else if (serverStage === 'swap') {
+            skipLabel = `Skip ${abilityRank} SWAP Stage`;
+          }
+        } // For Jack, default 'Skip Full Ability' is fine, server handles it as skipping its single stage.
+        currentActions.push({
+          label: skipLabel,
+          onClick: handleSkipAbility,
+          className: 'bg-gray-500 hover:bg-gray-600 text-white text-xs px-2.5 py-1.5 md:px-3 md:py-2'
+        });
       }
     }
     
@@ -531,15 +590,18 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
     actionBarPrompt = "Click a card from your hand to attempt a match, or 'Pass Match'.";
   } else if (isResolvingPlayerForAbility) {
     const ability = gameState.pendingAbilities[0];
+    const serverStage = ability.currentAbilityStage; // Use server stage for prompt
+    console.log(`[CheckGameBoard-actionBarPrompt] Rendering prompt for ${ability.card.rank}. Server stage: ${serverStage}`);
     const currentSelections = multiSelectedCardLocations.length;
-    const hasPeekTargetsInArgs = !!abilityArgs?.peekTargets && abilityArgs.peekTargets.length > 0;
 
     if (ability.card.rank === Rank.King) {
-        if (!hasPeekTargetsInArgs) actionBarPrompt = `King - PEEK: Select ${2 - currentSelections} more card(s).`;
-        else actionBarPrompt = `King - SWAP: Select ${2 - currentSelections} more card(s) to swap.`;
+        if (serverStage === 'peek') actionBarPrompt = `King - PEEK: Select ${2 - currentSelections} more card(s).`;
+        else if (serverStage === 'swap') actionBarPrompt = `King - SWAP: Select ${2 - currentSelections} more card(s) to swap.`;
+        else actionBarPrompt = `King: Complete action. (Stage: ${serverStage || 'undefined'})`; // More specific fallback
     } else if (ability.card.rank === Rank.Queen) {
-        if (!hasPeekTargetsInArgs) actionBarPrompt = `Queen - PEEK: Select ${1 - currentSelections} more card.`;
-        else actionBarPrompt = `Queen - SWAP: Select ${2 - currentSelections} more card(s) to swap.`;
+        if (serverStage === 'peek') actionBarPrompt = `Queen - PEEK: Select ${1 - currentSelections} more card.`;
+        else if (serverStage === 'swap') actionBarPrompt = `Queen - SWAP: Select ${2 - currentSelections} more card(s) to swap.`;
+        else actionBarPrompt = `Queen: Complete action. (Stage: ${serverStage || 'undefined'})`; // More specific fallback
     } else if (ability.card.rank === Rank.Jack) {
         actionBarPrompt = `Jack - SWAP: Select ${2 - currentSelections} more card(s) to swap.`;
     } else {
@@ -569,6 +631,36 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
         ? gameState.gameover.winner.map(wId => gameState.players[wId]?.name || `P-${wId.slice(-6)}`).join(' & ')
         : gameState.players[gameState.gameover.winner]?.name || `P-${gameState.gameover.winner.slice(-6)}`)
     : "";
+
+  const finalHandsForModal = gameState.gameover?.finalHands 
+    ? Object.entries(gameState.gameover.finalHands).map(([pId, hand]) => ({
+        playerName: gameState.players[pId]?.name || `P-${pId.slice(-6)}`,
+        cards: hand, // hand should already be Array<Card> with id from server
+      }))
+    : [];
+
+  // Determine if the discard pile should be visually locked for the current player
+  let displayDiscardPileAsLocked = !!gameState.topDiscardIsSpecialOrUnusable;
+  if (playerId === gameState.currentPlayerId && 
+      gameState.currentPhase === 'abilityResolutionPhase' && 
+      gameState.pendingAbilities && gameState.pendingAbilities.length > 0 && 
+      gameState.pendingAbilities[0].playerId === playerId) {
+    
+    const currentAbility = gameState.pendingAbilities[0];
+    const topDiscard = gameState.discardPile.length > 0 ? gameState.discardPile[0] : null;
+
+    if (topDiscard && 
+        topDiscard.rank === currentAbility.card.rank && 
+        topDiscard.suit === currentAbility.card.suit &&
+        (currentAbility.source === 'discard' || currentAbility.source === 'stackSecondOfPair')) {
+      // If the player is resolving their own special card that just went to discard (and isn't sealed by a separate match)
+      // don't show the lock *just* because it's a K,Q,J.
+      // If `gameState.discardPileIsSealed` is true (due to a match), it should remain locked.
+      if (!gameState.discardPileIsSealed) {
+        displayDiscardPileAsLocked = false;
+      }
+    }
+  }
 
   return (
     <div className="flex flex-col flex-grow w-full items-center font-sans select-none px-1 sm:px-2 md:px-3">
@@ -600,7 +692,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
             <DiscardPileComponent
               topCard={gameState.discardPile.length > 0 ? gameState.discardPile[0] : null}
               numberOfCards={gameState.discardPile.length}
-              isSealed={!!gameState.topDiscardIsSpecialOrUnusable}
+              isSealed={displayDiscardPileAsLocked}
               canDraw={canDrawFromDiscard}
               onClick={handleDrawFromDiscard}
             />
@@ -648,6 +740,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({ gameState, playerId, on
         onClose={() => setShowEndModal(false)} 
         winner={winnerName} 
         scores={transformedScores} 
+        finalHands={finalHandsForModal}
         onPlayAgain={handlePlayAgain}
       />
       

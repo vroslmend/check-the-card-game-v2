@@ -33,8 +33,8 @@ Turns proceed in a chosen direction. A player's turn consists of a primary draw 
     *   **Draw from the Draw Pile (Face Down):**
         1.  Take the top card from the Draw Pile. This card is known only to the drawing player.
         2.  The player then chooses one of these options for this drawn card:
-            *   **Swap & Discard:** Select one card from their hand grid and swap it with the drawn card. The drawn card is placed face-down into the selected grid position. The card originally in that grid position (Card X) is then placed face-up onto the Discard Pile. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7).
-            *   **Discard Drawn Card:** Immediately place the drawn card (Card X) face-up onto the Discard Pile. This does not affect the player's hand grid. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7).
+            *   **Swap & Discard:** Select one card from their hand grid and swap it with the drawn card. The drawn card is placed face-down into the selected grid position. The card originally in that grid position (Card X) is then placed face-up onto the Discard Pile. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7). *This action ensures `G.discardPileIsSealed` is `false` at the moment Card X is presented for a match.*
+            *   **Discard Drawn Card:** Immediately place the drawn card (Card X) face-up onto the Discard Pile. This does not affect the player's hand grid. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7). *This action also ensures `G.discardPileIsSealed` is `false` at the moment Card X is presented for a match.*
             *   *(Note: If a K, Q, or J is drawn and the player chooses to swap it into their hand, its ability does NOT trigger at this point. It only triggers when later discarded from the hand to the Discard Pile).*\
     *   **Draw from the Discard Pile (Face Up):**
         1.  This is only possible if `G.discardPileIsSealed` is `false` (i.e., the top card is not the second card of a just-completed matched pair).
@@ -52,6 +52,7 @@ Turns proceed in a chosen direction. A player's turn consists of a primary draw 
 *   **If a Match Occurs (Card Y is played on Card X via `attemptMatch`):**
     *   The hand of the player who played Card Y is reduced. Card Y is added to `G.discardPile`.
     *   `G.discardPileIsSealed` is set to `true`.
+    *   *The pile remains sealed through the resolution of any abilities triggered by this match and the remainder of the current player's turn actions (e.g., deciding to Call Check). It becomes unsealed (`false`) if a new card is discarded on top of it by any player (starting a new matching opportunity for that new card), or at the beginning of the next player's turn if no further discards that would unseal it occur.*
     *   If Card Y (and Card X) are **non-special cards** (e.g., '2's): No abilities trigger.
     *   If Card Y (and Card X) are **special cards** (e.g., Kings): This forms a stack. `PlayerState.pendingSpecialAbility` is set for the matcher (source: `'stack'`) and the original discarder (source: `'stackSecondOfPair'`).
     *   If playing Card Y causes the matcher's hand to become empty, they automatically "Call Check" (`G.playerWhoCalledCheck` is set).
@@ -70,25 +71,29 @@ Turns proceed in a chosen direction. A player's turn consists of a primary draw 
 *   The `abilityResolutionStage` continues (or re-enters for the second part of LIFO) until all pending abilities are cleared.
 *   `resolveSpecialAbility` clears the acting player's `pendingSpecialAbility` and sets `G.lastResolvedAbilitySource`.
 *   If a player is `isLocked` when their turn comes in `abilityResolutionStage`, their ability "fizzles" (is cleared without effect, `G.lastResolvedAbilitySource` is still set for LIFO).
+*   If there are no valid target cards available for an ability (e.g., all other players are locked and have no cards, or not enough cards exist to satisfy the ability's requirements like needing two cards for a swap), the player will be presented with an option to "Skip" the ability. Choosing to skip will also cause the ability to fizzle.
 *   **Ability Details:**
     *   **King (K - value 13):** Peek at any **two** cards on the table (any player's hand, any position). Then, swap any **one** card with any **other card** (any player, any position).
+        *   *Skip Option:* The player can choose to skip the Peek stage. If skipped, they proceed directly to the Swap stage (still for the King ability). They can then choose to perform the Swap or skip the Swap stage as well, which would fully end the King's ability.
     *   **Queen (Q - value 12):** Peek at any **one** card on the table. Then, swap any **one** card with any **other card**.
+        *   *Skip Option:* Similar to the King, the player can skip the Peek stage and proceed to the Swap stage, or skip the Swap stage to end the Queen's ability.
     *   **Jack (J - value 11):** Swap any **one** card with any **other card**. (No peek).
+        *   *Skip Option:* The player can choose to skip the Swap, which ends the Jack's ability.
 
 **9. Calling "Check" and Ending the Round:**
 *   **A. Player-Initiated "Check" (`callCheck` move):**
-    *   On their turn (in `playPhase`), if no other actions are pending, a player may "Call Check."
-    *   `G.playerWhoCalledCheck` is set. Player's `isLocked` becomes `true`. Turn ends. Game enters `finalTurnsPhase`.
+    *   On their turn (in `playPhase`, and only if `finalTurnsPhase` has not yet begun), if no other actions are pending, a player may "Call Check."
+    *   `G.playerWhoCalledCheck` is set. Player's `isLocked` becomes `true`. Turn ends. Game enters `finalTurnsPhase` for the first time, and `G.finalTurnsTaken` is reset to `0`.
 *   **B. Automatic "Check" (Empty Hand via `attemptMatch`):**
     *   If a player empties their hand by making a match.
-    *   `G.playerWhoCalledCheck` is set. Player's `isLocked` becomes `true`.
-    *   If abilities are pending from the match, game first transitions to `abilityResolutionStage`. After abilities resolve, it then proceeds to `finalTurnsPhase`. Otherwise, directly to `finalTurnsPhase`.
+    *   The player's `isLocked` becomes `true` and `hasCalledCheck` is set for them.
+    *   If `finalTurnsPhase` has *not* yet begun (`G.playerWhoCalledCheck` is not set), this action initiates it: `G.playerWhoCalledCheck` is set to this player, and `G.finalTurnsTaken` is reset to `0`.
+    *   If `finalTurnsPhase` is *already active* (meaning another player was the first to call Check), this player emptying their hand locks them, but it does *not* change the original `G.playerWhoCalledCheck` nor does it reset `G.finalTurnsTaken`.
+    *   If abilities are pending from the match, game first transitions to `abilityResolutionStage`. After abilities resolve, it then proceeds to `finalTurnsPhase` (either initiating it or continuing it as described above). Otherwise, it proceeds directly to `finalTurnsPhase`.
 *   **C. Final Turns Phase (`finalTurnsPhase`):**
-    *   `G.finalTurnsTaken` is reset to `0` upon entering.
-    *   The player who called/triggered "Check" is effectively skipped.
-    *   Every other eligible (not `isLocked`) player gets **exactly one more turn**.
-    *   The phase ends when enough final turns have been taken.
-    *   Transitions to `scoringPhase`.
+    *   Players cannot use the manual `callCheck` move during this phase.
+    *   `G.finalTurnsTaken` is managed as each eligible player takes their turn (it is typically reset to `0` only when `finalTurnsPhase` is first initiated).
+    *   The player who originally called/triggered "Check" (the `G.playerWhoCalledCheck`) is effectively skipped for taking a final turn.
 
 **10. Scoring Phase (`scoringPhase`):**
 *   All players' hand cards are revealed. Scores are calculated per card values (section 3).

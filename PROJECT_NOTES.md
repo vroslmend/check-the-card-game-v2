@@ -201,32 +201,40 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
 
 ---
 
-## Session Notes (YYYY-MM-DD)
+## Session Notes (Recent Updates - YYYY-MM-DD)
 
-This session focused on addressing several issues related to game logic, UI presentation, and stability, building upon the major Socket.IO refactor and UI redesign efforts.
+This session focused on further refining special ability logic, improving UI/UX for game flow and presentation, and enhancing the project's overall aesthetic.
 
-*   **Special Card Abilities (King, Queen, Jack) - Debugging & Refinement:**
-    *   **Initial Problem:** Infinite loops and incorrect behavior reported with Queen and King abilities.
-    *   **Investigation & Fixes (Client & Server):**
-        *   Reviewed `GAME_OVERVIEW.md` to confirm K/Q/J ability mechanics (peek stages, swap stages).
-        *   **Client (`CheckGameBoard.tsx`):**
-            *   Refined `handleResolveSpecialAbility` to correctly manage multi-stage abilities (peek then swap for K/Q, direct swap for J), including storing `peekTargets` in `abilityArgs` and clearing selections between stages.
-            *   Adjusted `handleCardClick` for correct maximum selections during different ability stages.
-            *   Updated `getActions` (button labels) and `actionBarPrompt` (instructional text) to provide clear guidance for multi-stage abilities and selection counts (e.g., "King: Confirm Peek (1/2)").
-            *   Added a `useEffect` hook to reset `abilityArgs` and `multiSelectedCardLocations` when `pendingAbilities` change or the player is no longer the one actively resolving an ability. This involved fixing an "Invalid hook call" by moving a `useRef` to the top level and refining reset conditions.
-            *   Added stricter client-side validation in `handleResolveSpecialAbility` for King/Queen swap stages to ensure `abilityArgs.peekTargets` was correctly structured before sending to the server.
-        *   **Server (`game-manager.ts` & `index.ts`):**
-            *   Modified `AbilityArgs` interface: `swapTarget` changed to `swapTargets` (array of 2 card locations).
-            *   Refactored `handleResolveSpecialAbility` (server) to correctly validate `peekTargets` (2 for King, 1 for Queen) and `swapTargets` (array of 2 locations for K, Q, J), and perform card swaps.
-            *   Corrected phase transition logic within `handleResolveSpecialAbility` to ensure smooth progression to the next ability, final turns, or next play turn.
-            *   **Key Discovery & Fix:** Identified that the server's `handleResolveSpecialAbility` was receiving the entire event `payload` instead of just the `args` object. Corrected the call in `server/src/index.ts` to pass `payload.args as AbilityArgs`, which resolved the persistent infinite loops with King and Queen abilities.
-    *   **Remaining Issue (Visual):** User reported ability cards sometimes appearing "stuck" as the top discard card visually, even if not logically the top card. Added `console.log(gameState.discardPile)` in `CheckGameBoard.tsx` to aid further diagnosis if the client's state is stale.
-
-*   **Discard Pile Order & Visual Glitch (Server-Side Fix):**
-    *   **Issue (Related to above):** The primary visual glitch where the discard pile didn't update correctly was traced to the server.
-    *   **Root Cause:** Server-side logic in `server/src/game-manager.ts` was appending new cards to the `discardPile` array using `Array.prototype.push()` instead of prepending.
-    *   **Fix:** Modified `handleSwapAndDiscard`, `handleDiscardDrawnCard`, and `handleAttemptMatch` in `server/src/game-manager.ts` to use `Array.prototype.unshift()` to add cards to the beginning of `gameState.discardPile`.
-    *   **Side Effects:** Ensured `discardPileIsSealed` flag is correctly set (`false` for simple discards, `true` for matches) in the modified functions.
-    *   **Status:** Fix applied. Awaiting testing to confirm this resolves the primary discard pile visual issue.
+*   **Special Card Abilities (King, Queen, Jack) - Stage & UI Synchronization:**
+    *   **Problem:** Players sometimes received multiple ability resolutions for a single card discard (e.g., multiple King swaps). Ability UI on the client (buttons/prompts) sometimes showed incorrect stages like "Finalize (Stage: undefined)".
+    *   **Fixes (Server - `server/src/game-manager.ts`):**
+        *   Ensured `G.matchingOpportunityInfo` is correctly nullified in `handleResolveSpecialAbility` after a discard-sourced ability (`'discard'` or `'stackSecondOfPair'`) is fully resolved, preventing it from being re-processed.
+        *   Modified `handleAttemptMatch` (for paired K/Q/J matches) and `checkMatchingStageEnd` (for discard-sourced K/Q/J abilities) to initialize the `currentAbilityStage` property on `PendingSpecialAbility` objects to `'peek'` (for K/Q) or `'swap'` (for J) when they are first added to `G.pendingAbilities`.
+    *   **Fixes (Client - `frontend/app/components/CheckGameBoard.tsx`):**
+        *   Refactored `getActions` (button labels), `actionBarPrompt` (instructional text), `canPlayerPerformAbilityAction` (action validation), and `handleResolveSpecialAbility` (action dispatch) to consistently use the server-authoritative `currentAbilityStage` from the `gameState.pendingAbilities[0]` object.
+        *   Updated the `useEffect` hook responsible for resetting local ability-related state (`abilityArgs`, `multiSelectedCardLocations`) to include `currentAbilityStage` in its dependency signature. This ensures client state is correctly reset when the server advances an ability's stage (e.g., from peek to swap).
+*   **UI - Card Selection for Abilities:**
+    *   **Problem:** Players could not correctly select two cards simultaneously for an ability's swap stage; selecting a second card would often deselect the first.
+    *   **Fix (Client - `frontend/app/components/CheckGameBoard.tsx`):**
+        *   Refactored the `setMultiSelectedCardLocations` updater logic within the `handleCardClick` function. It now correctly uses the server-provided `currentAbilityStage` to manage selections:
+            *   King peek: up to 2 cards.
+            *   Queen peek: 1 card.
+            *   King/Queen/Jack swap: up to 2 cards (if a 3rd is selected, the oldest is replaced).
+            *   Clicking an already selected card deselects it.
+*   **UI/UX - "Play Again" Functionality:**
+    *   **Change:** The "Play Again" button in the `EndOfGameModal` now returns the user to the main lobby/landing page.
+    *   **Implementation:**
+        *   Added a `handleReturnToLobby` function in `frontend/app/page.tsx` that resets client-side game state (`gameId`, `playerId`, `gameState`, etc.) and clears relevant `localStorage` entries (`gameId`, `playerId`).
+        *   Passed `handleReturnToLobby` as a prop to `CheckGameBoard.tsx` and subsequently to `EndOfGameModal.tsx` (via the `useEndModal` hook) to be called by the "Play Again" button.
+*   **UI - Main Page (Lobby) Enhancements:**
+    *   **Change:** Updated the styling of the main page (when no game is active) in `frontend/app/page.tsx` for a more modern, sleek, and minimal appearance using Tailwind CSS.
+    *   **Details:** Improved layout, centering, typography, input field styles, button styles, and the "OR" separator.
+*   **Project Font Update:**
+    *   **Change:** Replaced the "Inter" font with "Plus Jakarta Sans" across the project for a more unique and modern aesthetic.
+    *   **Implementation (`frontend/app/layout.tsx`):**
+        *   Imported `Plus_Jakarta_Sans` from `next/font/google`.
+        *   Applied its `className` to the `<body>` tag, making it the default font.
+        *   Included weights `400, 500, 600, 700` for styling flexibility.
+        *   Updated default metadata (title, description).
 
 *Overall, this session involved deep debugging of special ability logic on both client and server, culminating in a critical fix for argument passing on the server, and a separate fix for discard pile ordering to resolve visual inconsistencies.*

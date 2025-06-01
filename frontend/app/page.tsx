@@ -49,6 +49,20 @@ export default function HomePage() {
     setShowDebugPanel(prev => !prev);
   }, []);
 
+  const handleReturnToLobby = useCallback(() => {
+    setGameState(null);
+    setGameId(null);
+    setPlayerId(null);
+    // setPlayerName(""); // Optionally reset player name, or keep it for convenience
+    setInputGameId("");
+    setError(null);
+    localStorage.removeItem(SESSION_STORAGE_KEY_GAME_ID);
+    localStorage.removeItem(SESSION_STORAGE_KEY_PLAYER_ID);
+    // localStorage.removeItem(SESSION_STORAGE_KEY_PLAYER_NAME); // Optionally clear name
+    addLog("Returned to lobby. Game session cleared.");
+    // No need to set isAttemptingRejoin here, as it's mainly for initial load
+  }, [addLog]);
+
   // Effect for initializing socket and attempting to load session from localStorage
   useEffect(() => {
     const storedGameId = localStorage.getItem(SESSION_STORAGE_KEY_GAME_ID);
@@ -258,41 +272,73 @@ export default function HomePage() {
   // If still attempting rejoin and no game state yet, show loading. Avoids flash of join/create form.
   if (isAttemptingRejoin && !gameState) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <h1 className="text-3xl font-bold mb-8">Check! The Card Game</h1>
-        <p className="text-gray-600">Attempting to rejoin previous game...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-neutral-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200">
+        <h1 className="text-5xl font-bold mb-8 text-sky-600 dark:text-sky-400">Check!</h1>
+        <p className="text-neutral-600 dark:text-neutral-400">Attempting to rejoin previous game...</p>
       </div>
     );
   }
 
   if (!gameState || !gameId || !playerId) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <h1 className="text-3xl font-bold mb-8">Check! The Card Game</h1>
-        <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
-          <input 
-            type="text" 
-            placeholder="Enter your name (optional)" 
-            value={playerName} 
-            onChange={(e) => setPlayerName(e.target.value)} 
-            className="border p-2 w-full mb-4 rounded"
-          />
-          <button onClick={handleCreateGame} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full mb-4">
-            Create New Game
-          </button>
-          <div className="my-4 text-center">OR</div>
-          <input 
-            type="text" 
-            placeholder="Enter Game ID to Join" 
-            value={inputGameId} 
-            onChange={(e) => setInputGameId(e.target.value)} 
-            className="border p-2 w-full mb-2 rounded"
-          />
-          <button onClick={handleJoinGame} className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full">
-            Join Game
-          </button>
-          {/* Display general error messages here if any, related to form submission */} 
-          {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-neutral-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center">
+            <h1 className="text-5xl font-bold text-sky-600 dark:text-sky-400">Check!</h1>
+            <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">The Card Game</p>
+          </div>
+
+          <div className="bg-white dark:bg-neutral-800 p-6 sm:p-8 rounded-xl shadow-xl space-y-6">
+            <div>
+              <label htmlFor="playerName" className="sr-only">Your Name</label>
+              <input 
+                id="playerName"
+                type="text" 
+                placeholder="Enter your name (optional)" 
+                value={playerName} 
+                onChange={(e) => setPlayerName(e.target.value)} 
+                className="appearance-none rounded-lg relative block w-full px-4 py-3 border border-neutral-300 dark:border-neutral-600 placeholder-neutral-500 dark:placeholder-neutral-400 text-neutral-900 dark:text-neutral-100 bg-white dark:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 sm:text-sm transition-shadow duration-150 ease-in-out shadow-sm hover:shadow-md"
+              />
+            </div>
+
+            <button 
+              onClick={handleCreateGame} 
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-medium text-white bg-sky-600 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 dark:focus:ring-offset-neutral-800 transition-all duration-150 ease-in-out transform hover:scale-105 active:scale-95"
+            >
+              Create New Game
+            </button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <div className="w-full border-t border-neutral-300 dark:border-neutral-600" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
+                  OR
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="gameIdInput" className="sr-only">Game ID</label>
+              <input 
+                id="gameIdInput"
+                type="text" 
+                placeholder="Enter Game ID to Join" 
+                value={inputGameId} 
+                onChange={(e) => setInputGameId(e.target.value)} 
+                className="appearance-none rounded-lg relative block w-full px-4 py-3 border border-neutral-300 dark:border-neutral-600 placeholder-neutral-500 dark:placeholder-neutral-400 text-neutral-900 dark:text-neutral-100 bg-white dark:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm transition-shadow duration-150 ease-in-out shadow-sm hover:shadow-md"
+              />
+            </div>
+            <button 
+              onClick={handleJoinGame} 
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 dark:focus:ring-offset-neutral-800 transition-all duration-150 ease-in-out transform hover:scale-105 active:scale-95"
+            >
+              Join Game
+            </button>
+            
+            {error && <p className="text-red-500 dark:text-red-400 text-xs text-center pt-2">Error: {error}</p>}
+          </div>
         </div>
       </div>
     );
@@ -350,6 +396,7 @@ export default function HomePage() {
           onPlayerAction={sendPlayerAction} 
           gameId={gameId}
           showDebugPanel={showDebugPanel} /* Pass new prop */ 
+          onReturnToLobby={handleReturnToLobby}
         />
       </main>
       <GameLogComponent log={log} />
