@@ -59,20 +59,55 @@ export interface SpecialAbilityInfo {
 export interface PlayerState {
   hand: Card[];
   hasUsedInitialPeek: boolean;
-  isReadyForInitialPeek: boolean;      // New: Player has clicked "Ready" for initial peek
-  hasCompletedInitialPeek: boolean;    // New: Player has seen the peek and acknowledged
-  cardsToPeek?: Card[] | null;         // Server sends these to the specific player during their peek turn
-  peekAcknowledgeDeadline?: number | null; // Server sets this deadline for the player to acknowledge
+  isReadyForInitialPeek: boolean;
+  hasCompletedInitialPeek: boolean;
+  cardsToPeek: Card[] | null;
+  peekAcknowledgeDeadline: number | null;
   pendingDrawnCard: Card | null;
   pendingDrawnCardSource: 'deck' | 'discard' | null;
-  pendingSpecialAbility: PendingSpecialAbility | null;
+  pendingSpecialAbility: SpecialAbilityInfo | null;
   hasCalledCheck: boolean;
-  isLocked: boolean; // Player is locked after calling Check or emptying hand
-  score: number; // Score for the current round
-  // id: string; // playerID is the key in G.players, not stored here
-  name?: string; // Added for player identification
-  isConnected: boolean; // Tracks if player is currently connected via a socket
-  socketId: string;     // Stores the current socket ID of the player
+  isLocked: boolean;
+  score: number;
+  name?: string;
+  isConnected: boolean;
+  socketId: string;
+  numMatches: number;
+  numPenalties: number;
+}
+
+// Define GamePhase type
+export type GamePhase =
+  | 'initialPeekPhase'
+  | 'playPhase'
+  | 'matchingStage'
+  | 'abilityResolutionPhase'
+  | 'finalTurnsPhase'
+  | 'scoringPhase'
+  | 'gameOver'
+  | 'error' // For error states
+  | 'errorOrStalemate'; // For unrecoverable game states
+
+// Define MatchResolvedDetails interface
+export interface MatchResolvedDetails {
+  byPlayerId: string; // Who made the successful match
+  isAutoCheck: boolean; // Did this match result in an auto-check?
+  abilityResolutionRequired: boolean; // Does this match trigger special abilities?
+}
+
+// Data structure for game over information - DEFINED FIRST
+export interface GameOverData {
+  winner?: string | string[];
+  scores: { [playerId: string]: number };
+  finalHands?: { [playerId: string]: Card[] };
+  totalTurns?: number;
+  playerStats?: {
+    [playerId: string]: {
+      name: string; // Server will populate this from PlayerState
+      numMatches: number;
+      numPenalties: number;
+    };
+  };
 }
 
 export interface CheckGameState {
@@ -83,35 +118,26 @@ export interface CheckGameState {
   matchingOpportunityInfo: {
     cardToMatch: Card;
     originalPlayerID: string;
-    potentialMatchers: string[]; // Players who can attempt a match
+    potentialMatchers: string[];
   } | null;
   playerWhoCalledCheck: string | null;
   roundWinner: string | null;
   finalTurnsTaken: number;
-  lastResolvedAbilitySource: SpecialAbilityInfo['source'] | null; // Use the source type from SpecialAbilityInfo
   initialPeekAllReadyTimestamp: number | null;
   lastPlayerToResolveAbility: string | null;
+  lastResolvedAbilitySource: SpecialAbilityInfo['source'] | null;
   lastResolvedAbilityCardForCleanup: Card | null;
-
-  // New fields to replace boardgame.io context
-  currentPhase: string;
+  currentPhase: GamePhase;
   currentPlayerId: string;
   turnOrder: string[];
-  gameMasterId?: string; // Optional game master
-  activePlayers: { [playerID: string]: string }; // Tracks active players and their current stage
-  pendingAbilities: PendingSpecialAbility[]; // Abilities waiting for resolution (non-optional, init to [])
-  gameover?: { 
-    winner?: string; 
-    scores?: { [playerId: string]: number };
-    finalHands?: { [playerId: string]: Card[] }; // Added final hands
-  } | null; // Standardized gameover structure
-
-  // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
-  matchResolvedDetails: {
-    byPlayerId: string; // Who made the successful match
-    isAutoCheck: boolean;
-    abilityResolutionRequired: boolean;
-  } | null;
+  gameMasterId: string;
+  activePlayers: { [playerID: string]: string };
+  pendingAbilities: PendingSpecialAbility[];
+  matchResolvedDetails: MatchResolvedDetails | null;
+  gameover: GameOverData | null; // Uses the above defined GameOverData
+  totalTurnsInRound: number;
+  globalAbilityTargets?: Array<{ playerID: string; cardIndex: number; type: 'peek' | 'swap' }> | null;
+  lastRegularSwapInfo: LastRegularSwapInfo | null;
 }
 
 // Data structure for players joining a game or being set up initially
@@ -129,10 +155,11 @@ export interface PendingSpecialAbility {
   currentAbilityStage?: 'peek' | 'swap'; // Added to track K/Q multi-stage abilities
 }
 
-// This interface is currently empty and unused, as CheckGameState.matchingOpportunityInfo defines its structure inline.
-// export interface MatchingOpportunityInfo {
-//   // ... existing code ...
-// } 
+export interface LastRegularSwapInfo {
+  playerId: string;    // The player who performed the swap
+  handIndex: number;   // The index in their hand that was swapped
+  timestamp: number;   // Timestamp of when the swap occurred (Date.now())
+}
 
 // --- Client-Specific Types for Redaction ---
 
@@ -144,69 +171,62 @@ export interface HiddenCard {
 export type ClientCard = Card | HiddenCard;
 
 export interface ClientPlayerState {
-  // Fields from PlayerState, but with redacted hand
-  name?: string; // Player's display name
   hand: ClientCard[];
   hasUsedInitialPeek: boolean;
   isReadyForInitialPeek: boolean;
   hasCompletedInitialPeek: boolean;
-  cardsToPeek?: Card[] | null; // Viewer sees their cards to peek
-  peekAcknowledgeDeadline?: number | null; // Relevant for the viewer
-  // pendingDrawnCard for the viewing player should be Card | null
-  // for others, it should effectively be null or an indication of hidden card if that state is even sent to others
-  pendingDrawnCard: ClientCard | null; // Viewer sees their card, others see null or HiddenCard
-  // pendingDrawnCardSource is probably fine to send to all, or nullify for others
+  cardsToPeek: Card[] | null;
+  peekAcknowledgeDeadline: number | null;
+  pendingDrawnCard: ClientCard | null;
   pendingDrawnCardSource: 'deck' | 'discard' | null;
-  // pendingSpecialAbility: source might be okay, card details might need redaction if complex
-  pendingSpecialAbility: PendingSpecialAbility | null; // Or a redacted version for others
+  pendingSpecialAbility: SpecialAbilityInfo | null;
   hasCalledCheck: boolean;
   isLocked: boolean;
   score: number;
-  isConnected: boolean; // Client needs to know connection status
-  // socketId is server-internal, so it's NOT included here
+  name?: string;
+  isConnected: boolean;
+  numMatches: number;
+  numPenalties: number;
+  explicitlyRevealedCards?: { [cardIndex: number]: Card };
 }
 
-export interface ClientCheckGameState {
-  // Fields from CheckGameState, but with redactions
-  deckSize: number; // Instead of the full deck array
+// Client-specific game over data - DEFINED FIRST (before ClientCheckGameState)
+export interface ClientGameOverData extends Omit<GameOverData, 'finalHands' | 'playerStats'> {
+  finalHands?: { [playerId: string]: ClientCard[] };
+  playerStats?: {
+    [playerId: string]: {
+      name: string; // Name here comes from ClientPlayerState potentially
+      numMatches: number;
+      numPenalties: number;
+    };
+  };
+  // totalTurns is inherited correctly via Omit from GameOverData
+}
+
+export interface ClientCheckGameState extends Omit<CheckGameState, 'deck' | 'players' | 'gameover' | 'lastResolvedAbilitySource' | 'lastResolvedAbilityCardForCleanup'> {
+  deckSize: number;
   players: { [playerID: string]: ClientPlayerState };
-  discardPile: Card[]; // Discard pile is usually public
-  discardPileIsSealed: boolean;
-  matchingOpportunityInfo: {
-    cardToMatch: Card; // Card to match is public
-    originalPlayerID: string;
-    potentialMatchers: string[]; // Public info on who can match
-  } | null;
-  playerWhoCalledCheck: string | null;
-  roundWinner: string | null;
-  finalTurnsTaken: number;
-  lastResolvedAbilitySource: SpecialAbilityInfo['source'] | null;
-  initialPeekAllReadyTimestamp: number | null; 
-  // lastPlayerToResolveAbility might be sensitive or not, TBD.
-  // lastResolvedAbilityCardForCleanup definitely should not be sent to all.
-  // For simplicity, these can be omitted from ClientCheckGameState initially
-  // or handled carefully if needed by client logic beyond display.
+  topDiscardIsSpecialOrUnusable?: boolean;
+  gameover: ClientGameOverData | null; // Uses the above defined ClientGameOverData
+  viewingPlayerId: string;
+  globalAbilityTargets?: Array<{ playerID: string; cardIndex: number; type: 'peek' | 'swap' }> | null;
+  lastRegularSwapInfo: LastRegularSwapInfo | null;
+}
 
-  currentPhase: string;
-  currentPlayerId: string;
-  turnOrder: string[];
-  gameMasterId?: string;
-  activePlayers: { [playerID: string]: string };
-  pendingAbilities: PendingSpecialAbility[]; // List of abilities pending, card details might be sensitive if not for viewing player
-  gameover?: { 
-    winner?: string; 
-    scores?: { [playerId: string]: number };
-    finalHands?: { [playerId: string]: Card[] }; // Added final hands for client view
-  } | null;
-  
-  // Details of a resolved match, used by checkMatchingStageEnd to determine next phase
-  matchResolvedDetails: {
-    byPlayerId: string; 
-    isAutoCheck: boolean;
-    abilityResolutionRequired: boolean;
-  } | null;
+// Represents a card that a player has chosen to use for its special ability
+// ... existing code ...
 
-  // Specific to the client receiving this state
-  viewingPlayerId: string; 
-  topDiscardIsSpecialOrUnusable?: boolean; // True if discard pile top card is K,Q,J OR if discardPileIsSealed
+// Data structure for game over information
+export interface GameOverData {
+  winner?: string | string[]; // Can be single or multiple winners (draw)
+  scores: { [playerId: string]: number };
+  finalHands?: { [playerId: string]: Card[] }; // Optional: if we want to show final hands
+  totalTurns?: number; // New stat
+  playerStats?: { // New stat
+    [playerId: string]: {
+      name: string;
+      numMatches: number;
+      numPenalties: number;
+    };
+  };
 } 

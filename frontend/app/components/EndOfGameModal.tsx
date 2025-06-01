@@ -1,6 +1,7 @@
 import React from 'react';
-import { Card } from 'shared-types';
+import type { Card, ClientCard } from 'shared-types';
 import CardComponent from './CardComponent';
+import { motion } from 'motion/react';
 
 interface ScoreEntry {
   name: string;
@@ -12,20 +13,50 @@ interface FinalHandEntry {
   cards: Card[];
 }
 
+interface ScoreItem {
+  name: string;
+  score: number;
+}
+
+interface FinalHandItem {
+  playerName: string;
+  cards: ClientCard[];
+}
+
+interface PlayerStatItem {
+  name: string;
+  numMatches: number;
+  numPenalties: number;
+}
+
 interface EndOfGameModalProps {
   open: boolean;
   onClose: () => void;
   winner: string | string[];
-  scores: ScoreEntry[];
-  finalHands?: FinalHandEntry[];
+  scores: ScoreItem[];
+  finalHands?: FinalHandItem[];
   onPlayAgain: () => void;
+  totalTurns?: number;
+  playerStats?: PlayerStatItem[];
 }
 
-const EndOfGameModal: React.FC<EndOfGameModalProps> = ({ open, onClose, winner, scores, finalHands, onPlayAgain }) => {
+const EndOfGameModal: React.FC<EndOfGameModalProps> = ({ open, onClose, winner, scores, finalHands, onPlayAgain, totalTurns, playerStats }) => {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-40 backdrop-blur-sm transition-all">
-      <div className="bg-white rounded-xl shadow-2xl p-6 md:p-8 max-w-md w-full relative animate-fade-in max-h-[90vh] overflow-y-auto">
+    <motion.div
+      className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-40 backdrop-blur-sm transition-all"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <motion.div
+        className="bg-white rounded-xl shadow-2xl p-6 md:p-8 max-w-md w-full relative max-h-[90vh] overflow-y-auto"
+        initial={{ scale: 0.9, opacity: 0.8 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        transition={{ duration: 0.2, delay: 0.05 }}
+      >
         <button
           className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-xl font-bold focus:outline-none"
           onClick={onClose}
@@ -40,23 +71,42 @@ const EndOfGameModal: React.FC<EndOfGameModalProps> = ({ open, onClose, winner, 
             {Array.isArray(winner) ? winner.join(', ') : winner}
           </div>
           
-          <h3 className="text-md font-semibold mt-3 mb-1 text-gray-700">Final Scores:</h3>
-          <table className="w-full mb-4 text-sm">
-            <thead>
-              <tr className="text-gray-500">
-                <th className="text-left pl-2">Player</th>
-                <th className="text-right pr-2">Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scores.sort((a, b) => a.score - b.score).map((entry, i) => (
-                <tr key={`score-${i}`} className="border-t border-gray-100">
-                  <td className="py-1.5 pl-2 font-medium">{entry.name}</td>
-                  <td className="py-1.5 pr-2 text-right">{entry.score}</td>
-                </tr>
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Final Scores:</h4>
+            <ul className="space-y-1 text-xs">
+              {scores.sort((a, b) => a.score - b.score).map((s, index) => (
+                <li key={index} className={`flex justify-between p-1.5 rounded ${s.name === winner ? 'bg-green-100 dark:bg-green-700/30' : 'bg-gray-50 dark:bg-neutral-700/30'}`}>
+                  <span className={s.name === winner ? 'font-bold text-green-700 dark:text-green-300' : 'text-gray-600 dark:text-gray-400'}>{s.name}</span>
+                  <span className={`font-semibold ${s.name === winner ? 'text-green-700 dark:text-green-300' : 'text-gray-800 dark:text-gray-200'}`}>{s.score}</span>
+                </li>
               ))}
-            </tbody>
-          </table>
+            </ul>
+          </div>
+
+          {(typeof totalTurns === 'number' || (playerStats && playerStats.length > 0)) && (
+            <div className="mt-4 pt-3 border-t border-gray-200 dark:border-neutral-600">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Round Statistics:</h4>
+              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                {typeof totalTurns === 'number' && (
+                  <p>Total Turns Played: <span className="font-semibold text-gray-800 dark:text-gray-200">{totalTurns}</span></p>
+                )}
+                {playerStats && playerStats.length > 0 && (
+                  <div className="mt-1">
+                    <h5 className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-0.5">Player Stats:</h5>
+                    <ul className="space-y-0.5">
+                      {playerStats.map((stat, index) => (
+                        <li key={index} className="p-1 bg-gray-50 dark:bg-neutral-700/30 rounded">
+                          <span className="font-medium text-gray-700 dark:text-gray-300">{stat.name}:</span>
+                          <span className="ml-2">Matches: <span className="font-semibold text-green-600 dark:text-green-400">{stat.numMatches}</span></span>
+                          <span className="ml-2">Penalties: <span className="font-semibold text-red-600 dark:text-red-400">{stat.numPenalties}</span></span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {finalHands && finalHands.length > 0 && (
             <div className="w-full mt-2 mb-4">
@@ -83,8 +133,8 @@ const EndOfGameModal: React.FC<EndOfGameModalProps> = ({ open, onClose, winner, 
             Play Again
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 

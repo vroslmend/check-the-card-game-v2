@@ -1,10 +1,10 @@
-# Check! - The Online Multiplayer Card Game
+# Check! - Online Multiplayer Card Game
 
 ## 🃏 Overview
 
-"Check!" is a web-based, free-to-play online multiplayer card game. The primary goal is to have the lowest total card value in your hand at the end of a round. This project is an implementation of the card game featuring real-time multiplayer gameplay.
+"Check!" is a web-based, free-to-play online multiplayer card game. The primary goal is to have the lowest total card value in your hand at the end of a round. This project is an implementation of the card game featuring real-time multiplayer gameplay using a Node.js/Socket.IO backend and a Next.js/React frontend.
 
-The detailed game rules, mechanics, and ongoing development notes can be found in `PROJECT_NOTES.md`.
+This README provides a comprehensive guide to understanding, setting up, and running the project. For detailed game rules, refer to `GAME_OVERVIEW.md`. For a chronological log of development changes and specific bug fixes, see `PROJECT_NOTES.md`.
 
 ## 🚀 Core Objective of the Game
 
@@ -12,151 +12,182 @@ Be the player with the lowest total card value in your hand when a round ends. A
 
 ## ✨ Key Game Mechanics
 
-*   **2x2 Hand Grid:** Players manage four cards in a 2x2 grid, initially peeking at two.
-*   **Draw & Swap/Discard:** Players draw from a deck or discard pile, then swap a card from their hand into the discard pile, or discard the drawn card directly.
-*   **Matching Opportunity:** Discarding a card creates an opportunity for *any* player to match its rank with a card from their hand.
-*   **Special Cards (K, Q, J):** These cards have abilities (peek, swap cards) when discarded or as part of a matched pair.
-*   **LIFO Ability Resolution:** If a special card is matched with another special card, their abilities trigger in Last-In, First-Out order.
-*   **Calling "Check":** Players can "Call Check" to initiate the end of the round, or it can happen automatically if a player empties their hand via a match. Other players get one final turn.
+(Refer to `GAME_OVERVIEW.md` for full details)
+
+*   **Hand Management:** Players manage their cards (initially four) in a conceptual grid, with an initial peek at two of them.
+*   **Turn Actions:** Draw from the deck or discard pile, then discard a card by either swapping with a hand card or discarding the drawn card directly.
+*   **Matching:** Discarding a card creates an opportunity for any player to match its rank with a card from their hand.
+*   **Special Abilities (K, Q, J):** Kings, Queens, and Jacks have unique abilities (peeking at cards, swapping cards) that trigger when discarded or matched as a pair. These abilities can be multi-stage and include options to skip stages.
+*   **"Calling Check":** Players can manually "Call Check" to signal the final round of turns, or this can occur automatically if a player empties their hand through a successful match.
 
 ## 💻 Technology Stack
 
-*   **Frontend:** Next.js 15.x (App Router), React, TypeScript, Tailwind CSS (implicitly via `globals.css` and Next.js conventions)
-*   **Backend:** Node.js, TypeScript, `boardgame.io` (for game logic and state management)
-*   **Shared Code:** TypeScript types compiled to CommonJS, shared between frontend and backend.
-*   **Real-time Communication:** `Socket.IO` (managed by `boardgame.io`)
-*   **Package Manager:** npm (for each sub-project)
+*   **Frontend:**
+    *   Next.js (using the App Router)
+    *   React
+    *   TypeScript
+    *   Tailwind CSS (for styling and UI components)
+    *   Socket.IO Client (for real-time communication with the backend)
+*   **Backend:**
+    *   Node.js (with native `http` module for server creation)
+    *   Socket.IO (for WebSocket-based real-time communication)
+    *   TypeScript
+*   **Shared Code:**
+    *   TypeScript types and interfaces located in the `shared-types/` directory, utilized by both frontend and backend to ensure data consistency.
+*   **Development Environment:**
+    *   npm (Node Package Manager) for managing dependencies and running scripts in each sub-project (`frontend/`, `server/`, `shared-types/`).
+    *   Hot-reloading enabled for both server and frontend development.
 
 ## 📁 Project Structure
 
-The project is organized into three main sub-directories:
-
-*   `frontend/`: Contains the Next.js client-side application.
-*   `server/`: Contains the Node.js `boardgame.io` game server.
-*   `shared-types/`: Contains TypeScript type definitions used by both the frontend and server.
-
 ```
 check-the-card-game-v2/
-├── frontend/               # Next.js UI
-│   ├── app/
-│   ├── components/
-│   ├── public/
-│   ├── next.config.ts
-│   ├── tsconfig.json
-│   └── package.json
-├── server/                 # boardgame.io game server
+├── frontend/               # Next.js UI Application
+│   ├── app/                # App Router: layouts, pages, components
+│   │   ├── layout.tsx      # Root layout, font & global styles setup
+│   │   ├── page.tsx        # Main landing/lobby page, hosts game client
+│   │   └── components/     # Reusable React components (GameBoard, Card, etc.)
+│   ├── public/             # Static assets (e.g., favicon)
+│   ├── next.config.ts      # Next.js configuration
+│   ├── tsconfig.json       # TypeScript configuration for frontend
+│   └── package.json        # Frontend dependencies and scripts
+├── server/                 # Node.js Socket.IO Game Server
+│   ├── src/                # TypeScript source files for the server
+│   │   ├── index.ts        # Main server entry point, Socket.IO setup, event handlers
+│   │   └── game-manager.ts # Core game logic, state management, phase transitions
+│   ├── tsconfig.json       # TypeScript configuration for server
+│   ├── package.json        # Server dependencies and scripts
+│   └── dist/               # (Generated on build) Compiled JavaScript output
+├── shared-types/           # Shared TypeScript Interfaces & Types
 │   ├── src/
-│   │   ├── game-definition.ts  # Core game logic exported for client
-│   │   └── server.ts           # Server setup
-│   ├── dist/                 # Compiled server code
-│   ├── tsconfig.json
-│   └── package.json
-├── shared-types/           # Shared TypeScript interfaces
-│   ├── src/
-│   │   └── index.ts
-│   ├── dist/                 # Compiled shared types (CommonJS)
-│   ├── tsconfig.json
-│   └── package.json
+│   │   └── index.ts        # Main export for shared types
+│   ├── tsconfig.json       # TypeScript configuration for shared types
+│   ├── package.json        # Shared-types dependencies (e.g., typescript itself)
+│   └── dist/               # (Generated on build) Compiled JavaScript output (e.g., for CommonJS compatibility if needed)
 ├── .gitignore
-├── PROJECT_NOTES.md        # Detailed developer notes and game rules
-└── README.md               # This file
+├── GAME_OVERVIEW.md        # Authoritative game rules and mechanics
+├── PROJECT_NOTES.md        # Detailed developer log: features, changes, bug fixes
+└── README.md               # This file: Project overview and setup guide
 ```
 
 ## ⚙️ Setup and Installation
 
-You'll need to install dependencies for each sub-project (`shared-types`, `server`, `frontend`).
+Follow these steps to set up the project locally.
 
-1.  **Clone the repository (if you haven't already):**
+1.  **Clone the Repository:**
     ```bash
-    git clone <repository-url>
+    git clone <repository_url>
     cd check-the-card-game-v2
     ```
 
-2.  **Install Dependencies for `shared-types`:**
+2.  **Install Dependencies and Build `shared-types`:**
+    This package contains TypeScript definitions crucial for both frontend and backend. Building it ensures type consistency.
     ```bash
     cd shared-types
     npm install
-    npm run build # Compile types to dist/
+    npm run build # This usually runs `tsc` to compile TypeScript.
     cd ..
     ```
 
-3.  **Install Dependencies for `server`:**
+3.  **Install Dependencies and Build the Backend Server:**
+    The server needs its dependencies and to be compiled from TypeScript to JavaScript for production or if not using a TS-aware runner like `ts-node` for development.
     ```bash
     cd server
     npm install
-    # The server imports from shared-types/dist, ensure it's built first.
+    npm run build # Compiles TypeScript to `dist/` folder. For dev, `npm run dev` often handles this via `ts-node-dev` or similar.
     cd ..
     ```
 
-4.  **Install Dependencies for `frontend`:**
+4.  **Install Dependencies for the Frontend Application:**
     ```bash
     cd frontend
     npm install
-    # The frontend imports from server/dist, ensure it's built first (for server-game alias).
+    # For development (`npm run dev`), Next.js handles compilation. For production, `npm run build` is used.
     cd ..
     ```
 
 ## ▶️ How to Run the Game
 
-1.  **Build `shared-types` (if not already done or if changed):**
-    ```bash
-    cd shared-types
-    npm run build
-    cd ..
-    ```
+### Development Mode (Recommended for Local Development)
 
-2.  **Build `server` (if not already done or if changed):**
-    This step compiles the server TypeScript to JavaScript in `server/dist/`, which is then used by the `server-game` alias in the frontend.
+1.  **Start the Backend Server:**
+    Ensure `shared-types` has been built at least once.
     ```bash
     cd server
-    npm run build
-    cd ..
+    npm run dev
     ```
+    The server will typically start on `http://localhost:8000`. Monitor the console for the exact port and status messages.
 
-3.  **Start the Game Server:**
+2.  **Start the Frontend Application:**
+    In a **new terminal window/tab**, ensure `shared-types` has been built at least once.
+    ```bash
+    cd frontend
+    npm run dev
+    ```
+    The frontend development server will usually be available at `http://localhost:3000`.
+
+3.  **Access the Game:**
+    Open your web browser and navigate to `http://localhost:3000`. You should see the game's main page, where you can create a new game or join an existing one using a Game ID.
+
+### Production-Like Run (Conceptual)
+
+For a more production-like setup (actual deployment may vary based on hosting provider):
+
+1.  **Build All Parts:** Ensure all packages are built.
+    ```bash
+    cd shared-types && npm run build && cd ..
+    cd server && npm run build && cd ..
+    cd frontend && npm run build && cd ..
+    ```
+2.  **Run the Compiled Server:**
+    The `server/package.json` should have a `start` script that runs the compiled JavaScript from its `dist/` folder (e.g., `node dist/index.js`).
     ```bash
     cd server
-    npm start  # Typically runs node dist/server.js or similar via package.json script
-    cd ..
+    npm start
     ```
-    The server will usually start on `localhost:8000`.
+3.  **Serve the Frontend Build:**
+    The `frontend/package.json` should have a `start` script that serves the optimized Next.js build.
+    ```bash
+    cd frontend
+    npm start
+    ```
 
-4.  **Start the Frontend Development Server:**
-    Open a new terminal for this step.
-    *   **Using Webpack (recommended for stability with current alias setup):**
-        ```bash
-        cd frontend
-        npm run dev:webpack  # Assuming you have 'npx next dev' as dev:webpack
-        # Or directly: npx next dev
-        ```
-    *   **Using Turbopack (experimental, ensure `next.config.ts` is configured):**
-        ```bash
-        cd frontend
-        npm run dev # Assuming this is 'next dev --turbopack'
-        ```
-    The frontend will usually be available at `localhost:3000`. Open this address in your browser. You should see two player views and a spectator view connecting to the game server.
+## 📝 Development Status & Key Features
 
-## 📝 Current Status (High-Level)
+*   **Socket.IO Refactor:** The project has been successfully refactored from `boardgame.io` to a custom Node.js/Socket.IO backend, enabling more direct control over real-time communication and game state management.
+*   **Core Gameplay Implemented:**
+    *   Multiplayer game room creation and joining.
+    *   Card dealing, drawing from deck/discard, and discarding with swap.
+    *   Matching mechanics for card ranks.
+    *   Special card abilities (K, Q, J) with multi-stage resolution (peek & swap) and skip options.
+    *   "Call Check" functionality and final turns phase.
+    *   End-of-round scoring and winner determination.
+    *   Display of final hands at game end.
+*   **User Interface:**
+    *   Responsive game board display using React and Tailwind CSS.
+    *   Client-side state management for UI interactivity.
+    *   Visual feedback for game phases, player turns, and card states (including discard pile lock nuances).
+    *   End-of-game modal displaying scores and final hands, with a "Play Again" (return to lobby) button.
+    *   Revamped lobby/main page UI with improved aesthetics (Plus Jakarta Sans font).
+*   **Session Management:** Basic client-side session persistence and reconnection attempts.
+*   **Code Quality:** TypeScript used across frontend, backend, and shared types for improved maintainability and type safety.
 
-*   **Core Game Logic:** Largely complete on the server using `boardgame.io`, including complex turn structures, matching, and special card abilities with LIFO resolution.
-*   **Server & Shared Types:** Build systems in place, and modules are correctly resolved.
-*   **Frontend UI:**
-    *   Basic Next.js application structure with `boardgame.io` client integration.
-    *   Client connects to the server and renders multiple player perspectives.
-    *   Reusable UI components for Cards, Player Hands, Draw Pile, and Discard Pile have been created.
-    *   The main `CheckGameBoard.tsx` component has been significantly enhanced to display the game visually and handle basic interactions and game phases.
-*   **Build/Bundling:** Next.js frontend successfully imports server-side game logic using path aliases with both Webpack and Turbopack (with minor Turbopack warnings).
+## 🔧 Environment Variables
 
-For a detailed breakdown, see the "✅ What is DONE" and "⏳ What is LEFT" sections in `PROJECT_NOTES.md`.
+*   **Frontend:** The frontend can be configured to connect to a different server URL by setting the `NEXT_PUBLIC_SERVER_URL` environment variable (e.g., in a `.env.local` file in the `frontend` directory). If not set, it defaults to `http://localhost:8000`.
+*   **Backend:** The server listens on port 8000 by default. This can be configured via the `PORT` environment variable.
+
+## ☁️ Deployment Considerations
+
+*   **Socket.IO Server Hosting:** If deploying to platforms like Vercel (which have limitations with persistent WebSocket connections on serverless functions), the Socket.IO server will likely need to be hosted separately on a platform that supports long-running Node.js applications (e.g., Heroku, DigitalOcean, AWS EC2/ECS, a dedicated Node.js hosting service).
+*   **Frontend Hosting:** The Next.js frontend can be deployed to Vercel, Netlify, or any other platform that supports Next.js applications. Ensure the `NEXT_PUBLIC_SERVER_URL` environment variable is correctly set to point to the deployed Socket.IO server.
 
 ## 🎯 Next Steps / Future Goals
 
-*   **Refine Frontend Interactivity:** Fully implement UI for all game actions, especially complex special card abilities.
-*   **Visual Polish:** Enhance styling and overall user experience.
-*   **Game Messages/Log:** Add a clear log of game events.
-*   **Thorough Testing:** Conduct extensive playtesting of all game phases and interactions.
-*   (Optional) User authentication, lobbies, multi-round game sessions, leaderboards.
+*   Comprehensive testing of all game mechanics and edge cases, particularly around multi-player interactions and ability resolutions.
+*   Enhanced visual polish, animations (e.g., card movements), and sound effects for a more immersive experience.
+*   More robust error handling and user feedback mechanisms across the application.
+*   Potential features: persistent player accounts/profiles, leaderboards, game variations/custom rules, AI opponents, improved spectator mode.
 
 ---
-
-This `README.md` provides a starting point. Feel free to expand it as the project evolves! 
+Happy Gaming and Coding!

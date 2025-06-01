@@ -1,4 +1,4 @@
-import { Card, Suit, Rank, PlayerState, CheckGameState as ServerCheckGameState, InitialPlayerSetupData, cardValues, HiddenCard, ClientCard, ClientPlayerState, ClientCheckGameState, SpecialAbilityInfo, PendingSpecialAbility } from 'shared-types';
+import { Card, Suit, Rank, PlayerState, CheckGameState as ServerCheckGameState, InitialPlayerSetupData, cardValues, HiddenCard, ClientCard, ClientPlayerState, ClientCheckGameState, SpecialAbilityInfo, PendingSpecialAbility, GameOverData, GamePhase, MatchResolvedDetails } from 'shared-types';
 
 const PEEK_COUNTDOWN_SECONDS = 5; // Define based on typical client value or make configurable
 const PEEK_REVEAL_SECONDS = 5;    // Define based on typical client value or make configurable
@@ -49,7 +49,7 @@ const activeGames: { [gameId: string]: GameRoom } = {};
 // Encapsulated within an object to allow GameRoom methods to access it if they were class methods.
 const broadcastService = {
     triggerBroadcast: (gameId: string, gameState: ServerCheckGameState) => {
-        console.warn("[GameManager] broadcastService.triggerBroadcast called but not implemented. This should be set by index.ts");
+        console.warn("[GameManager] broadcastService.triggerBroadcast called but not implemented. This should be set by index.ts. GAT: " + JSON.stringify(gameState.globalAbilityTargets));
     }
 };
 
@@ -104,6 +104,8 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
       name: playerInfo.name,
       isConnected: true, // New: Player starts as connected
       socketId: playerInfo.socketId, // New: Store socket ID, ensure playerInfo provides it
+      numMatches: 0, // Initialize new stat
+      numPenalties: 0, // Initialize new stat
     };
   });
 
@@ -123,6 +125,7 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
     matchResolvedDetails: null,
     pendingAbilities: [], // Initialize pendingAbilities
     gameover: null, // Initialize gameover
+    globalAbilityTargets: null, // Initialize new field
     currentPhase: 'initialPeekPhase',
     currentPlayerId: playerSetupData[0].id, 
     turnOrder: playerSetupData.map(p => p.id),
@@ -131,6 +134,8 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
       acc[p.id] = 'awaitingReadiness';
       return acc;
     }, {} as { [playerID: string]: string }),
+    totalTurnsInRound: 0, // Initialize new stat
+    lastRegularSwapInfo: null, // Initialize new field
   };
 
   const newGameRoom: GameRoom = {
@@ -203,6 +208,8 @@ export const addPlayerToGame = (
     name: playerInfo.name,
     isConnected: true,
     socketId: socketId,
+    numMatches: 0, // Initialize new stat
+    numPenalties: 0, // Initialize new stat
   };
 
   gameRoom.gameState.players[playerInfo.id] = newPlayerState;
@@ -222,6 +229,7 @@ export const handleDrawFromDeck = (
   if (!gameRoom) {
     return { success: false, message: "Game not found." };
   }
+  clearGlobalAbilityTargetsIfNeeded(gameRoom.gameState); // Clear GATs at the start of this action
 
   const player = gameRoom.gameState.players[playerId];
   if (!player) {
@@ -261,6 +269,7 @@ export const handleDrawFromDiscard = (
   if (!gameRoom) {
     return { success: false, message: "Game not found." };
   }
+  clearGlobalAbilityTargetsIfNeeded(gameRoom.gameState); // Clear GATs at the start of this action
 
   const player = gameRoom.gameState.players[playerId];
   if (!player) {
@@ -323,6 +332,14 @@ export const handleSwapAndDiscard = (
   gameRoom.gameState.discardPile.unshift(cardFromHand);
   gameRoom.gameState.discardPileIsSealed = false;
   
+  // NEW: Record the swap event
+  gameRoom.gameState.lastRegularSwapInfo = {
+    playerId: playerId,
+    handIndex: handIndex,
+    timestamp: Date.now()
+  };
+  console.log(`[GameManager] Recorded lastRegularSwapInfo for player ${playerId}, index ${handIndex}`);
+
   console.log(`[GameManager] Player ${playerId} swapped drawn card with hand[${handIndex}]. Discarded: ${cardFromHand.rank}${cardFromHand.suit}`);
 
   const potentialMatchers = Object.keys(gameRoom.gameState.players).filter(pId => {
@@ -426,6 +443,7 @@ export const handleAttemptMatch = (
     player.hand.splice(handIndex, 1); 
     G.discardPile.unshift(cardY); 
     G.discardPileIsSealed = true;
+    player.numMatches++; // Increment successful matches
     
     let abilityResolutionRequired = false;
     const isCardXSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardX.rank);
@@ -472,7 +490,7 @@ export const handleAttemptMatch = (
     const finalGameState = checkMatchingStageEnd(gameId);
     if (!finalGameState) return {success: false, message: "Error after attempting match (checkMatchingStageEnd failed processing match details)." };
     
-    return { success: true, updatedGameState: finalGameState };
+    return { success: true, message: "Match successful!", updatedGameState: finalGameState };
 
   } else {
     // Cards do not match. Player incurs a penalty and their attempt for this opportunity is over.
@@ -483,6 +501,7 @@ export const handleAttemptMatch = (
       const penaltyCard = G.deck.pop();
       if (penaltyCard) {
         player.hand.push(penaltyCard);
+        player.numPenalties++; // Increment penalties
         console.log(`[GameManager] Player ${playerId} drew a penalty card: ${penaltyCard.rank}${penaltyCard.suit}. Hand size: ${player.hand.length}. Deck size: ${G.deck.length}`);
       } else {
         console.warn(`[GameManager] Penalty card draw failed for ${playerId} in game ${gameId} - deck pop returned undefined despite length > 0.`);
@@ -542,10 +561,10 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
         // The next call to setupNextPlayTurn/setupAbilityResolutionPhase from a higher level will trigger continueOrEndFinalTurns.
         G.activePlayers = {}; // Clear active players for this specific part.
       } else { // Final turns are NOT active
-        console.log("[GameManager] checkMatchingStageEnd (after match, not in final turns): Match successful. Player's turn continues in playPhase.");
-        G.currentPhase = 'playPhase';
-        G.currentPlayerId = byPlayerId;
-        G.activePlayers = { [byPlayerId]: 'playPhaseActive' };
+        console.log("[GameManager] checkMatchingStageEnd (after match, not in final turns): Match successful. Setting up next regular play turn.");
+        // G.currentPlayerId remains the player who initiated the discard.
+        // setupNextPlayTurn will determine the actual next player and set phase, currentPlayerId, and activePlayers.
+      setupNextPlayTurn(gameId);
       }
     }
     activeGames[gameId] = gameRoom; 
@@ -675,6 +694,9 @@ const setupNextPlayTurn = (gameId: string): ServerCheckGameState | null => {
   if (!gameRoom) { console.error(`[GameManager] setupNextPlayTurn: Game room ${gameId} not found.`); return null; }
   const G = gameRoom.gameState;
 
+  clearGlobalAbilityTargetsIfNeeded(G); // Clear at start of new turn setup
+  clearTransientVisualCues(G); // NEW: Clear transient cues
+
   if (G.playerWhoCalledCheck && G.currentPhase === 'finalTurnsPhase') {
     console.log(`[GameManager] setupNextPlayTurn: In finalTurnsPhase for game ${gameId}. Calling continueOrEndFinalTurns.`);
     return continueOrEndFinalTurns(gameId);
@@ -734,6 +756,10 @@ const setupNextPlayTurn = (gameId: string): ServerCheckGameState | null => {
   G.currentPlayerId = nextPlayerId;
   G.activePlayers = { [nextPlayerId]: 'playPhaseActive' };
   G.discardPileIsSealed = false; 
+  if (!G.playerWhoCalledCheck) { // Only count as a new turn start if not in final turns phase already initiated
+    G.totalTurnsInRound++;
+    console.log(`[GameManager] Total turns in round for game ${gameId} incremented to: ${G.totalTurnsInRound} (playPhase start)`);
+  }
 
   console.log(`[GameManager] game ${gameId} setup for next play turn. Player: ${G.currentPlayerId}.`);
   activeGames[gameId] = gameRoom; 
@@ -745,10 +771,15 @@ const setupFinalTurnsPhase = (gameId: string, checkerPlayerId: string): ServerCh
   if (!gameRoom) { console.error(`[GameManager] setupFinalTurnsPhase: Game room ${gameId} not found.`); return null; }
   const G = gameRoom.gameState;
 
+  clearGlobalAbilityTargetsIfNeeded(G); // Clear when initiating final turns
+  clearTransientVisualCues(G); // NEW: Clear transient cues
   G.currentPhase = 'finalTurnsPhase';
   if (!G.playerWhoCalledCheck) {
     G.playerWhoCalledCheck = checkerPlayerId; 
   G.finalTurnsTaken = 0; 
+    // Increment total turns when final turns phase is *first* initiated
+    G.totalTurnsInRound++; 
+    console.log(`[GameManager] Total turns in round for game ${gameId} incremented to: ${G.totalTurnsInRound} (finalTurnsPhase initiated)`);
   }
 
   console.log(`[GameManager] setupFinalTurnsPhase: Game ${gameId} entering/re-evaluating final turns. Original Checker: ${G.playerWhoCalledCheck}. Initial/Current turns taken: ${G.finalTurnsTaken}. Player who triggered this call: ${checkerPlayerId}.`);
@@ -801,6 +832,8 @@ const setupAbilityResolutionPhase = (gameId: string): ServerCheckGameState | nul
 
   if (!G.pendingAbilities || G.pendingAbilities.length === 0) {
     console.log(`[GameManager] setupAbilityResolutionPhase: No pending abilities for game ${gameId}. Determining next phase.`);
+    clearGlobalAbilityTargetsIfNeeded(G); // Clear if no abilities left, before transitioning
+    clearTransientVisualCues(G); // NEW: Clear transient cues
     if (G.playerWhoCalledCheck) {
       console.log(`[GameManager] setupAbilityResolutionPhase: Check was called. Proceeding to final turns setup.`);
       return setupFinalTurnsPhase(gameId, G.playerWhoCalledCheck);
@@ -841,6 +874,9 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
   if (!gameRoom) { console.error(`[GameManager] continueOrEndFinalTurns: Game room ${gameId} not found.`); return null; }
   const G = gameRoom.gameState;
 
+  // No clear here, as it's a continuation. Clearing happens when it *ends* or a *new* final turn player is set up.
+  // However, if we are moving to scoring, cues should be cleared.
+
   console.log(`[DEBUG_FinalTurns] Entering continueOrEndFinalTurns. Current player (turn just ended): ${G.currentPlayerId}, Current Phase: ${G.currentPhase}, Player Who Called Check: ${G.playerWhoCalledCheck}`);
 
   if (G.currentPhase !== 'finalTurnsPhase' || !G.playerWhoCalledCheck) {
@@ -863,6 +899,8 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
 
   if (allTurnsTaken) {
     console.log(`[GameManager] continueOrEndFinalTurns: All eligible players (${numEligiblePlayers}) have taken their final turn in game ${gameId}. Proceeding to scoring.`);
+    clearGlobalAbilityTargetsIfNeeded(G); // Clear before moving to scoring
+    clearTransientVisualCues(G); // NEW: Clear transient cues before scoring
     return setupScoringPhase(gameId);
   } else {
     let lastTurnPlayerIndex = G.turnOrder.indexOf(playerWhoseTurnJustEnded);
@@ -891,6 +929,10 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
     G.currentPlayerId = nextPlayerId;
     G.activePlayers = { [nextPlayerId]: 'finalTurnActive' };
     G.discardPileIsSealed = false;
+    clearGlobalAbilityTargetsIfNeeded(G); // Clear for the start of the next player's final turn
+    clearTransientVisualCues(G); // NEW: Clear for the start of the next player's final turn
+    G.totalTurnsInRound++; // Increment for each final turn taken by a different player
+    console.log(`[GameManager] Total turns in round for game ${gameId} incremented to: ${G.totalTurnsInRound} (final turn for ${nextPlayerId})`);
 
     console.log(`[GameManager] Game ${gameId} continuing final turns. Next player: ${G.currentPlayerId}. Total final turns taken: ${G.finalTurnsTaken}`);
     activeGames[gameId] = gameRoom;
@@ -903,6 +945,8 @@ const setupScoringPhase = (gameId: string): ServerCheckGameState | null => {
   if (!gameRoom) { console.error(`[GameManager] setupScoringPhase: Game room ${gameId} not found.`); return null; }
   const G = gameRoom.gameState;
 
+  clearGlobalAbilityTargetsIfNeeded(G); // Clear at the start of scoring phase
+  clearTransientVisualCues(G); // NEW: Clear transient cues
   G.currentPhase = 'scoringPhase';
   G.activePlayers = {};
   G.currentPlayerId = "";
@@ -913,6 +957,7 @@ const setupScoringPhase = (gameId: string): ServerCheckGameState | null => {
   let roundWinnerIds: string[] = [];
   const scores: { [playerId: string]: number } = {};
   const finalHands: { [playerId: string]: Card[] } = {};
+  const playerStatsForGameOver: GameOverData['playerStats'] = {}; // Explicit type
 
   for (const playerId in G.players) {
     const player = G.players[playerId];
@@ -920,9 +965,16 @@ const setupScoringPhase = (gameId: string): ServerCheckGameState | null => {
     player.hand.forEach(card => {
       playerScore += cardValues[card.rank];
     });
-    player.score = playerScore;
-    scores[playerId] = playerScore;
-    finalHands[playerId] = [...player.hand];
+    player.score = playerScore; // Update player's main score property
+    scores[playerId] = playerScore; // Collect for gameover.scores
+    finalHands[playerId] = [...player.hand]; // Collect for gameover.finalHands
+
+    // Collect stats for gameover.playerStats
+    playerStatsForGameOver[playerId] = {
+      name: player.name || `P-${playerId.slice(-4)}`, // Use existing name or a fallback
+      numMatches: player.numMatches,
+      numPenalties: player.numPenalties,
+    };
 
     if (playerScore < minScore) {
       minScore = playerScore;
@@ -935,13 +987,15 @@ const setupScoringPhase = (gameId: string): ServerCheckGameState | null => {
   G.roundWinner = roundWinnerIds.length > 0 ? roundWinnerIds[0] : null; 
   
 G.gameover = {
-    winner: G.roundWinner === null ? undefined : G.roundWinner,
+    winner: G.roundWinner === null ? undefined : G.roundWinner, // Ensure undefined for no winner
     scores: scores,
     finalHands: finalHands,
+    totalTurns: G.totalTurnsInRound, // Add total turns
+    playerStats: playerStatsForGameOver, // Add collected player stats
   };
   G.currentPhase = 'gameOver';
 
-  console.log(`[GameManager] Game ${gameId} scoring complete. Round Winner: ${G.roundWinner}. Scores:`, scores);
+  console.log(`[GameManager] Game ${gameId} scoring complete. Round Winner: ${G.roundWinner}. Scores:`, scores, `Total Turns: ${G.totalTurnsInRound}, Player Stats:`, playerStatsForGameOver);
   activeGames[gameId] = gameRoom;
   return G;
 };
@@ -963,6 +1017,7 @@ export const handleResolveSpecialAbility = (
   if (!gameRoom) { return { success: false, message: "Game not found." }; }
   const G = gameRoom.gameState;
   if (!G.pendingAbilities || G.pendingAbilities.length === 0) {
+    G.globalAbilityTargets = null; // Clear if no abilities
     return { success: false, message: "No pending abilities to resolve." };
   }
   // Do not shift yet, we might modify it for multi-stage
@@ -982,6 +1037,7 @@ export const handleResolveSpecialAbility = (
     G.lastResolvedAbilitySource = pendingAbility.source;
     G.lastPlayerToResolveAbility = pendingAbility.playerId;
     G.pendingAbilities.shift(); // Remove the fizzled ability
+    G.globalAbilityTargets = null; // Clear targets on fizzle
     message = `Ability ${abilityRank} fizzled: Player locked.`;
     // ... (standard phase transition logic) ...
     let nextState = setupAbilityResolutionPhase(gameId);
@@ -1005,6 +1061,7 @@ export const handleResolveSpecialAbility = (
 
     if ((abilityRank === Rank.King || abilityRank === Rank.Queen) && skipType === 'peek' && pendingAbility.currentAbilityStage === 'peek') {
       pendingAbility.currentAbilityStage = 'swap'; // Advance to swap stage
+      G.globalAbilityTargets = null; // Clear peek targets
       // DO NOT remove from G.pendingAbilities yet.
       // The game should re-enter ability resolution for this same player and ability.
       G.lastPlayerToResolveAbility = playerId; // Ensure this player gets to act again for the swap part
@@ -1020,6 +1077,7 @@ export const handleResolveSpecialAbility = (
       G.lastResolvedAbilitySource = pendingAbility.source;
       G.lastPlayerToResolveAbility = pendingAbility.playerId;
       G.pendingAbilities.shift(); // Remove the ability
+      G.globalAbilityTargets = null; // Clear targets on full skip/swap skip
 
       // If the resolved ability was from a discard, clear the matching opportunity that might have created it.
       if (pendingAbility.source === 'discard' || pendingAbility.source === 'stackSecondOfPair') {
@@ -1040,22 +1098,38 @@ export const handleResolveSpecialAbility = (
   }
 
   // --- Main ability logic (if not skipped) ---
-  if (!abilityResolutionArgs) return { success: false, message: "Ability arguments missing for resolution." };
-  const { peekTargets, swapTargets } = abilityResolutionArgs;
+  if (!abilityResolutionArgs) {
+    // If no args, means we might be re-entering for a swap stage where targets were already set by handleRequestPeekReveal
+    // or for a Jack where client directly sends swap targets.
+    // If it's a peek stage expecting client to send peekTargets for handleRequestPeekReveal, this path shouldn't be hit yet.
+    // This function primarily processes the *results* of peek or swap actions.
+    // Let's assume if args are missing here, it's not a critical error for now, but needs review.
+    console.warn(`[GameManager-handleResolveSpecialAbility] abilityResolutionArgs missing. Ability: ${abilityRank}, Stage: ${pendingAbility.currentAbilityStage}. This might be okay if targets are set/cleared elsewhere for this stage transition.`);
+  }
+  const { peekTargets, swapTargets } = abilityResolutionArgs || {}; // Allow undefined args for now
 
-  // PEEK STAGE for King/Queen
+  // PEEK STAGE for King/Queen - This stage is now primarily for server to acknowledge client's peek reveal request.
+  // The actual setting of globalAbilityTargets for peek happens in handleRequestPeekReveal.
+  // This function then transitions the ability state.
   if ((abilityRank === Rank.King || abilityRank === Rank.Queen) && pendingAbility.currentAbilityStage === 'peek') {
-    if (abilityRank === Rank.King && (!peekTargets || peekTargets.length !== 2)) return { success: false, message: "King PEEK requires 2 targets." };
-    if (abilityRank === Rank.Queen && (!peekTargets || peekTargets.length !== 1)) return { success: false, message: "Queen PEEK requires 1 target." };
-    for (const target of peekTargets!) {
-      if (G.players[target.playerID]?.isLocked) return { success: false, message: `PEEK: Cannot target locked player ${target.playerID}.` };
+    // This part of handleResolveSpecialAbility is called *after* client's local peek timer ends,
+    // and client sends resolveSpecialAbility with PEEK_TARGETS to confirm they saw them and server should move to swap.
+    
+    if (abilityRank === Rank.King && (!peekTargets || peekTargets.length !== 2)) {
+        console.warn(`[GameManager] King PEEK confirmation: Client did not send 2 peekTargets with resolveSpecialAbility. Proceeding to swap stage anyway.`);
     }
-    // Peek is conceptual for server; client handles display. Server acknowledges to proceed.
+    if (abilityRank === Rank.Queen && (!peekTargets || peekTargets.length !== 1)) {
+        console.warn(`[GameManager] Queen PEEK confirmation: Client did not send 1 peekTarget with resolveSpecialAbility. Proceeding to swap stage anyway.`);
+    }
+    
     pendingAbility.currentAbilityStage = 'swap'; // Advance to swap stage
-    message = `${abilityRank} PEEK stage complete. Ready for SWAP stage.`;
-    G.lastPlayerToResolveAbility = playerId; // Ensure this player gets to act again for the swap part
+    // DO NOT clear G.globalAbilityTargets here. Let the 'peek' targets persist for others to see
+    // while the current player is deciding on their swap. They will be overwritten by 'swap' targets later,
+    // or cleared by general phase changes / ability completion.
+    message = `${abilityRank} PEEK stage confirmed. Ready for SWAP stage. Peek targets remain visible.`;
+    G.lastPlayerToResolveAbility = playerId;
     activeGames[gameId] = gameRoom;
-    const nextStateAfterPeek = setupAbilityResolutionPhase(gameId); // Re-enter for swap
+    const nextStateAfterPeek = setupAbilityResolutionPhase(gameId); // This will use G with existing 'peek' targets.
     return { success: true, message, updatedGameState: nextStateAfterPeek ?? G };
   }
 
@@ -1072,6 +1146,12 @@ export const handleResolveSpecialAbility = (
       return { success: false, message: "SWAP: Targets must be two different cards." };
     }
 
+    let justPerformedSwapTargets: Array<{ playerID: string; cardIndex: number; type: 'peek' | 'swap' }> | null = null;
+
+    G.globalAbilityTargets = swapTargets.map(st => ({ ...st, type: 'swap' }));
+    justPerformedSwapTargets = G.globalAbilityTargets; // Capture them
+    console.log(`[GameManager] ${abilityRank} SWAP: Global targets set and captured:`, JSON.stringify(G.globalAbilityTargets));
+
     const p1State = G.players[swapTargets[0].playerID];
     const p2State = G.players[swapTargets[1].playerID];
     const card1 = p1State.hand[swapTargets[0].cardIndex];
@@ -1081,33 +1161,73 @@ export const handleResolveSpecialAbility = (
     console.log(`[GameManager] ${abilityRank} SWAPPED ${swapTargets[0].playerID}[${swapTargets[0].cardIndex}] with ${swapTargets[1].playerID}[${swapTargets[1].cardIndex}]`);
     message = `${abilityRank} SWAP stage complete.`;
 
-    // Ability fully resolved, remove it
     G.lastResolvedAbilityCardForCleanup = pendingAbility.card;
     G.lastResolvedAbilitySource = pendingAbility.source;
     G.lastPlayerToResolveAbility = pendingAbility.playerId;
-    const resolvedAbilitySource = pendingAbility.source; // Store before shift
+    const resolvedAbilitySource = pendingAbility.source; 
     G.pendingAbilities.shift(); 
-
-    // If the resolved ability was from a discard, clear the matching opportunity that might have created it.
+    
     if (resolvedAbilitySource === 'discard' || resolvedAbilitySource === 'stackSecondOfPair') {
       if (G.matchingOpportunityInfo && G.matchingOpportunityInfo.cardToMatch.rank === G.lastResolvedAbilityCardForCleanup?.rank && G.matchingOpportunityInfo.cardToMatch.suit === G.lastResolvedAbilityCardForCleanup?.suit) {
         console.log(`[GameManager] Clearing matchingOpportunityInfo for ${G.lastResolvedAbilityCardForCleanup?.rank}${G.lastResolvedAbilityCardForCleanup?.suit} after its discard-sourced ability was resolved.`);
         G.matchingOpportunityInfo = null;
       }
     }
+    
+    let nextStateIsErrorOrGameOver = false;
+    let nextState = setupAbilityResolutionPhase(gameId); 
+    if (!nextState) { 
+        nextState = setupNextPlayTurn(gameId);
+    }
+    if (!nextState && G.playerWhoCalledCheck) {
+        nextState = continueOrEndFinalTurns(gameId);
+    }
+    if (!nextState && !G.gameover) { 
+        nextState = setupScoringPhase(gameId);
+        if (nextState && (nextState.currentPhase === 'gameOver' || nextState.currentPhase === 'scoringPhase')) { // scoringPhase implies game over soon
+            nextStateIsErrorOrGameOver = true;
+        }
+    } else if (G.gameover || (nextState && (nextState.currentPhase === 'gameOver' || nextState.currentPhase === 'scoringPhase'))) {
+         nextStateIsErrorOrGameOver = true;
+    }
+    
+    const finalGameStateToReturn = nextState ?? G;
 
-    // ... (standard phase transition logic) ...
-    let nextState = setupAbilityResolutionPhase(gameId);
-    if (!nextState) nextState = setupNextPlayTurn(gameId);
-    if (!nextState && G.playerWhoCalledCheck) nextState = continueOrEndFinalTurns(gameId);
-    if (!nextState && !G.gameover) nextState = setupScoringPhase(gameId);
-    activeGames[gameId] = gameRoom;
-    return { success: true, message, updatedGameState: nextState ?? G };
+    // The globalAbilityTargets were set directly on G when the swap happened.
+    // If intermediate phase setups cleared G.globalAbilityTargets before finalGameStateToReturn was fully determined,
+    // then finalGameStateToReturn might have them as null. 
+    // The principle should be: the broadcast that immediately follows the resolution of the swap includes the GATs.
+    // Subsequent phase setups (like for the next player's turn) should then clear them.
+    // So, if finalGameStateToReturn (which is what will be broadcasted by the caller of this function)
+    // has GATs as null, BUT we just performed a swap, it means an intermediate clearer was too aggressive.
+    // However, the current structure is that `setupNextPlayTurn` will be called, and IT should do the clearing for ITS broadcast.
+    // The state G *at the point of swap* had the GATs. This G is passed to subsequent setup functions.
+    // The problem was re-adding them if the *final* state of *this entire resolution chain* had them as null.
+    // We simply want the GATs set from the swap to be present in the G that forms the basis of the next step.
+
+    // The `justPerformedSwapTargets` were set on `G.globalAbilityTargets` earlier in this block.
+    // `finalGameStateToReturn` is derived from subsequent phase setups which might have cleared GATs on `G`.
+    // The log was `[GameManager] Re-applying SWAP targets...`
+    // The current G (which became finalGameStateToReturn after phase calls) might have null GATs.
+    // We need to ensure the `updatedGameState` being returned from *this* function call (which triggers a broadcast)
+    // *does* have the swap targets if a swap just occurred.
+
+    // If a swap just occurred, ensure the GATs are in the state being returned for broadcast.
+    if (justPerformedSwapTargets && !finalGameStateToReturn.globalAbilityTargets) {
+        console.log(`[GameManager-SwapResolve-DEBUG] Swap happened. finalGameStateToReturn GATs were null. Setting them from justPerformedSwapTargets for this broadcast.`);
+        finalGameStateToReturn.globalAbilityTargets = justPerformedSwapTargets;
+    } else if (justPerformedSwapTargets && finalGameStateToReturn.globalAbilityTargets) {
+        console.log(`[GameManager-SwapResolve-DEBUG] Swap happened. finalGameStateToReturn GATs were already present (hopefully correct swap ones). GATs:`, JSON.stringify(finalGameStateToReturn.globalAbilityTargets));
+    }
+
+    activeGames[gameId].gameState = finalGameStateToReturn; 
+    return { success: true, message, updatedGameState: finalGameStateToReturn };
   }
 
   // Fallback if somehow no stage matched
   console.warn(`[GameManager] handleResolveSpecialAbility: Ability ${abilityRank} for player ${playerId} did not match any processing stage. Current stage on ability: ${pendingAbility.currentAbilityStage}`);
   G.pendingAbilities.shift(); // Remove to prevent loop
+  G.globalAbilityTargets = null; // Clear targets
   let fallbackState = setupAbilityResolutionPhase(gameId) ?? setupNextPlayTurn(gameId) ?? G; 
   activeGames[gameId] = gameRoom;
   return { success: false, message: "Error processing ability stage.", updatedGameState: fallbackState };
@@ -1224,7 +1344,9 @@ export const handleDeclareReadyForPeek = (
 
 export const generatePlayerView = (
   fullGameState: ServerCheckGameState,
-  viewingPlayerId: string
+  viewingPlayerId: string,
+  // Optional parameter for temporary card reveals (e.g., for K/Q peek)
+  temporaryReveals?: { [playerId: string]: { [cardIndex: number]: Card } }
 ): ClientCheckGameState => {
   const clientPlayers: { [playerID: string]: ClientPlayerState } = {};
 
@@ -1232,21 +1354,61 @@ export const generatePlayerView = (
     const serverPlayerState = fullGameState.players[pId];
     let clientHand: ClientCard[];
 
+    const revealsForThisPlayer = temporaryReveals?.[pId];
+
     if (pId === viewingPlayerId) {
       clientHand = serverPlayerState.hand.map((card, index) => ({
         ...card, 
-        id: `${pId}-card-${index}`
+        id: card.id || `${pId}-card-${index}` // Use existing ID if present, else generate
       }));
     } else {
-      clientHand = serverPlayerState.hand.map((_, index) => ({ 
-        isHidden: true, 
-        id: `${pId}-hidden-${index}`
-      }));
+      clientHand = serverPlayerState.hand.map((card, index) => {
+        if (revealsForThisPlayer?.[index]) {
+          const revealedCard = revealsForThisPlayer[index];
+          return {
+            ...revealedCard,
+            id: revealedCard.id || `${pId}-revealed-${index}` // Use existing ID if present
+          };
+        }
+        return { 
+          isHidden: true, 
+          id: `${pId}-hidden-${index}` // Hidden cards always get a generated ID based on position
+        };
+      });
     }
     
     let cardsToPeekForClient: Card[] | null = null;
     if (pId === viewingPlayerId && serverPlayerState.cardsToPeek) {
-        cardsToPeekForClient = serverPlayerState.cardsToPeek;
+        // Ensure cardsToPeek also have IDs, though they are raw Cards from server state
+        // They might be used in UI elements expecting IDs.
+        cardsToPeekForClient = serverPlayerState.cardsToPeek.map((c, idx) => ({
+            ...c,
+            id: c.id || `${pId}-peek-${idx}`
+        }));
+    }
+
+    let clientPendingDrawnCard: ClientCard | null = null;
+    if (pId === viewingPlayerId) {
+      if (serverPlayerState.pendingDrawnCard) {
+        if (!('isHidden' in serverPlayerState.pendingDrawnCard)) {
+          const pdc = serverPlayerState.pendingDrawnCard as Card;
+          clientPendingDrawnCard = {
+            ...pdc,
+            id: pdc.id || `${pId}-pendingdrawn-${pdc.rank}-${pdc.suit}` // Assign ID if missing
+          };
+        } else {
+          // This case should ideally not happen if it's a known card for viewing player,
+          // but handle if it's somehow a HiddenCard type from server state.
+          clientPendingDrawnCard = {
+            ...serverPlayerState.pendingDrawnCard,
+            id: (serverPlayerState.pendingDrawnCard as HiddenCard).id || `${pId}-pendinghidden`
+          };
+        }
+      }
+    } else {
+      clientPendingDrawnCard = serverPlayerState.pendingDrawnCard 
+        ? { isHidden: true, id: `pending-hidden-${pId}` } 
+        : null;
     }
 
     clientPlayers[pId] = {
@@ -1257,9 +1419,7 @@ export const generatePlayerView = (
       cardsToPeek: cardsToPeekForClient, 
       peekAcknowledgeDeadline: pId === viewingPlayerId ? serverPlayerState.peekAcknowledgeDeadline : null,
       
-      pendingDrawnCard: pId === viewingPlayerId 
-        ? serverPlayerState.pendingDrawnCard 
-        : (serverPlayerState.pendingDrawnCard ? { isHidden: true, id: `pending-hidden-${pId}` } : null),
+      pendingDrawnCard: clientPendingDrawnCard, // Use the processed one with ID
       pendingDrawnCardSource: pId === viewingPlayerId ? serverPlayerState.pendingDrawnCardSource : null,
       
       pendingSpecialAbility: serverPlayerState.pendingSpecialAbility, 
@@ -1269,12 +1429,18 @@ export const generatePlayerView = (
       score: serverPlayerState.score,
       name: serverPlayerState.name,
       isConnected: serverPlayerState.isConnected,
+      numMatches: serverPlayerState.numMatches, 
+      numPenalties: serverPlayerState.numPenalties, 
+      explicitlyRevealedCards: undefined, 
     };
+
+    if (pId !== viewingPlayerId && revealsForThisPlayer) {
+      clientPlayers[pId].explicitlyRevealedCards = { ...revealsForThisPlayer };
+    }
   }
 
-  // Calculate topDiscardIsSpecialOrUnusable for the entire game state view
   const topDiscardCard = fullGameState.discardPile.length > 0 ? fullGameState.discardPile[0] : null;
-  let isTopDiscardActuallySpecial = false; // Default to false
+  let isTopDiscardActuallySpecial = false; 
   if (topDiscardCard) {
     isTopDiscardActuallySpecial = (topDiscardCard.rank === Rank.King || 
                                    topDiscardCard.rank === Rank.Queen || 
@@ -1290,12 +1456,32 @@ export const generatePlayerView = (
         ? Object.fromEntries(
             Object.entries(fullGameState.gameover.finalHands).map(([pId, hand]) => [
               pId,
-              hand.map((card, index) => ({ ...card, id: `${pId}-finalhand-${index}` }))
+              hand.map((card, index) => ({ 
+                ...card, 
+                id: card.id || `${pId}-finalhand-${index}-${card.suit}-${card.rank}`
+              }))
             ])
           )
         : undefined,
+      playerStats: fullGameState.gameover.playerStats
+        ? Object.fromEntries(
+            Object.entries(fullGameState.gameover.playerStats).map(([pId, stats]) => [
+                pId,
+                {
+                    ...stats,
+                    name: stats.name || fullGameState.players[pId]?.name || `P-${pId.slice(-4)}`
+                }
+            ])
+        )
+        : undefined
     };
   }
+
+  // Ensure all cards in the discard pile have IDs
+  const clientDiscardPile = fullGameState.discardPile.map((card, index) => ({
+    ...card,
+    id: card.id || `discard-${index}-${card.rank}-${card.suit}` // Assign ID if missing
+  }));
 
   const clientGameState: ClientCheckGameState = {
     ...fullGameState,
@@ -1303,13 +1489,14 @@ export const generatePlayerView = (
     players: clientPlayers, 
     topDiscardIsSpecialOrUnusable: topDiscardFlagForClient,
 
-    discardPile: fullGameState.discardPile, 
+    discardPile: clientDiscardPile, // Use the processed discard pile with IDs
     discardPileIsSealed: fullGameState.discardPileIsSealed,
     matchingOpportunityInfo: fullGameState.matchingOpportunityInfo, 
     playerWhoCalledCheck: fullGameState.playerWhoCalledCheck,
     roundWinner: fullGameState.roundWinner,
     finalTurnsTaken: fullGameState.finalTurnsTaken,
     initialPeekAllReadyTimestamp: fullGameState.initialPeekAllReadyTimestamp,
+    globalAbilityTargets: fullGameState.globalAbilityTargets, // Pass through the new field
     
     currentPhase: fullGameState.currentPhase,
     currentPlayerId: fullGameState.currentPlayerId,
@@ -1317,15 +1504,15 @@ export const generatePlayerView = (
     gameMasterId: fullGameState.gameMasterId,
     activePlayers: fullGameState.activePlayers, 
     pendingAbilities: fullGameState.pendingAbilities, 
-    gameover: clientGameOverData, // Use the processed gameover data
+    gameover: clientGameOverData, 
     matchResolvedDetails: fullGameState.matchResolvedDetails, 
 
     viewingPlayerId: viewingPlayerId, 
   };
   
   delete (clientGameState as any).deck; 
-  delete (clientGameState as any).lastPlayerToResolveAbility;
   delete (clientGameState as any).lastResolvedAbilityCardForCleanup;
+  delete (clientGameState as any).lastResolvedAbilitySource; // Also remove this one as it's in the Omit for ClientCheckGameState
 
   return clientGameState;
 };
@@ -1399,3 +1586,96 @@ export const attemptRejoin = (
 //   id: string; // e.g., socket.id or a user-chosen ID if unique
 //   name?: string;
 // } 
+
+// New function to handle client's request to see peeked cards
+export const handleRequestPeekReveal = (
+  gameId: string,
+  requestingPlayerId: string,
+  peekTargets: Array<{ playerID: string; cardIndex: number }>
+): { success: boolean; message?: string; updatedPlayerSpecificGameState?: ClientCheckGameState } => {
+  const room = getGameRoom(gameId);
+  if (!room) return { success: false, message: "Game room not found." };
+  if (room.gameState.currentPhase !== 'abilityResolutionPhase') {
+    return { success: false, message: "Not in ability resolution phase." };
+  }
+  const pendingAbility = room.gameState.pendingAbilities.find(pa => pa.playerId === requestingPlayerId);
+  if (!pendingAbility || (pendingAbility.card.rank !== Rank.King && pendingAbility.card.rank !== Rank.Queen) || pendingAbility.currentAbilityStage !== 'peek') {
+    return { success: false, message: "No valid peek ability pending or not in peek stage." };
+  }
+
+  // Basic validation: Ensure targets are within bounds and not locked (if applicable to your rules)
+  for (const target of peekTargets) {
+    const targetPlayerState = room.gameState.players[target.playerID];
+    if (!targetPlayerState || target.cardIndex < 0 || target.cardIndex >= targetPlayerState.hand.length) {
+      return { success: false, message: "Invalid peek target: Card index out of bounds or player not found." };
+    }
+    // Add any other validation for locked players if necessary based on game rules
+  }
+
+  // Update global targets for all players to see (icons)
+  room.gameState.globalAbilityTargets = peekTargets.map(t => ({ ...t, type: 'peek' }));
+  
+  // SERVER LOGGING POINT
+  console.log(`[SERVER_DEBUG_GAT] GameID: ${gameId}, Player ${requestingPlayerId} requested peek. globalAbilityTargets set to:`, JSON.stringify(room.gameState.globalAbilityTargets));
+
+  // broadcastService.triggerBroadcast(gameId, room.gameState); // << REMOVE THIS LINE
+
+  // For the requesting player, we send a more immediate state update with the revealed cards.
+  const temporaryReveals: { [playerId: string]: { [cardIndex: number]: Card } } = {};
+  peekTargets.forEach(target => {
+    if (!temporaryReveals[target.playerID]) {
+      temporaryReveals[target.playerID] = {};
+    }
+    const targetCard = room.gameState.players[target.playerID]?.hand[target.cardIndex];
+    if (targetCard && !('isHidden' in targetCard)) { // Ensure it's a real card
+      temporaryReveals[target.playerID][target.cardIndex] = targetCard as Card;
+    }
+  });
+
+  const playerSpecificView = generatePlayerView(room.gameState, requestingPlayerId, temporaryReveals);
+
+  return { success: true, message: "Peek targets registered. Card data included in your updated game state.", updatedPlayerSpecificGameState: playerSpecificView };
+};
+
+// Helper function to be called at the beginning of phases or actions that should clear transient global targets
+const clearGlobalAbilityTargetsIfNeeded = (gameState: ServerCheckGameState) => {
+    console.log(`[GameManager-ClearGATs-ENTRY] Called. Current GATs:`, JSON.stringify(gameState.globalAbilityTargets));
+    if (!gameState.globalAbilityTargets) {
+        console.log(`[GameManager-ClearGATs-EXIT] No GATs to clear.`);
+        return;
+    }
+
+    const pendingAbility = gameState.pendingAbilities && gameState.pendingAbilities.length > 0 ? gameState.pendingAbilities[0] : null;
+    console.log(`[GameManager-ClearGATs-INFO] Detected pendingAbility:`, pendingAbility ? `${pendingAbility.card.rank} by ${pendingAbility.playerId} stage: ${pendingAbility.currentAbilityStage}` : null);
+
+    if (pendingAbility && 
+        (pendingAbility.card.rank === Rank.King || pendingAbility.card.rank === Rank.Queen) && 
+        pendingAbility.currentAbilityStage === 'swap') {
+        
+        if (gameState.globalAbilityTargets.every(t => t.type === 'peek')) {
+            console.log('[GameManager-ClearGATs-DECISION] K/Q in swap stage. Clearing PEEK targets ONLY.');
+            gameState.globalAbilityTargets = null;
+        } else {
+            console.log('[GameManager-ClearGATs-DECISION] K/Q in swap stage. GATs are not all peek (might be swap or mixed). Retaining GATs.');
+            // If GATs are swap type, they were likely just set by K/Q swap resolution for broadcast, don't clear immediately.
+        }
+        console.log(`[GameManager-ClearGATs-EXIT] Exiting after K/Q swap stage check. GATs:`, JSON.stringify(gameState.globalAbilityTargets));
+        return; 
+    }
+
+    console.log('[GameManager-ClearGATs-DECISION] Proceeding to general clear (not K/Q in swap stage, or no pending ability).');
+    gameState.globalAbilityTargets = null;
+    console.log(`[GameManager-ClearGATs-EXIT] Exiting after general clear. GATs set to null.`);
+};
+
+// NEW HELPER FUNCTION
+const clearTransientVisualCues = (gameState: ServerCheckGameState) => {
+    if (gameState.lastRegularSwapInfo) {
+        console.log('[GameManager-ClearCues] Clearing lastRegularSwapInfo.');
+        gameState.lastRegularSwapInfo = null;
+    }
+    // This function can be expanded to clear other transient cues in the future
+};
+
+// Example of use in setupNextPlayTurn (similar logic can be added to other phase setup functions)
+// ... rest of the file (ensure all calls to clearGlobalAbilityTargetsIfNeeded are just clearGlobalAbilityTargetsIfNeeded(G) without other args)

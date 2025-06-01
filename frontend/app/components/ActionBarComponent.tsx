@@ -1,6 +1,8 @@
 import React from 'react';
 import CardComponent from './CardComponent'; // Assuming CardComponent is in the same directory
 import type { ClientCard } from 'shared-types';
+import { GiCardDraw, GiCardPick } from 'react-icons/gi'; // Import chosen icons
+import { motion } from 'motion/react'; // Import motion
 
 interface Action {
   label: string;
@@ -16,31 +18,22 @@ interface ActionBarComponentProps {
 }
 
 // Basic SVG Icons (can be replaced with a library or more detailed SVGs)
-const DrawDeckIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeDasharray="4 2" strokeOpacity="0.6" />
-    <path d="M12 16L12 8" />
-    <path d="M9 11L12 8L15 11" />
-    <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="10" fill="currentColor" dy=".1em">?</text>
-  </svg>
-);
+const DrawDeckIcon = <GiCardDraw size={20} />;
 
-const DiscardPileIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" strokeOpacity="0.6" />
-    <path d="M12 8L12 16" />
-    <path d="M9 13L12 16L15 13" />
-  </svg>
-);
+const DiscardPileIcon = <GiCardPick size={20} />;
 
 const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, children }) => {
   return (
-    // Slimmed down fixed bar
-    <div className="fixed left-1/2 bottom-3 md:bottom-4 z-20 -translate-x-1/2 flex flex-col items-center w-full max-w-xs sm:max-w-sm md:max-w-md px-2">
+    <motion.div // Changed to motion.div for entrance animation
+      className="fixed left-1/2 bottom-3 md:bottom-4 z-20 -translate-x-1/2 flex flex-col items-center w-full max-w-xs sm:max-w-sm md:max-w-md px-2"
+      initial={{ y: 100, opacity: 0 }} // Initial: off-screen below and transparent
+      animate={{ y: 0, opacity: 1 }}   // Animate: slide up and fade in
+      transition={{ type: 'spring', stiffness: 120, damping: 20, delay: 0.3 }} // Spring animation with a slight delay
+    >
       {/* Action Buttons Container */} 
       <div className={`flex flex-row items-center justify-center flex-wrap gap-1.5 p-1.5 bg-neutral-800/85 backdrop-blur-md rounded-full shadow-xl w-auto`}>
         {actions.map((action, i) => (
-          <button
+          <motion.button // Changed to motion.button for hover/tap animations
             key={i}
             onClick={action.onClick}
             disabled={action.disabled}
@@ -51,9 +44,12 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
                 : (action.className || 'bg-neutral-700/70 hover:bg-neutral-600/90 text-neutral-100')}
               ${action.icon ? 'w-10 h-10 md:w-12 md:h-12' : 'px-3 md:px-4'} // Adjust padding for icon vs text buttons
             `}
+            whileHover={!action.disabled ? { scale: 1.1, boxShadow: "0px 0px 8px rgba(255,255,255,0.3)" } : {}}
+            whileTap={!action.disabled ? { scale: 0.95 } : {}}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }} // For hover/tap
           >
             {action.icon ? action.icon : action.label}
-          </button>
+          </motion.button>
         ))}
       </div>
 
@@ -63,7 +59,7 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
           {children}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 

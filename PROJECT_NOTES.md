@@ -196,8 +196,12 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
 - Accessibility: keyboard navigation, colorblind support, loading/waiting states.
 - Optional: Game log enhancements, player avatars, sound effects, advanced end-of-game experience.
 - Cross-device testing and feedback-driven iteration.
+- Fix the ending result screen.
+- Improve the UI and Card Design.
+- Better animations.
+- Fix inconsistent ui size bug when penalty card is added (placeholder card visual difference)
 
-*Last Updated: 2024-06-10*
+*Last Updated: 2025-06-2*
 
 ---
 

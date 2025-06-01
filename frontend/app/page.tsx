@@ -219,23 +219,46 @@ export default function HomePage() {
   };
   
   // Handler for actions sent from CheckGameBoard
-  const sendPlayerAction = (type: string, payload?: any) => {
+  const sendPlayerAction = (
+    type: string, 
+    payload?: any,
+    clientCallback?: (message: string, isError: boolean) => void
+  ) => {
     if (!socket || !gameId || !playerId) {
       setError('Cannot send action: connection or game details missing.');
+      if (clientCallback) clientCallback('Connection or game details missing.', true);
       return;
     }
-    socket.emit('playerAction', { gameId, playerId, type, payload }, (response: {success: boolean, gameState?: ClientCheckGameState, message?: string}) => {
+    socket.emit('playerAction', { gameId, playerId, type, payload }, 
+        (response: {success: boolean, gameState?: ClientCheckGameState, message?: string}) => {
+        // Handle the server's response
+        if (response.message && clientCallback) {
+          clientCallback(response.message, !response.success);
+        } else if (clientCallback && type === 'passMatch' && response.success) {
+          // For a successful pass, if server sends no specific message, 
+          // let CheckGameBoard provide its default by calling callback with empty string.
+          clientCallback("", false);
+        } else if (clientCallback && response.success && !response.message) {
+          // For other successful actions with no message, indicate success without text
+          clientCallback("", false);
+        } else if (clientCallback && !response.success && !response.message) {
+            // For failed actions with no message, provide a generic error message
+            clientCallback(`Action ${type} failed.`, true);
+        }
+
+        // Existing logic for logging or setting global error can remain (or be enhanced)
         if (response.success && response.gameState) {
-            // Server broadcasts gameStateUpdate, so direct setGameState here might be redundant or cause quick double update.
-            // However, server message might be useful.
-            if (response.message && type === 'attemptMatch') {
-              addLog(`Match Attempt: ${response.message}`); // Log server messages for match attempts
-            } else if (response.message) {
-              addLog(`Server: ${response.message}`); // Log other server messages
-            }
+          // THIS IS WHERE THE PLAYER-SPECIFIC gameState SHOULD BE APPLIED
+          console.log(`[Page.tsx-playerActionCallback] Received direct gameState for player ${playerId} after action ${type}. Applying...`);
+          setGameState(response.gameState); // Apply the player-specific game state
+        } else if (response.success) {
+            // Action was successful but didn't return a new game state directly.
+            // This is fine if the server is expected to follow up with a general broadcast.
+            addLog(`Action ${type} successful. Waiting for broadcast update.`);
         } else {
-            setError(response.message || `Action ${type} failed.`);
-            addLog(`Action ${type} failed: ${response.message || 'Unknown error'}`);
+          // Action failed, message handled by clientCallback above or set as general error.
+          setError(response.message || `Action ${type} failed.`);
+          addLog(`Action ${type} failed: ${response.message || 'No specific error message.'}`);
         }
     });
   };

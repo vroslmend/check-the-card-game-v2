@@ -18,7 +18,8 @@ import {
     handleResolveSpecialAbility,
     setTriggerBroadcastFunction,
     markPlayerAsDisconnected,
-    attemptRejoin as attemptRejoinGame
+    attemptRejoin as attemptRejoinGame,
+    handleRequestPeekReveal
 } from './game-manager';
 import { InitialPlayerSetupData, CheckGameState as ServerCheckGameState, ClientCheckGameState } from 'shared-types';
 
@@ -164,19 +165,39 @@ io.on('connection', (socket: Socket) => {
     const { gameId, playerId, type, payload } = action;
     console.log(`[Server] Received playerAction: ${type} from ${playerId} (${socket.id}) in game ${gameId} with payload:`, payload);
 
-    // Ensure socket has session mapping. If not, it might be a stray action or needs rejoin.
     const session = getSocketSession();
     if (!session || session.gameId !== gameId || session.playerId !== playerId) {
         console.warn(`[Server] Action from socket ${socket.id} for player ${playerId}/game ${gameId} but no matching session or session mismatch. Current session:`, session);
-        // Depending on strictness, could reject action or try to recover.
-        // For now, we proceed but log warning. Client should ideally rejoin first.
-        // Let's ensure socket.data is set as a fallback, though registerSocketSession should be the primary way.
+        // Fallback: ensure socket.data is set, though registerSocketSession should be the primary way.
          (socket as any).data.playerId = playerId;
          (socket as any).data.gameId = gameId;
     }
 
+    // Specific handling for requestPeekReveal
+    if (type === 'requestPeekReveal') {
+        console.log(`[Server] Handling specific action: ${type} from ${playerId} in ${gameId}`);
+        let peekCallbackResult: { success: boolean; message?: string; gameState?: ClientCheckGameState; peekTargets?: any };
+        if (payload && Array.isArray(payload.peekTargets)) {
+            const peekRevealResult = handleRequestPeekReveal(gameId, playerId, payload.peekTargets);
+            if (peekRevealResult.success && peekRevealResult.updatedPlayerSpecificGameState) {
+                // Send the player-specific state directly to the requesting socket
+                socket.emit('gameStateUpdate', { gameId, gameState: peekRevealResult.updatedPlayerSpecificGameState });
+                console.log(`[Server] Sent player-specific peek reveal state to ${playerId} (${socket.id})`);
+                // The callback also receives this specific state
+                peekCallbackResult = { success: true, gameState: peekRevealResult.updatedPlayerSpecificGameState, message: peekRevealResult.message };
+            } else {
+                peekCallbackResult = { success: false, message: peekRevealResult.message || "Failed to process peek reveal." };
+            }
+        } else {
+            peekCallbackResult = { success: false, message: "Invalid payload: peekTargets must be an array for requestPeekReveal." };
+        }
+        if (callback) callback(peekCallbackResult);
+        return; // Action fully handled, including callback. No further broadcast needed for this action.
+    }
+
+    // For all other actions:
     let result: { success: boolean; message?: string; updatedGameState?: ServerCheckGameState; [key: string]: any; }; // Allow extra fields like peekJustStarted
-    let shouldBroadcastGeneral = true; // Default to true for most actions that return updatedGameState
+    let shouldBroadcastGeneral = true; 
 
     switch (type) {
       case 'drawFromDeck': result = handleDrawFromDeck(gameId, playerId); break;
@@ -221,13 +242,19 @@ io.on('connection', (socket: Socket) => {
       
       console.log(`[Server] Action ${type} successful for ${playerId} in ${gameId}. Player-specific states broadcasted by general handler.`);
       const initiatorPlayerView = generatePlayerView(result.updatedGameState, playerId);
-      if (callback) callback({ success: true, gameState: initiatorPlayerView, message: result.message }); 
+      // Ensure peekJustStarted is included in the callback if present in the result
+      if (callback) callback({ success: true, gameState: initiatorPlayerView, message: result.message, peekJustStarted: result.peekJustStarted }); 
     } else if (result.success && !result.updatedGameState && shouldBroadcastGeneral) {
         // Action was successful but didn't result in a state change that needs immediate broadcast by this general handler
         console.log(`[Server] Action ${type} successful for ${playerId} in ${gameId}, but no immediate state update from this action to broadcast generally (may be handled internally or no state change).`);
         if (callback) callback({ success: true, message: result.message });
-    }
-    else if (!result.success) {
+    } else if (result.success && result.updatedGameState && !shouldBroadcastGeneral) {
+        // This case is for actions that update server state but explicitly skip general broadcast
+        // (e.g. handleDeclareReadyForPeek when peek hasn't started yet, or if an action handles its own specific broadcast like requestPeekReveal would if not handled separately above)
+        console.log(`[Server] Action ${type} successful for ${playerId}, general broadcast skipped by shouldBroadcastGeneral=false. Informing initiator.`);
+        const initiatorPlayerView = generatePlayerView(result.updatedGameState, playerId);
+        if (callback) callback({ success: true, gameState: initiatorPlayerView, message: result.message, peekJustStarted: result.peekJustStarted });
+    } else if (!result.success) {
       console.warn(`[Server] Action ${type} failed for ${playerId} in ${gameId}. Reason: ${result.message}`);
       if (callback) callback({ success: false, message: result.message });
     }
