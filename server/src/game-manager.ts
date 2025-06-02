@@ -4,6 +4,16 @@ const PEEK_COUNTDOWN_SECONDS = 5; // Define based on typical client value or mak
 const PEEK_REVEAL_SECONDS = 5;    // Define based on typical client value or make configurable
 const PEEK_TOTAL_DURATION_MS = 10 * 1000; // Simplified to 10 seconds total for server timer. Client handles its own countdown visuals.
 
+// Turn Timer Constants (configurable)
+const TURN_DURATION_MS = 60 * 1000; // 60 seconds
+const DISCONNECT_GRACE_PERIOD_MS = 90 * 1000; // 90 seconds
+const MATCHING_STAGE_DURATION_MS = 20 * 1000; // 20 seconds global timer for matching
+
+// Server-only map for managing active timer IDs
+const activeTurnTimerIds = new Map<string, NodeJS.Timeout>(); // Key: gameId_playerId
+const activeDisconnectGraceTimerIds = new Map<string, NodeJS.Timeout>(); // Key: gameId_playerId
+const activeMatchingStageTimer = new Map<string, NodeJS.Timeout>(); // Key: gameId
+
 // Placeholder for playerSetupData structure, will be moved to shared-types
 // export interface InitialPlayerSetupData {
 //   id: string; // e.g., socket.id or a user-chosen ID if unique
@@ -104,9 +114,11 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
       name: playerInfo.name,
       isConnected: true, // New: Player starts as connected
       socketId: playerInfo.socketId, // New: Store socket ID, ensure playerInfo provides it
+      forfeited: false, // Initialize new field
       numMatches: 0, // Initialize new stat
       numPenalties: 0, // Initialize new stat
     };
+    console.log(`[GameManager] Dealt 4 cards to player ${playerInfo.name || playerId} during game initialization.`);
   });
 
   const initialGameState: ServerCheckGameState = {
@@ -136,6 +148,8 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
     }, {} as { [playerID: string]: string }),
     totalTurnsInRound: 0, // Initialize new stat
     lastRegularSwapInfo: null, // Initialize new field
+    playerTimers: {}, // Initialize new field
+    currentTurnSegment: 'initialAction', // Initialize new field
   };
 
   const newGameRoom: GameRoom = {
@@ -145,7 +159,7 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
   };
 
   activeGames[gameId] = newGameRoom;
-  console.log(`[GameManager] New game room created: ${gameId} with players: ${playerSetupData.map(p=>p.id).join(', ')}`);
+  console.log(`[GameManager] New game room created: ${gameId} with players: ${playerSetupData.map(p=>(p.name || p.id)).join(', ')}`);
   return newGameRoom;
 };
 
@@ -208,6 +222,7 @@ export const addPlayerToGame = (
     name: playerInfo.name,
     isConnected: true,
     socketId: socketId,
+    forfeited: false, // Initialize new field
     numMatches: 0, // Initialize new stat
     numPenalties: 0, // Initialize new stat
   };
@@ -217,7 +232,7 @@ export const addPlayerToGame = (
   
   activeGames[gameId] = gameRoom;
 
-  console.log(`[GameManager] Player ${playerInfo.id} added to game ${gameId}. Total players: ${Object.keys(gameRoom.gameState.players).length}`);
+  console.log(`[GameManager] Player ${playerInfo.name || playerInfo.id} (Socket: ${socketId}) added to game ${gameId}. Dealt 4 cards. Total players: ${Object.keys(gameRoom.gameState.players).length}`);
   return { success: true, gameRoom, newPlayerState };
 };
 
@@ -235,6 +250,10 @@ export const handleDrawFromDeck = (
   if (!player) {
     return { success: false, message: "Player not found in game." };
   }
+
+  // --- Start: Segment and Timer Logic ---
+  clearPlayerTimers(gameId, playerId); // Clear timer for 'initialAction' segment
+  // --- End: Segment and Timer Logic ---
 
   if (player.pendingDrawnCard) {
     return { success: false, message: "Player already has a pending drawn card." };
@@ -255,9 +274,14 @@ export const handleDrawFromDeck = (
   player.pendingDrawnCard = card;
   player.pendingDrawnCardSource = 'deck';
   
+  // --- Start: Segment and Timer Logic ---
+  gameRoom.gameState.currentTurnSegment = 'postDrawAction';
+  startTurnTimer(gameId, playerId); // Start timer for 'postDrawAction' segment
+  // --- End: Segment and Timer Logic ---
+
   activeGames[gameId] = gameRoom;
 
-  console.log(`[GameManager] Player ${playerId} drew from deck in game ${gameId}. Card: ${card.rank}${card.suit}. Deck size: ${gameRoom.gameState.deck.length}`);
+  console.log(`[GameManager] Player ${player.name || playerId} drew from deck in game ${gameId}. Card: ${card.rank}${card.suit}. Deck size: ${gameRoom.gameState.deck.length}. Segment: ${gameRoom.gameState.currentTurnSegment}.`);
   return { success: true, updatedGameState: gameRoom.gameState };
 };
 
@@ -275,6 +299,10 @@ export const handleDrawFromDiscard = (
   if (!player) {
     return { success: false, message: "Player not found in game." };
   }
+
+  // --- Start: Segment and Timer Logic ---
+  clearPlayerTimers(gameId, playerId); // Clear timer for 'initialAction' segment
+  // --- End: Segment and Timer Logic ---
 
   if (player.pendingDrawnCard) {
     return { success: false, message: "Player already has a pending drawn card." };
@@ -304,9 +332,14 @@ export const handleDrawFromDiscard = (
   player.pendingDrawnCard = card;
   player.pendingDrawnCardSource = 'discard';
   
+  // --- Start: Segment and Timer Logic ---
+  gameRoom.gameState.currentTurnSegment = 'postDrawAction';
+  startTurnTimer(gameId, playerId); // Start timer for 'postDrawAction' segment
+  // --- End: Segment and Timer Logic ---
+  
   activeGames[gameId] = gameRoom; 
 
-  console.log(`[GameManager] Player ${playerId} drew from discard in game ${gameId}. Card: ${card.rank}${card.suit}. Discard pile size: ${gameRoom.gameState.discardPile.length}`);
+  console.log(`[GameManager] Player ${player.name || playerId} drew from discard in game ${gameId}. Card: ${card.rank}${card.suit}. Discard pile size: ${gameRoom.gameState.discardPile.length}. Segment: ${gameRoom.gameState.currentTurnSegment}.`);
   return { success: true, updatedGameState: gameRoom.gameState };
 };
 
@@ -328,6 +361,11 @@ export const handleSwapAndDiscard = (
   player.pendingDrawnCard = null;
   player.pendingDrawnCardSource = null;
 
+  // --- Start: Segment and Timer Logic ---
+  clearPlayerTimers(gameId, playerId); // Clear timer for 'postDrawAction' segment
+  gameRoom.gameState.currentTurnSegment = null; // End of player's active turn segments
+  // --- End: Segment and Timer Logic ---
+
   // Add the card from hand to the discard pile
   gameRoom.gameState.discardPile.unshift(cardFromHand);
   gameRoom.gameState.discardPileIsSealed = false;
@@ -338,9 +376,9 @@ export const handleSwapAndDiscard = (
     handIndex: handIndex,
     timestamp: Date.now()
   };
-  console.log(`[GameManager] Recorded lastRegularSwapInfo for player ${playerId}, index ${handIndex}`);
+  console.log(`[GameManager] Recorded lastRegularSwapInfo for player ${player.name || playerId}, index ${handIndex}`);
 
-  console.log(`[GameManager] Player ${playerId} swapped drawn card with hand[${handIndex}]. Discarded: ${cardFromHand.rank}${cardFromHand.suit}`);
+  console.log(`[GameManager] Player ${player.name || playerId} swapped drawn card with hand[${handIndex}]. Discarded: ${cardFromHand.rank}${cardFromHand.suit}`);
 
   const potentialMatchers = Object.keys(gameRoom.gameState.players).filter(pId => {
     const p = gameRoom.gameState.players[pId];
@@ -361,7 +399,8 @@ export const handleSwapAndDiscard = (
   gameRoom.gameState.activePlayers = newActivePlayers;
 
   activeGames[gameId] = gameRoom;
-  console.log(`[GameManager] Player ${playerId} swapped and discarded in ${gameId}. Card: ${cardFromHand.rank}${cardFromHand.suit}. Phase -> matchingStage. Active matchers: ${Object.keys(newActivePlayers).join(', ')}`);
+  console.log(`[GameManager] Player ${player.name || playerId} swapped and discarded in ${gameId}. Card: ${cardFromHand.rank}${cardFromHand.suit}. Phase -> matchingStage. Active matchers: ${Object.keys(newActivePlayers).map(pId => gameRoom.gameState.players[pId]?.name || pId).join(', ')}`);
+  startMatchingStageTimer(gameId); // <<< START MATCHING STAGE TIMER
   return { success: true, updatedGameState: gameRoom.gameState };
 };
 
@@ -382,10 +421,16 @@ export const handleDiscardDrawnCard = (
   const drawnCard = player.pendingDrawnCard;
   player.pendingDrawnCard = null;
   player.pendingDrawnCardSource = null;
+  
+  // --- Start: Segment and Timer Logic ---
+  clearPlayerTimers(gameId, playerId); // Clear timer for 'postDrawAction' segment
+  gameRoom.gameState.currentTurnSegment = null; // End of player's active turn segments
+  // --- End: Segment and Timer Logic ---
+  
   gameRoom.gameState.discardPile.unshift(drawnCard);
   gameRoom.gameState.discardPileIsSealed = false;
   
-  console.log(`[GameManager] Player ${playerId} discarded drawn card: ${drawnCard.rank}${drawnCard.suit}`);
+  console.log(`[GameManager] Player ${player.name || playerId} discarded drawn card: ${drawnCard.rank}${drawnCard.suit}`);
 
   const potentialMatchers = Object.keys(gameRoom.gameState.players).filter(pId => {
     const p = gameRoom.gameState.players[pId];
@@ -406,7 +451,8 @@ export const handleDiscardDrawnCard = (
   gameRoom.gameState.activePlayers = newActivePlayers;
 
   activeGames[gameId] = gameRoom;
-  console.log(`[GameManager] Player ${playerId} discarded drawn card in ${gameId}. Card: ${drawnCard.rank}${drawnCard.suit}. Phase -> matchingStage. Active matchers: ${Object.keys(newActivePlayers).join(', ')}`);
+  console.log(`[GameManager] Player ${player.name || playerId} discarded drawn card in ${gameId}. Card: ${drawnCard.rank}${drawnCard.suit}. Phase -> matchingStage. Active matchers: ${Object.keys(newActivePlayers).map(pId => gameRoom.gameState.players[pId]?.name || pId).join(', ')}`);
+  startMatchingStageTimer(gameId); // <<< START MATCHING STAGE TIMER
   return { success: true, updatedGameState: gameRoom.gameState };
 };
 
@@ -435,7 +481,7 @@ export const handleAttemptMatch = (
   const cardY = player.hand[handIndex]; 
   const cardX = cardToMatch; 
 
-  console.log(`[GameManager] handleAttemptMatch: Player ${playerId} attempting to match.`);
+  console.log(`[GameManager] handleAttemptMatch: Player ${player.name || playerId} attempting to match.`);
   console.log(`[GameManager] Card from Hand (cardY at index ${handIndex}): ${cardY ? cardY.rank + cardY.suit : 'undefined'}`);
   console.log(`[GameManager] Card to Match (cardX from discard): ${cardX ? cardX.rank + cardX.suit : 'undefined'}`);
 
@@ -478,7 +524,7 @@ export const handleAttemptMatch = (
       G.finalTurnsTaken = 0; 
       }
       isAutoCheck = true;
-      console.log(`[GameManager] Player ${playerId} emptied hand on match. Auto-Check!`);
+      console.log(`[GameManager] Player ${player.name || playerId} emptied hand on match. Auto-Check!`);
     }
 
     G.matchResolvedDetails = {
@@ -494,7 +540,7 @@ export const handleAttemptMatch = (
 
   } else {
     // Cards do not match. Player incurs a penalty and their attempt for this opportunity is over.
-    console.log(`[GameManager] Player ${playerId} failed match attempt in game ${gameId}. Cards ${cardY.rank} and ${cardX.rank} do not match.`);
+    console.log(`[GameManager] Match FAILED for player ${player.name || playerId} in game ${gameId}. Card ${cardY.rank}${cardY.suit} (hand) does not match ${cardX.rank}${cardX.suit} (discard).`);
     
     // Penalty: Draw a card from the deck
     if (G.deck.length > 0) {
@@ -502,12 +548,12 @@ export const handleAttemptMatch = (
       if (penaltyCard) {
         player.hand.push(penaltyCard);
         player.numPenalties++; // Increment penalties
-        console.log(`[GameManager] Player ${playerId} drew a penalty card: ${penaltyCard.rank}${penaltyCard.suit}. Hand size: ${player.hand.length}. Deck size: ${G.deck.length}`);
+        console.log(`[GameManager] Player ${player.name || playerId} drew a penalty card: ${penaltyCard.rank}${penaltyCard.suit}. Hand size: ${player.hand.length}. Deck size: ${G.deck.length}`);
       } else {
-        console.warn(`[GameManager] Penalty card draw failed for ${playerId} in game ${gameId} - deck pop returned undefined despite length > 0.`);
+        console.warn(`[GameManager] Penalty card draw failed for ${player.name || playerId} in game ${gameId} - deck pop returned undefined despite length > 0.`);
       }
     } else {
-      console.warn(`[GameManager] Player ${playerId} should receive a penalty card in game ${gameId}, but deck is empty.`);
+      console.warn(`[GameManager] Player ${player.name || playerId} should receive a penalty card in game ${gameId}, but deck is empty.`);
       // Potentially handle game-specific rules for empty deck penalties if any.
     }
 
@@ -529,9 +575,11 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
 
   if (G.matchResolvedDetails) {
     const { byPlayerId, isAutoCheck, abilityResolutionRequired } = G.matchResolvedDetails;
-    console.log(`[GameManager] checkMatchingStageEnd: Processing resolved match by ${byPlayerId} in game ${gameId}.`);
+    const matchPlayerName = G.players[byPlayerId]?.name || byPlayerId;
+    console.log(`[GameManager] checkMatchingStageEnd: Processing resolved match by ${matchPlayerName} in game ${gameId}. AutoCheck: ${isAutoCheck}, AbilityRequired: ${abilityResolutionRequired}.`);
 
     G.matchingOpportunityInfo = null; 
+    clearMatchingStageTimer(gameId); // <<< CLEAR MATCHING STAGE TIMER
     if (G.activePlayers[byPlayerId]) {
         delete G.activePlayers[byPlayerId]; 
     }
@@ -554,7 +602,7 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
     } else {
       // Match successful, no abilities/autocheck
       if (G.playerWhoCalledCheck) { // If final turns ARE active
-        console.log(`[GameManager] checkMatchingStageEnd (after match in final turns): Match by ${byPlayerId} successful. Phase remains finalTurnsPhase. Player's final turn action complete.`);
+        console.log(`[GameManager] checkMatchingStageEnd (after match in final turns): Match by ${matchPlayerName} successful. Phase remains finalTurnsPhase. Player's final turn action complete.`);
         G.currentPhase = 'finalTurnsPhase'; // Explicitly ensure it stays finalTurnsPhase
         G.currentPlayerId = byPlayerId;   // Player who made the match
         // This player's "active" part of the turn is done. They don't get to do more actions.
@@ -575,9 +623,10 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
                                 Object.values(G.activePlayers).some(status => status === 'awaitingMatchAction');
 
   if (!remainingActiveMatchers && G.matchingOpportunityInfo) { 
-    console.log(`[GameManager] checkMatchingStageEnd: All players passed or resolved for game ${gameId}. Ending matching stage.`);
+    console.log(`[GameManager] checkMatchingStageEnd: All players passed or resolved for game ${gameId}. Ending matching stage for card ${G.matchingOpportunityInfo.cardToMatch.rank}${G.matchingOpportunityInfo.cardToMatch.suit} (discarded by ${G.players[G.matchingOpportunityInfo.originalPlayerID]?.name || G.matchingOpportunityInfo.originalPlayerID}).`);
     const { cardToMatch, originalPlayerID } = G.matchingOpportunityInfo;
     G.matchingOpportunityInfo = null;
+    clearMatchingStageTimer(gameId); // <<< CLEAR MATCHING STAGE TIMER
 
     const originalDiscarder = G.players[originalPlayerID];
     const isOriginalDiscardSpecial = originalDiscarder && cardToMatch && [Rank.King, Rank.Queen, Rank.Jack].includes(cardToMatch.rank);
@@ -636,7 +685,7 @@ export const handlePassMatch = (
   if (G.currentPhase !== 'matchingStage') return { success: false, message: "Not in matching stage." };
   if (!G.activePlayers || !G.activePlayers[playerId]) return { success: false, message: "Player not active for matching or already passed." };
 
-  console.log(`[GameManager] Player ${playerId} passed in matching stage for game ${gameId}.`);
+  console.log(`[GameManager] Player ${G.players[playerId]?.name || playerId} passed in matching stage for game ${gameId}.`);
   delete G.activePlayers[playerId]; 
 
   const updatedGameState = checkMatchingStageEnd(gameId);
@@ -680,7 +729,7 @@ export const handleCallCheck = (
   }
   G.finalTurnsTaken = 0;
 
-  console.log(`[GameManager] Player ${playerId} called Check in game ${gameId}. Transitioning to finalTurnsPhase.`);
+  console.log(`[GameManager] Player ${G.players[playerId]?.name || playerId} called Check in game ${gameId}. Transitioning to finalTurnsPhase.`);
   
   setupFinalTurnsPhase(gameId, playerId); 
 
@@ -694,8 +743,8 @@ const setupNextPlayTurn = (gameId: string): ServerCheckGameState | null => {
   if (!gameRoom) { console.error(`[GameManager] setupNextPlayTurn: Game room ${gameId} not found.`); return null; }
   const G = gameRoom.gameState;
 
-  clearGlobalAbilityTargetsIfNeeded(G); // Clear at start of new turn setup
-  clearTransientVisualCues(G); // NEW: Clear transient cues
+  clearGlobalAbilityTargetsIfNeeded(G);
+  clearTransientVisualCues(G);
 
   if (G.playerWhoCalledCheck && G.currentPhase === 'finalTurnsPhase') {
     console.log(`[GameManager] setupNextPlayTurn: In finalTurnsPhase for game ${gameId}. Calling continueOrEndFinalTurns.`);
@@ -714,7 +763,7 @@ const setupNextPlayTurn = (gameId: string): ServerCheckGameState | null => {
 
   let currentPlayerIndex = G.turnOrder.indexOf(G.currentPlayerId);
   if (currentPlayerIndex === -1) {
-    console.warn(`[GameManager] setupNextPlayTurn: Current player ${G.currentPlayerId} not in turn order for game ${gameId}. Starting from first player.`);
+    console.warn(`[GameManager] setupNextPlayTurn: Current player ${G.players[G.currentPlayerId]?.name || G.currentPlayerId} not in turn order for game ${gameId}. Starting from first player.`);
     G.currentPlayerId = G.turnOrder[0];
     currentPlayerIndex = G.turnOrder.indexOf(G.currentPlayerId); 
   }
@@ -727,7 +776,8 @@ const setupNextPlayTurn = (gameId: string): ServerCheckGameState | null => {
       do {
         currentPlayerIndex = (currentPlayerIndex + 1) % G.turnOrder.length;
         const potentialNextPlayerId = G.turnOrder[currentPlayerIndex];
-        if (!G.players[potentialNextPlayerId]?.isLocked) {
+        const potentialPlayer = G.players[potentialNextPlayerId];
+        if (potentialPlayer && !potentialPlayer.isLocked && potentialPlayer.isConnected && !potentialPlayer.forfeited) { // Added forfeited check
           nextPlayerId = potentialNextPlayerId;
           foundNextPlayer = true;
           break;
@@ -742,13 +792,13 @@ const setupNextPlayTurn = (gameId: string): ServerCheckGameState | null => {
   
 
   if (!foundNextPlayer) {
-    console.warn(`[GameManager] setupNextPlayTurn: No unlocked player found in game ${gameId}.`);
+    console.warn(`[GameManager] setupNextPlayTurn: No unlocked, connected, and non-forfeited player found in game ${gameId}.`);
     if (G.playerWhoCalledCheck) { 
         return setupScoringPhase(gameId); 
     }
     G.currentPhase = 'errorOrStalemate'; 
     G.activePlayers = {}; G.currentPlayerId = "";
-    console.error(`[GameManager] Game ${gameId} is stuck. All players locked, no check path to scoring defined here.`);
+    console.error(`[GameManager] Game ${gameId} is stuck. All players locked, disconnected, or forfeited, no check path to scoring defined here.`);
     activeGames[gameId] = gameRoom; return G;
   }
   
@@ -756,12 +806,15 @@ const setupNextPlayTurn = (gameId: string): ServerCheckGameState | null => {
   G.currentPlayerId = nextPlayerId;
   G.activePlayers = { [nextPlayerId]: 'playPhaseActive' };
   G.discardPileIsSealed = false; 
-  if (!G.playerWhoCalledCheck) { // Only count as a new turn start if not in final turns phase already initiated
+  if (!G.playerWhoCalledCheck) {
     G.totalTurnsInRound++;
     console.log(`[GameManager] Total turns in round for game ${gameId} incremented to: ${G.totalTurnsInRound} (playPhase start)`);
   }
+  G.currentTurnSegment = 'initialAction'; // Set for the new turn
 
-  console.log(`[GameManager] game ${gameId} setup for next play turn. Player: ${G.currentPlayerId}.`);
+  startTurnTimer(gameId, nextPlayerId); // <<< ADD THIS LINE
+
+  console.log(`[GameManager] game ${gameId} setup for next play turn. Player: ${G.players[G.currentPlayerId]?.name || G.currentPlayerId}. Segment: ${G.currentTurnSegment}.`);
   activeGames[gameId] = gameRoom; 
   return G;
 };
@@ -779,14 +832,14 @@ const setupFinalTurnsPhase = (gameId: string, checkerPlayerId: string): ServerCh
   G.finalTurnsTaken = 0; 
     // Increment total turns when final turns phase is *first* initiated
     G.totalTurnsInRound++; 
-    console.log(`[GameManager] Total turns in round for game ${gameId} incremented to: ${G.totalTurnsInRound} (finalTurnsPhase initiated)`);
+    console.log(`[GameManager] Total turns in round for game ${gameId} incremented to: ${G.totalTurnsInRound} (finalTurnsPhase initiated by ${G.players[checkerPlayerId]?.name || checkerPlayerId})`);
   }
 
-  console.log(`[GameManager] setupFinalTurnsPhase: Game ${gameId} entering/re-evaluating final turns. Original Checker: ${G.playerWhoCalledCheck}. Initial/Current turns taken: ${G.finalTurnsTaken}. Player who triggered this call: ${checkerPlayerId}.`);
+  console.log(`[GameManager] setupFinalTurnsPhase: Game ${gameId} entering/re-evaluating final turns. Original Checker: ${G.players[G.playerWhoCalledCheck]?.name || G.playerWhoCalledCheck}. Initial/Current turns taken: ${G.finalTurnsTaken}. Player who triggered this call: ${G.players[checkerPlayerId]?.name || checkerPlayerId}.`);
     
   let checkerIndex = G.turnOrder.indexOf(G.playerWhoCalledCheck);
   if (checkerIndex === -1) {
-    console.error(`[GameManager] setupFinalTurnsPhase: Original checker ${G.playerWhoCalledCheck} not in turn order for game ${gameId}.`);
+    console.error(`[GameManager] setupFinalTurnsPhase: Original checker ${G.players[G.playerWhoCalledCheck]?.name || G.playerWhoCalledCheck} not in turn order for game ${gameId}.`);
     G.currentPhase = 'error'; G.activePlayers = {}; G.currentPlayerId = "";
     activeGames[gameId] = gameRoom; return G;
   }
@@ -799,8 +852,9 @@ const setupFinalTurnsPhase = (gameId: string, checkerPlayerId: string): ServerCh
   do {
     currentTurnIdx = (currentTurnIdx + 1) % G.turnOrder.length;
     const candidateId = G.turnOrder[currentTurnIdx];
-    console.log(`[DEBUG_FinalTurns] Attempt ${attempts + 1}: Candidate is ${candidateId} (index ${currentTurnIdx}). Is locked: ${G.players[candidateId]?.isLocked}. Is checker: ${candidateId === G.playerWhoCalledCheck}`);
-    if (candidateId !== G.playerWhoCalledCheck && !G.players[candidateId]?.isLocked) {
+    const candidatePlayer = G.players[candidateId];
+    console.log(`[DEBUG_FinalTurns] Attempt ${attempts + 1}: Candidate is ${candidateId} (index ${currentTurnIdx}). Is locked: ${candidatePlayer?.isLocked}. Is checker: ${candidateId === G.playerWhoCalledCheck}. Is connected: ${candidatePlayer?.isConnected}. Is forfeited: ${candidatePlayer?.forfeited}`);
+    if (candidatePlayer && candidateId !== G.playerWhoCalledCheck && !candidatePlayer.isLocked && candidatePlayer.isConnected && !candidatePlayer.forfeited) { // Added forfeited check
       nextPlayerId = candidateId;
       foundNextPlayer = true;
       console.log(`[DEBUG_FinalTurns] Found next player: ${nextPlayerId}`);
@@ -810,16 +864,18 @@ const setupFinalTurnsPhase = (gameId: string, checkerPlayerId: string): ServerCh
   } while (attempts < G.turnOrder.length);
 
   if (!foundNextPlayer) {
-    // If all other players are locked, go straight to scoring
-    console.error(`[GameManager] setupFinalTurnsPhase: No eligible player found for final turns in game ${gameId}. Moving to scoring.`);
+    console.error(`[GameManager] setupFinalTurnsPhase: No eligible (unlocked, connected, non-forfeited, not checker) player found for final turns in game ${gameId}. Moving to scoring.`);
     return setupScoringPhase(gameId);
   }
 
   G.currentPlayerId = nextPlayerId;
   G.activePlayers = { [nextPlayerId]: 'finalTurnActive' }; 
   G.discardPileIsSealed = false; 
+  G.currentTurnSegment = 'initialAction'; // Set for the new final turn
 
-  console.log(`[GameManager] Game ${gameId} setup for final turns. Player: ${G.currentPlayerId}. Total final turns taken: ${G.finalTurnsTaken}`);
+  startTurnTimer(gameId, nextPlayerId); // <<< ADD THIS LINE
+
+  console.log(`[GameManager] Game ${gameId} setup for final turns. Player: ${G.players[G.currentPlayerId]?.name || G.currentPlayerId}. Total final turns taken: ${G.finalTurnsTaken}. Segment: ${G.currentTurnSegment}.`);
   activeGames[gameId] = gameRoom;
   return G;
 };
@@ -863,8 +919,16 @@ const setupAbilityResolutionPhase = (gameId: string): ServerCheckGameState | nul
   G.currentPlayerId = playerToActId;
   G.activePlayers = { [playerToActId]: 'abilityResolutionActive' };
   G.discardPileIsSealed = true;
+  // G.currentTurnSegment = 'abilityAction'; // Or some other appropriate segment if abilities have their own timed segments
+  // For now, assuming ability resolution uses the standard turn timer initiated here.
+  // If ability resolution is very quick or doesn't need its own distinct timer segment, 
+  // currentTurnSegment might be null or inherited from the previous player if not explicitly set.
+  // Let's set it to null for now, assuming ability resolution isn't a 'turn segment' in the same way.
+  G.currentTurnSegment = null; 
 
-  console.log(`[GameManager] Game ${gameId} setup for ability resolution. Player: ${playerToActId}, Ability: ${abilityToResolve.card.rank} from ${abilityToResolve.source}.`);
+  startTurnTimer(gameId, playerToActId); // <<< ADD THIS LINE (if abilities should be timed)
+
+  console.log(`[GameManager] Game ${gameId} setup for ability resolution. Player: ${playerToActId}, Ability: ${abilityToResolve.card.rank} from ${abilityToResolve.source}. Segment: ${G.currentTurnSegment}.`);
   activeGames[gameId] = gameRoom;
   return G;
 };
@@ -874,9 +938,6 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
   if (!gameRoom) { console.error(`[GameManager] continueOrEndFinalTurns: Game room ${gameId} not found.`); return null; }
   const G = gameRoom.gameState;
 
-  // No clear here, as it's a continuation. Clearing happens when it *ends* or a *new* final turn player is set up.
-  // However, if we are moving to scoring, cues should be cleared.
-
   console.log(`[DEBUG_FinalTurns] Entering continueOrEndFinalTurns. Current player (turn just ended): ${G.currentPlayerId}, Current Phase: ${G.currentPhase}, Player Who Called Check: ${G.playerWhoCalledCheck}`);
 
   if (G.currentPhase !== 'finalTurnsPhase' || !G.playerWhoCalledCheck) {
@@ -885,22 +946,26 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
   }
 
   const playerWhoseTurnJustEnded = G.currentPlayerId;
+  const playerNameOfTurnEnded = G.players[playerWhoseTurnJustEnded]?.name || playerWhoseTurnJustEnded;
   console.log(`[DEBUG_FinalTurns] finalTurnsTaken (before increment): ${G.finalTurnsTaken === undefined ? 'undefined' : G.finalTurnsTaken}`);
   if (!G.finalTurnsTaken) G.finalTurnsTaken = 0;
   G.finalTurnsTaken += 1;
-  console.log(`[GameManager] continueOrEndFinalTurns: Player ${playerWhoseTurnJustEnded} completed final turn. finalTurnsTaken (after increment): ${G.finalTurnsTaken} for game ${gameId}.`);
+  console.log(`[GameManager] continueOrEndFinalTurns: Player ${playerNameOfTurnEnded} completed final turn. finalTurnsTaken (after increment): ${G.finalTurnsTaken} for game ${gameId}.`);
 
-  const eligiblePlayerIds = G.turnOrder.filter(pid => pid !== G.playerWhoCalledCheck && !G.players[pid]?.isLocked);
+  const eligiblePlayerIds = G.turnOrder.filter(pid => {
+    const p = G.players[pid];
+    return p && pid !== G.playerWhoCalledCheck && !p.isLocked && p.isConnected && !p.forfeited; // Added forfeited check
+  });
   const numEligiblePlayers = eligiblePlayerIds.length;
-  console.log(`[DEBUG_FinalTurns] Eligible players for final turns: ${eligiblePlayerIds.join(', ') || 'NONE'}. Total numEligiblePlayers: ${numEligiblePlayers}`);
+  console.log(`[DEBUG_FinalTurns] Eligible players for final turns (unlocked, connected, non-forfeited, not checker): ${eligiblePlayerIds.join(', ') || 'NONE'}. Total numEligiblePlayers: ${numEligiblePlayers}`);
 
   const allTurnsTaken = G.finalTurnsTaken >= numEligiblePlayers;
   console.log(`[DEBUG_FinalTurns] Comparison: finalTurnsTaken (${G.finalTurnsTaken}) >= numEligiblePlayers (${numEligiblePlayers})? Result: ${allTurnsTaken}`);
 
   if (allTurnsTaken) {
     console.log(`[GameManager] continueOrEndFinalTurns: All eligible players (${numEligiblePlayers}) have taken their final turn in game ${gameId}. Proceeding to scoring.`);
-    clearGlobalAbilityTargetsIfNeeded(G); // Clear before moving to scoring
-    clearTransientVisualCues(G); // NEW: Clear transient cues before scoring
+    clearGlobalAbilityTargetsIfNeeded(G);
+    clearTransientVisualCues(G);
     return setupScoringPhase(gameId);
   } else {
     let lastTurnPlayerIndex = G.turnOrder.indexOf(playerWhoseTurnJustEnded);
@@ -911,8 +976,9 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
     do {
       lastTurnPlayerIndex = (lastTurnPlayerIndex + 1) % G.turnOrder.length;
       const candidateId = G.turnOrder[lastTurnPlayerIndex];
-      console.log(`[DEBUG_FinalTurns] Attempt ${attempts + 1}: Candidate is ${candidateId} (index ${lastTurnPlayerIndex}). Is locked: ${G.players[candidateId]?.isLocked}. Is checker: ${candidateId === G.playerWhoCalledCheck}`);
-      if (candidateId !== G.playerWhoCalledCheck && !G.players[candidateId]?.isLocked) {
+      const candidatePlayer = G.players[candidateId];
+      console.log(`[DEBUG_FinalTurns] Attempt ${attempts + 1}: Candidate is ${candidateId} (index ${lastTurnPlayerIndex}). Is locked: ${candidatePlayer?.isLocked}. Is checker: ${candidateId === G.playerWhoCalledCheck}. Is connected: ${candidatePlayer?.isConnected}. Is forfeited: ${candidatePlayer?.forfeited}`);
+      if (candidatePlayer && candidateId !== G.playerWhoCalledCheck && !candidatePlayer.isLocked && candidatePlayer.isConnected && !candidatePlayer.forfeited) { // Added forfeited check
         nextPlayerId = candidateId;
         foundNextPlayer = true;
         console.log(`[DEBUG_FinalTurns] Found next player: ${nextPlayerId}`);
@@ -922,19 +988,21 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
     } while (attempts < G.turnOrder.length);
 
     if (!foundNextPlayer) {
-      console.error(`[GameManager] continueOrEndFinalTurns: Logic error - could not find next eligible player for final turn in game ${gameId}, but not all turns taken (finalTurnsTaken: ${G.finalTurnsTaken}, numEligiblePlayers: ${numEligiblePlayers}). Forcing scoring phase as fallback.`);
+      console.error(`[GameManager] continueOrEndFinalTurns: Logic error - could not find next eligible (unlocked, connected, non-forfeited, not checker) player for final turn in game ${gameId}, but not all turns taken (finalTurnsTaken: ${G.finalTurnsTaken}, numEligiblePlayers: ${numEligiblePlayers}). Forcing scoring phase as fallback.`);
       return setupScoringPhase(gameId);
     }
 
     G.currentPlayerId = nextPlayerId;
     G.activePlayers = { [nextPlayerId]: 'finalTurnActive' };
     G.discardPileIsSealed = false;
-    clearGlobalAbilityTargetsIfNeeded(G); // Clear for the start of the next player's final turn
-    clearTransientVisualCues(G); // NEW: Clear for the start of the next player's final turn
-    G.totalTurnsInRound++; // Increment for each final turn taken by a different player
-    console.log(`[GameManager] Total turns in round for game ${gameId} incremented to: ${G.totalTurnsInRound} (final turn for ${nextPlayerId})`);
+    clearGlobalAbilityTargetsIfNeeded(G);
+    clearTransientVisualCues(G);
+    G.totalTurnsInRound++;
+    console.log(`[GameManager] Total turns in round for game ${gameId} incremented to: ${G.totalTurnsInRound} (final turn for ${G.players[nextPlayerId]?.name || nextPlayerId})`);
+    
+    startTurnTimer(gameId, nextPlayerId); // <<< ADD THIS LINE
 
-    console.log(`[GameManager] Game ${gameId} continuing final turns. Next player: ${G.currentPlayerId}. Total final turns taken: ${G.finalTurnsTaken}`);
+    console.log(`[GameManager] Game ${gameId} continuing final turns. Next player: ${G.players[G.currentPlayerId]?.name || G.currentPlayerId}. Total final turns taken: ${G.finalTurnsTaken}. Segment: ${G.currentTurnSegment}.`);
     activeGames[gameId] = gameRoom;
     return G;
   }
@@ -995,7 +1063,9 @@ G.gameover = {
   };
   G.currentPhase = 'gameOver';
 
-  console.log(`[GameManager] Game ${gameId} scoring complete. Round Winner: ${G.roundWinner}. Scores:`, scores, `Total Turns: ${G.totalTurnsInRound}, Player Stats:`, playerStatsForGameOver);
+  const roundWinnerName = G.roundWinner ? (G.players[G.roundWinner]?.name || G.roundWinner) : "None (Tie or Error)";
+  console.log(`[GameManager] Game ${gameId} scoring complete. Round Winner: ${roundWinnerName}. Scores:`, scores, `Total Turns: ${G.totalTurnsInRound}, Player Stats:`, playerStatsForGameOver);
+  clearAllGameTimers(gameId); // Ensure all timers are cleared when game definitively ends through scoring.
   activeGames[gameId] = gameRoom;
   return G;
 };
@@ -1018,21 +1088,23 @@ export const handleResolveSpecialAbility = (
   const G = gameRoom.gameState;
   if (!G.pendingAbilities || G.pendingAbilities.length === 0) {
     G.globalAbilityTargets = null; // Clear if no abilities
+    console.log(`[GameManager-handleResolveSpecialAbility] No pending abilities for player ${G.players[playerId]?.name || playerId} to resolve.`);
     return { success: false, message: "No pending abilities to resolve." };
   }
   // Do not shift yet, we might modify it for multi-stage
   let pendingAbility = G.pendingAbilities[0]; 
 
   if (pendingAbility.playerId !== playerId) {
+    console.warn(`[GameManager-handleResolveSpecialAbility] Player ${G.players[pendingAbility.playerId]?.name || pendingAbility.playerId} attempting to resolve ability, but it's ${playerId}'s turn for ability.`);
     return { success: false, message: "Not your turn to resolve an ability." };
   }
-
-  const player = G.players[playerId];
+  
   const abilityRank = pendingAbility.card.rank;
   let message = `${abilityRank} ability action.`;
+  console.log(`[GameManager-handleResolveSpecialAbility] Player ${G.players[playerId]?.name || playerId} starting resolution for ${abilityRank}${pendingAbility.card.suit} from ${pendingAbility.source}. Stage: ${pendingAbility.currentAbilityStage || 'default'}. Args:`, JSON.stringify(abilityResolutionArgs, null, 2));
 
   // Handle player being locked (fizzles entire ability)
-  if (!player || player.isLocked) {
+  if (!G.players[playerId] || G.players[playerId].isLocked) {
     G.lastResolvedAbilityCardForCleanup = pendingAbility.card;
     G.lastResolvedAbilitySource = pendingAbility.source;
     G.lastPlayerToResolveAbility = pendingAbility.playerId;
@@ -1056,8 +1128,8 @@ export const handleResolveSpecialAbility = (
   // Handle skips
   if (abilityResolutionArgs?.skipAbility) {
     const skipType = abilityResolutionArgs.skipType || 'full';
-    message = `Player chose to skip ${abilityRank} ability stage: ${skipType}.`;
-    console.log(`[GameManager] Player ${playerId} skipping ${abilityRank}, type: ${skipType}`);
+    message = `Player ${G.players[playerId]?.name || playerId} chose to skip ${abilityRank} ability stage: ${skipType}.`;
+    console.log(`[GameManager] Player ${G.players[playerId]?.name || playerId} skipping ${abilityRank}, type: ${skipType}`);
 
     if ((abilityRank === Rank.King || abilityRank === Rank.Queen) && skipType === 'peek' && pendingAbility.currentAbilityStage === 'peek') {
       pendingAbility.currentAbilityStage = 'swap'; // Advance to swap stage
@@ -1225,7 +1297,7 @@ export const handleResolveSpecialAbility = (
   }
 
   // Fallback if somehow no stage matched
-  console.warn(`[GameManager] handleResolveSpecialAbility: Ability ${abilityRank} for player ${playerId} did not match any processing stage. Current stage on ability: ${pendingAbility.currentAbilityStage}`);
+  console.warn(`[GameManager] handleResolveSpecialAbility: Ability ${abilityRank} for player ${G.players[playerId]?.name || playerId} did not match any processing stage. Current stage on ability: ${pendingAbility.currentAbilityStage}`);
   G.pendingAbilities.shift(); // Remove to prevent loop
   G.globalAbilityTargets = null; // Clear targets
   let fallbackState = setupAbilityResolutionPhase(gameId) ?? setupNextPlayTurn(gameId) ?? G; 
@@ -1252,14 +1324,14 @@ export const handleDeclareReadyForPeek = (
   // we might just return current state.
   // However, if they are clicking ready again, it implies they want to ensure they are marked.
   if (player.isReadyForInitialPeek && gameRoom.gameState.initialPeekAllReadyTimestamp) {
-    console.log(`[GameManager] Player ${playerId} already ready and peek is/was active in game ${gameId}.`);
+    console.log(`[GameManager] Player ${player.name || playerId} already ready and peek is/was active in game ${gameId}.`);
     // Optionally, could return a specific message or just the current state.
     // If cardsToPeek is still set on player, they will see them.
     return { success: true, updatedGameState: gameRoom.gameState, peekJustStarted: false };
   }
 
   player.isReadyForInitialPeek = true;
-  console.log(`[GameManager] Player ${playerId} marked as ready for peek in game ${gameId}.`);
+  console.log(`[GameManager] Player ${player.name || playerId} marked as ready for peek in game ${gameId}.`);
 
   let allPlayersReady = true;
   // Check against turnOrder to ensure we consider all expected players
@@ -1333,12 +1405,12 @@ export const handleDeclareReadyForPeek = (
     // This case means all players were already set to ready, and the peek process has started (timestamp is set).
     // This can happen if a player sends 'declareReadyForPeek' again while peek is active.
     // We send them the current state which should include their cardsToPeek.
-    console.log(`[GameManager] Player ${playerId} declared ready, but peek already in progress for ${gameId}. Sending current peek state.`);
+    console.log(`[GameManager] Player ${player.name || playerId} declared ready, but peek already in progress for ${gameId}. Sending current peek state.`);
     return { success: true, updatedGameState: gameRoom.gameState, peekJustStarted: true }; // Indicate peek is active
   }
 
   // If not all players are ready yet, but this player is now ready
-  console.log(`[GameManager] Player ${playerId} is ready for peek in game ${gameId}. Waiting for other players.`);
+  console.log(`[GameManager] Player ${player.name || playerId} is ready for peek in game ${gameId}. Waiting for other players.`);
   return { success: true, updatedGameState: gameRoom.gameState, peekJustStarted: false };
 };
 
@@ -1432,6 +1504,9 @@ export const generatePlayerView = (
       numMatches: serverPlayerState.numMatches, 
       numPenalties: serverPlayerState.numPenalties, 
       explicitlyRevealedCards: undefined, 
+      forfeited: serverPlayerState.forfeited, // Pass through forfeited status
+      turnTimerExpiresAt: fullGameState.playerTimers?.[pId]?.turnTimerExpiresAt,
+      disconnectGraceTimerExpiresAt: fullGameState.playerTimers?.[pId]?.disconnectGraceTimerExpiresAt,
     };
 
     if (pId !== viewingPlayerId && revealsForThisPlayer) {
@@ -1540,8 +1615,16 @@ export const markPlayerAsDisconnected = (gameId: string, playerId: string): { su
     player.isConnected = false;
     // We keep player.socketId as is, it represents the *last known* socketId.
     // This might be useful for logging or if the same socket reconnects quickly.
-    console.log(`[GameManager] Player ${playerId} in game ${gameId} marked as disconnected. Last socket ID: ${player.socketId}`);
+    console.log(`[GameManager] Player ${player.name || playerId} in game ${gameId} marked as disconnected. Last socket ID: ${player.socketId}`);
+    
+    // Start disconnect grace timer only if the player is not already forfeited.
+    if (!player.forfeited) {
+      startDisconnectGraceTimer(gameId, playerId);
+    } 
+
     activeGames[gameId] = gameRoom; 
+    // The broadcastService.triggerBroadcast will be called by index.ts after this function returns,
+    // and it will include the updated gameState with disconnectGraceTimerExpiresAt if set.
     return { success: true, updatedGameState: gameRoom.gameState, playerWasFound: true };
   }
   return { success: false, playerWasFound: false };
@@ -1562,20 +1645,29 @@ export const attemptRejoin = (
     return { success: false, message: "Player ID not found in this game." };
   }
 
+  if (playerState.forfeited) {
+    return { success: false, message: "Cannot rejoin: player is forfeited." };
+  }
+
   if (playerState.isConnected && playerState.socketId !== newSocketId) {
-    console.warn(`[GameManager] Player ${playerId} (Game ${gameId}) is rejoining with new socket ${newSocketId}, but was already connected with socket ${playerState.socketId}. Updating to new socket ID.`);
+    console.warn(`[GameManager] Player ${playerState.name || playerId} (Game ${gameId}) is rejoining with new socket ${newSocketId}, but was already connected with socket ${playerState.socketId}. Updating to new socket ID.`);
   } else if (playerState.isConnected && playerState.socketId === newSocketId) {
-     console.log(`[GameManager] Player ${playerId} (Game ${gameId}) rejoining with same socket ${newSocketId} and already connected. No state change.`);
+     console.log(`[GameManager] Player ${playerState.name || playerId} (Game ${gameId}) rejoining with same socket ${newSocketId} and already connected. No state change.`);
      return { success: true, message: "Already connected.", gameState: gameRoom.gameState };
   } else if (!playerState.isConnected) {
-     console.log(`[GameManager] Player ${playerId} (Game ${gameId}) was disconnected, rejoining with socket ${newSocketId}.`);
+     console.log(`[GameManager] Player ${playerState.name || playerId} (Game ${gameId}) was disconnected, rejoining with socket ${newSocketId}.`);
   }
 
   playerState.isConnected = true;
   playerState.socketId = newSocketId;
+
+  if (!playerState.forfeited) { // Only clear grace timer if not forfeited
+    clearDisconnectGraceTimer(gameId, playerId); // Clear any active grace timer on successful rejoin
+  }
+
   activeGames[gameId] = gameRoom; 
 
-  console.log(`[GameManager] Player ${playerId} successfully rejoined game ${gameId} with new socket ID ${newSocketId}.`);
+  console.log(`[GameManager] Player ${playerState.name || playerId} successfully rejoined game ${gameId} with new socket ID ${newSocketId}.`);
   return { success: true, message: "Rejoined successfully.", gameState: gameRoom.gameState };
 };
 
@@ -1679,3 +1771,507 @@ const clearTransientVisualCues = (gameState: ServerCheckGameState) => {
 
 // Example of use in setupNextPlayTurn (similar logic can be added to other phase setup functions)
 // ... rest of the file (ensure all calls to clearGlobalAbilityTargetsIfNeeded are just clearGlobalAbilityTargetsIfNeeded(G) without other args)
+
+// --- TIMER FUNCTIONS ---
+
+const clearPlayerTimers = (gameId: string, playerId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  const timerKey = `${gameId}_${playerId}`;
+
+  if (activeTurnTimerIds.has(timerKey)) {
+    clearTimeout(activeTurnTimerIds.get(timerKey)!);
+    activeTurnTimerIds.delete(timerKey);
+    console.log(`[GameManager-Timer] Cleared active turn timer for ${timerKey}`);
+  }
+
+  // Clear expiration from shared game state if it exists
+  if (gameRoom && gameRoom.gameState.playerTimers && gameRoom.gameState.playerTimers[playerId]) {
+    delete gameRoom.gameState.playerTimers[playerId].turnTimerExpiresAt;
+    // If no other timer info exists for this player (e.g. disconnect timer), remove the player entry
+    if (Object.keys(gameRoom.gameState.playerTimers[playerId]).length === 0) {
+      delete gameRoom.gameState.playerTimers[playerId];
+    }
+    console.log(`[GameManager-Timer] Cleared turn timer expiration for player ${playerId} in game ${gameId} from gameState.`);
+  }
+  // We'll add disconnectGraceTimerId clearing later
+};
+
+const handleTurnTimeout = (gameId: string, playerId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  if (!gameRoom) {
+    console.warn(`[GameManager-Timer] handleTurnTimeout: Game ${gameId} not found.`);
+    return;
+  }
+  const G = gameRoom.gameState;
+  const player = G.players[playerId];
+  const playerName = player?.name || playerId;
+
+  // Ensure timer is cleared from the map and state
+  const timerKey = `${gameId}_${playerId}`;
+  if (activeTurnTimerIds.has(timerKey)) {
+    clearTimeout(activeTurnTimerIds.get(timerKey)!);
+    activeTurnTimerIds.delete(timerKey);
+  }
+  if (G.playerTimers && G.playerTimers[playerId] && G.playerTimers[playerId].turnTimerExpiresAt) {
+    delete G.playerTimers[playerId].turnTimerExpiresAt;
+    if (Object.keys(G.playerTimers[playerId]).length === 0) delete G.playerTimers[playerId];
+  }
+
+  // If game is in matching stage, individual turn timers are superseded by the global matching timer.
+  if (G.currentPhase === 'matchingStage') {
+    console.log(`[GameManager-Timer] handleTurnTimeout for ${playerName} in ${gameId}: Game is in matchingStage. Individual turn timer ignored. Timer might be stale.`);
+    // Broadcast state to ensure client clears timer display if it was based on stale info
+    broadcastService.triggerBroadcast(gameId, G);
+    return; // Do not proceed with turn-specific timeout actions
+  }
+
+  if (!player || G.currentPhase === 'gameOver' || G.currentPhase === 'scoringPhase') {
+    console.log(`[GameManager-Timer] handleTurnTimeout for ${playerName} in ${gameId}: Player not found, or game ended. Aborting timeout action.`);
+    return;
+  }
+
+  // Check if it was actually this player's turn or active moment, otherwise, timer might be stale.
+  let isPlayerActiveMoment = G.currentPlayerId === playerId;
+  // If an ability is pending for THIS player (even if they are not G.currentPlayerId, though typically they would be)
+  if (G.currentPhase === 'abilityResolutionPhase' && G.pendingAbilities && G.pendingAbilities.length > 0 && G.pendingAbilities[0].playerId === playerId) {
+    isPlayerActiveMoment = true; // Their "turn" to resolve ability
+  }
+
+  if (!isPlayerActiveMoment) {
+    console.log(`[GameManager-Timer] handleTurnTimeout for ${playerName} in ${gameId}: Not player's active moment (Phase: ${G.currentPhase}, CurrentPlayer: ${G.players[G.currentPlayerId]?.name || G.currentPlayerId}, Current Segment: ${G.currentTurnSegment}). Timer might be stale. No action taken.`);
+    // Broadcast state to ensure client clears timer display if it was based on stale info
+    broadcastService.triggerBroadcast(gameId, G);
+    return;
+  }
+
+  console.log(`[GameManager-Timer] Turn timed out for player ${playerName} in game ${gameId}. Current phase: ${G.currentPhase}. Taking default action.`);
+
+  let nextState: ServerCheckGameState | null = null;
+  let broadcastManuallyAfterDefaultAction = false;
+
+  // --- Start: Segment-aware Timeout Logic ---
+  const currentSegment = G.currentTurnSegment;
+  G.currentTurnSegment = null; // Clear segment as part of timeout processing
+  // Timer ID and expiration in G.playerTimers already cleared by caller (handleTurnTimeout) or will be by clearPlayerTimers here
+
+  if (currentSegment === 'initialAction') {
+    console.log(`[GameManager-Timer] Player ${playerName} timed out during 'initialAction' segment.`);
+    // Player did nothing, simply advance the turn.
+    // No pending card, no specific action to auto-resolve other than ending their chance to act.
+    clearPlayerTimers(gameId, playerId); // Ensure all timer aspects are cleared
+
+    if (G.playerWhoCalledCheck) {
+      nextState = continueOrEndFinalTurns(gameId);
+    } else {
+      nextState = setupNextPlayTurn(gameId);
+    }
+  } else if (currentSegment === 'postDrawAction') {
+    console.log(`[GameManager-Timer] Player ${playerName} timed out during 'postDrawAction' segment.`);
+    clearPlayerTimers(gameId, playerId); // Ensure all timer aspects are cleared
+
+    if (player.pendingDrawnCard) {
+      const cardHeld = player.pendingDrawnCard;
+      if (player.pendingDrawnCardSource === 'deck') {
+        console.log(`[GameManager-Timer] Player ${playerName} timed out with card ${cardHeld.rank}${cardHeld.suit} from deck. Auto-discarding.`);
+        handleDiscardDrawnCard(gameId, playerId); // This will broadcast and internally call setupNextPlayTurn/continueOrEndFinalTurns
+      } else if (player.pendingDrawnCardSource === 'discard') {
+        console.log(`[GameManager-Timer] Player ${playerName} timed out with card ${cardHeld.rank}${cardHeld.suit} from discard. Attempting auto-swap with first hand card.`);
+        if (player.hand.length === 0) {
+          console.error(`[GameManager-Timer] Player ${playerName} has no cards in hand to auto-swap with ${cardHeld.rank}${cardHeld.suit} from discard. Discarding drawn card as fallback.`);
+          G.discardPile.unshift(player.pendingDrawnCard);
+          player.pendingDrawnCard = null;
+          player.pendingDrawnCardSource = null;
+          G.discardPileIsSealed = false;
+          broadcastManuallyAfterDefaultAction = true;
+        } else {
+          const cardFromHand = player.hand.splice(0, 1, player.pendingDrawnCard)[0];
+          player.pendingDrawnCard = null;
+          player.pendingDrawnCardSource = null;
+          G.discardPile.unshift(cardFromHand);
+          G.discardPileIsSealed = false;
+          console.log(`[GameManager-Timer] Auto-swapped. Card from hand ${cardFromHand.rank}${cardFromHand.suit} discarded. No matching/ability triggered.`);
+          broadcastManuallyAfterDefaultAction = true;
+        }
+        // After this auto-swap/discard, the turn ends for this player.
+        if (G.playerWhoCalledCheck) {
+          nextState = continueOrEndFinalTurns(gameId);
+        } else {
+          nextState = setupNextPlayTurn(gameId);
+        }
+      }
+    } else {
+      // Should not happen if in 'postDrawAction' segment, but as a fallback:
+      console.warn(`[GameManager-Timer] Player ${playerName} in 'postDrawAction' but no pending card. Advancing turn.`);
+      if (G.playerWhoCalledCheck) {
+        nextState = continueOrEndFinalTurns(gameId);
+      } else {
+        nextState = setupNextPlayTurn(gameId);
+      }
+    }
+  } else { // currentSegment is null or an unexpected value (e.g. during ability, matching)
+    // This part handles timeouts for actions that are NOT part of the two main turn segments,
+    // or if the segment was already nullified.
+    console.log(`[GameManager-Timer] Player ${playerName} timed out. Segment was '${currentSegment}'. Applying generic timeout logic.`);
+    clearPlayerTimers(gameId, playerId); // Ensure all timer aspects are cleared
+
+    if (G.currentPhase === 'abilityResolutionPhase' && G.pendingAbilities && G.pendingAbilities.length > 0 && G.pendingAbilities[0].playerId === playerId) {
+      const abilityTimedOut = G.pendingAbilities[0];
+      console.log(`[GameManager-Timer] Player ${playerName} timed out during ability resolution for ${abilityTimedOut.card.rank}${abilityTimedOut.card.suit}. Auto-skipping ability.`);
+      handleResolveSpecialAbility(gameId, playerId, { skipAbility: true, skipType: 'full' });
+    // This block is unreachable because of the early return if G.currentPhase is 'matchingStage'
+    // } else if (G.currentPhase === 'matchingStage' && G.activePlayers[playerId]) { 
+    //   console.log(`[GameManager-Timer] Player ${playerName} timed out during matching stage for card ${G.matchingOpportunityInfo?.cardToMatch.rank}${G.matchingOpportunityInfo?.cardToMatch.suit}. Auto-passing.`);
+    //   handlePassMatch(gameId, playerId);
+    } else if (player.pendingDrawnCard) { // Fallback if segment was null but card is held (should be rare)
+        const cardHeld = player.pendingDrawnCard;
+        if (player.pendingDrawnCardSource === 'deck') {
+            console.log(`[GameManager-Timer] Player ${playerName} (segment: ${currentSegment}) timed out with card ${cardHeld.rank}${cardHeld.suit} from deck. Auto-discarding.`);
+            handleDiscardDrawnCard(gameId, playerId);
+        } else { // discard source, or unknown but has card
+            console.log(`[GameManager-Timer] Player ${playerName} (segment: ${currentSegment}) timed out with card ${cardHeld.rank}${cardHeld.suit}. Attempting auto-swap with first hand card or discard.`);
+            if (player.hand.length === 0) {
+                G.discardPile.unshift(player.pendingDrawnCard);
+                player.pendingDrawnCard = null; player.pendingDrawnCardSource = null; G.discardPileIsSealed = false;
+                broadcastManuallyAfterDefaultAction = true;
+            } else {
+                const cardFromHand = player.hand.splice(0, 1, player.pendingDrawnCard)[0];
+                player.pendingDrawnCard = null; player.pendingDrawnCardSource = null;
+                G.discardPile.unshift(cardFromHand); G.discardPileIsSealed = false;
+                broadcastManuallyAfterDefaultAction = true;
+            }
+            if (G.playerWhoCalledCheck) nextState = continueOrEndFinalTurns(gameId);
+            else nextState = setupNextPlayTurn(gameId);
+        }
+    } else if (G.currentPhase === 'playPhase' || G.currentPhase === 'finalTurnsPhase') {
+      console.log(`[GameManager-Timer] Player ${playerName} (segment: ${currentSegment}) timed out in ${G.currentPhase} (no card held, no specific action pending). Skipping turn.`);
+      if (G.playerWhoCalledCheck) {
+        nextState = continueOrEndFinalTurns(gameId);
+      } else {
+        nextState = setupNextPlayTurn(gameId);
+      }
+    } else {
+      console.warn(`[GameManager-Timer] Turn timeout for ${playerName} (segment: ${currentSegment}) in unhandled situation or phase: ${G.currentPhase}. Attempting generic turn advance.`);
+      if (G.playerWhoCalledCheck) {
+        nextState = continueOrEndFinalTurns(gameId);
+      } else {
+        nextState = setupNextPlayTurn(gameId);
+      }
+    }
+  }
+  // --- End: Segment-aware Timeout Logic ---
+
+  if (broadcastManuallyAfterDefaultAction) {
+    // If a default action modified G directly (like auto-swap) and didn't call another handler that broadcasts.
+    broadcastService.triggerBroadcast(gameId, G);
+  }
+
+  if (nextState) { // If a turn advancement function was called and returned a new state
+    // These turn advancement functions (setupNextPlayTurn, continueOrEndFinalTurns)
+    // already call startTurnTimer for the *next* player and broadcast.
+    // No need to broadcast `nextState` here explicitly if it's the direct result of those calls,
+    // as they handle their own broadcast. The primary broadcast here is for the `G` modified by the default action itself.
+    // However, if `nextState` is different from `G` (e.g., game ended), it's already handled.
+  }
+  
+  // Note: checkGameEndDueToForfeits is NOT called here anymore.
+};
+
+const startTurnTimer = (gameId: string, playerId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  if (!gameRoom) return;
+  const G = gameRoom.gameState;
+  const player = G.players[playerId];
+
+  if (!player || player.forfeited || !player.isConnected) {
+    console.log(`[GameManager-Timer] Cannot start turn timer for ${player.name || playerId} in ${gameId}: Player forfeited or not connected.`);
+    return;
+  }
+
+  const timerKey = `${gameId}_${playerId}`;
+  // Clear any existing timer ID from the map before setting a new one
+  if (activeTurnTimerIds.has(timerKey)) {
+    clearTimeout(activeTurnTimerIds.get(timerKey)!);
+    activeTurnTimerIds.delete(timerKey); // Remove old key
+  }
+
+  // Set the expiration time on the shared game state
+  if (!G.playerTimers) G.playerTimers = {};
+  if (!G.playerTimers[playerId]) G.playerTimers[playerId] = {}; // Ensure player entry exists
+  G.playerTimers[playerId].turnTimerExpiresAt = Date.now() + TURN_DURATION_MS;
+  
+  // Store the new timer ID in the server-local map
+  activeTurnTimerIds.set(timerKey, setTimeout(() => handleTurnTimeout(gameId, playerId), TURN_DURATION_MS));
+  
+  console.log(`[GameManager-Timer] Started turn timer for player ${player.name || playerId} in game ${gameId}. Expires in ${TURN_DURATION_MS / 1000}s. Key: ${timerKey}`);
+  
+  // Optionally, broadcast updated G to let clients know about the new turnTimerExpiresAt
+  broadcastService.triggerBroadcast(gameId, G);
+};
+
+const clearDisconnectGraceTimer = (gameId: string, playerId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  const timerKey = `${gameId}_${playerId}`;
+
+  if (activeDisconnectGraceTimerIds.has(timerKey)) {
+    clearTimeout(activeDisconnectGraceTimerIds.get(timerKey)!);
+    activeDisconnectGraceTimerIds.delete(timerKey);
+    console.log(`[GameManager-Timer] Cleared active disconnect grace timer for ${timerKey}`);
+  }
+
+  if (gameRoom && gameRoom.gameState.playerTimers && gameRoom.gameState.playerTimers[playerId]) {
+    delete gameRoom.gameState.playerTimers[playerId].disconnectGraceTimerExpiresAt;
+    if (Object.keys(gameRoom.gameState.playerTimers[playerId]).length === 0) {
+      delete gameRoom.gameState.playerTimers[playerId];
+    }
+    console.log(`[GameManager-Timer] Cleared disconnect grace timer expiration for player ${playerId} in game ${gameId} from gameState.`);
+  }
+};
+
+const handleDisconnectTimeout = (gameId: string, playerId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  if (!gameRoom) {
+    console.warn(`[GameManager-Timer] handleDisconnectTimeout: Game ${gameId} not found.`);
+    return;
+  }
+  const G = gameRoom.gameState;
+  const player = G.players[playerId];
+
+  // Clear timer ID from map and expiration from gameState
+  const timerKey = `${gameId}_${playerId}`;
+  if (activeDisconnectGraceTimerIds.has(timerKey)) {
+    clearTimeout(activeDisconnectGraceTimerIds.get(timerKey)!);
+    activeDisconnectGraceTimerIds.delete(timerKey);
+  }
+  if (G.playerTimers && G.playerTimers[playerId] && G.playerTimers[playerId].disconnectGraceTimerExpiresAt) {
+    delete G.playerTimers[playerId].disconnectGraceTimerExpiresAt;
+    if (Object.keys(G.playerTimers[playerId]).length === 0) delete G.playerTimers[playerId];
+  }
+
+  if (!player || player.forfeited || player.isConnected) {
+    console.log(`[GameManager-Timer] handleDisconnectTimeout for ${player.name || playerId} in ${gameId}: Player not found, already forfeited, or reconnected. Aborting forfeit action.`);
+    return;
+  }
+
+  console.log(`[GameManager-Timer] Disconnect grace period expired for player ${player.name || playerId} in game ${gameId}. Marking as forfeited.`);
+  player.forfeited = true;
+  // player.isConnected should already be false
+
+  broadcastService.triggerBroadcast(gameId, G); // Broadcast the forfeit update
+
+  // After forfeiting, try to advance the game state if it was this player's turn or if their forfeit affects game flow
+  // This is important so the game doesn't stall.
+  let nextState: ServerCheckGameState | null = null;
+  if (G.currentPlayerId === playerId) {
+    console.log(`[GameManager-Timer] Disconnected player ${player.name || playerId} was current player. Advancing turn after forfeit.`);
+    // Similar logic to handleTurnTimeout for advancing the game
+    if (G.pendingAbilities && G.pendingAbilities.length > 0 && G.pendingAbilities[0].playerId === playerId) {
+      handleResolveSpecialAbility(gameId, playerId, { skipAbility: true, skipType: 'full' });
+    } else if (G.currentPhase === 'matchingStage' && G.activePlayers[playerId]) {
+      handlePassMatch(gameId, playerId);
+    } else if (G.currentPhase === 'playPhase' || G.currentPhase === 'finalTurnsPhase') {
+      if (player.pendingDrawnCard) {
+        handleDiscardDrawnCard(gameId, playerId);
+      } else {
+        if (G.playerWhoCalledCheck) {
+          nextState = continueOrEndFinalTurns(gameId);
+        } else {
+          nextState = setupNextPlayTurn(gameId);
+        }
+      }
+    } else {
+      console.warn(`[GameManager-Timer] Disconnect timeout for current player ${player.name || playerId} in unhandled phase: ${G.currentPhase}. Attempting generic turn advance.`);
+      if (G.playerWhoCalledCheck) {
+        nextState = continueOrEndFinalTurns(gameId);
+      } else {
+        nextState = setupNextPlayTurn(gameId);
+      }
+    }
+  } else {
+    // If the disconnected player wasn't the current player, their forfeit might still affect turn order (e.g. if they were next).
+    // Calling a general turn progression function can help recalculate.
+    // However, if the game is in a state not expecting a turn progression (e.g. gameOver), do nothing more.
+    if (G.currentPhase !== 'gameOver' && G.currentPhase !== 'scoringPhase'){
+        console.log(`[GameManager-Timer] Disconnected player ${player.name || playerId} was not current player. Checking if game progression is needed.`);
+        // Potentially, just a broadcast was enough. If their absence breaks a quorum for an action, that phase logic should handle it.
+        // But if they were in turnOrder and now are forfeited, setupNextPlayTurn/continueOrEndFinalTurns will correctly skip them.
+        // Re-evaluate if specific phase needs re-triggering here.
+        // For now, the broadcast of their forfeit status is the main outcome if not current player.
+    }
+  }
+
+  if (nextState) {
+    broadcastService.triggerBroadcast(gameId, nextState); // Broadcast the new game state after advancing turn
+  }
+  // TODO: Add logic to check if game should end due to insufficient players after a forfeit.
+};
+
+const startDisconnectGraceTimer = (gameId: string, playerId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  if (!gameRoom) return;
+  const G = gameRoom.gameState;
+  const player = G.players[playerId];
+
+  if (!player || player.forfeited || player.isConnected) { // Don't start if already forfeited or if they somehow reconnected before this fired
+    console.log(`[GameManager-Timer] Cannot start disconnect grace timer for ${player.name || playerId} in ${gameId}: Player forfeited or already connected.`);
+    return;
+  }
+
+  const timerKey = `${gameId}_${playerId}`;
+  if (activeDisconnectGraceTimerIds.has(timerKey)) {
+    clearTimeout(activeDisconnectGraceTimerIds.get(timerKey)!);
+    activeDisconnectGraceTimerIds.delete(timerKey);
+  }
+
+  if (!G.playerTimers) G.playerTimers = {};
+  if (!G.playerTimers[playerId]) G.playerTimers[playerId] = {};
+  G.playerTimers[playerId].disconnectGraceTimerExpiresAt = Date.now() + DISCONNECT_GRACE_PERIOD_MS;
+
+  activeDisconnectGraceTimerIds.set(timerKey, setTimeout(() => handleDisconnectTimeout(gameId, playerId), DISCONNECT_GRACE_PERIOD_MS));
+  console.log(`[GameManager-Timer] Started disconnect grace timer for player ${player.name || playerId} in game ${gameId}. Expires in ${DISCONNECT_GRACE_PERIOD_MS / 1000}s. Key: ${timerKey}`);
+  
+  // Broadcast the updated gameState with the disconnectGraceTimerExpiresAt
+  broadcastService.triggerBroadcast(gameId, G);
+};
+
+const clearAllGameTimers = (gameId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  if (!gameRoom) return;
+
+  console.log(`[GameManager-Timer] Clearing ALL timers for game ${gameId} due to game end or critical phase change.`);
+  // Iterate over all players who might have timers, typically from turnOrder or players object keys
+  const playerIds = Object.keys(gameRoom.gameState.players);
+
+  playerIds.forEach(playerId => {
+    const turnTimerKey = `${gameId}_${playerId}`;
+    if (activeTurnTimerIds.has(turnTimerKey)) {
+      clearTimeout(activeTurnTimerIds.get(turnTimerKey)!);
+      activeTurnTimerIds.delete(turnTimerKey);
+    }
+    const disconnectTimerKey = `${gameId}_${playerId}`;
+    if (activeDisconnectGraceTimerIds.has(disconnectTimerKey)) {
+      clearTimeout(activeDisconnectGraceTimerIds.get(disconnectTimerKey)!);
+      activeDisconnectGraceTimerIds.delete(disconnectTimerKey);
+    }
+  });
+  // Clear all timer expirations from the shared game state
+  if (gameRoom.gameState.playerTimers) {
+    gameRoom.gameState.playerTimers = {};
+  }
+  clearMatchingStageTimer(gameId); // Also clear the global matching stage timer
+  // Note: A broadcast might be needed if playerTimers being empty is significant for clients immediately.
+  // However, usually this is part of a larger state transition (like scoring) which will broadcast anyway.
+};
+
+const checkGameEndDueToForfeits = (gameId: string): boolean => {
+  const gameRoom = getGameRoom(gameId);
+  if (!gameRoom) return false; // Game not found, can't end it.
+  const G = gameRoom.gameState;
+
+  if (G.currentPhase === 'gameOver' || G.currentPhase === 'scoringPhase') {
+    return false; // Game is already ending or over.
+  }
+
+  const activeNonForfeitedPlayers = G.turnOrder.filter(playerId => {
+    const player = G.players[playerId];
+    // A player is considered active for continuing the game if they are not forfeited.
+    // Connection status is handled by the disconnect grace timer; if that expires, they forfeit.
+    return player && !player.forfeited;
+  });
+
+  // Game ends if fewer than 2 players are left non-forfeited.
+  // Adjust this threshold as per game rules (e.g., 1 if a solo win is possible).
+  const MIN_PLAYERS_TO_CONTINUE = 2;
+  if (activeNonForfeitedPlayers.length < MIN_PLAYERS_TO_CONTINUE) {
+    console.log(`[GameManager-ForfeitEndCheck] Game ${gameId} ending: ${activeNonForfeitedPlayers.length} non-forfeited players (less than ${MIN_PLAYERS_TO_CONTINUE}). Proceeding to scoring.`);
+    clearAllGameTimers(gameId); // Clear all active timers for the game
+    setupScoringPhase(gameId); // This will set phase to gameOver and broadcast
+    // setupScoringPhase itself will call clearAllGameTimers again, but it's safe.
+    return true; // Game ended
+  }
+  return false; // Game continues
+};
+
+const handleMatchingStageTimeout = (gameId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  if (!gameRoom) {
+    console.warn(`[GameManager-Timer] handleMatchingStageTimeout: Game ${gameId} not found.`);
+    return;
+  }
+  const G = gameRoom.gameState;
+
+  // Clear timer ID from map and expiration from gameState
+  if (activeMatchingStageTimer.has(gameId)) {
+    clearTimeout(activeMatchingStageTimer.get(gameId)!);
+    activeMatchingStageTimer.delete(gameId);
+  }
+  delete G.matchingStageTimerExpiresAt;
+
+  if (G.currentPhase !== 'matchingStage' || !G.matchingOpportunityInfo) {
+    console.log(`[GameManager-Timer] handleMatchingStageTimeout for game ${gameId}: Not in matching stage or no opportunity. Aborting auto-pass.`);
+    // The expiration is already cleared above. We just need to broadcast.
+    broadcastService.triggerBroadcast(gameId, G);
+    return;
+  }
+
+  console.log(`[GameManager-Timer] Matching stage timed out for game ${gameId}. Auto-passing remaining players.`);
+
+  const { potentialMatchers } = G.matchingOpportunityInfo;
+  let broadcastNeeded = false;
+
+  potentialMatchers.forEach(playerId => {
+    if (G.activePlayers[playerId]) {
+      console.log(`[GameManager-Timer] Auto-passing player ${G.players[playerId]?.name || playerId} in game ${gameId} for matching stage timeout.`);
+      // Directly manipulate state as handlePassMatch would, then let one final checkMatchingStageEnd process.
+      delete G.activePlayers[playerId];
+      // Note: We are not calling handlePassMatch for each player to avoid multiple broadcasts
+      // and potential race conditions. We modify the state here and then call checkMatchingStageEnd once.
+      broadcastNeeded = true;
+    }
+  });
+
+  if (broadcastNeeded) {
+    // After all auto-passes, call checkMatchingStageEnd to process the end of the matching stage.
+    const nextState = checkMatchingStageEnd(gameId);
+    if (nextState) {
+      broadcastService.triggerBroadcast(gameId, nextState); // Broadcast the final state after auto-passes
+    }
+  } else {
+    console.log(`[GameManager-Timer] Matching stage timeout for game ${gameId}, but no players needed auto-passing.`);
+    // Still, good to ensure the timer value is cleared from client view if it was showing
+    broadcastService.triggerBroadcast(gameId, G);
+  }
+};
+
+const startMatchingStageTimer = (gameId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  if (!gameRoom || gameRoom.gameState.currentPhase !== 'matchingStage') {
+    console.warn(`[GameManager-Timer] Cannot start matching stage timer for game ${gameId}: Not in matching stage or game not found.`);
+    return;
+  }
+  const G = gameRoom.gameState;
+
+  if (activeMatchingStageTimer.has(gameId)) {
+    clearTimeout(activeMatchingStageTimer.get(gameId)!);
+    activeMatchingStageTimer.delete(gameId);
+  }
+
+  G.matchingStageTimerExpiresAt = Date.now() + MATCHING_STAGE_DURATION_MS;
+  activeMatchingStageTimer.set(gameId, setTimeout(() => handleMatchingStageTimeout(gameId), MATCHING_STAGE_DURATION_MS));
+  console.log(`[GameManager-Timer] Started matching stage timer for game ${gameId}. Expires in ${MATCHING_STAGE_DURATION_MS / 1000}s.`);
+  // Broadcast state so clients know about the timer
+  broadcastService.triggerBroadcast(gameId, G);
+};
+
+const clearMatchingStageTimer = (gameId: string) => {
+  const gameRoom = getGameRoom(gameId);
+  if (activeMatchingStageTimer.has(gameId)) {
+    clearTimeout(activeMatchingStageTimer.get(gameId)!);
+    activeMatchingStageTimer.delete(gameId);
+    console.log(`[GameManager-Timer] Cleared active matching stage timer for game ${gameId}`);
+  }
+  if (gameRoom && gameRoom.gameState.matchingStageTimerExpiresAt) {
+    delete gameRoom.gameState.matchingStageTimerExpiresAt;
+    console.log(`[GameManager-Timer] Cleared matching stage timer expiration for game ${gameId} from gameState.`);
+    // No need to broadcast here, the function that calls this (e.g. checkMatchingStageEnd) will broadcast the overall state change.
+  }
+};

@@ -34,9 +34,35 @@ const getSuitColor = (suit: string | undefined): string => {
 };
 
 const cardVisualsVariants = {
-    normal: { scale: 1, boxShadow: "0px 2px 5px rgba(0,0,0,0.2)" },
-    selected: { scale: 1.05, boxShadow: "0px 4px 10px rgba(0,0,0,0.3)" },
-    hiddenInHand: { opacity: 0.7, scale: 0.95 },
+    normal: {
+        scale: 1,
+        boxShadow: "0px 2px 5px rgba(0,0,0,0.2)",
+        borderColor: "rgba(0,0,0,0.1)",
+        borderWidth: "1px",
+        filter: 'brightness(1)'
+    },
+    selected: {
+        scale: 1.05,
+        boxShadow: "0px 4px 10px rgba(0,0,0,0.3)",
+        borderColor: "#60a5fa",
+        borderWidth: "2px",
+        filter: 'brightness(1)'
+    },
+    locked: {
+        scale: 1,
+        boxShadow: "0px 2px 5px rgba(0,0,0,0.2)",
+        borderColor: "#f87171",
+        borderWidth: "2px",
+        filter: 'brightness(0.8)'
+    },
+    hiddenInHand: {
+        scale: 1,
+        boxShadow: "0px 2px 5px rgba(0,0,0,0.2)",
+        borderColor: "rgba(0,0,0,0.1)",
+        borderWidth: "1px",
+        filter: 'brightness(1)',
+        opacity: 1,
+    },
 };
 
 const CardComponent: React.FC<CardComponentProps> = ({
@@ -98,8 +124,13 @@ const CardComponent: React.FC<CardComponentProps> = ({
   const isHiddenInHandVisualEffect = !isActuallyHiddenType && !showFront && !forceShowFront && !isFaceUp;
 
   let currentAnimateState: keyof typeof cardVisualsVariants = 'normal';
-  if (isHiddenInHandVisualEffect) currentAnimateState = 'hiddenInHand';
-  else if (isSelected) currentAnimateState = 'selected';
+  if (isLocked) {
+    currentAnimateState = 'locked';
+  } else if (isHiddenInHandVisualEffect) {
+    currentAnimateState = 'hiddenInHand';
+  } else if (isSelected) {
+    currentAnimateState = 'selected';
+  }
 
   const effectiveIsInteractive = isInteractive && !isLocked && !isFlipping;
 
@@ -114,13 +145,14 @@ const CardComponent: React.FC<CardComponentProps> = ({
       className={`relative w-full h-full cursor-pointer rounded-md overflow-hidden shadow-md ${showPeekHighlight ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-neutral-800' : ''}`}
       variants={cardVisualsVariants}
       animate={currentAnimateState}
+      transition={{ type: "spring", stiffness: 300, damping: 15 }}
       whileHover={!disableHoverEffect && effectiveIsInteractive ? { scale: 1.1, y: -5, boxShadow: "0px 10px 20px rgba(0,0,0,0.25)" } : {}}
       whileTap={!disableHoverEffect && effectiveIsInteractive ? { scale: 0.95 } : {}}
       onClick={handleClick}
       style={{
         perspective: '1000px',
-        border: isSelected ? '2px solid #60a5fa' : (isLocked ? '2px solid #f87171' : '1px solid rgba(0,0,0,0.1)'),
-        filter: isLocked ? 'brightness(0.8)' : 'none',
+        // border: isSelected ? '2px solid #60a5fa' : (isLocked ? '2px solid #f87171' : '1px solid rgba(0,0,0,0.1)'), // Border handled by variants
+        // filter: isLocked ? 'brightness(0.8)' : 'none', // Filter handled by variants
       }}
       aria-label={renderFrontFaceBasedOnProps ? `${cardContent?.rank || ''} of ${cardContent?.suit || ''}` : "Hidden card"}
       role={effectiveIsInteractive && onClick ? 'button' : undefined}
@@ -134,53 +166,77 @@ const CardComponent: React.FC<CardComponentProps> = ({
             initial={{ rotateY: -180 }} 
             animate={{ rotateY: 0 }}    
             exit={{ rotateY: 180 }}     
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
             onAnimationComplete={handleFlipAnimationComplete} 
           >
             {(() => {
-              if (renderFrontFaceBasedOnProps) {
-                console.log(`[CardComponent_FRONT_RENDER ${cardIdForLog}] cardContent:`, JSON.stringify(cardContent), `isActuallyHiddenType: ${isActuallyHiddenType}`);
+              // Logging for diagnostics
+              // if (renderFrontFaceBasedOnProps) { // Keep this commented out for now to reduce console noise unless needed
+              //   console.log(`[CardComponent_FRONT_RENDER ${cardIdForLog}] card:`, JSON.stringify(card), `cardContent:`, JSON.stringify(cardContent), `isActuallyHiddenType: ${isActuallyHiddenType}`, `forceShowFront: ${forceShowFront}`);
+              // }
+
+              // If we must show the front (forceShowFront) AND we have actual card content (rank/suit)
+              if (forceShowFront && cardContent) {
+                return (
+                  <>
+                    <div className="flex items-start">
+                      <div className={`font-sans text-base md:text-lg lg:text-xl ${getSuitColor(cardContent?.suit)}`}>
+                        <span className="block -mb-1 md:-mb-1.5 leading-none">{cardContent?.rank}</span>
+                        <span className="block text-sm md:text-base leading-none">{cardContent?.suit ? suitSymbols[cardContent?.suit] : ''}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-end justify-end self-end">
+                      <div className={`font-sans text-base md:text-lg lg:text-xl ${getSuitColor(cardContent?.suit)} transform rotate-180`}>
+                        <span className="block -mb-1 md:-mb-1.5 leading-none">{cardContent?.rank}</span>
+                        <span className="block text-sm md:text-base leading-none">{cardContent?.suit ? suitSymbols[cardContent?.suit] : ''}</span>
+                      </div>
+                    </div>
+                  </>
+                );
               }
-              return null; // This block doesn't render anything
+              // Otherwise (not forcing front), if it's not a hidden-type card AND we have actual card content
+              if (!isActuallyHiddenType && cardContent) {
+                return (
+                  <>
+                    <div className="flex items-start">
+                      <div className={`font-sans text-base md:text-lg lg:text-xl ${getSuitColor(cardContent?.suit)}`}>
+                        <span className="block -mb-1 md:-mb-1.5 leading-none">{cardContent?.rank}</span>
+                        <span className="block text-sm md:text-base leading-none">{cardContent?.suit ? suitSymbols[cardContent?.suit] : ''}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-end justify-end self-end">
+                      <div className={`font-sans text-base md:text-lg lg:text-xl ${getSuitColor(cardContent?.suit)} transform rotate-180`}>
+                        <span className="block -mb-1 md:-mb-1.5 leading-none">{cardContent?.rank}</span>
+                        <span className="block text-sm md:text-base leading-none">{cardContent?.suit ? suitSymbols[cardContent?.suit] : ''}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              }
+              // Fallback/Error states if we intended to show the front but couldn't render details:
+              if (renderFrontFaceBasedOnProps) {
+                return (
+                  <div className="flex items-center justify-center w-full h-full">
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      {isActuallyHiddenType ? "Card Privately Hidden" : (cardContent ? "Display Error" : "No Card Data")}
+                    </p>
+                  </div>
+                );
+              }
+              return null; // Should not be reached if back face is rendered due to AnimatePresence logic
             })()}
-            {card && !isActuallyHiddenType && (
-              <>
-                <div className="h-1/4 flex items-start">
-                  <div className={`font-sans text-base md:text-lg lg:text-xl ${getSuitColor(cardContent?.suit)}`}>
-                    <span className="block -mb-1 md:-mb-1.5 leading-none">{cardContent?.rank}</span>
-                    <span className="block text-sm md:text-base leading-none">{cardContent?.suit ? suitSymbols[cardContent?.suit] : ''}</span>
-                  </div>
-                </div>
-                <div className="h-1/2 flex items-center justify-center">
-                  <span className={`font-sans font-semibold text-4xl md:text-5xl lg:text-6xl ${getSuitColor(cardContent?.suit)} opacity-90`}>
-                    {cardContent?.suit ? suitSymbols[cardContent?.suit] : ''}
-                  </span>
-                </div>
-                <div className="h-1/4 flex items-end justify-end">
-                  <div className={`font-sans text-base md:text-lg lg:text-xl ${getSuitColor(cardContent?.suit)} transform rotate-180`}>
-                    <span className="block -mb-1 md:-mb-1.5 leading-none">{cardContent?.rank}</span>
-                    <span className="block text-sm md:text-base leading-none">{cardContent?.suit ? suitSymbols[cardContent?.suit] : ''}</span>
-                  </div>
-                </div>
-              </>
-            )}
-            {isActuallyHiddenType && renderFrontFaceBasedOnProps && (
-                <div className="flex items-center justify-center w-full h-full">
-                    <p className="text-xs text-neutral-500">Error: Hidden card forced face up.</p>
-                </div>
-            )}
           </motion.div>
         ) : (
           <motion.div
             key="back"
-            className="absolute inset-0 w-full h-full bg-gradient-to-br from-neutral-600 to-neutral-800 dark:from-neutral-700 dark:to-neutral-900 rounded-md flex items-center justify-center shadow-inner"
+            className="absolute inset-0 w-full h-full bg-neutral-700 dark:bg-neutral-800 rounded-md flex items-center justify-center shadow-inner"
             initial={{ rotateY: 180 }} 
             animate={{ rotateY: 0 }}    
             exit={{ rotateY: -180 }}    
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
             onAnimationComplete={handleFlipAnimationComplete} 
           >
-            <div className="w-3/5 h-3/5 bg-neutral-500/30 dark:bg-neutral-800/50 rounded-sm shadow-md"></div>
+            {/* Removed inner div for a cleaner back */}
           </motion.div>
         )}
       </AnimatePresence>
@@ -193,8 +249,16 @@ const CardComponent: React.FC<CardComponentProps> = ({
           exit={{ opacity: 0, scale: 0.5 }}
           transition={{ duration: 0.2 }}
         >
-          {isBeingTargetedForPeek && <FaEye className="text-white text-2xl md:text-3xl opacity-80" />}
-          {isBeingTargetedForSwap && <FaExchangeAlt className="text-white text-2xl md:text-3xl opacity-80" />}
+          {isBeingTargetedForPeek && 
+            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1, ease: "easeInOut" }}>
+              <FaEye className="text-white text-2xl md:text-3xl opacity-80" />
+            </motion.div>
+          }
+          {isBeingTargetedForSwap && 
+            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1, ease: "easeInOut" }}>
+              <FaExchangeAlt className="text-white text-2xl md:text-3xl opacity-80" />
+            </motion.div>
+          }
         </motion.div>
       )}
     </motion.div>

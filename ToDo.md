@@ -1,13 +1,12 @@
-
 ---
 
 ## UI/UX Modernization & Animation To-Do List
 
 ### I. Global Styles & Setup (Verification)
 
-*   **[ ] Font Verification:**
+*   **[DONE] Font Verification:**
     *   **Goal:** Ensure `Plus_Jakarta_Sans` (from `layout.tsx`) is the primary font being rendered.
-    *   **Action:** Inspect the game in a browser. The `font-family: Arial, Helvetica, sans-serif;` in `frontend/app/globals.css` likely overrides `Plus_Jakarta_Sans`. If `Plus_Jakarta_Sans` is desired, this override needs to be removed or adjusted.
+    *   **Action:** Inspected. `Plus_Jakarta_Sans` is active after `globals.css` override was handled.
     *   **Impact:** Critical for the "modern, sleek" feel.
 *   **[ ] Tailwind CSS Setup:**
     *   **Goal:** Confirm Tailwind CSS is processing styles as expected.
@@ -24,15 +23,15 @@
         *   Explore alternative layouts (e.g., two-panel for Create/Join, card-based options).
         *   Refine typography (font sizes, weights) for clear hierarchy.
         *   Increase whitespace for a minimal aesthetic.
-*   **[ ] Input Fields (Player Name, Game ID):**
+*   **[PARTIALLY DONE] Input Fields (Player Name, Game ID):**
     *   **Goal:** Stylized and interactive input fields.
     *   **Action:**
-        *   Implement subtle focus animations (e.g., border/underline animates in, placeholder slides/fades).
+        *   Implemented subtle focus animations (border/underline animates in, placeholder slides/fades).
         *   Consider adding icons within input fields if appropriate.
-*   **[ ] Buttons (Create Game, Join Game):**
+*   **[PARTIALLY DONE] Buttons (Create Game, Join Game):**
     *   **Goal:** Sleek buttons with satisfying feedback.
     *   **Action:**
-        *   Enhance existing hover/active animations (e.g., smoother scaling, subtle gradient/shadow changes).
+        *   Enhanced existing hover/active animations (e.g., smoother scaling, subtle gradient/shadow changes).
         *   Implement a ripple click effect.
         *   Design and implement a loading state for buttons (e.g., spinner/progress animation) after click.
 *   **[ ] "OR" Separator:**
@@ -41,24 +40,24 @@
 *   **[ ] Background / Theme:**
     *   **Goal:** More visually interesting (but minimal) background.
     *   **Action:** Consider a very subtle, slow-moving gradient or a high-quality, optimized abstract background image for the lobby area.
-*   **[ ] Loading State ("Attempting to rejoin"):**
+*   **[DONE] Loading State ("Attempting to rejoin"):**
     *   **Goal:** Engaging loading animation.
-    *   **Action:** Replace static text with an animated spinner or a theme-appropriate loading graphic. Text could also have a subtle pulse animation.
+    *   **Action:** Replaced static text with an animated spinner and text pulse animation.
 *   **[ ] Error Display Modal:**
     *   **Goal:** Smoother modal presentation.
     *   **Action:** Animate modal entry/exit more smoothly (e.g., fade in + slide down). Polish "X" button interaction.
 
 ### III. In-Game Header (`frontend/app/page.tsx`)
 
-*   **[ ] Game ID Copy Animation:**
+*   **[DONE] Game ID Copy Animation:**
     *   **Goal:** Smoother "Copied!" tooltip animation.
-    *   **Action:** Refine animation (e.g., fade in/out and slide up). Animate copy icon itself on hover/click.
+    *   **Action:** Refined animation (fade in/out and slide up). Animated copy icon itself on hover/click.
 *   **[ ] Player Name Truncation:**
     *   **Goal:** More graceful truncation.
     *   **Action:** If `truncate` feels abrupt, consider a fade-out ellipsis effect.
-*   **[ ] Debug Toggle Animation:**
+*   **[DONE] Debug Toggle Animation:**
     *   **Goal:** Small visual flair for debug icon.
-    *   **Action:** Add a slight rotation or morphing animation on toggle, ensuring smooth color transition.
+    *   **Action:** Added a slight rotation animation on toggle, ensuring smooth color transition.
 
 ### IV. Core Game Board (`frontend/app/components/CheckGameBoard.tsx`)
 
@@ -74,11 +73,12 @@
 *   **[ ] "Waiting for..." Messages:**
     *   **Goal:** More dynamic waiting state.
     *   **Action:** Add subtle loading animations (e.g., animated ellipsis, pulsing icon) to "Waiting for opponents/player" messages.
-*   **[ ] Animation Orchestration:**
+*   **[SUBSTANTIALLY DONE] Animation Orchestration:**
     *   **Goal:** Manage animations for cards moving between areas (e.g., deck to hand, hand to discard).
-    *   **Action:** Implement logic in `CheckGameBoard.tsx` to trigger animations when game state dictates card movement. This involves:
-        *   Animating cards from `DrawPileComponent` to a staging area or hand.
-        *   Animating cards from hand/staging area to `DiscardPileComponent`.
+    *   **Action:** Implemented logic in `CheckGameBoard.tsx`. Key pile separation/rejoining animation for holding area is smooth.
+        *   Animating cards from `DrawPileComponent` to a staging area or hand (Holding area animation from deck is present).
+        *   Animating cards from hand/staging area to `DiscardPileComponent` (Card movement to discard pile from hand needs review for specific animation beyond just appearing).
+        *   [ ] Review card animation from hand to discard pile for `DiscardDrawnCard` and `SwapAndDiscard` actions.
 
 ### V. Player Hand (`frontend/app/components/PlayerHandComponent.tsx`)
 
@@ -94,6 +94,9 @@
 *   **[ ] `showSwapHighlight` Polish:**
     *   **Goal:** Crisp and clear swap highlight on opponent hands.
     *   **Action:** Ensure the shimmering gradient animation is smooth and well-timed. Consider if it should also apply briefly to the newly received card.
+*   **[DONE] Styled Scrollbar:**
+    *   **Goal:** Consistent modern aesthetics.
+    *   **Action:** Modal content uses `styled-scrollbar-dark`.
 
 ### VI. Individual Cards (`frontend/app/components/CardComponent.tsx`)
 
@@ -123,6 +126,7 @@
 ### VII. Deck & Discard Piles
 
 *   **`DrawPileComponent.tsx`:**
+    *   **[SUBSTANTIALLY DONE] Holding Area Interaction:** Pile animates smoothly when holding area appears/disappears.
     *   **[ ] Stack Effect Enhancement:**
         *   **Goal:** More convincing 3D stack.
         *   **Action:** Render a few more dummy card backs with increasing offsets and varied opacity/brightness. Animate stack layers shifting when a card is drawn.
@@ -133,6 +137,7 @@
         *   **Goal:** Smooth transition to empty state.
         *   **Action:** Animate the "Empty" state text/placeholder fading in.
 *   **`DiscardPileComponent.tsx`:**
+    *   **[SUBSTANTIALLY DONE] Holding Area Interaction:** Pile animates smoothly when holding area appears/disappears.
     *   **[ ] Stack Effect Enhancement:** (Similar to `DrawPileComponent`)
     *   **[ ] `isSealed` Lock Animation:**
         *   **Goal:** Animated lock icon appearance.
@@ -142,9 +147,9 @@
 
 ### VIII. Action Bar (`frontend/app/components/ActionBarComponent.tsx`)
 
-*   **[ ] Prompt Text Animation:**
+*   **[DONE] Prompt Text Animation:**
     *   **Goal:** Smooth transitions for changing prompts/feedback messages.
-    *   **Action:** Wrap prompt text in `motion.div` within `AnimatePresence` to animate old text out and new text in.
+    *   **Action:** Wrapped prompt text in `motion.div` within `AnimatePresence` with `mode="popLayout"`. Solved jumping issue.
 *   **[ ] Button Icon Animation (Optional "Eye Candy"):**
     *   **Goal:** More engaging icon buttons.
     *   **Action:** If feasible, icons within buttons could have subtle animations on hover (e.g., rotation, bounce).
@@ -154,21 +159,24 @@
 
 ### IX. End Of Game Modal (`frontend/app/components/EndOfGameModal.tsx`)
 
-*   **[ ] Celebratory Winner Animation:**
+*   **[DONE] UI Revamp & Styling:**
+    *   **Goal:** Modern, sleek, minimal aesthetic matching the project's theme.
+    *   **Action:** Updated color scheme, typography, layout. Ensured dark mode compatibility.
+*   **[DONE] Final Hands Display:**
+    *   **Goal:** Clearly show all players' final hands with card faces visible.
+    *   **Action:** Implemented display, resolved card visibility issues, adjusted sizing.
+*   **[DONE] Celebratory Winner Animation:**
     *   **Goal:** More exciting winner reveal.
-    *   **Action:**
-        *   Animate winner's name (e.g., letters sequence in, shimmer effect).
-        *   Animate `🏆` icon (pop in, wiggle).
-        *   Consider lightweight confetti/particle animation on winner reveal (respect `prefers-reduced-motion`).
-*   **[ ] Staggered List Animation:**
+    *   **Action:** Winner name, icon, and text have entry animations.
+*   **[DONE] Staggered List Animation:**
     *   **Goal:** Dynamic presentation of scores, stats, and final hands.
-    *   **Action:** Use `motion.li` with a staggered `delay` in `transition` for items in lists to animate in sequentially.
-*   **[ ] "Play Again" Button Animation:**
+    *   **Action:** Used `motion.li` / `motion.div` with `whileInView` and staggered delays for items in lists to animate in sequentially as they scroll into view. Card spawn animation refined.
+*   **[DONE] "Play Again" Button Animation:**
     *   **Goal:** Consistent interactive feedback.
-    *   **Action:** Add `whileHover` and `whileTap` effects (scale, color change) using `motion.button`.
-*   **[ ] Styled Scrollbar:**
+    *   **Action:** Added `whileHover` and `whileTap` effects using `motion.button`.
+*   **[DONE] Styled Scrollbar:**
     *   **Goal:** Consistent modern aesthetics.
-    *   **Action:** Ensure `overflow-y-auto` on the modal content has a styled scrollbar (thin, auto-hiding).
+    *   **Action:** Modal content uses `styled-scrollbar-dark`.
 
 ### X. Game Log (`frontend/app/components/GameLogComponent.tsx`)
 
@@ -187,5 +195,15 @@
 *   **[ ] Styled Scrollbar:**
     *   **Goal:** Consistent modern aesthetics.
     *   **Action:** Style the scrollbar within the log content area.
+
+---
+
+## XI. Timers & Forfeits (Client UI)
+
+*   **[DONE] `PlayerStatusDisplay.tsx`**: Initial implementation with turn timer progress, reconnecting message, forfeited status.
+*   **[DONE] Integrate `PlayerStatusDisplay` into `CheckGameBoard.tsx`**: For all players.
+*   **[DONE] Style forfeited player hands in `PlayerHandComponent.tsx`**: Apply opacity.
+*   **[SUBSTANTIALLY DONE (Keying Fix)] Timer Synchronization Review**: Ensure client-side countdowns in `PlayerStatusDisplay` are visually representative even with minor latency differences (server is authoritative). Keying fixed the primary animation reset issue.
+*   **[ ] Visual Feedback for Impending Timeout**: Consider a visual pulse or color change on the timer bar when time is low (e.g., last 10 seconds).
 
 ---

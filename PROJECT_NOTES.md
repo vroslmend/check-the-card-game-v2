@@ -249,5 +249,8 @@ This session focused on significant UI/UX enhancements, particularly around visu
             *   This was enhanced with a Framer Motion animation:
                 *   First attempt: A keyframe-based "pulse" for the ring.
                 *   Second attempt (current): A "shimmer" or "glint" effect where a semi-transparent white band sweeps across the card. This involves animating the `backgroundPosition` of a `linear-gradient` on a `motion.div`.
+*   **Timer Animation Key Fix (`PlayerStatusDisplay.tsx`, `CheckGameBoard.tsx`):**
+    *   **Problem:** The progress bar animation for player timers (especially when viewed by an opponent) could be inconsistent or not reset properly due to an incorrect or `undefined` `key` prop (`turnSegmentIdentifier`) on the `motion.div`.
+    *   **Fix:** Modified `CheckGameBoard.tsx` to correctly pass the `turnSegmentTrigger` (combined with `visibilityTrigger` from `page.tsx`) as `turnSegmentIdentifier` to the `PlayerStatusDisplay` component for the player whose turn is currently active, regardless of whether it's the viewing player or an opponent. This ensures the animation `key` is always a consistent, defined string, allowing `motion/react` to reliably reset the animation when the key changes (e.g., on turn changes or segment changes).
 
 *Overall, this session involved deep debugging of special ability logic on both client and server, culminating in a critical fix for argument passing on the server, and a separate fix for discard pile ordering to resolve visual inconsistencies.*

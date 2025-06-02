@@ -74,6 +74,7 @@ export interface PlayerState {
   socketId: string;
   numMatches: number;
   numPenalties: number;
+  forfeited?: boolean;
 }
 
 // Define GamePhase type
@@ -87,6 +88,9 @@ export type GamePhase =
   | 'gameOver'
   | 'error' // For error states
   | 'errorOrStalemate'; // For unrecoverable game states
+
+// Define TurnSegment type
+export type TurnSegment = 'initialAction' | 'postDrawAction' | null;
 
 // Define MatchResolvedDetails interface
 export interface MatchResolvedDetails {
@@ -138,6 +142,14 @@ export interface CheckGameState {
   totalTurnsInRound: number;
   globalAbilityTargets?: Array<{ playerID: string; cardIndex: number; type: 'peek' | 'swap' }> | null;
   lastRegularSwapInfo: LastRegularSwapInfo | null;
+  playerTimers?: {
+    [playerId: string]: {
+      turnTimerExpiresAt?: number;
+      disconnectGraceTimerExpiresAt?: number;
+    };
+  };
+  currentTurnSegment: TurnSegment; // Added new field
+  matchingStageTimerExpiresAt?: number; // New field for matching stage timer
 }
 
 // Data structure for players joining a game or being set up initially
@@ -188,6 +200,9 @@ export interface ClientPlayerState {
   numMatches: number;
   numPenalties: number;
   explicitlyRevealedCards?: { [cardIndex: number]: Card };
+  forfeited?: boolean;
+  turnTimerExpiresAt?: number;
+  disconnectGraceTimerExpiresAt?: number;
 }
 
 // Client-specific game over data - DEFINED FIRST (before ClientCheckGameState)
@@ -211,22 +226,12 @@ export interface ClientCheckGameState extends Omit<CheckGameState, 'deck' | 'pla
   viewingPlayerId: string;
   globalAbilityTargets?: Array<{ playerID: string; cardIndex: number; type: 'peek' | 'swap' }> | null;
   lastRegularSwapInfo: LastRegularSwapInfo | null;
+  currentTurnSegment: TurnSegment; // Ensure client also has this
+  matchingStageTimerExpiresAt?: number; // New field for matching stage timer
 }
 
 // Represents a card that a player has chosen to use for its special ability
 // ... existing code ...
 
 // Data structure for game over information
-export interface GameOverData {
-  winner?: string | string[]; // Can be single or multiple winners (draw)
-  scores: { [playerId: string]: number };
-  finalHands?: { [playerId: string]: Card[] }; // Optional: if we want to show final hands
-  totalTurns?: number; // New stat
-  playerStats?: { // New stat
-    [playerId: string]: {
-      name: string;
-      numMatches: number;
-      numPenalties: number;
-    };
-  };
-} 
+/* Duplicate GameOverData definition removed */

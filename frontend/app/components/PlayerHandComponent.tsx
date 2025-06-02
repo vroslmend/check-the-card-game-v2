@@ -18,7 +18,7 @@ interface PlayerHandComponentProps {
   abilityTargetsOnThisHand?: AbilityTarget[]; // New prop
   isLocked?: boolean;
   hasCalledCheck?: boolean;
-  cardsBeingPeeked?: Card[] | null;
+  cardsBeingPeeked?: ClientCard[] | null;
   isInitialPeekActive?: boolean;
   swappingOutCardId?: string | null; // ID of the card being swapped out, for animation
   lastRegularSwapInfo?: LastRegularSwapInfo | null; // New prop for swap highlight
@@ -32,6 +32,7 @@ const cardContainerVariants = {
     opacity: 0,
     scale: 0.5,
     rotate: -15,
+    y: -50,
     transition: { duration: 0.4, ease: 'easeOut' },
   },
   layoutTransition: {
@@ -112,9 +113,9 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
     if (!isInitialPeekActive || !cardsBeingPeeked || !card || ('isHidden' in card)) {
       return false;
     }
-    const actualCard = card as Card;
     return cardsBeingPeeked.some(peekedCard => 
-        peekedCard.rank === actualCard.rank && peekedCard.suit === actualCard.suit
+        !('isHidden' in peekedCard) &&
+        peekedCard.rank === (card as Card).rank && peekedCard.suit === (card as Card).suit
     );
   };
 
@@ -145,12 +146,6 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
     visualGridCells[i] = actualHandForDisplay[i];
   }
 
-  const statusBadge = isLocked ? (
-    <span className="ml-1 text-gray-400 dark:text-gray-500 text-[0.6rem] align-middle" title="Locked" aria-label="Locked">🔒</span>
-  ) : hasCalledCheck ? (
-    <span className="ml-1 text-amber-600 dark:text-amber-400 text-[0.6rem] align-middle" title="Called Check" aria-label="Called Check">✔️</span>
-  ) : null;
-
   const handPadding = 'p-1 md:p-1.5';
   const handAreaClasses = [
     handPadding,
@@ -159,12 +154,11 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
     'bg-white/80 dark:bg-neutral-800/70',
     'backdrop-blur-sm',
     'flex', 'justify-center', 'items-center',
-    isLocked ? 'opacity-60' : '',
-    hasCalledCheck && !isLocked ? 'bg-amber-50/60 dark:bg-amber-900/30' : '',
+    playerState?.forfeited ? 'opacity-50 pointer-events-none' : (isLocked ? 'opacity-60' : ''),
+    hasCalledCheck && !isLocked && !playerState?.forfeited ? 'bg-amber-50/60 dark:bg-amber-900/30' : '',
     'transition-all', 'duration-150',
   ].join(' ');
 
-  const playerNameFontSize = isViewingPlayer ? 'text-sm font-semibold md:text-base' : 'text-xs font-medium';
   const gridGap = 'gap-1 md:gap-1.5';
   const cardWidth = 'w-12 md:w-14';
   const cardHeight = 'aspect-[2.5/3.5]';
@@ -184,176 +178,169 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
   const playerHand = actualHandForDisplay;
 
   return (
-    <div className="mb-0.5 flex flex-col items-center">
-      <div className={`flex items-center justify-center mb-0.5`}>
-        <h4 className={`text-center font-sans ${playerNameFontSize} text-gray-700 dark:text-neutral-300`}>
-          {playerState.name || playerID.slice(-6)}
-          {isViewingPlayer && <span className="ml-1 text-xs text-gray-500 dark:text-gray-400 font-normal">(You)</span>}
-        </h4>
-        {statusBadge}
-      </div>
-      <div
-        className={handAreaClasses}
-        aria-label={isViewingPlayer ? 'Your hand' : `${playerState.name || playerID}\'s hand`}
-      >
-        {numberOfCardsToRender === 0 ? (
-          <div className={`px-2 py-1 text-xs text-gray-500 dark:text-gray-400 italic ${cardWidth}`}>0 cards</div>
-        ) : (
-          <motion.div
-            className={`grid ${gridGap}`}
-            style={{
-              gridTemplateColumns: `repeat(${numVisualCols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${numVisualRows}, auto)`,
-            }}
-          >
-            <AnimatePresence>
-              {visualGridCells.map((cellCard, cellIndex) => {
-                // cellCard is actualHandForDisplay[cellIndex] if a card exists at this slot,
-                // otherwise it's null (for empty grid slots if hand is smaller than grid dimensions)
-                // originalCardIndex is effectively cellIndex if cellCard is not null and cellIndex < numberOfCardsToRender
-                const originalCardIndex = cellCard ? actualHandForDisplay.findIndex(c => {
-                  if (!cellCard) return false; // Should not happen if cellCard is truthy
-                  // Compare by ID for object equality since cards can be recreated
-                  if (('isHidden' in c && 'isHidden' in cellCard && c.id === cellCard.id) || 
-                      (!('isHidden' in c) && !('isHidden' in cellCard) && c.id === cellCard.id)) {
-                    return true;
+    <div
+      className={handAreaClasses}
+      aria-label={isViewingPlayer ? 'Your hand' : `${playerState.name || playerID}\'s hand`}
+    >
+      {numberOfCardsToRender === 0 ? (
+        <div className={`px-2 py-1 text-xs text-gray-500 dark:text-gray-400 italic ${cardWidth}`}>0 cards</div>
+      ) : (
+        <motion.div
+          className={`grid ${gridGap}`}
+          style={{
+            gridTemplateColumns: `repeat(${numVisualCols}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${numVisualRows}, auto)`,
+          }}
+        >
+          <AnimatePresence>
+            {visualGridCells.map((cellCard, cellIndex) => {
+              // cellCard is actualHandForDisplay[cellIndex] if a card exists at this slot,
+              // otherwise it's null (for empty grid slots if hand is smaller than grid dimensions)
+              // originalCardIndex is effectively cellIndex if cellCard is not null and cellIndex < numberOfCardsToRender
+              const originalCardIndex = cellCard ? actualHandForDisplay.findIndex(c => {
+                if (!cellCard) return false; // Should not happen if cellCard is truthy
+                // Compare by ID for object equality since cards can be recreated
+                if (('isHidden' in c && 'isHidden' in cellCard && c.id === cellCard.id) || 
+                    (!('isHidden' in c) && !('isHidden' in cellCard) && c.id === cellCard.id)) {
+                  return true;
+                }
+                return false;
+              }) : -1;
+
+              // Fallback if findIndex fails but cellCard exists (should imply cellIndex is the originalIndex)
+              // This is more a safeguard; findIndex should work if IDs are stable and cellCard is from actualHandForDisplay
+              const cardIsPresentInHand = originalCardIndex !== -1;
+
+              let showFaceUp = false;
+              if (cellCard && cardIsPresentInHand) { // Ensure we are working with a card that's actually in the hand
+                if (isViewingPlayer) {
+                  if (isCardBeingPeeked(cellCard, originalCardIndex)) {
+                    showFaceUp = true;
+                  } else if (cardsToForceShowFaceUp[originalCardIndex]) {
+                    showFaceUp = true;
+                  } else if (cellCard && !('isHidden' in cellCard)) {
+                     showFaceUp = false; 
                   }
-                  return false;
-                }) : -1;
+                } else { // Opponent's hand
+                  showFaceUp = !!cardsToForceShowFaceUp[originalCardIndex];
+                }
+              } else if (cellCard && !('isHidden' in cellCard)) { // Should not be hit if cardIsPresentInHand is false
+                showFaceUp = true; 
+              }
 
-                // Fallback if findIndex fails but cellCard exists (should imply cellIndex is the originalIndex)
-                // This is more a safeguard; findIndex should work if IDs are stable and cellCard is from actualHandForDisplay
-                const cardIsPresentInHand = originalCardIndex !== -1;
+              const isSelectedForSingleAction = cardIsPresentInHand && selectedCardIndices.includes(originalCardIndex);
+              const isSelectedForMultiAction = cardIsPresentInHand && multiSelectedCardIndices.includes(originalCardIndex);
 
-                let showFaceUp = false;
-                if (cellCard && cardIsPresentInHand) { // Ensure we are working with a card that's actually in the hand
-                  if (isViewingPlayer) {
-                    if (isCardBeingPeeked(cellCard, originalCardIndex)) {
-                      showFaceUp = true;
-                    } else if (cardsToForceShowFaceUp[originalCardIndex]) {
-                      showFaceUp = true;
-                    } else if (cellCard && !('isHidden' in cellCard)) {
-                       showFaceUp = false; 
+              const cardId = cellCard && !('isHidden' in cellCard) ? (cellCard as Card).id : null;
+              const isThisCardSwappingOut = !!(swappingOutCardId && cardId && cardId === swappingOutCardId);
+              
+              // Use cellIndex for the key of the motion.div wrapper for grid stability,
+              // but originalCardIndex for logic tied to the card data itself.
+              const stableCardSlotKey = `${playerID}-slot-${cellIndex}`;
+
+              // Check if this card is being targeted by a global ability
+              const currentGlobalTarget = cardIsPresentInHand ? abilityTargetsOnThisHand?.find(target => target.cardIndex === originalCardIndex) : undefined;
+              const isBeingTargetedForPeek = currentGlobalTarget?.type === 'peek';
+              const isBeingTargetedForSwap = currentGlobalTarget?.type === 'swap';
+              
+              // Logging for opponent peek (can be removed after debugging)
+              if (!isViewingPlayer && showFaceUp && cardIsPresentInHand) {
+                console.log(`[PlayerHandComponent-OPPONENT-PEEK-DEBUG] Key: ${stableCardSlotKey}`, {
+                  cardForDisplay: cellCard,
+                  isFaceUpProp: showFaceUp,
+                  forceShowFrontProp: (isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex)) || (!isViewingPlayer && showFaceUp),
+                  showPeekHighlightProp: (isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex) && !cardsToForceShowFaceUp[originalCardIndex]) || (!isViewingPlayer && showFaceUp),
+                  originalCardIndex,
+                  cardsToForceShowFaceUp
+                });
+              }
+
+              const isMultiSelected = multiSelectedCardIndices?.includes(originalCardIndex) ?? false;
+              const isAbilityTargetedForPeek = abilityTargetsOnThisHand?.some(target => target.cardIndex === originalCardIndex && target.type === 'peek') ?? false;
+              const isAbilityTargetedForSwap = abilityTargetsOnThisHand?.some(target => target.cardIndex === originalCardIndex && target.type === 'swap') ?? false;
+              const isBeingSwappedByPlayer = swappingOutCardId === cardId;
+
+              // Determine if this specific card should get the temporary swap highlight
+              const showSwapHighlight = !isViewingPlayer && highlightedSwapIndex === originalCardIndex;
+
+              let cardWrapperClassName = "relative w-16 md:w-20 aspect-[2.5/3.5] overflow-hidden rounded-lg";
+
+              if (isSelectedForSingleAction || isSelectedForMultiAction) {
+                cardWrapperClassName += " ring-2 ring-accent ring-offset-2 ring-offset-neutral-800";
+              }
+              
+              return (
+                <motion.div
+                  key={stableCardSlotKey}
+                  layoutId={cardId ? `card-${cardId}` : undefined}
+                  layout
+                  variants={cardContainerVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit={determineExitVariant(isThisCardSwappingOut)}
+                  custom={isThisCardSwappingOut}
+                  transition={cardContainerVariants.layoutTransition}
+                  className={cardWrapperClassName}
+                  onClick={() => {
+                    if (cardIsPresentInHand) { // Ensure click is on an actual card
+                      onCardClick(playerID, originalCardIndex);
+                    } else {
+                      // Optional: handle click on empty slot if needed, or do nothing
+                      // console.warn("[PlayerHandComponent] Clicked on an empty card slot. CellIndex:", cellIndex);
                     }
-                  } else { // Opponent's hand
-                    showFaceUp = !!cardsToForceShowFaceUp[originalCardIndex];
-                  }
-                } else if (cellCard && !('isHidden' in cellCard)) { // Should not be hit if cardIsPresentInHand is false
-                  showFaceUp = true; 
-                }
-
-                const isSelectedForSingleAction = cardIsPresentInHand && selectedCardIndices.includes(originalCardIndex);
-                const isSelectedForMultiAction = cardIsPresentInHand && multiSelectedCardIndices.includes(originalCardIndex);
-
-                const cardId = cellCard && !('isHidden' in cellCard) ? (cellCard as Card).id : null;
-                const isThisCardSwappingOut = !!(swappingOutCardId && cardId && cardId === swappingOutCardId);
-                
-                // Use cellIndex for the key of the motion.div wrapper for grid stability,
-                // but originalCardIndex for logic tied to the card data itself.
-                const stableCardSlotKey = `${playerID}-slot-${cellIndex}`;
-
-                // Check if this card is being targeted by a global ability
-                const currentGlobalTarget = cardIsPresentInHand ? abilityTargetsOnThisHand?.find(target => target.cardIndex === originalCardIndex) : undefined;
-                const isBeingTargetedForPeek = currentGlobalTarget?.type === 'peek';
-                const isBeingTargetedForSwap = currentGlobalTarget?.type === 'swap';
-                
-                // Logging for opponent peek (can be removed after debugging)
-                if (!isViewingPlayer && showFaceUp && cardIsPresentInHand) {
-                  console.log(`[PlayerHandComponent-OPPONENT-PEEK-DEBUG] Key: ${stableCardSlotKey}`, {
-                    cardForDisplay: cellCard,
-                    isFaceUpProp: showFaceUp,
-                    forceShowFrontProp: (isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex)) || (!isViewingPlayer && showFaceUp),
-                    showPeekHighlightProp: (isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex) && !cardsToForceShowFaceUp[originalCardIndex]) || (!isViewingPlayer && showFaceUp),
-                    originalCardIndex,
-                    cardsToForceShowFaceUp
-                  });
-                }
-
-                const isMultiSelected = multiSelectedCardIndices?.includes(originalCardIndex) ?? false;
-                const isAbilityTargetedForPeek = abilityTargetsOnThisHand?.some(target => target.cardIndex === originalCardIndex && target.type === 'peek') ?? false;
-                const isAbilityTargetedForSwap = abilityTargetsOnThisHand?.some(target => target.cardIndex === originalCardIndex && target.type === 'swap') ?? false;
-                const isBeingSwappedByPlayer = swappingOutCardId === cardId;
-
-                // Determine if this specific card should get the temporary swap highlight
-                const showSwapHighlight = !isViewingPlayer && highlightedSwapIndex === originalCardIndex;
-
-                let cardWrapperClassName = "relative w-16 md:w-20 aspect-[2.5/3.5] overflow-hidden rounded-lg";
-
-                if (isSelectedForSingleAction || isSelectedForMultiAction) {
-                  cardWrapperClassName += " ring-2 ring-accent ring-offset-2 ring-offset-neutral-800";
-                }
-                
-                return (
-                  <motion.div
-                    key={stableCardSlotKey}
-                    variants={cardContainerVariants}
-                    initial="initial"
-                    animate="animate"
-                    exit={determineExitVariant(isThisCardSwappingOut)}
-                    custom={isThisCardSwappingOut}
-                    transition={cardContainerVariants.layoutTransition}
-                    className={cardWrapperClassName}
-                    onClick={() => {
-                      if (cardIsPresentInHand) { // Ensure click is on an actual card
-                        onCardClick(playerID, originalCardIndex);
-                      } else {
-                        // Optional: handle click on empty slot if needed, or do nothing
-                        // console.warn("[PlayerHandComponent] Clicked on an empty card slot. CellIndex:", cellIndex);
+                  }}
+                >
+                  {cellCard ? (
+                    <CardComponent
+                      card={cellCard}
+                      isFaceUp={showFaceUp}
+                      isSelected={isSelectedForSingleAction || isSelectedForMultiAction}
+                      isInteractive={cardIsPresentInHand && !isLocked && (!isInitialPeekActive || isCardBeingPeeked(cellCard, originalCardIndex)) || (!isViewingPlayer && showFaceUp && cardIsPresentInHand)}
+                      isLocked={isLocked}
+                      forceShowFront={
+                        (cardIsPresentInHand && isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex)) ||
+                        (!isViewingPlayer && showFaceUp && cardIsPresentInHand) 
+                      } 
+                      showPeekHighlight={
+                        (cardIsPresentInHand && isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex) && !cardsToForceShowFaceUp[originalCardIndex]) ||
+                        (!isViewingPlayer && showFaceUp && cardIsPresentInHand)
                       }
-                    }}
-                  >
-                    {cellCard ? (
-                      <CardComponent
-                        card={cellCard}
-                        isFaceUp={showFaceUp}
-                        isSelected={isSelectedForSingleAction || isSelectedForMultiAction}
-                        isInteractive={cardIsPresentInHand && !isLocked && (!isInitialPeekActive || isCardBeingPeeked(cellCard, originalCardIndex)) || (!isViewingPlayer && showFaceUp && cardIsPresentInHand)}
-                        isLocked={isLocked}
-                        forceShowFront={
-                          (cardIsPresentInHand && isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex)) ||
-                          (!isViewingPlayer && showFaceUp && cardIsPresentInHand) 
-                        } 
-                        showPeekHighlight={
-                          (cardIsPresentInHand && isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex) && !cardsToForceShowFaceUp[originalCardIndex]) ||
-                          (!isViewingPlayer && showFaceUp && cardIsPresentInHand)
-                        }
-                        isBeingTargetedForPeek={isBeingTargetedForPeek}
-                        isBeingTargetedForSwap={isBeingTargetedForSwap}
-                        isPlayerHandCard={true}
-                      />
-                    ) : (
-                      <div className={`${cardWidth} ${cardHeight} rounded-md md:rounded-lg bg-black/5 dark:bg-white/5`} /> 
-                    )}
-                    <AnimatePresence>
-                      {showSwapHighlight && (
-                        <motion.div
-                          className="absolute inset-0 pointer-events-none rounded-lg"
-                          style={{
-                            backgroundSize: "200% 100%",
-                            backgroundImage: "linear-gradient(to right, transparent 30%, rgba(255, 255, 255, 0.4) 50%, transparent 70%)",
-                          }}
-                          initial={{ backgroundPosition: "-150% 0%", opacity: 0.7 }}
-                          animate={{ backgroundPosition: "150% 0%", opacity: [0.7, 1, 0.7] }}
-                          exit={{ opacity: 0, transition: { duration: 0.2 } }}
-                          transition={{
+                      isBeingTargetedForPeek={isBeingTargetedForPeek}
+                      isBeingTargetedForSwap={isBeingTargetedForSwap}
+                      isPlayerHandCard={true}
+                    />
+                  ) : (
+                    <div className={`${cardWidth} ${cardHeight} rounded-md md:rounded-lg bg-black/5 dark:bg-white/5`} /> 
+                  )}
+                  <AnimatePresence>
+                    {showSwapHighlight && (
+                      <motion.div
+                        className="absolute inset-0 pointer-events-none rounded-lg"
+                        style={{
+                          backgroundSize: "200% 100%",
+                          backgroundImage: "linear-gradient(to right, transparent 30%, rgba(255, 255, 255, 0.4) 50%, transparent 70%)",
+                        }}
+                        initial={{ backgroundPosition: "-150% 0%", opacity: 0.7 }}
+                        animate={{ backgroundPosition: "150% 0%", opacity: [0.7, 1, 0.7] }}
+                        exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                        transition={{
+                          duration: 0.7,
+                          ease: "linear",
+                          opacity: {
                             duration: 0.7,
-                            ease: "linear",
-                            opacity: {
-                              duration: 0.7,
-                              ease: "easeInOut",
-                              times: [0, 0.5, 1]
-                            }
-                          }}
-                        />
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </div>
+                            ease: "easeInOut",
+                            times: [0, 0.5, 1]
+                          }
+                        }}
+                      />
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </motion.div>
+      )}
     </div>
   );
 });

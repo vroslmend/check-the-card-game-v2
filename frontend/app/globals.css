@@ -24,3 +24,45 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom scrollbar styles for dark themed components */
+.styled-scrollbar-dark::-webkit-scrollbar {
+  width: 6px;
+}
+.styled-scrollbar-dark::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.1); /* Slightly visible track for context */
+}
+.styled-scrollbar-dark::-webkit-scrollbar-thumb {
+  background: #555; /* Dark thumb */
+  border-radius: 3px;
+}
+.styled-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: #777; /* Lighter on hover */
+}
+
+/* Firefox specific for dark scrollbar */
+.styled-scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: #555 rgba(0,0,0,0.1);
+}
+
+/* Custom scrollbar styles for light themed components (e.g. EndOfGameModal) */
+.styled-scrollbar-light::-webkit-scrollbar {
+  width: 8px;
+}
+.styled-scrollbar-light::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.05); /* Very subtle track */
+}
+.styled-scrollbar-light::-webkit-scrollbar-thumb {
+  background: #bbb; /* Light thumb */
+  border-radius: 4px;
+}
+.styled-scrollbar-light::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+/* Firefox specific for light scrollbar */
+.styled-scrollbar-light {
+  scrollbar-width: thin;
+  scrollbar-color: #bbb rgba(0,0,0,0.05);
+}

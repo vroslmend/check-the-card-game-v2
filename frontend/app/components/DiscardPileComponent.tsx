@@ -28,7 +28,10 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
         <div className={`absolute w-full h-full rounded-md md:rounded-lg bg-gradient-to-br from-neutral-500 to-neutral-700 dark:from-neutral-600 dark:to-neutral-800 shadow-md transform translate-x-0.5 translate-y-0.5 pointer-events-none`} />
       )}
       {topCard && numberOfCards > 2 && (
-        <div className={`absolute w-full h-full rounded-md md:rounded-lg bg-gradient-to-br from-neutral-500 to-neutral-700 dark:from-neutral-600 dark:to-neutral-800 shadow-sm transform translate-x-1 translate-y-1 pointer-events-none`} />
+        <div className={`absolute w-full h-full rounded-md md:rounded-lg bg-gradient-to-br from-neutral-500 to-neutral-700 dark:from-neutral-600 dark:to-neutral-800 shadow-sm transform translate-x-1 translate-y-1 pointer-events-none opacity-75`} />
+      )}
+      {topCard && numberOfCards > 3 && (
+        <div className={`absolute w-full h-full rounded-md md:rounded-lg bg-gradient-to-br from-neutral-500 to-neutral-700 dark:from-neutral-600 dark:to-neutral-800 shadow-xs transform translate-x-[1.5px] translate-y-[1.5px] pointer-events-none opacity-50`} />
       )}
       
       <AnimatePresence mode='wait'>
@@ -38,8 +41,8 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
             initial={{ opacity: 0, scale: 0.7, rotate: -15 }}
             animate={{ opacity: 1, scale: 1, rotate: 0 }}
             exit={{ opacity: 0, scale: 0.7, rotate: 15 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="w-full h-full absolute inset-0"
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="w-full h-full absolute inset-0 z-10"
           >
             <CardComponent
               card={topCard}
@@ -47,14 +50,22 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
               isInteractive={false}
               disableHoverEffect={true}
             />
-            {isSealed && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-md md:rounded-lg p-2 pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-              </div>
-            )}
+            <AnimatePresence>
+              {isSealed && (
+                <motion.div 
+                  className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-md md:rounded-lg p-2 pointer-events-none"
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.5 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         ) : (
           <motion.div
@@ -92,8 +103,10 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
 
   return (
     <motion.div 
+      layout
+      transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className="flex flex-col items-center justify-center p-1 group"
-      whileHover={effectiveCanDraw && topCard ? { scale: 1.05 } : {}}
+      whileHover={effectiveCanDraw && topCard ? { scale: 1.05, y: -4 } : {}}
       whileTap={effectiveCanDraw && topCard ? { scale: 0.95 } : {}}
       onClick={effectiveCanDraw && topCard ? onClick : undefined}
       style={{ cursor: (effectiveCanDraw && topCard) ? 'pointer' : 'default' }}
