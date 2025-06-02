@@ -162,7 +162,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
         {renderFrontFaceBasedOnProps ? (
           <motion.div
             key="front"
-            className="absolute inset-0 w-full h-full bg-white dark:bg-neutral-100 rounded-md flex flex-col items-stretch justify-between p-1.5 md:p-2 shadow-md"
+            className="absolute inset-0 w-full h-full bg-white dark:bg-neutral-200 dark:border dark:border-neutral-400 rounded-md flex flex-col items-stretch justify-between p-1.5 md:p-2 shadow-md"
             initial={{ rotateY: -180 }} 
             animate={{ rotateY: 0 }}    
             exit={{ rotateY: 180 }}     
@@ -229,7 +229,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
         ) : (
           <motion.div
             key="back"
-            className="absolute inset-0 w-full h-full bg-neutral-700 dark:bg-neutral-800 rounded-md flex items-center justify-center shadow-inner"
+            className="absolute inset-0 w-full h-full bg-neutral-700 dark:bg-neutral-600 rounded-md flex items-center justify-center shadow-inner"
             initial={{ rotateY: 180 }} 
             animate={{ rotateY: 0 }}    
             exit={{ rotateY: -180 }}    

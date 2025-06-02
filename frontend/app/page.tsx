@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { motion, AnimatePresence } from 'motion/react'; // Changed from framer-motion
 import CheckGameBoard from './components/CheckGameBoard';
-import type { ClientCheckGameState, InitialPlayerSetupData } from 'shared-types'; // Assuming shared-types is aliased or path is correct
+import type { ClientCheckGameState, InitialPlayerSetupData, Card, RichGameLogMessage } from 'shared-types';
 import GameLogComponent from './components/GameLogComponent';
 import { FaBug } from 'react-icons/fa'; // Import the bug icon
 import { FiX } from 'react-icons/fi'; // Added import for FiX
@@ -14,6 +14,23 @@ const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000'
 const SESSION_STORAGE_KEY_GAME_ID = 'checkGame_gameId';
 const SESSION_STORAGE_KEY_PLAYER_ID = 'checkGame_playerId';
 const SESSION_STORAGE_KEY_PLAYER_NAME = 'checkGame_playerName';
+
+// Helper function to get player name
+const getPlayerName = (pId: string, gs: ClientCheckGameState | null): string => {
+  if (!gs || !gs.players || !gs.players[pId]) {
+    return `P-${pId.slice(-4)}`; // Fallback if player not found or gameState is null
+  }
+  return gs.players[pId].name || `P-${pId.slice(-4)}`;
+};
+
+// Helper function to format a card for display
+const cardToString = (card: Card | null | undefined): string => {
+  if (!card || ('isHidden' in card && card.isHidden)) {
+    return 'a card'; // Or 'a hidden card'
+  }
+  const suitSymbols: { [key: string]: string } = { H: '♥', D: '♦', C: '♣', S: '♠' };
+  return `${card.rank}${suitSymbols[card.suit] || card.suit}`;
+};
 
 const ADJECTIVES = [
   'Silent', 'Quick', 'Shadow', 'Crimson', 'Iron', 'Cosmic', 'Arctic', 'Mystic', 'Golden', 'Silver',
@@ -34,7 +51,7 @@ export default function HomePage() {
   const [playerId, setPlayerId] = useState<string | null>(null); // This will be the player's unique ID in the game
   const [playerName, setPlayerName] = useState<string>("");
   const [inputGameId, setInputGameId] = useState<string>("");
-  const [log, setLog] = useState<{ message: string; timestamp: string }[]>([]);
+  const [log, setLog] = useState<RichGameLogMessage[]>([]);
   const [isAttemptingRejoin, setIsAttemptingRejoin] = useState<boolean>(true); // Start true
   const [rejoinStatusMessage, setRejoinStatusMessage] = useState<string>("Attempting to rejoin previous game..."); // More detailed status
   const [copiedGameId, setCopiedGameId] = useState(false);
@@ -43,9 +60,13 @@ export default function HomePage() {
   const [visibilityTrigger, setVisibilityTrigger] = useState<number>(0); // For tab focus reset
 
   // Helper to add a log entry
-  const addLog = useCallback((msg: string) => {
+  const addLog = useCallback((logEntry: Omit<RichGameLogMessage, 'timestamp'>) => {
     setLog((prev) => {
-      const next = [...prev, { message: msg, timestamp: new Date().toLocaleTimeString() }];
+      const newEntryWithTimestamp: RichGameLogMessage = {
+        ...logEntry,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      const next = [...prev, newEntryWithTimestamp];
       return next.length > 100 ? next.slice(-100) : next;
     });
   }, []);
@@ -63,7 +84,7 @@ export default function HomePage() {
     setRejoinStatusMessage(""); // Clear rejoin status
     localStorage.removeItem(SESSION_STORAGE_KEY_GAME_ID);
     localStorage.removeItem(SESSION_STORAGE_KEY_PLAYER_ID);
-    addLog("Returned to lobby. Game session cleared.");
+    addLog({ message: "Returned to lobby. Game session cleared." });
     setIsAttemptingRejoin(false); // Explicitly stop any rejoin attempts
   }, [addLog]);
 
@@ -77,7 +98,7 @@ export default function HomePage() {
       setGameId(storedGameId);
       setPlayerId(storedPlayerId);
       setRejoinStatusMessage(`Found previous session: Game ${storedGameId.slice(-4)}. Attempting to reconnect...`);
-      addLog(`Found previous session: Game ${storedGameId.slice(-4)}, Player ${storedPlayerId.slice(-4)}`);
+      addLog({ message: `Found previous session: Game ${storedGameId.slice(-4)}, Player ${storedPlayerId.slice(-4)}` });
     } else {
       setIsAttemptingRejoin(false); 
       setRejoinStatusMessage("");
@@ -124,7 +145,7 @@ export default function HomePage() {
 
       if (storedGameId && storedPlayerId && isAttemptingRejoin && !rejoinAttemptedOnConnect) {
         rejoinAttemptedOnConnect = true;
-        addLog(`Attempting to rejoin game ${storedGameId.slice(-4)} as player ${storedPlayerId.slice(-4)}...`);
+        addLog({ message: `Attempting to rejoin game ${storedGameId.slice(-4)} as player ${storedPlayerId.slice(-4)}...` });
         setRejoinStatusMessage(`Attempting to rejoin game ${storedGameId.slice(-4)}...`);
         socket.emit('attemptRejoin', { gameId: storedGameId, playerId: storedPlayerId }, 
           (response: { success: boolean; gameState?: ClientCheckGameState; message?: string }) => {
@@ -133,11 +154,11 @@ export default function HomePage() {
               setGameId(storedGameId);
               setPlayerId(storedPlayerId);
               setError(null);
-              addLog('Successfully rejoined game.');
+              addLog({ message: 'Successfully rejoined game.' });
               setRejoinStatusMessage('Successfully rejoined game!');
               setIsAttemptingRejoin(false); // SUCCESS
             } else {
-              addLog(`Rejoin failed: ${response.message || 'Could not rejoin previous game.'}`);
+              addLog({ message: `Rejoin failed: ${response.message || 'Could not rejoin previous game.'}` });
               setRejoinStatusMessage(`Rejoin failed: ${response.message || 'Previous session invalid.'}`);
               localStorage.removeItem(SESSION_STORAGE_KEY_GAME_ID);
               localStorage.removeItem(SESSION_STORAGE_KEY_PLAYER_ID);
@@ -158,7 +179,7 @@ export default function HomePage() {
 
     const handleDisconnect = (reason: string) => {
       console.log('Disconnected:', reason);
-      addLog(`Disconnected from server: ${reason}`);
+      addLog({ message: `Disconnected from server: ${reason}` });
       if (reason === 'io server disconnect') { // Server told us to disconnect
         setIsAttemptingRejoin(false); // Don't try to rejoin if server kicked us
         setRejoinStatusMessage("Disconnected by server.");
@@ -174,7 +195,7 @@ export default function HomePage() {
 
     const handleConnectError = (err: Error) => { 
       console.error('Connection error:', err.message);
-      addLog(`Connection error: ${err.message}`);
+      addLog({ message: `Connection error: ${err.message}` });
       // Don't set isAttemptingRejoin to false here. Let reconnect_failed handle it.
       // Update status message if currently in rejoin process
       if (isAttemptingRejoin) {
@@ -186,7 +207,7 @@ export default function HomePage() {
 
     const handleReconnectAttempt = (attemptNumber: number) => {
       console.log(`Reconnect attempt #${attemptNumber}`);
-      addLog(`Reconnect attempt #${attemptNumber}`);
+      addLog({ message: `Reconnect attempt #${attemptNumber}` });
       if (isAttemptingRejoin || (gameId && playerId)) { // If initial rejoin or trying to restore active game
          setRejoinStatusMessage(`Connection lost. Reconnect attempt #${attemptNumber}...`);
       }
@@ -195,7 +216,7 @@ export default function HomePage() {
 
     const handleReconnectFailed = () => {
       console.error('Reconnection failed after multiple attempts.');
-      addLog('Reconnection failed definitively.');
+      addLog({ message: 'Reconnection failed definitively.', type: 'error' });
       if (isAttemptingRejoin || (gameId && playerId)) {
         setRejoinStatusMessage("Failed to reconnect. Please check your connection and refresh or return to lobby.");
         setIsAttemptingRejoin(false); // Definitive failure to reconnect
@@ -213,11 +234,26 @@ export default function HomePage() {
         console.log('[Page.tsx-gameStateUpdate] Received. New CurrentPlayerID:', data.gameState.currentPlayerId, 'New Segment:', data.gameState.currentTurnSegment);
         if (currentGameState) {
             console.log('[Page.tsx-gameStateUpdate] Old CurrentPlayerID:', currentGameState.currentPlayerId, 'Old Segment:', currentGameState.currentTurnSegment);
+            
+            // Log phase changes with more descriptive messages (can keep this client-side for immediacy)
+            if (data.gameState.currentPhase !== currentGameState.currentPhase) {
+              let phaseMessage = `Game phase changed to: ${data.gameState.currentPhase}`;
+              switch (data.gameState.currentPhase) {
+                case 'initialPeekPhase': phaseMessage = "Initial Peek phase has begun."; break;
+                case 'playPhase': phaseMessage = "Play phase has started."; break;
+                case 'matchingStage': phaseMessage = "Matching stage has begun!"; break;
+                case 'abilityResolutionPhase': phaseMessage = "Ability resolution in progress."; break;
+                case 'finalTurnsPhase': phaseMessage = "Final Turns phase has started."; break;
+                case 'scoringPhase': phaseMessage = "Scoring phase."; break;
+                case 'gameOver': phaseMessage = "Game Over!"; break; // Winner logged separately by server now
+              }
+              addLog({ message: phaseMessage, type: 'game_event' });
+            }
+
+            // Player calling "Check!" and Game Over/Winner are now logged by the server.
+            // Turn changes are also now logged by the server.
         }
 
-        if (data.gameState.currentPhase && data.gameState.currentPhase !== currentGameState?.currentPhase) {
-          addLog(`Phase: ${data.gameState.currentPhase}`);
-        }
         // Update turnSegmentTrigger when game state changes for current player or their segment
         if (currentGameState && 
             (data.gameState.currentPlayerId !== currentGameState.currentPlayerId || 
@@ -231,24 +267,25 @@ export default function HomePage() {
       if (data.gameState.viewingPlayerId && playerId !== data.gameState.viewingPlayerId) {
         setPlayerId(data.gameState.viewingPlayerId);
         localStorage.setItem(SESSION_STORAGE_KEY_PLAYER_ID, data.gameState.viewingPlayerId);
-        addLog(`Player ID updated by server to: ${data.gameState.viewingPlayerId.slice(-4)}`);
+        addLog({ message: `Player ID updated by server to: ${data.gameState.viewingPlayerId.slice(-4)}` });
       }
       // If a gameStateUpdate comes through, it implies successful connection/rejoin.
       if(isAttemptingRejoin) {
         setIsAttemptingRejoin(false);
         setRejoinStatusMessage("Game state updated, session active.");
-        addLog("Game state updated, session active.");
+        addLog({ message: "Game state updated, session active." });
       }
     };
 
     const handlePlayerJoined = (data: { gameId: string, newPlayerInfo: InitialPlayerSetupData, updatedTurnOrder: string[] }) => {
-      addLog(`Player joined: ${data.newPlayerInfo.name || data.newPlayerInfo.id.slice(-4)}`);
+      // Player joined logs are now handled by serverLogEntry
+      // addLog({ message: `Player joined: ${data.newPlayerInfo.name || data.newPlayerInfo.id.slice(-4)}` });
     };
     
     // Custom event from server if rejoin attempt is specifically denied (e.g. game full, not found)
     // This is an alternative to using the callback of `socket.emit('attemptRejoin', ...)`
     const handleRejoinDenied = (data: { message: string }) => {
-        addLog(`Rejoin denied: ${data.message}`);
+        addLog({ message: `Rejoin denied: ${data.message}`, type: 'error' });
         setRejoinStatusMessage(`Rejoin denied: ${data.message}`);
         localStorage.removeItem(SESSION_STORAGE_KEY_GAME_ID);
         localStorage.removeItem(SESSION_STORAGE_KEY_PLAYER_ID);
@@ -258,6 +295,21 @@ export default function HomePage() {
         setIsAttemptingRejoin(false);
     };
 
+    // New listener for server-sent log entries
+    const handleServerLogEntry = (data: { gameId: string; logEntry: RichGameLogMessage }) => {
+      if (data.gameId === gameId || (gameId === null && isAttemptingRejoin)) {
+        addLog(data.logEntry);
+      }
+    };
+
+    // Listener for initial batch of logs on join/rejoin
+    const handleInitialLogs = (data: { logs: RichGameLogMessage[] }) => {
+      console.log('[Page.tsx] Received initialLogs:', data.logs);
+      // Replace current client logs with the initial set from server
+      // This ensures the welcome message and recent history are displayed correctly.
+      setLog(data.logs.length > 100 ? data.logs.slice(-100) : data.logs);
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
@@ -265,7 +317,9 @@ export default function HomePage() {
     socket.on('reconnect_failed', handleReconnectFailed);
     socket.on('gameStateUpdate', handleGameStateUpdate);
     socket.on('playerJoined', handlePlayerJoined);
-    socket.on('rejoinDenied', handleRejoinDenied); // New listener for specific rejoin errors
+    socket.on('rejoinDenied', handleRejoinDenied);
+    socket.on('serverLogEntry', handleServerLogEntry);
+    socket.on('initialLogs', handleInitialLogs); // Add listener for initialLogs
 
     return () => {
       socket.off('connect', handleConnect);
@@ -276,6 +330,8 @@ export default function HomePage() {
       socket.off('gameStateUpdate', handleGameStateUpdate);
       socket.off('playerJoined', handlePlayerJoined);
       socket.off('rejoinDenied', handleRejoinDenied);
+      socket.off('serverLogEntry', handleServerLogEntry);
+      socket.off('initialLogs', handleInitialLogs); // Clean up listener
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [socket, addLog, playerId, isAttemptingRejoin, gameId, handleReturnToLobby]); // Added gameId, handleReturnToLobby
@@ -305,7 +361,8 @@ export default function HomePage() {
         localStorage.setItem(SESSION_STORAGE_KEY_PLAYER_ID, response.playerId);
         localStorage.setItem(SESSION_STORAGE_KEY_PLAYER_NAME, finalPlayerName); // Store the final name
         setError(null);
-        addLog(`Game ${response.gameId.slice(-4)} created. You are ${finalPlayerName} (Player ${response.playerId.slice(-4)}).`);
+        // Game creation log now comes from server
+        // addLog({ message: `Game ${response.gameId.slice(-4)} created. You are ${finalPlayerName} (Player ${response.playerId.slice(-4)}).` });
       } else {
         setError(response.message || "Failed to create game.");
       }
@@ -331,12 +388,12 @@ export default function HomePage() {
     const sanitizedGameId = inputGameId.trim();
     if (sanitizedGameId.startsWith('http://') || sanitizedGameId.startsWith('https://')) {
         setError("Invalid Game ID format. Please enter only the Game ID (e.g., game_xxxxxx), not a full URL.");
-        addLog("Join attempt with invalid Game ID format (URL detected).");
+        addLog({ message: "Join attempt with invalid Game ID format (URL detected)." });
         return;
     }
     if (!sanitizedGameId.startsWith('game_')) {
         setError("Invalid Game ID format. Game IDs typically start with 'game_'.");
-        addLog("Join attempt with invalid Game ID format (missing 'game_' prefix).");
+        addLog({ message: "Join attempt with invalid Game ID format (missing 'game_' prefix)." });
         return;
     }
 
@@ -349,7 +406,8 @@ export default function HomePage() {
         localStorage.setItem(SESSION_STORAGE_KEY_PLAYER_ID, response.playerId);
         localStorage.setItem(SESSION_STORAGE_KEY_PLAYER_NAME, finalPlayerName); // Store the final name
         setError(null);
-        addLog(`Joined Game ${response.gameId.slice(-4)}. You are ${finalPlayerName} (Player ${response.playerId.slice(-4)}).`);
+        // Join game log now comes from server
+        // addLog({ message: `Joined Game ${response.gameId.slice(-4)}. You are ${finalPlayerName} (Player ${response.playerId.slice(-4)}).` });
       } else {
         setError(response.message || "Failed to join game.");
       }
@@ -403,11 +461,12 @@ export default function HomePage() {
         } else if (response.success) {
             // Action was successful but didn't return a new game state directly.
             // This is fine if the server is expected to follow up with a general broadcast.
-            addLog(`Action ${type} successful. Waiting for broadcast update.`);
+            // Action-specific logs now come from the server via 'serverLogEntry'
+            // addLog({ message: `Action ${type} successful. Waiting for broadcast update.` });
         } else {
           // Action failed, message handled by clientCallback above or set as general error.
           setError(response.message || `Action ${type} failed.`);
-          addLog(`Action ${type} failed: ${response.message || 'No specific error message.'}`);
+          addLog({ message: `Action ${type} failed: ${response.message || 'No specific error message.'}`, type: 'error' });
         }
     });
   };
@@ -419,7 +478,7 @@ export default function HomePage() {
         setTimeout(() => setCopiedGameId(false), 2000); // Hide message after 2 seconds
       }).catch(err => {
         console.error('Failed to copy game ID: ', err);
-        addLog("Error copying Game ID to clipboard.");
+        addLog({ message: "Error copying Game ID to clipboard.", type: 'error' });
       });
     }
   };
@@ -537,11 +596,11 @@ export default function HomePage() {
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 select-none">
       {/* Header */}
-      <header className="bg-white dark:bg-neutral-800 shadow-md p-2.5 sm:p-3 flex items-center justify-between w-full flex-shrink-0">
+      <header className="bg-white dark:bg-neutral-800 dark:border-b dark:border-neutral-700 shadow-md p-2.5 sm:p-3 flex items-center justify-between w-full flex-shrink-0">
         <div className="flex items-center">
           <h1 className="text-xl sm:text-2xl font-bold text-sky-600 dark:text-sky-400 mr-3 sm:mr-4">Check!</h1>
           {gameId && (
-            <div className="flex items-center bg-gray-100 dark:bg-neutral-700 p-1.5 rounded-md">
+            <div className="flex items-center border border-gray-300 dark:border-neutral-700 p-1.5 rounded-md">
               <span className="text-[0.65rem] sm:text-xs text-gray-500 dark:text-neutral-400 mr-1.5 uppercase">Game:</span>
               <span className="text-xs sm:text-sm font-mono font-semibold tracking-wider text-gray-700 dark:text-neutral-200">{gameId.slice(-6)}</span>
               <button 
@@ -554,10 +613,10 @@ export default function HomePage() {
                 <AnimatePresence>
                   {copiedGameId && (
                     <motion.span 
-                      className="absolute -top-7 -right-1 text-[0.6rem] bg-sky-500 text-white px-1 py-0.5 rounded-sm shadow-md"
-                      initial={{ opacity: 0, y: -10 }}
+                      className="absolute top-full mt-1.5 left-1/2 transform -translate-x-1/2 text-[0.6rem] bg-sky-500 text-white px-1 py-0.5 rounded-sm shadow-md"
+                      initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
+                      exit={{ opacity: 0, y: 8 }}
                       transition={{ duration: 0.2 }}
                     >
                       Copied!
@@ -569,10 +628,10 @@ export default function HomePage() {
           )}
         </div>
         <div className="flex items-center space-x-2 sm:space-x-3">
-          {playerName && <span className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 hidden sm:inline truncate max-w-[100px] sm:max-w-[150px]" title={playerName}>{playerName}</span>}
+          {playerName && <span className="text-xs sm:text-sm text-gray-500 dark:text-neutral-300 hidden sm:inline truncate max-w-[100px] sm:max-w-[150px]" title={playerName}>{playerName}</span>}
           <div className="flex items-center">
-            <span className="text-[0.65rem] sm:text-xs text-gray-400 dark:text-neutral-500 mr-1 uppercase">P:</span>
-            <span className="text-xs sm:text-sm font-mono text-gray-500 dark:text-neutral-400">{playerId.slice(-4)}</span>
+            <span className="text-[0.65rem] sm:text-xs text-gray-400 dark:text-neutral-400 mr-1 uppercase">P:</span>
+            <span className="text-xs sm:text-sm font-mono text-gray-500 dark:text-neutral-300">{playerId.slice(-4)}</span>
           </div>
           {/* Debug Toggle Button */}
           <button 
@@ -598,9 +657,9 @@ export default function HomePage() {
           playerId={playerId} 
           onPlayerAction={sendPlayerAction} 
           gameId={gameId}
-          showDebugPanel={showDebugPanel} /* Pass new prop */ 
+          showDebugPanel={showDebugPanel}
           onReturnToLobby={handleReturnToLobby}
-          turnSegmentTrigger={`${turnSegmentTrigger}-${visibilityTrigger}`} // Combine triggers
+          turnSegmentTrigger={`${turnSegmentTrigger}-${visibilityTrigger}`}
         />
       </main>
       <GameLogComponent log={log} />

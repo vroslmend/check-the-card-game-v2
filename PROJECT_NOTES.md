@@ -205,7 +205,51 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
 
 ---
 
-## Session Notes (YYYY-MM-DD) - UI/UX Refinements & Visual Cues
+## Session Notes (YYYY-MM-DD) - Logging, Core Mechanics, Rule Verification & UI Fixes
+
+This session covered several key areas: refining the logging system, ensuring core gameplay mechanics align with the intended rules (especially card visibility), verifying server logic against the game overview, and fixing a UI bug.
+
+*   **Sensitive & Targeted Logging Enhancements:**
+    *   **Redundancy Reduction:** Implemented a mechanism to prevent players from receiving both a detailed private log and a generic public log for the same event.
+        *   Added `privateVersionRecipientId?: string` to `RichGameLogMessage` in `shared-types`.
+        *   Updated `emitLogEntry` (`game-manager.ts`) to set this field on the public log if a private version is sent.
+        *   Modified `broadcastLogEntry` (`server/src/index.ts`) to check `privateVersionRecipientId` and exclude that recipient from the public broadcast, ensuring they only get the detailed private log.
+*   **Comprehensive Server-Side Event Logging:**
+    *   Added new `emitLogEntry` calls in `game-manager.ts` for previously unlogged critical game events:
+        *   Player reconnection (`attemptRejoin`).
+        *   Player disconnection (`markPlayerAsDisconnected`).
+        *   Player forfeiture due to disconnect timeout (`handleDisconnectTimeout`).
+        *   Game Over: Winner, final scores, total turns (`setupScoringPhase`).
+        *   Matching stage ending without a match (all passed) (`checkMatchingStageEnd`).
+        *   Matching stage timeout (`handleMatchingStageTimeout`).
+        *   Turn timeouts with context for different segments (initial action, draw/discard choice, swap/discard choice, ability choice) (`handleTurnTimeout`).
+*   **Core Gameplay Mechanic: "Always Face-Down in Hand" & Penalty Cards:**
+    *   **Clarification:** Established that penalty cards are drawn face-down and remain unknown to the drawing player.
+    *   **Implementation:**
+        *   Added `isFaceDownToOwner?: boolean` to `Card` interface in `shared-types`.
+        *   `handleAttemptMatch` (`game-manager.ts`): When a penalty card is drawn, it's now marked `isFaceDownToOwner: true`. The private log to the attempter now states "You drew a face-down card..." instead of revealing the card.
+        *   `generatePlayerView` (`game-manager.ts`): Updated to send a `HiddenCard` object if `card.isFaceDownToOwner` is true for the viewing player's hand.
+    *   **Reinforced "Always Face-Down In Hand" Principle:**
+        *   Ensured cards are dealt initially with `isFaceDownToOwner: true` in `initializeNewGame`.
+        *   Corrected `handleDeclareReadyForPeek` (initial peek timeout logic) to *not* permanently reveal peeked cards in hand; knowledge is temporary via `cardsToPeek`.
+        *   Corrected `handleResolveSpecialAbility` (King/Queen peek confirmation) to *not* permanently reveal self-peeked cards in hand.
+        *   Ensured cards swapped into hand via `handleSwapAndDiscard` are set with `isFaceDownToOwner: true`.
+*   **Game Rule Verification & Server Logic Alignment (vs. `GAME_OVERVIEW.md`):**
+    *   Confirmed card point values in `shared-types` match the overview.
+    *   Verified that `setupNextPlayTurn` correctly unseals the discard pile.
+    *   Confirmed `handleDrawFromDiscard` correctly prevents drawing special cards (K, Q, J, A) as per overview.
+    *   Discussed and clarified the discard pile locking mechanism: locked if top card is special OR if it was placed as a match.
+        *   Current server implementation of `topDiscardFlagForClient` in `generatePlayerView` correctly flags special cards and just-matched cards, aligning with this.
+*   **UI Fixes:**
+    *   **Draw Pile Count Visibility:**
+        *   The card count for the draw pile was not showing.
+        *   Fixed by adding `z-10` to the `className` of the `div` wrapping the card count display in `frontend/app/components/DrawPileComponent.tsx` to ensure it renders above other pile elements.
+
+*Last Updated: 2025-06-02*
+
+---
+
+## Session Notes (2025-06-02) - UI/UX Refinements & Visual Cues
 
 This session focused on significant UI/UX enhancements, particularly around visual feedback for player actions and game state changes.
 

@@ -1,4 +1,6 @@
-import { Card, Suit, Rank, PlayerState, CheckGameState as ServerCheckGameState, InitialPlayerSetupData, cardValues, HiddenCard, ClientCard, ClientPlayerState, ClientCheckGameState, SpecialAbilityInfo, PendingSpecialAbility, GameOverData, GamePhase, MatchResolvedDetails } from 'shared-types';
+import { Card, Suit, Rank, PlayerState, CheckGameState as ServerCheckGameState, InitialPlayerSetupData, cardValues, HiddenCard, ClientCard, ClientPlayerState, ClientCheckGameState, SpecialAbilityInfo, PendingSpecialAbility, GameOverData, GamePhase, MatchResolvedDetails, RichGameLogMessage } from 'shared-types';
+
+// Local RichGameLogMessage definition removed, imported from shared-types above.
 
 const PEEK_COUNTDOWN_SECONDS = 5; // Define based on typical client value or make configurable
 const PEEK_REVEAL_SECONDS = 5;    // Define based on typical client value or make configurable
@@ -8,6 +10,9 @@ const PEEK_TOTAL_DURATION_MS = 10 * 1000; // Simplified to 10 seconds total for 
 const TURN_DURATION_MS = 60 * 1000; // 60 seconds
 const DISCONNECT_GRACE_PERIOD_MS = 90 * 1000; // 90 seconds
 const MATCHING_STAGE_DURATION_MS = 20 * 1000; // 20 seconds global timer for matching
+
+const MAX_LOG_HISTORY = 100;
+const NUM_RECENT_LOGS_ON_JOIN_REJOIN = 20; // Define the constant here
 
 // Server-only map for managing active timer IDs
 const activeTurnTimerIds = new Map<string, NodeJS.Timeout>(); // Key: gameId_playerId
@@ -63,9 +68,89 @@ const broadcastService = {
     }
 };
 
+// New service for broadcasting log entries
+const logBroadcastService = {
+    triggerLogBroadcast: (gameId: string, logEntry: RichGameLogMessage) => {
+        console.warn("[GameManager] logBroadcastService.triggerLogBroadcast called but not implemented. This should be set by index.ts.");
+    }
+};
+
 export const setTriggerBroadcastFunction = (fn: (gameId: string, gameState: ServerCheckGameState) => void) => {
     broadcastService.triggerBroadcast = fn;
     console.log("[GameManager] triggerBroadcast function has been set.");
+};
+
+export const setTriggerLogBroadcastFunction = (fn: (gameId: string, logEntry: RichGameLogMessage) => void) => {
+    logBroadcastService.triggerLogBroadcast = fn;
+    console.log("[GameManager] triggerLogBroadcast function has been set.");
+};
+
+// Helper to get player name, avoiding null/undefined issues for logging
+const getPlayerNameForLog = (playerId: string, gameState: ServerCheckGameState): string => {
+    return gameState.players[playerId]?.name || `P-${playerId.slice(-4)}`;
+};
+
+// Helper function to emit a log entry
+const emitLogEntry = (
+    gameId: string, 
+    gameStateForContext: ServerCheckGameState, 
+    publicLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'recipientPlayerId'> & { actorId?: string },
+    privateLogConfig?: { 
+        message: string; 
+        recipientPlayerId: string; 
+        cardContext?: string; 
+        type?: RichGameLogMessage['type'];
+        actorId?: string; // Optional: if different from publicLogData.actorId or if public has no actor
+    }
+) => {
+    // Process and send the public log entry
+    const publicEntry: RichGameLogMessage = {
+        ...publicLogData,
+        isPublic: true, // Explicitly mark as public
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+    if (publicLogData.actorId && gameStateForContext && gameStateForContext.players[publicLogData.actorId]) {
+        publicEntry.actorName = getPlayerNameForLog(publicLogData.actorId, gameStateForContext);
+    }
+    
+    // If a private log is being sent, mark the public log so the recipient of the private log doesn't get both.
+    if (privateLogConfig && privateLogConfig.recipientPlayerId) {
+        publicEntry.privateVersionRecipientId = privateLogConfig.recipientPlayerId;
+    }
+    
+    // Store public entry in game state log history
+    const gameRoom = getGameRoom(gameId);
+    if (gameRoom) {
+        if (!gameRoom.gameState.logHistory) {
+            gameRoom.gameState.logHistory = [];
+        }
+        gameRoom.gameState.logHistory.push(publicEntry);
+        if (gameRoom.gameState.logHistory.length > MAX_LOG_HISTORY) {
+            gameRoom.gameState.logHistory = gameRoom.gameState.logHistory.slice(-MAX_LOG_HISTORY);
+        }
+    } else {
+        console.warn(`[GameManager-emitLogEntry] Game room ${gameId} not found when trying to store public log history.`);
+    }
+    logBroadcastService.triggerLogBroadcast(gameId, publicEntry);
+
+    // Process and send the private log entry if configured
+    if (privateLogConfig && privateLogConfig.recipientPlayerId) {
+        const privateEntry: RichGameLogMessage = {
+            message: privateLogConfig.message,
+            type: privateLogConfig.type || publicLogData.type, // Default to public type if not specified
+            cardContext: privateLogConfig.cardContext,
+            isPublic: false,
+            recipientPlayerId: privateLogConfig.recipientPlayerId,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        };
+
+        const actorForPrivateLog = privateLogConfig.actorId || publicLogData.actorId;
+        if (actorForPrivateLog && gameStateForContext && gameStateForContext.players[actorForPrivateLog]) {
+            privateEntry.actorName = getPlayerNameForLog(actorForPrivateLog, gameStateForContext);
+        }
+        // Note: Private logs are NOT added to the general gameRoom.gameState.logHistory here.
+        logBroadcastService.triggerLogBroadcast(gameId, privateEntry);
+    }
 };
 
 // Define an explicit return type for handleDeclareReadyForPeek
@@ -99,7 +184,7 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
         playerInfo.socketId = `missing_socket_${Math.random().toString(36).substring(2,7)}`;
     }
     initialPlayers[playerId] = {
-      hand: shuffledDeck.splice(0, 4),
+      hand: shuffledDeck.splice(0, 4).map(card => ({ ...card, isFaceDownToOwner: true })),
       hasUsedInitialPeek: false,
       isReadyForInitialPeek: false,
       hasCompletedInitialPeek: false,
@@ -150,6 +235,7 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
     lastRegularSwapInfo: null, // Initialize new field
     playerTimers: {}, // Initialize new field
     currentTurnSegment: 'initialAction', // Initialize new field
+    logHistory: [], // Initialize log history
   };
 
   const newGameRoom: GameRoom = {
@@ -160,6 +246,16 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
 
   activeGames[gameId] = newGameRoom;
   console.log(`[GameManager] New game room created: ${gameId} with players: ${playerSetupData.map(p=>(p.name || p.id)).join(', ')}`);
+  
+  // Log game creation
+  if (playerSetupData.length > 0) {
+    const creatorName = playerSetupData[0].name || `P-${playerSetupData[0].id.slice(-4)}`;
+    // gameStateForContext is newGameRoom.gameState here. Need to pass it.
+    emitLogEntry(gameId, newGameRoom.gameState, { 
+        message: `Game created by ${creatorName}. Game ID: ${gameId.slice(-6)}.`, 
+        type: 'game_event' 
+    });
+  }
   return newGameRoom;
 };
 
@@ -232,6 +328,14 @@ export const addPlayerToGame = (
   
   activeGames[gameId] = gameRoom;
 
+  // Log player joining
+  const playerName = newPlayerState.name || `P-${playerInfo.id.slice(-4)}`;
+  emitLogEntry(gameId, gameRoom.gameState, { 
+      message: `${playerName} joined the game.`, 
+      type: 'game_event', 
+      actorId: playerInfo.id // actorId to resolve name
+    });
+
   console.log(`[GameManager] Player ${playerInfo.name || playerInfo.id} (Socket: ${socketId}) added to game ${gameId}. Dealt 4 cards. Total players: ${Object.keys(gameRoom.gameState.players).length}`);
   return { success: true, gameRoom, newPlayerState };
 };
@@ -282,6 +386,27 @@ export const handleDrawFromDeck = (
   activeGames[gameId] = gameRoom;
 
   console.log(`[GameManager] Player ${player.name || playerId} drew from deck in game ${gameId}. Card: ${card.rank}${card.suit}. Deck size: ${gameRoom.gameState.deck.length}. Segment: ${gameRoom.gameState.currentTurnSegment}.`);
+  
+  // Public and private logs for drawing from deck
+  const publicMessage = `drew a card from the deck.`;
+  const privateMessage = `You drew ${card.rank}${suitSymbols[card.suit] || card.suit} from the deck.`;
+
+  emitLogEntry(
+    gameId, 
+    gameRoom.gameState, 
+    { // Public log data
+      message: publicMessage,
+      type: 'player_action', 
+      actorId: playerId 
+    },
+    { // Private log config
+      message: privateMessage,
+      recipientPlayerId: playerId,
+      cardContext: `${card.rank}${suitSymbols[card.suit] || card.suit}`, // Private context shows the card
+      type: 'player_action' // Explicitly type, though it would default to public's type
+    }
+  );
+
   return { success: true, updatedGameState: gameRoom.gameState };
 };
 
@@ -340,6 +465,15 @@ export const handleDrawFromDiscard = (
   activeGames[gameId] = gameRoom; 
 
   console.log(`[GameManager] Player ${player.name || playerId} drew from discard in game ${gameId}. Card: ${card.rank}${card.suit}. Discard pile size: ${gameRoom.gameState.discardPile.length}. Segment: ${gameRoom.gameState.currentTurnSegment}.`);
+  
+  const cardString = `${card.rank}${card.suit}`; // Consider a more robust cardToString if suits are symbols
+  emitLogEntry(gameId, gameRoom.gameState, { 
+    message: `drew ${cardString} from the discard pile.`, 
+    type: 'player_action', 
+    actorId: playerId,
+    cardContext: cardString
+  });
+  
   return { success: true, updatedGameState: gameRoom.gameState };
 };
 
@@ -357,7 +491,13 @@ export const handleSwapAndDiscard = (
   if (!player.pendingDrawnCard) return { success: false, message: "No card pending to swap." };
   if (handIndex < 0 || handIndex >= player.hand.length) return { success: false, message: "Invalid hand index." };
 
-  const cardFromHand = player.hand.splice(handIndex, 1, player.pendingDrawnCard)[0];
+  // Ensure the card being swapped into the hand is marked as face-down to its owner.
+  const cardToPlaceInHand: Card = { 
+    ...player.pendingDrawnCard,
+    isFaceDownToOwner: true 
+  };
+
+  const cardFromHand = player.hand.splice(handIndex, 1, cardToPlaceInHand)[0];
   player.pendingDrawnCard = null;
   player.pendingDrawnCardSource = null;
 
@@ -400,6 +540,32 @@ export const handleSwapAndDiscard = (
 
   activeGames[gameId] = gameRoom;
   console.log(`[GameManager] Player ${player.name || playerId} swapped and discarded in ${gameId}. Card: ${cardFromHand.rank}${cardFromHand.suit}. Phase -> matchingStage. Active matchers: ${Object.keys(newActivePlayers).map(pId => gameRoom.gameState.players[pId]?.name || pId).join(', ')}`);
+  
+  const cardFromHandStr = `${cardFromHand.rank}${suitSymbols[cardFromHand.suit] || cardFromHand.suit}`;
+  const takenCard = player.hand[handIndex]; 
+  const takenCardStr = takenCard ? `${takenCard.rank}${suitSymbols[takenCard.suit] || takenCard.suit}` : 'a card';
+  
+  // Public and private logs for swapping and discarding
+  const publicMessage = `discarded a card and kept their drawn card.`;
+  const privateMessage = `You discarded ${cardFromHandStr} and kept ${takenCardStr}.`;
+
+  emitLogEntry(
+    gameId, 
+    gameRoom.gameState, 
+    { // Public log data
+      message: publicMessage,
+      type: 'player_action', 
+      actorId: playerId,
+      cardContext: `Discarded a card` // Public context is vague
+    },
+    { // Private log config
+      message: privateMessage,
+      recipientPlayerId: playerId,
+      cardContext: `Discarded: ${cardFromHandStr}, Kept: ${takenCardStr}`,
+      type: 'player_action'
+    }
+  );
+
   startMatchingStageTimer(gameId); // <<< START MATCHING STAGE TIMER
   return { success: true, updatedGameState: gameRoom.gameState };
 };
@@ -431,6 +597,14 @@ export const handleDiscardDrawnCard = (
   gameRoom.gameState.discardPileIsSealed = false;
   
   console.log(`[GameManager] Player ${player.name || playerId} discarded drawn card: ${drawnCard.rank}${drawnCard.suit}`);
+
+  const drawnCardStr = `${drawnCard.rank}${drawnCard.suit}`;
+  emitLogEntry(gameId, gameRoom.gameState, { 
+    message: `discarded their drawn card ${drawnCardStr}.`, 
+    type: 'player_action', 
+    actorId: playerId,
+    cardContext: drawnCardStr 
+  });
 
   const potentialMatchers = Object.keys(gameRoom.gameState.players).filter(pId => {
     const p = gameRoom.gameState.players[pId];
@@ -491,6 +665,20 @@ export const handleAttemptMatch = (
     G.discardPileIsSealed = true;
     player.numMatches++; // Increment successful matches
     
+    // Log successful match
+    const originalPlayerName = getPlayerNameForLog(originalPlayerID, G);
+    // Simplified card string representation
+    const cardXStr = `${cardX.rank}${suitSymbols[cardX.suit] || cardX.suit}`;
+    const cardYStr = `${cardY.rank}${suitSymbols[cardY.suit] || cardY.suit}`;
+    
+    emitLogEntry(gameId, G, {
+      message: `matched ${originalPlayerName}'s ${cardXStr} with their ${cardYStr}.`,
+      type: 'player_action',
+      actorId: playerId, // The player who made the match
+      targetName: originalPlayerName, // The player whose card was matched
+      cardContext: `${cardYStr} matches ${cardXStr}`
+    });
+    
     let abilityResolutionRequired = false;
     const isCardXSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardX.rank);
     const isCardYSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardY.rank);
@@ -543,19 +731,48 @@ export const handleAttemptMatch = (
     console.log(`[GameManager] Match FAILED for player ${player.name || playerId} in game ${gameId}. Card ${cardY.rank}${cardY.suit} (hand) does not match ${cardX.rank}${cardX.suit} (discard).`);
     
     // Penalty: Draw a card from the deck
+    let privatePenaltyCardContext = "No card drawn (deck empty)"; // For private log
+    let publicPenaltyMessage = "and drew a penalty card."; // For public log
     if (G.deck.length > 0) {
       const penaltyCard = G.deck.pop();
       if (penaltyCard) {
+        penaltyCard.isFaceDownToOwner = true; // Mark as face-down to owner
         player.hand.push(penaltyCard);
         player.numPenalties++; // Increment penalties
-        console.log(`[GameManager] Player ${player.name || playerId} drew a penalty card: ${penaltyCard.rank}${penaltyCard.suit}. Hand size: ${player.hand.length}. Deck size: ${G.deck.length}`);
+        privatePenaltyCardContext = "a face-down card"; // Updated private context
+        console.log(`[GameManager] Player ${player.name || playerId} drew a penalty card face-down. Hand size: ${player.hand.length}. Deck size: ${G.deck.length}`);
       } else {
         console.warn(`[GameManager] Penalty card draw failed for ${player.name || playerId} in game ${gameId} - deck pop returned undefined despite length > 0.`);
+        publicPenaltyMessage = "but no penalty card could be drawn (deck error).";
       }
     } else {
       console.warn(`[GameManager] Player ${player.name || playerId} should receive a penalty card in game ${gameId}, but deck is empty.`);
-      // Potentially handle game-specific rules for empty deck penalties if any.
+      publicPenaltyMessage = "and would draw a penalty, but the deck is empty.";
     }
+
+    const attemptedCardStr = `${cardY.rank}${suitSymbols[cardY.suit] || cardY.suit}`;
+    const targetCardStr = `${cardX.rank}${suitSymbols[cardX.suit] || cardX.suit}`;
+
+    // Emit public and private logs for failed match
+    const publicMessage = `failed to match ${targetCardStr} with their ${attemptedCardStr} ${publicPenaltyMessage}`;
+    const privateMessage = `You failed to match ${targetCardStr} with your ${attemptedCardStr}. You drew ${privatePenaltyCardContext} as a penalty.`;
+
+    emitLogEntry(
+      gameId, 
+      G, 
+      { // Public log data
+        message: publicMessage,
+        type: 'player_action',
+        actorId: playerId,
+        cardContext: `Attempt: ${attemptedCardStr} vs ${targetCardStr}` // Public context doesn't show penalty card
+      },
+      { // Private log config
+        message: privateMessage,
+        recipientPlayerId: playerId,
+        cardContext: `Attempt: ${attemptedCardStr} vs ${targetCardStr}. Penalty: ${privatePenaltyCardContext}`,
+        type: 'player_action'
+      }
+    );
 
     // Treat them as if they passed for this specific opportunity.
     if (G.activePlayers && G.activePlayers[playerId]) {
@@ -625,6 +842,16 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
   if (!remainingActiveMatchers && G.matchingOpportunityInfo) { 
     console.log(`[GameManager] checkMatchingStageEnd: All players passed or resolved for game ${gameId}. Ending matching stage for card ${G.matchingOpportunityInfo.cardToMatch.rank}${G.matchingOpportunityInfo.cardToMatch.suit} (discarded by ${G.players[G.matchingOpportunityInfo.originalPlayerID]?.name || G.matchingOpportunityInfo.originalPlayerID}).`);
     const { cardToMatch, originalPlayerID } = G.matchingOpportunityInfo;
+
+    // Log that the matching stage ended without a successful match made by a player
+    const cardStr = `${cardToMatch.rank}${suitSymbols[cardToMatch.suit] || cardToMatch.suit}`;
+    const originalPlayerName = getPlayerNameForLog(originalPlayerID, G);
+    emitLogEntry(gameId, G, {
+      message: `Matching stage ended. No matches were made for ${cardStr} discarded by ${originalPlayerName}.`,
+      type: 'game_event',
+      cardContext: cardStr
+    });
+
     G.matchingOpportunityInfo = null;
     clearMatchingStageTimer(gameId); // <<< CLEAR MATCHING STAGE TIMER
 
@@ -688,6 +915,12 @@ export const handlePassMatch = (
   console.log(`[GameManager] Player ${G.players[playerId]?.name || playerId} passed in matching stage for game ${gameId}.`);
   delete G.activePlayers[playerId]; 
 
+  emitLogEntry(gameId, G, { 
+    message: `passed the match.`, 
+    type: 'player_action', 
+    actorId: playerId 
+  });
+
   const updatedGameState = checkMatchingStageEnd(gameId);
   if (!updatedGameState) return {success: false, message: "Error after passing."};
   
@@ -730,6 +963,12 @@ export const handleCallCheck = (
   G.finalTurnsTaken = 0;
 
   console.log(`[GameManager] Player ${G.players[playerId]?.name || playerId} called Check in game ${gameId}. Transitioning to finalTurnsPhase.`);
+  
+  emitLogEntry(gameId, G, { 
+    message: `called Check!`, 
+    type: 'player_action', 
+    actorId: playerId 
+  });
   
   setupFinalTurnsPhase(gameId, playerId); 
 
@@ -1065,6 +1304,27 @@ G.gameover = {
 
   const roundWinnerName = G.roundWinner ? (G.players[G.roundWinner]?.name || G.roundWinner) : "None (Tie or Error)";
   console.log(`[GameManager] Game ${gameId} scoring complete. Round Winner: ${roundWinnerName}. Scores:`, scores, `Total Turns: ${G.totalTurnsInRound}, Player Stats:`, playerStatsForGameOver);
+  
+  // Emit Game Over logs
+  const winnerLogName = G.roundWinner ? getPlayerNameForLog(G.roundWinner, G) : "No one (tie or error)";
+  emitLogEntry(gameId, G, {
+    message: `Game Over! Round Winner: ${winnerLogName}.`,
+    type: 'game_event'
+  });
+
+  const scoreSummary = Object.entries(scores)
+    .map(([pid, score]) => `${getPlayerNameForLog(pid, G)}: ${score}`)
+    .join(', ');
+  emitLogEntry(gameId, G, {
+    message: `Final Scores: ${scoreSummary}.`,
+    type: 'info' // Using 'info' to differentiate from the main game_event
+  });
+
+  emitLogEntry(gameId, G, {
+    message: `Total turns played this round: ${G.totalTurnsInRound}.`,
+    type: 'info'
+  });
+
   clearAllGameTimers(gameId); // Ensure all timers are cleared when game definitively ends through scoring.
   activeGames[gameId] = gameRoom;
   return G;
@@ -1111,6 +1371,15 @@ export const handleResolveSpecialAbility = (
     G.pendingAbilities.shift(); // Remove the fizzled ability
     G.globalAbilityTargets = null; // Clear targets on fizzle
     message = `Ability ${abilityRank} fizzled: Player locked.`;
+
+    // Log the fizzle
+    emitLogEntry(gameId, G, {
+      message: `'s ${abilityRank} ability fizzled because they are locked.`,
+      type: 'game_event', // Or 'player_action' with a system-like tone
+      actorId: playerId,
+      cardContext: `${abilityRank} fizzled (locked)`
+    });
+
     // ... (standard phase transition logic) ...
     let nextState = setupAbilityResolutionPhase(gameId);
     if (!nextState) nextState = setupNextPlayTurn(gameId);
@@ -1130,6 +1399,22 @@ export const handleResolveSpecialAbility = (
     const skipType = abilityResolutionArgs.skipType || 'full';
     message = `Player ${G.players[playerId]?.name || playerId} chose to skip ${abilityRank} ability stage: ${skipType}.`;
     console.log(`[GameManager] Player ${G.players[playerId]?.name || playerId} skipping ${abilityRank}, type: ${skipType}`);
+    // Log the skip action
+    let logMessage = `chose to skip the ${abilityRank} ability`;
+    if (skipType === 'peek') {
+      logMessage = `chose to skip the PEEK stage of the ${abilityRank} ability.`;
+    } else if (skipType === 'swap') {
+      logMessage = `chose to skip the SWAP stage of the ${abilityRank} ability.`;
+    } else { // full skip
+      logMessage = `chose to skip the entire ${abilityRank} ability.`;
+    }
+
+    emitLogEntry(gameId, G, {
+      message: logMessage,
+      type: 'player_action',
+      actorId: playerId,
+      cardContext: `${abilityRank} skip ${skipType}`
+    });
 
     if ((abilityRank === Rank.King || abilityRank === Rank.Queen) && skipType === 'peek' && pendingAbility.currentAbilityStage === 'peek') {
       pendingAbility.currentAbilityStage = 'swap'; // Advance to swap stage
@@ -1194,6 +1479,9 @@ export const handleResolveSpecialAbility = (
         console.warn(`[GameManager] Queen PEEK confirmation: Client did not send 1 peekTarget with resolveSpecialAbility. Proceeding to swap stage anyway.`);
     }
     
+    // Knowledge of self-peeked cards was temporary. No change to isFaceDownToOwner needed.
+    // The client saw these cards via temporaryReveals in generatePlayerView.
+    
     pendingAbility.currentAbilityStage = 'swap'; // Advance to swap stage
     // DO NOT clear G.globalAbilityTargets here. Let the 'peek' targets persist for others to see
     // while the current player is deciding on their swap. They will be overwritten by 'swap' targets later,
@@ -1232,6 +1520,18 @@ export const handleResolveSpecialAbility = (
     p2State.hand[swapTargets[1].cardIndex] = card1;
     console.log(`[GameManager] ${abilityRank} SWAPPED ${swapTargets[0].playerID}[${swapTargets[0].cardIndex}] with ${swapTargets[1].playerID}[${swapTargets[1].cardIndex}]`);
     message = `${abilityRank} SWAP stage complete.`;
+
+    const card1Str = `${card1.rank}${card1.suit}`;
+    const card2Str = `${card2.rank}${card2.suit}`;
+    const p1Name = getPlayerNameForLog(swapTargets[0].playerID, G);
+    const p2Name = getPlayerNameForLog(swapTargets[1].playerID, G);
+
+    emitLogEntry(gameId, G, {
+      message: `used ${abilityRank} to swap ${p1Name}'s card (${card1Str} at index ${swapTargets[0].cardIndex}) with ${p2Name}'s card (${card2Str} at index ${swapTargets[1].cardIndex}).`,
+      type: 'player_action',
+      actorId: playerId,
+      cardContext: `${p1Name}[${swapTargets[0].cardIndex}](${card1Str}) <-> ${p2Name}[${swapTargets[1].cardIndex}](${card2Str})`
+    });
 
     G.lastResolvedAbilityCardForCleanup = pendingAbility.card;
     G.lastResolvedAbilitySource = pendingAbility.source;
@@ -1348,6 +1648,8 @@ export const handleDeclareReadyForPeek = (
     gameRoom.gameState.initialPeekAllReadyTimestamp = Date.now(); // Mark that the peek sequence has started
     const deadline = Date.now() + PEEK_TOTAL_DURATION_MS;
 
+    emitLogEntry(gameId, gameRoom.gameState, { message: "All players ready. Initial peek starting!", type: 'game_event' });
+
     for (const pid of gameRoom.gameState.turnOrder) {
       const p = gameRoom.gameState.players[pid];
       if (p) {
@@ -1373,12 +1675,16 @@ export const handleDeclareReadyForPeek = (
         for (const pid of currentRoom.gameState.turnOrder) {
           const p = currentRoom.gameState.players[pid];
           if (p) {
+            // Knowledge of peeked cards was temporary via p.cardsToPeek.
+            // Cards in hand remain isFaceDownToOwner: true.
             p.cardsToPeek = null;
             p.hasCompletedInitialPeek = true;
             p.peekAcknowledgeDeadline = null; // Clear deadline
           }
         }
         currentRoom.gameState.initialPeekAllReadyTimestamp = null; // Clear the timestamp to prevent re-entry
+        
+        emitLogEntry(gameId, currentRoom.gameState, { message: "Initial peek has ended.", type: 'game_event' });
         
         // Transition to the next phase
         const nextPhaseState = setupNextPlayTurn(gameId); 
@@ -1411,6 +1717,13 @@ export const handleDeclareReadyForPeek = (
 
   // If not all players are ready yet, but this player is now ready
   console.log(`[GameManager] Player ${player.name || playerId} is ready for peek in game ${gameId}. Waiting for other players.`);
+  
+  emitLogEntry(gameId, gameRoom.gameState, {
+    message: `is ready for the initial peek.`,
+    type: 'player_action',
+    actorId: playerId
+  });
+
   return { success: true, updatedGameState: gameRoom.gameState, peekJustStarted: false };
 };
 
@@ -1429,10 +1742,20 @@ export const generatePlayerView = (
     const revealsForThisPlayer = temporaryReveals?.[pId];
 
     if (pId === viewingPlayerId) {
-      clientHand = serverPlayerState.hand.map((card, index) => ({
-        ...card, 
-        id: card.id || `${pId}-card-${index}` // Use existing ID if present, else generate
-      }));
+      clientHand = serverPlayerState.hand.map((card, index) => {
+        // If the card is marked as face-down to the owner, send it as a HiddenCard
+        if (card.isFaceDownToOwner) {
+          return { 
+            isHidden: true, 
+            id: card.id || `${pId}-hidden-facedown-${index}` // Generate ID if needed
+          };
+        }
+        // Otherwise, send the full card details
+        return {
+          ...card, 
+          id: card.id || `${pId}-card-${index}` // Use existing ID if present, else generate
+        };
+      });
     } else {
       clientHand = serverPlayerState.hand.map((card, index) => {
         if (revealsForThisPlayer?.[index]) {
@@ -1620,6 +1943,27 @@ export const markPlayerAsDisconnected = (gameId: string, playerId: string): { su
     // Start disconnect grace timer only if the player is not already forfeited.
     if (!player.forfeited) {
       startDisconnectGraceTimer(gameId, playerId);
+      // Emit a public log that the player has disconnected and has a grace period
+      emitLogEntry(
+        gameId,
+        gameRoom.gameState,
+        {
+          message: `has disconnected. They have a grace period to rejoin.`,
+          type: 'game_event',
+          actorId: playerId
+        }
+      );
+    } else {
+      // Emit a public log that a forfeited player (who might have briefly reconnected then DCd again) has disconnected
+      emitLogEntry(
+        gameId,
+        gameRoom.gameState,
+        {
+          message: `has disconnected (was already forfeited).`,
+          type: 'game_event',
+          actorId: playerId
+        }
+      );
     } 
 
     activeGames[gameId] = gameRoom; 
@@ -1634,7 +1978,7 @@ export const attemptRejoin = (
   gameId: string, 
   playerId: string, 
   newSocketId: string
-): { success: boolean; message?: string; gameState?: ServerCheckGameState } => {
+): { success: boolean; message?: string; gameState?: ServerCheckGameState, initialLogsForRejoiner?: RichGameLogMessage[] } => {
   const gameRoom = getGameRoom(gameId);
   if (!gameRoom) {
     return { success: false, message: "Game not found." };
@@ -1649,11 +1993,12 @@ export const attemptRejoin = (
     return { success: false, message: "Cannot rejoin: player is forfeited." };
   }
 
+  // Restore existing logic for logging different rejoin scenarios
   if (playerState.isConnected && playerState.socketId !== newSocketId) {
     console.warn(`[GameManager] Player ${playerState.name || playerId} (Game ${gameId}) is rejoining with new socket ${newSocketId}, but was already connected with socket ${playerState.socketId}. Updating to new socket ID.`);
   } else if (playerState.isConnected && playerState.socketId === newSocketId) {
      console.log(`[GameManager] Player ${playerState.name || playerId} (Game ${gameId}) rejoining with same socket ${newSocketId} and already connected. No state change.`);
-     return { success: true, message: "Already connected.", gameState: gameRoom.gameState };
+     // Still send initial logs even if already connected, as client might have refreshed
   } else if (!playerState.isConnected) {
      console.log(`[GameManager] Player ${playerState.name || playerId} (Game ${gameId}) was disconnected, rejoining with socket ${newSocketId}.`);
   }
@@ -1661,14 +2006,38 @@ export const attemptRejoin = (
   playerState.isConnected = true;
   playerState.socketId = newSocketId;
 
-  if (!playerState.forfeited) { // Only clear grace timer if not forfeited
-    clearDisconnectGraceTimer(gameId, playerId); // Clear any active grace timer on successful rejoin
+  if (!playerState.forfeited) { 
+    clearDisconnectGraceTimer(gameId, playerId); 
   }
 
-  activeGames[gameId] = gameRoom; 
+  // Emit a public log that the player has reconnected
+  emitLogEntry(
+    gameId,
+    gameRoom.gameState,
+    {
+      message: `has reconnected.`,
+      type: 'game_event',
+      actorId: playerId
+    }
+  );
+
+  activeGames[gameId] = gameRoom;
+
+  const welcomeMessage: RichGameLogMessage = {
+    message: `Welcome back, ${playerState.name || playerId.slice(-4)}! You've rejoined Game ${gameId.slice(-6)}.`,
+    type: 'system',
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  };
+  const recentLogs = gameRoom.gameState.logHistory?.slice(-NUM_RECENT_LOGS_ON_JOIN_REJOIN) || [];
+  const initialLogsForRejoiner = [welcomeMessage, ...recentLogs.filter(log => log.message !== welcomeMessage.message)];
 
   console.log(`[GameManager] Player ${playerState.name || playerId} successfully rejoined game ${gameId} with new socket ID ${newSocketId}.`);
-  return { success: true, message: "Rejoined successfully.", gameState: gameRoom.gameState };
+  return { 
+    success: true, 
+    message: "Rejoined successfully.", 
+    gameState: gameRoom.gameState, 
+    initialLogsForRejoiner // Add this to the return payload
+  };
 };
 
 // Placeholder for playerSetupData, this should align with what the client sends when creating/joining a game.
@@ -1709,6 +2078,30 @@ export const handleRequestPeekReveal = (
   
   // SERVER LOGGING POINT
   console.log(`[SERVER_DEBUG_GAT] GameID: ${gameId}, Player ${requestingPlayerId} requested peek. globalAbilityTargets set to:`, JSON.stringify(room.gameState.globalAbilityTargets));
+
+  // Log the peek action
+  const requestingPlayerName = getPlayerNameForLog(requestingPlayerId, room.gameState);
+  const abilityCardRank = pendingAbility.card.rank;
+  
+  // Consolidate peek targets for a more readable log message
+  const peekTargetSummary: { [playerName: string]: number } = {};
+  peekTargets.forEach(target => {
+    const targetPlayerName = getPlayerNameForLog(target.playerID, room.gameState);
+    peekTargetSummary[targetPlayerName] = (peekTargetSummary[targetPlayerName] || 0) + 1;
+  });
+  
+  const summaryParts: string[] = [];
+  for (const [playerName, count] of Object.entries(peekTargetSummary)) {
+    summaryParts.push(`${count} card${count > 1 ? 's' : ''} from ${playerName}`);
+  }
+  const peekDetails = summaryParts.join(' and ');
+
+  emitLogEntry(gameId, room.gameState, {
+    message: `used ${abilityCardRank} to peek at ${peekDetails}.`,
+    type: 'player_action',
+    actorId: requestingPlayerId,
+    cardContext: `${abilityCardRank} peek`
+  });
 
   // broadcastService.triggerBroadcast(gameId, room.gameState); // << REMOVE THIS LINE
 
@@ -1848,6 +2241,7 @@ const handleTurnTimeout = (gameId: string, playerId: string) => {
 
   let nextState: ServerCheckGameState | null = null;
   let broadcastManuallyAfterDefaultAction = false;
+  let timeoutLogMessage = `timed out.`; // Default log message part
 
   // --- Start: Segment-aware Timeout Logic ---
   const currentSegment = G.currentTurnSegment;
@@ -1856,8 +2250,8 @@ const handleTurnTimeout = (gameId: string, playerId: string) => {
 
   if (currentSegment === 'initialAction') {
     console.log(`[GameManager-Timer] Player ${playerName} timed out during 'initialAction' segment.`);
+    timeoutLogMessage = `timed out during their initial action.`
     // Player did nothing, simply advance the turn.
-    // No pending card, no specific action to auto-resolve other than ending their chance to act.
     clearPlayerTimers(gameId, playerId); // Ensure all timer aspects are cleared
 
     if (G.playerWhoCalledCheck) {
@@ -1868,28 +2262,35 @@ const handleTurnTimeout = (gameId: string, playerId: string) => {
   } else if (currentSegment === 'postDrawAction') {
     console.log(`[GameManager-Timer] Player ${playerName} timed out during 'postDrawAction' segment.`);
     clearPlayerTimers(gameId, playerId); // Ensure all timer aspects are cleared
+    timeoutLogMessage = `timed out after drawing a card.`
 
     if (player.pendingDrawnCard) {
       const cardHeld = player.pendingDrawnCard;
+      const cardHeldStr = `${cardHeld.rank}${suitSymbols[cardHeld.suit] || cardHeld.suit}`;
       if (player.pendingDrawnCardSource === 'deck') {
-        console.log(`[GameManager-Timer] Player ${playerName} timed out with card ${cardHeld.rank}${cardHeld.suit} from deck. Auto-discarding.`);
+        console.log(`[GameManager-Timer] Player ${playerName} timed out with card ${cardHeldStr} from deck. Auto-discarding.`);
+        timeoutLogMessage = `timed out and their drawn card ${cardHeldStr} was automatically discarded.`
         handleDiscardDrawnCard(gameId, playerId); // This will broadcast and internally call setupNextPlayTurn/continueOrEndFinalTurns
       } else if (player.pendingDrawnCardSource === 'discard') {
-        console.log(`[GameManager-Timer] Player ${playerName} timed out with card ${cardHeld.rank}${cardHeld.suit} from discard. Attempting auto-swap with first hand card.`);
+        console.log(`[GameManager-Timer] Player ${playerName} timed out with card ${cardHeldStr} from discard. Attempting auto-swap with first hand card.`);
+        timeoutLogMessage = `timed out with drawn card ${cardHeldStr} (from discard).`
         if (player.hand.length === 0) {
-          console.error(`[GameManager-Timer] Player ${playerName} has no cards in hand to auto-swap with ${cardHeld.rank}${cardHeld.suit} from discard. Discarding drawn card as fallback.`);
+          console.error(`[GameManager-Timer] Player ${playerName} has no cards in hand to auto-swap with ${cardHeldStr} from discard. Discarding drawn card as fallback.`);
           G.discardPile.unshift(player.pendingDrawnCard);
           player.pendingDrawnCard = null;
           player.pendingDrawnCardSource = null;
           G.discardPileIsSealed = false;
+          timeoutLogMessage += ` Card ${cardHeldStr} was discarded as no hand cards were available for swap.`;
           broadcastManuallyAfterDefaultAction = true;
         } else {
           const cardFromHand = player.hand.splice(0, 1, player.pendingDrawnCard)[0];
+          const cardFromHandStr = `${cardFromHand.rank}${suitSymbols[cardFromHand.suit] || cardFromHand.suit}`;
           player.pendingDrawnCard = null;
           player.pendingDrawnCardSource = null;
           G.discardPile.unshift(cardFromHand);
           G.discardPileIsSealed = false;
-          console.log(`[GameManager-Timer] Auto-swapped. Card from hand ${cardFromHand.rank}${cardFromHand.suit} discarded. No matching/ability triggered.`);
+          console.log(`[GameManager-Timer] Auto-swapped. Card from hand ${cardFromHandStr} discarded. No matching/ability triggered.`);
+          timeoutLogMessage += ` Card ${cardHeldStr} was kept, and ${cardFromHandStr} from hand was discarded.`;
           broadcastManuallyAfterDefaultAction = true;
         }
         // After this auto-swap/discard, the turn ends for this player.
@@ -1916,7 +2317,9 @@ const handleTurnTimeout = (gameId: string, playerId: string) => {
 
     if (G.currentPhase === 'abilityResolutionPhase' && G.pendingAbilities && G.pendingAbilities.length > 0 && G.pendingAbilities[0].playerId === playerId) {
       const abilityTimedOut = G.pendingAbilities[0];
-      console.log(`[GameManager-Timer] Player ${playerName} timed out during ability resolution for ${abilityTimedOut.card.rank}${abilityTimedOut.card.suit}. Auto-skipping ability.`);
+      const abilityStr = `${abilityTimedOut.card.rank}${suitSymbols[abilityTimedOut.card.suit] || abilityTimedOut.card.suit}`;
+      console.log(`[GameManager-Timer] Player ${playerName} timed out during ability resolution for ${abilityStr}. Auto-skipping ability.`);
+      timeoutLogMessage = `timed out and their ${abilityStr} ability was automatically skipped.`
       handleResolveSpecialAbility(gameId, playerId, { skipAbility: true, skipType: 'full' });
     // This block is unreachable because of the early return if G.currentPhase is 'matchingStage'
     // } else if (G.currentPhase === 'matchingStage' && G.activePlayers[playerId]) { 
@@ -1924,19 +2327,25 @@ const handleTurnTimeout = (gameId: string, playerId: string) => {
     //   handlePassMatch(gameId, playerId);
     } else if (player.pendingDrawnCard) { // Fallback if segment was null but card is held (should be rare)
         const cardHeld = player.pendingDrawnCard;
+        const cardHeldStr = `${cardHeld.rank}${suitSymbols[cardHeld.suit] || cardHeld.suit}`;
         if (player.pendingDrawnCardSource === 'deck') {
-            console.log(`[GameManager-Timer] Player ${playerName} (segment: ${currentSegment}) timed out with card ${cardHeld.rank}${cardHeld.suit} from deck. Auto-discarding.`);
+            console.log(`[GameManager-Timer] Player ${playerName} (segment: ${currentSegment}) timed out with card ${cardHeldStr} from deck. Auto-discarding.`);
+            timeoutLogMessage = `timed out and their drawn card ${cardHeldStr} was automatically discarded.`
             handleDiscardDrawnCard(gameId, playerId);
         } else { // discard source, or unknown but has card
-            console.log(`[GameManager-Timer] Player ${playerName} (segment: ${currentSegment}) timed out with card ${cardHeld.rank}${cardHeld.suit}. Attempting auto-swap with first hand card or discard.`);
+            console.log(`[GameManager-Timer] Player ${playerName} (segment: ${currentSegment}) timed out with card ${cardHeldStr}. Attempting auto-swap with first hand card or discard.`);
+            timeoutLogMessage = `timed out holding ${cardHeldStr}.`
             if (player.hand.length === 0) {
                 G.discardPile.unshift(player.pendingDrawnCard);
                 player.pendingDrawnCard = null; player.pendingDrawnCardSource = null; G.discardPileIsSealed = false;
+                timeoutLogMessage += ` Card ${cardHeldStr} was discarded as no hand cards were available for swap.`;
                 broadcastManuallyAfterDefaultAction = true;
             } else {
                 const cardFromHand = player.hand.splice(0, 1, player.pendingDrawnCard)[0];
+                const cardFromHandStr = `${cardFromHand.rank}${suitSymbols[cardFromHand.suit] || cardFromHand.suit}`;
                 player.pendingDrawnCard = null; player.pendingDrawnCardSource = null;
                 G.discardPile.unshift(cardFromHand); G.discardPileIsSealed = false;
+                timeoutLogMessage += ` Card ${cardHeldStr} was kept, and ${cardFromHandStr} from hand was discarded.`;
                 broadcastManuallyAfterDefaultAction = true;
             }
             if (G.playerWhoCalledCheck) nextState = continueOrEndFinalTurns(gameId);
@@ -1954,11 +2363,19 @@ const handleTurnTimeout = (gameId: string, playerId: string) => {
       if (G.playerWhoCalledCheck) {
         nextState = continueOrEndFinalTurns(gameId);
       } else {
+        timeoutLogMessage = `timed out during ${G.currentPhase}.`;
         nextState = setupNextPlayTurn(gameId);
       }
     }
   }
   // --- End: Segment-aware Timeout Logic ---
+
+  // Emit the consolidated log message for the timeout event
+  emitLogEntry(gameId, G, {
+    message: timeoutLogMessage,
+    type: 'game_event',
+    actorId: playerId
+  });
 
   if (broadcastManuallyAfterDefaultAction) {
     // If a default action modified G directly (like auto-swap) and didn't call another handler that broadcasts.
@@ -2055,6 +2472,17 @@ const handleDisconnectTimeout = (gameId: string, playerId: string) => {
   console.log(`[GameManager-Timer] Disconnect grace period expired for player ${player.name || playerId} in game ${gameId}. Marking as forfeited.`);
   player.forfeited = true;
   // player.isConnected should already be false
+
+  // Emit a public log that the player has forfeited
+  emitLogEntry(
+    gameId,
+    G,
+    {
+      message: `has forfeited the game due to inactivity.`,
+      type: 'game_event',
+      actorId: playerId
+    }
+  );
 
   broadcastService.triggerBroadcast(gameId, G); // Broadcast the forfeit update
 
@@ -2215,8 +2643,19 @@ const handleMatchingStageTimeout = (gameId: string) => {
 
   console.log(`[GameManager-Timer] Matching stage timed out for game ${gameId}. Auto-passing remaining players.`);
 
-  const { potentialMatchers } = G.matchingOpportunityInfo;
+  const { cardToMatch, originalPlayerID, potentialMatchers } = G.matchingOpportunityInfo;
   let broadcastNeeded = false;
+
+  // Log that the matching stage timed out
+  if (cardToMatch && originalPlayerID) {
+    const cardStr = `${cardToMatch.rank}${suitSymbols[cardToMatch.suit] || cardToMatch.suit}`;
+    const originalPlayerName = getPlayerNameForLog(originalPlayerID, G);
+    emitLogEntry(gameId, G, {
+      message: `Matching stage for ${cardStr} (discarded by ${originalPlayerName}) timed out. Auto-passing remaining players.`,
+      type: 'game_event',
+      cardContext: cardStr
+    });
+  }
 
   potentialMatchers.forEach(playerId => {
     if (G.activePlayers[playerId]) {
@@ -2275,3 +2714,12 @@ const clearMatchingStageTimer = (gameId: string) => {
     // No need to broadcast here, the function that calls this (e.g. checkMatchingStageEnd) will broadcast the overall state change.
   }
 };
+
+// Add suitSymbols definition
+const suitSymbols: { [key: string]: string } = {
+  H: '♥',
+  D: '♦',
+  C: '♣',
+  S: '♠',
+};
+

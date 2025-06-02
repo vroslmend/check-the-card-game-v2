@@ -30,6 +30,7 @@ export interface Card {
   suit: Suit;
   rank: Rank;
   id?: string; // Make id optional for React keys, added by server when sending to client
+  isFaceDownToOwner?: boolean; // Server-side flag: if true, this card is hidden from its owner in their client view
 }
 
 export const cardValues: { [key in Rank]: number } = {
@@ -150,6 +151,7 @@ export interface CheckGameState {
   };
   currentTurnSegment: TurnSegment; // Added new field
   matchingStageTimerExpiresAt?: number; // New field for matching stage timer
+  logHistory?: RichGameLogMessage[]; // Added for storing recent logs on server
 }
 
 // Data structure for players joining a game or being set up initially
@@ -228,6 +230,7 @@ export interface ClientCheckGameState extends Omit<CheckGameState, 'deck' | 'pla
   lastRegularSwapInfo: LastRegularSwapInfo | null;
   currentTurnSegment: TurnSegment; // Ensure client also has this
   matchingStageTimerExpiresAt?: number; // New field for matching stage timer
+  // logHistory will also be available here via Omit, client will receive a subset on join/rejoin
 }
 
 // Represents a card that a player has chosen to use for its special ability
@@ -235,3 +238,19 @@ export interface ClientCheckGameState extends Omit<CheckGameState, 'deck' | 'pla
 
 // Data structure for game over information
 /* Duplicate GameOverData definition removed */
+
+// New interface for structured log messages
+export interface RichGameLogMessage {
+  message: string;
+  timestamp?: string; // Server will add this
+  type?: 'system' | 'player_action' | 'game_event' | 'error' | 'info';
+  actorName?: string; // e.g., player who performed the action
+  targetName?: string; // e.g., player targeted by an action
+  cardContext?: string; // e.g., "drew 7H", "discarded KD", "matched 5S"
+  // We can add more structured fields later, like card details or action specifics
+
+  // New fields for sensitive logging
+  isPublic?: boolean;       // Defaults to true. If false, this log is targeted.
+  recipientPlayerId?: string; // If isPublic is false, this specifies the sole recipient.
+  privateVersionRecipientId?: string; // If set on a public log, this player received a private version.
+}

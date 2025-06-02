@@ -65,7 +65,7 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
           </AnimatePresence>
 
           {/* Card count overlay at the bottom of the card */}
-          <div className="absolute bottom-0 left-0 right-0 p-0.5 bg-black/30 rounded-b-md md:rounded-b-lg pointer-events-none">
+          <div className="absolute bottom-0 left-0 right-0 p-0.5 bg-black/30 rounded-b-md md:rounded-b-lg pointer-events-none z-10">
             <AnimatePresence mode="wait">
               <motion.span
                 key={`count-${numberOfCards}`}

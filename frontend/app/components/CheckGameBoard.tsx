@@ -22,6 +22,12 @@ interface FeedbackMessage {
   type: 'success' | 'error' | 'info';
 }
 
+interface GameLogMessageFromPage {
+  message: string;
+  timestamp?: string;
+  type?: string;
+}
+
 interface AbilityClientArgs {
   peekTargets?: Array<{ playerID: string; cardIndex: number }>;
   // swapTargets are typically built from multiSelectedCardLocations right before sending
@@ -1065,6 +1071,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
             isViewingPlayer={true}
             turnSegmentIdentifier={playerId === gameState.currentPlayerId ? turnSegmentTrigger : undefined}
           />
+
           <PlayerHandComponent
             playerID={playerId}
             playerState={clientPlayerState}
@@ -1081,7 +1088,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
             isInitialPeekActive={showPeekedCards || (peekGetReadyTimer !== null || peekRevealTimer !== null)}
             swappingOutCardId={swappingOutCardId}
           />
-           {turnIndicatorForPlayer(playerId)}
+          {turnIndicatorForPlayer(playerId)}
         </div>
       </div>
 

@@ -19,9 +19,11 @@ import {
     setTriggerBroadcastFunction,
     markPlayerAsDisconnected,
     attemptRejoin as attemptRejoinGame,
-    handleRequestPeekReveal
+    handleRequestPeekReveal,
+    setTriggerLogBroadcastFunction,
+    getGameRoom,
 } from './game-manager';
-import { InitialPlayerSetupData, CheckGameState as ServerCheckGameState, ClientCheckGameState } from 'shared-types';
+import { InitialPlayerSetupData, CheckGameState as ServerCheckGameState, ClientCheckGameState, RichGameLogMessage } from 'shared-types';
 
 console.log('Server starting with Socket.IO...');
 
@@ -59,6 +61,53 @@ const broadcastGameStateUpdate = async (gameId: string, fullGameState: ServerChe
 // Pass the broadcast function to the game-manager
 setTriggerBroadcastFunction(broadcastGameStateUpdate);
 
+// New function to broadcast a single log entry
+const broadcastLogEntry = async (gameId: string, logEntry: RichGameLogMessage) => {
+  const isPublicLog = logEntry.isPublic !== false;
+
+  if (isPublicLog) {
+    if (logEntry.privateVersionRecipientId) {
+      // This public log has a private version for a specific recipient.
+      // Send this public log to everyone EXCEPT that recipient.
+      const recipientPlayerId = logEntry.privateVersionRecipientId;
+      const gameRoom = getGameRoom(gameId);
+      const recipientSocketId = gameRoom?.gameState.players[recipientPlayerId]?.socketId;
+
+      const socketsInRoom = await io.in(gameId).allSockets();
+      socketsInRoom.forEach(socketIdInRoom => {
+        if (socketIdInRoom !== recipientSocketId) {
+          io.to(socketIdInRoom).emit('serverLogEntry', { gameId, logEntry });
+        }
+      });
+      // Optional: console.log(`[Server-LogBroadcast-PublicConditional] Sent to room ${gameId} (excluding ${recipientPlayerId}): ${logEntry.actorName || 'System'} - ${logEntry.message}`);
+    } else {
+      // Standard public log, no specific private version for anyone. Send to all.
+      io.to(gameId).emit('serverLogEntry', { gameId, logEntry });
+      // Optional: console.log(`[Server-LogBroadcast-PublicGlobal] Sent to room ${gameId}: ${logEntry.actorName || 'System'} - ${logEntry.message}`);
+    }
+  } else if (logEntry.recipientPlayerId) {
+    // This is a private log. Send only to the recipient.
+    const gameRoom = getGameRoom(gameId);
+    if (gameRoom && gameRoom.gameState.players[logEntry.recipientPlayerId]) {
+      const recipientSocketId = gameRoom.gameState.players[logEntry.recipientPlayerId].socketId;
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('serverLogEntry', { gameId, logEntry });
+        // Optional: console.log(`[Server-LogBroadcast-Private] Sent to player ${logEntry.recipientPlayerId} (socket ${recipientSocketId}): ${logEntry.message}`);
+      } else {
+        console.warn(`[Server-LogBroadcast-Private] Could not send private log to player ${logEntry.recipientPlayerId} in game ${gameId}: Socket ID not found.`);
+      }
+    } else {
+      console.warn(`[Server-LogBroadcast-Private] Could not send private log to player ${logEntry.recipientPlayerId} in game ${gameId}: Player or game room not found.`);
+    }
+  } else {
+    console.warn(`[Server-LogBroadcast] Log entry for game ${gameId} was marked private but no recipientPlayerId was provided. Broadcasting publicly as a fallback:`, logEntry);
+    io.to(gameId).emit('serverLogEntry', { gameId, logEntry });
+  }
+};
+
+// Pass the log broadcast function to the game-manager
+setTriggerLogBroadcastFunction(broadcastLogEntry);
+
 // Store a mapping of socket.id to gameId and playerId for easier disconnect handling
 // This is a simple in-memory store; for production, a more robust solution (e.g., Redis) might be needed
 interface SocketSessionInfo {
@@ -66,6 +115,8 @@ interface SocketSessionInfo {
     playerId: string;
 }
 const socketSessionMap = new Map<string, SocketSessionInfo>();
+
+const NUM_RECENT_LOGS_ON_JOIN = 20;
 
 io.on('connection', (socket: Socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -93,71 +144,83 @@ io.on('connection', (socket: Socket) => {
     delete (socket as any).data.gameId;
   };
 
-  socket.on('createGame', (playerSetupData: InitialPlayerSetupData, callback) => {
-    const gameId = `game_${Math.random().toString(36).substring(2, 9)}`;
-    console.log(`[Server] Received createGame request from ${socket.id} for game ${gameId} with player data:`, playerSetupData);
-    
-    // Add socket.id to playerSetupData for game-manager
-    const fullPlayerSetupData = { ...playerSetupData, socketId: socket.id };
-    
-    const gameRoom = initializeNewGame(gameId, [fullPlayerSetupData]);
+  socket.on('createGame', (playerSetupData: InitialPlayerSetupData, callback: (response: any) => void) => {
+    const gameId = `game_${Math.random().toString(36).substring(2, 8)}`;
+    playerSetupData.socketId = socket.id; // Add socket.id for game manager
+    const gameRoom = initializeNewGame(gameId, [playerSetupData]);
 
-    if (gameRoom && gameRoom.gameState) {
+    if (gameRoom) {
       socket.join(gameId);
-      registerSocketSession(gameId, fullPlayerSetupData.id); // Use fullPlayerSetupData.id as playerId
-      console.log(`[Server] Player ${socket.id} (P1: ${fullPlayerSetupData.id}) created and joined room ${gameId}`);
-      const playerSpecificView = generatePlayerView(gameRoom.gameState, fullPlayerSetupData.id);
-      callback({ success: true, gameId, playerId: fullPlayerSetupData.id, gameState: playerSpecificView }); // Return playerId
+      registerSocketSession(gameId, playerSetupData.id);
+      const clientGameState = generatePlayerView(gameRoom.gameState, playerSetupData.id);
+      
+      // Send initial logs to the creator
+      const welcomeMessage: RichGameLogMessage = {
+        message: `Welcome, ${playerSetupData.name || playerSetupData.id.slice(-4)}! You've created Game ${gameId.slice(-6)}.`,
+        type: 'system',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      };
+      const recentLogs = gameRoom.gameState.logHistory?.slice(-NUM_RECENT_LOGS_ON_JOIN) || [];
+      const initialLogPayload = [welcomeMessage, ...recentLogs.filter(log => log.message !== welcomeMessage.message)];
+      
+      socket.emit('initialLogs', { logs: initialLogPayload });
+      
+      callback({ success: true, gameId, playerId: playerSetupData.id, gameState: clientGameState });
     } else {
-      console.error(`[Server] Failed to create game ${gameId}`);
-      callback({ success: false, message: "Failed to create game." });
+      callback({ success: false, message: "Failed to create game (null gameRoom)." });
     }
   });
 
-  socket.on('joinGame', async (gameId: string, playerSetupData: InitialPlayerSetupData, callback) => {
-    console.log(`[Server] Received joinGame request from ${socket.id} for game ${gameId} with player data:`, playerSetupData);
-    
-    // Pass socket.id to addPlayerToGame
-    const result = addPlayerToGame(gameId, playerSetupData, socket.id);
+  socket.on('joinGame', (gameIdToJoin: string, playerSetupData: InitialPlayerSetupData, callback: (response: any) => void) => {
+    playerSetupData.socketId = socket.id; // Add socket.id before passing to game manager
+    const result = addPlayerToGame(gameIdToJoin, playerSetupData, socket.id);
 
-    if (result.success && result.gameRoom && result.gameRoom.gameState && result.newPlayerState) {
-      socket.join(gameId);
-      registerSocketSession(gameId, playerSetupData.id); // Use playerSetupData.id as playerId
-      const fullGameState = result.gameRoom.gameState;
-      console.log(`[Server] Player ${socket.id} (as ${playerSetupData.id}) joined room ${gameId}.`);
+    if (result.success && result.gameRoom && result.newPlayerState) {
+      socket.join(gameIdToJoin);
+      registerSocketSession(gameIdToJoin, playerSetupData.id);
+      const clientGameState = generatePlayerView(result.gameRoom.gameState, playerSetupData.id);
 
-      broadcastGameStateUpdate(gameId, fullGameState); // Broadcast to all, including new player and existing ones
+      // Send initial logs to the joiner
+      const welcomeMessage: RichGameLogMessage = {
+        message: `Welcome, ${playerSetupData.name || playerSetupData.id.slice(-4)}! You've joined Game ${gameIdToJoin.slice(-6)}.`,
+        type: 'system',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      };
+      const recentLogs = result.gameRoom.gameState.logHistory?.slice(-NUM_RECENT_LOGS_ON_JOIN) || [];
+      const initialLogPayload = [welcomeMessage, ...recentLogs.filter(log => log.message !== welcomeMessage.message)];
       
-      // Callback to the joining player is now implicitly handled by broadcastGameStateUpdate
-      // if the client expects a direct callback with state, we can still provide it.
-      // The client page.tsx seems to process gameStateUpdate for all setup.
-      console.log(`[Server] Game state broadcasted after player ${playerSetupData.id} joined.`);
-      callback({ success: true, gameId, playerId: playerSetupData.id, gameState: generatePlayerView(fullGameState, playerSetupData.id), message: result.message }); // Return playerId
+      socket.emit('initialLogs', { logs: initialLogPayload });
+
+      callback({ success: true, gameId: gameIdToJoin, playerId: playerSetupData.id, gameState: clientGameState });
     } else {
-      console.warn(`[Server] Player ${socket.id} failed to join room ${gameId}. Reason: ${result.message}`);
       callback({ success: false, message: result.message || "Failed to join game." });
     }
   });
 
-  socket.on('attemptRejoin', (data: { gameId: string; playerId: string }, callback) => {
-    const { gameId, playerId } = data;
-    console.log(`[Server] Received attemptRejoin from socket ${socket.id} for game ${gameId}, player ${playerId}`);
-
-    const result = attemptRejoinGame(gameId, playerId, socket.id);
+  socket.on('attemptRejoin', async (data: { gameId: string; playerId: string }, callback) => {
+    console.log(`[Server] Received attemptRejoin from ${socket.id} for game ${data.gameId}, player ${data.playerId}`);
+    const result = attemptRejoinGame(data.gameId, data.playerId, socket.id);
 
     if (result.success && result.gameState) {
-      socket.join(gameId);
-      registerSocketSession(gameId, playerId); // Re-register with new socket ID if needed
+      socket.join(data.gameId);
+      registerSocketSession(data.gameId, data.playerId);
+      console.log(`[Server] Player ${socket.id} (as ${data.playerId}) successfully rejoined game ${data.gameId}.`);
       
-      broadcastGameStateUpdate(gameId, result.gameState); // Broadcast updated state (e.g. player now connected)
+      // Send initial logs if present in the result
+      if (result.initialLogsForRejoiner) {
+        socket.emit('initialLogs', { logs: result.initialLogsForRejoiner });
+      }
       
-      console.log(`[Server] Player ${playerId} (${socket.id}) successfully rejoined game ${gameId}.`);
-      // Client expects specific view in callback
-      const playerSpecificView = generatePlayerView(result.gameState, playerId);
-      callback({ success: true, gameState: playerSpecificView, message: result.message });
+      // Send the latest game state to the rejoining player directly
+      callback({ success: true, gameState: generatePlayerView(result.gameState, data.playerId) });
+      
+      // Broadcast updated game state to all players in the room (including the rejoining one again)
+      // This ensures everyone has the latest, including potentially updated isConnected status.
+      broadcastGameStateUpdate(data.gameId, result.gameState);
+
     } else {
-      console.warn(`[Server] Player ${playerId} (${socket.id}) failed to rejoin game ${gameId}. Reason: ${result.message}`);
-      callback({ success: false, message: result.message || "Failed to rejoin." });
+      console.warn(`[Server] Player ${socket.id} failed to rejoin game ${data.gameId}. Reason: ${result.message}`);
+      callback({ success: false, message: result.message });
     }
   });
 

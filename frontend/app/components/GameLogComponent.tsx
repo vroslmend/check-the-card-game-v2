@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+// Icons removed for this version as we are focusing on text-only display
+// import { FiInfo, FiAlertCircle, FiUserCheck, FiZap, FiChevronRight } from 'react-icons/fi';
 
 interface GameLogMessage {
   message: string;
   timestamp?: string;
-  type?: string;
+  type?: 'system' | 'player_action' | 'game_event' | 'error' | 'info'; // Added 'info' for general non-error system messages
+  actorName?: string; // e.g., player who performed the action
+  targetName?: string; // e.g., player targeted by an action
+  // We can add more structured fields later, like card details
 }
 
 interface GameLogComponentProps {
@@ -12,88 +17,124 @@ interface GameLogComponentProps {
 }
 
 const GameLogComponent: React.FC<GameLogComponentProps> = ({ log }) => {
-  const [open, setOpen] = useState(false);
   const logContainerRef = useRef<HTMLDivElement>(null);
   const lastLogLengthRef = useRef(log.length);
+  const [showScrollToBottomButton, setShowScrollToBottomButton] = useState(false);
 
   useEffect(() => {
-    if (open && logContainerRef.current && log.length > lastLogLengthRef.current) {
-      const container = logContainerRef.current;
-      if (container.scrollHeight - container.scrollTop <= container.clientHeight + 20) {
-        container.scrollTop = container.scrollHeight;
+    const container = logContainerRef.current;
+    if (container && log.length > lastLogLengthRef.current) {
+      // A new message has arrived
+      const isScrolledToBottom = Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) < 10;
+
+      if (isScrolledToBottom) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth'
+        });
+        setShowScrollToBottomButton(false); 
+      } else {
+        // New message and user is not at the bottom
+        if (container.scrollHeight > container.clientHeight) { // Only show button if actually scrollable
+          setShowScrollToBottomButton(true);
+        }
       }
     }
+    // Always update the last log length after processing
     lastLogLengthRef.current = log.length;
-  }, [log, open]);
+  }, [log]);
+
+  const handleScroll = useCallback(() => {
+    const container = logContainerRef.current;
+    if (container) {
+      const isAtBottom = Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) < 10;
+      if (isAtBottom) {
+        setShowScrollToBottomButton(false);
+      }
+      // If user scrolls up and new messages have arrived (button is visible),
+      // it should remain visible. This is handled by the log useEffect.
+    }
+  }, []); 
+
+  useEffect(() => {
+    const container = logContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      return () => {
+        // Check if container still exists on cleanup, common in React StrictMode
+        if (logContainerRef.current) { 
+            logContainerRef.current.removeEventListener('scroll', handleScroll);
+        }
+      };
+    }
+  }, [handleScroll]); 
 
   return (
-    <motion.div 
-      layout 
-      transition={{ type: 'spring', stiffness: 350, damping: 35 }}
-      className={`fixed bottom-4 right-4 z-20 max-w-sm w-full flex flex-col items-end bg-transparent`}
+    <motion.div
+      key="compact-log-panel"
+      ref={logContainerRef}
+      className={`fixed bottom-6 right-8 z-30 max-w-xs w-full h-36 custom-scrollbar overflow-y-auto bg-white/50 dark:bg-neutral-900/60 backdrop-blur-md rounded-lg shadow-lg border border-white/20 dark:border-neutral-700/60 p-2.5 text-xs font-sans`} // Adjusted transparency and blur
+      // Adjusted background for better dark mode contrast with text, slightly more padding, stronger shadow
     >
-      <button
-        className="mb-1 p-1.5 rounded-full bg-white dark:bg-neutral-700 shadow-md hover:bg-gray-100 dark:hover:bg-neutral-600 border border-gray-200 dark:border-neutral-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-colors"
-        aria-label={open ? 'Collapse game log' : 'Expand game log'}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <motion.span 
-          className={`inline-block text-sm text-gray-700 dark:text-gray-300`}
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-        >
-          ▶
-        </motion.span>
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div 
-            key="log-content-panel"
-            ref={logContainerRef}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: '18rem' }}
-            exit={{ opacity: 0, height: 0, transition: { duration: 0.15 } }}
-            transition={{ type: 'spring', stiffness: 350, damping: 35, delay: 0.05 }}
-            className={`styled-scrollbar-dark overflow-y-auto bg-white dark:bg-neutral-800 rounded-xl shadow-xl border border-gray-100 dark:border-neutral-700 p-2 text-xs font-sans text-gray-700 dark:text-gray-300 w-full`}
-            aria-label="Game log panel"
-          >
-            {log.length === 0 ? (
-              <div className="text-gray-400 dark:text-gray-500 text-center py-4">No events yet</div>
-            ) : (
-              <ul className="space-y-1">
-                <AnimatePresence initial={false}>
-                  {log.slice(-50).map((entry, i) => {
-                    const key = `${entry.timestamp}-${entry.message}-${i}`;
-                    let messageColor = 'dark:text-gray-300';
-                    if (entry.type === 'error') {
-                      messageColor = 'text-red-500 dark:text-red-400';
-                    } else if (entry.type === 'system') {
-                      messageColor = 'text-blue-500 dark:text-blue-400';
-                    } else if (entry.type === 'player_action') {
-                      messageColor = 'text-emerald-600 dark:text-emerald-400';
-                    } else if (entry.type === 'game_event') {
-                      messageColor = 'text-purple-500 dark:text-purple-400';
-                    }
+      {log.length === 0 ? (
+        <div className="text-gray-500 dark:text-neutral-400 text-center py-4 h-full flex items-center justify-center">No events yet.</div>
+      ) : (
+        <ul className="space-y-1"> {/* Increased space-y slightly for readability */}
+          <AnimatePresence initial={false}>
+            {log.slice(-15).map((entry, i) => {
+              const key = `${entry.timestamp}-${entry.message}-${i}`;
+              let messageColor = 'text-gray-800 dark:text-neutral-200'; // Default message color
 
-                    return (
-                      <motion.li 
-                        key={key}
-                        layout
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, x: -10, transition: { duration: 0.1 } }}
-                        transition={{ type: 'spring', stiffness: 260, damping: 25 }}
-                        className="truncate hover:overflow-visible hover:white-space-normal text-xs"
-                      >
-                        <span className="text-gray-400 dark:text-gray-500 mr-1">{entry.timestamp ? `[${entry.timestamp}]` : ''}</span>
-                        <span className={messageColor}>{entry.message}</span>
-                      </motion.li>
-                    );
-                  })}
-                </AnimatePresence>
-              </ul>
-            )}
-          </motion.div>
+              if (entry.type === 'error') {
+                messageColor = 'text-red-600 dark:text-red-400 font-semibold';
+              } else if (entry.type === 'system') {
+                messageColor = 'text-sky-600 dark:text-sky-400';
+              } else if (entry.type === 'player_action') {
+                messageColor = 'text-emerald-600 dark:text-emerald-400';
+              } else if (entry.type === 'game_event') {
+                messageColor = 'text-purple-600 dark:text-purple-400';
+              }
+
+              return (
+                <motion.li
+                  key={key}
+                  layout="position"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, transition: { duration: 0.15 } }} // Simplified exit
+                  transition={{ type: 'spring', stiffness: 280, damping: 28, delay: Math.min(0.03 * i, 0.3) }} // Capped delay
+                  className="flex items-start"
+                >
+                  <span className="text-gray-500 dark:text-neutral-500 mr-1.5 whitespace-nowrap shrink-0 tabular-nums text-[0.9em]">{entry.timestamp ? `[${entry.timestamp}]` : ''}</span>
+                  <span className={`flex-grow ${messageColor} leading-snug`}>{entry.message}</span>
+                </motion.li>
+              );
+            })}
+          </AnimatePresence>
+        </ul>
+      )}
+      <AnimatePresence>
+        {showScrollToBottomButton && (
+          <motion.button
+            onClick={() => {
+              const container = logContainerRef.current;
+              if (container) {
+                container.scrollTo({
+                  top: container.scrollHeight,
+                  behavior: 'smooth'
+                });
+                // Optimistically hide; handleScroll will confirm if not quite at bottom.
+                setShowScrollToBottomButton(false); 
+              }
+            }}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[0.7rem] leading-none bg-sky-500/90 hover:bg-sky-500 text-white rounded-full shadow-lg backdrop-blur-sm border border-sky-400/50"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.2 }}
+          >
+            Scroll to latest
+          </motion.button>
         )}
       </AnimatePresence>
     </motion.div>
