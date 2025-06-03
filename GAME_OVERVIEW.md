@@ -18,7 +18,7 @@ A standard 52-card deck (no Jokers) is used.
 **4. Setup:**
 *   The deck is shuffled.
 *   Each player is dealt four cards, placed face-down in a **2x2 grid** in front of them. This is their initial hand.
-*   **Initial Peek Phase:** After cards are dealt, each player secretly looks at their **bottom two cards** in their 2x2 grid. They must try to memorize these cards and their positions. These cards remain face-down unless revealed or swapped by game actions.
+*   **Initial Peek Phase:** After cards are dealt, each player secretly looks at their **bottom two cards** in their 2x2 grid. They must try to memorize these cards and their positions. These cards remain face-down unless revealed or swapped by game actions (all the reveals are temporary for the player hands and the default position of the cards is face down in this game most of the time)
 
 **5. Card Layout and Hand Expansion:**
 *   Players' hands are visualized as a grid, starting as 2x2.
@@ -35,7 +35,7 @@ Turns proceed in a chosen direction. A player's turn consists of a primary draw 
         2.  The player then chooses one of these options for this drawn card:
             *   **Swap & Discard:** Select one card from their hand grid and swap it with the drawn card. The drawn card is placed face-down into the selected grid position. The card originally in that grid position (Card X) is then placed face-up onto the Discard Pile. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7). *This action ensures `G.discardPileIsSealed` is `false` at the moment Card X is presented for a match.*
             *   **Discard Drawn Card:** Immediately place the drawn card (Card X) face-up onto the Discard Pile. This does not affect the player's hand grid. This discard (Card X) creates a "Matching/Stacking Opportunity" (see section 7). *This action also ensures `G.discardPileIsSealed` is `false` at the moment Card X is presented for a match.*
-            *   *(Note: If a K, Q, or J is drawn and the player chooses to swap it into their hand, its ability does NOT trigger at this point. It only triggers when later discarded from the hand to the Discard Pile).*\
+            *   *(Note: If a K, Q, or J is drawn and the player chooses to swap it into their hand, its ability does NOT trigger at this point. It only triggers when later discarded from the hand to the Discard Pile).*
     *   **Draw from the Discard Pile (Face Up):**
         1.  This is only possible if `G.discardPileIsSealed` is `false` (i.e., the top card is not the second card of a just-completed matched pair).
         2.  Additionally, a player **cannot draw a special ability card (King, Queen, or Jack)** from the discard pile.
@@ -48,7 +48,7 @@ Turns proceed in a chosen direction. A player's turn consists of a primary draw 
 *   **During `matchingStage`:**
     *   Any one player (including the current player) can use the `attemptMatch` move with a card (Card Y) from their hand of the **exact same rank** as Card X.
     *   Any player can choose to `passMatch`.
-    *   The stage ends once one player successfully matches, or all players have passed/had a chance.
+    *   The stage ends once one player successfully matches, or all players have passed/attempted a match.
 *   **If a Match Occurs (Card Y is played on Card X via `attemptMatch`):**
     *   The hand of the player who played Card Y is reduced. Card Y is added to `G.discardPile`.
     *   `G.discardPileIsSealed` is set to `true`.

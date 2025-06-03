@@ -1,4 +1,4 @@
-import { Card, Suit, Rank, PlayerState, CheckGameState as ServerCheckGameState, InitialPlayerSetupData, cardValues, HiddenCard, ClientCard, ClientPlayerState, ClientCheckGameState, SpecialAbilityInfo, PendingSpecialAbility, GameOverData, GamePhase, MatchResolvedDetails, RichGameLogMessage } from 'shared-types';
+import { Card, Suit, Rank, PlayerState, CheckGameState as ServerCheckGameState, InitialPlayerSetupData, cardValues, HiddenCard, ClientCard, ClientPlayerState, ClientCheckGameState, SpecialAbilityInfo, PendingSpecialAbility, GameOverData, GamePhase, MatchResolvedDetails, RichGameLogMessage, PlayerActivityStatus } from 'shared-types';
 
 // Local RichGameLogMessage definition removed, imported from shared-types above.
 
@@ -39,10 +39,25 @@ export const createDeck = (): Card[] => {
   return deck;
 };
 
-// TODO: Replace with a proper random shuffle (e.g., Fisher-Yates)
-// This is a placeholder and NOT cryptographically secure or truly random.
+// Fisher-Yates (aka Knuth) Shuffle algorithm
 const simpleShuffle = <T>(array: T[]): T[] => {
-  return array.sort(() => Math.random() - 0.5);
+  let currentIndex = array.length;
+  let temporaryValue: T;
+  let randomIndex: number;
+
+  // While there remain elements to shuffle...
+  while (currentIndex !== 0) {
+    // Pick a remaining element...
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex -= 1;
+
+    // And swap it with the current element.
+    temporaryValue = array[currentIndex];
+    array[currentIndex] = array[randomIndex];
+    array[randomIndex] = temporaryValue;
+  }
+
+  return array;
 };
 
 
@@ -238,9 +253,9 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
     turnOrder: playerSetupData.map(p => p.id),
     gameMasterId: playerSetupData[0].id,
     activePlayers: playerSetupData.reduce((acc, p) => {
-      acc[p.id] = 'awaitingReadiness';
+      acc[p.id] = PlayerActivityStatus.AWAITING_READINESS; // Use enum
       return acc;
-    }, {} as { [playerID: string]: string }),
+    }, {} as { [playerID: string]: PlayerActivityStatus }), // Ensure type matches
     totalTurnsInRound: 0, // Initialize new stat
     lastRegularSwapInfo: null, // Initialize new field
     playerTimers: {}, // Initialize new field
@@ -552,9 +567,9 @@ export const handleSwapAndDiscard = (
   };
 
   gameRoom.gameState.currentPhase = 'matchingStage';
-  const newActivePlayers: { [playerID: string]: string } = {};
+  const newActivePlayers: { [playerID: string]: PlayerActivityStatus } = {}; // Use enum
   potentialMatchers.forEach(pId => {
-    newActivePlayers[pId] = 'awaitingMatchAction';
+    newActivePlayers[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION; // Use enum
   });
   gameRoom.gameState.activePlayers = newActivePlayers;
 
@@ -651,9 +666,9 @@ export const handleDiscardDrawnCard = (
 
   gameRoom.gameState.currentPhase = 'matchingStage'; // Update current phase
 
-  const newActivePlayers: { [playerID: string]: string } = {};
+  const newActivePlayers: { [playerID: string]: PlayerActivityStatus } = {}; // Use enum
   potentialMatchers.forEach(pId => {
-    newActivePlayers[pId] = 'awaitingMatchAction';
+    newActivePlayers[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION; // Use enum
   });
   gameRoom.gameState.activePlayers = newActivePlayers;
 
@@ -686,7 +701,7 @@ export const handleAttemptMatch = (
   if (handIndex < 0 || handIndex >= player.hand.length) return { success: false, message: "Invalid hand index." };
   
   if (G.currentPhase !== 'matchingStage') return { success: false, message: "Not in matching stage." };
-  if (!G.activePlayers || !G.activePlayers[playerId]) return { success: false, message: "Player not active for matching." };
+  if (!G.activePlayers || G.activePlayers[playerId] !== PlayerActivityStatus.AWAITING_MATCH_ACTION) return { success: false, message: "Player not active for matching." }; // Use enum
 
   const { cardToMatch, originalPlayerID, potentialMatchers } = G.matchingOpportunityInfo || {};
   if (!cardToMatch || !originalPlayerID || !potentialMatchers) return { success: false, message: "No matching opportunity active or missing details." };
@@ -846,7 +861,7 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
     
     const remainingActiveKeys = Object.keys(G.activePlayers);
     for (const pId of remainingActiveKeys) {
-        if (G.activePlayers[pId] === 'awaitingMatchAction') {
+        if (G.activePlayers[pId] === PlayerActivityStatus.AWAITING_MATCH_ACTION) { // Use enum
             delete G.activePlayers[pId];
         }
     }
@@ -880,7 +895,7 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
   }
 
   const remainingActiveMatchers = G.activePlayers && 
-                                Object.values(G.activePlayers).some(status => status === 'awaitingMatchAction');
+                                Object.values(G.activePlayers).some(status => status === PlayerActivityStatus.AWAITING_MATCH_ACTION); // Use enum
 
   if (!remainingActiveMatchers && G.matchingOpportunityInfo) { 
     console.log(`[GameManager] checkMatchingStageEnd: All players passed or resolved for game ${gameId}. Ending matching stage for card ${G.matchingOpportunityInfo.cardToMatch.rank}${G.matchingOpportunityInfo.cardToMatch.suit} (discarded by ${G.players[G.matchingOpportunityInfo.originalPlayerID]?.name || G.matchingOpportunityInfo.originalPlayerID}).`);
@@ -901,36 +916,45 @@ const checkMatchingStageEnd = (gameId: string): ServerCheckGameState | null => {
     const originalDiscarder = G.players[originalPlayerID];
     const isOriginalDiscardSpecial = originalDiscarder && cardToMatch && [Rank.King, Rank.Queen, Rank.Jack].includes(cardToMatch.rank);
     
-    if (isOriginalDiscardSpecial && !originalDiscarder.pendingSpecialAbility) {
-      const hasOtherPending = G.pendingAbilities && G.pendingAbilities.some(ab => ab.playerId === originalPlayerID);
-      if (!hasOtherPending) {
-        console.log(`[GameManager] checkMatchingStageEnd (all passed): Original discarder ${originalPlayerID} has ${cardToMatch.rank} ability from discard.`);
-        G.pendingAbilities = G.pendingAbilities || [];
-        let stageForDiscardedCard: 'peek' | 'swap' | undefined = undefined;
-        if (cardToMatch.rank === Rank.King || cardToMatch.rank === Rank.Queen) stageForDiscardedCard = 'peek';
-        else if (cardToMatch.rank === Rank.Jack) stageForDiscardedCard = 'swap';
-        G.pendingAbilities.push({ playerId: originalPlayerID, card: cardToMatch, source: 'discard', currentAbilityStage: stageForDiscardedCard });
-        console.log(`[GameManager] Added discard ability for ${cardToMatch.rank} to ${originalPlayerID} with stage: ${stageForDiscardedCard}`);
-        setupAbilityResolutionPhase(gameId);
+    // Revised logic based on Rule 7: If original discard was special, queue its ability.
+    if (isOriginalDiscardSpecial) {
+      console.log(`[GameManager] checkMatchingStageEnd (all passed/timeout): Original discard by ${originalPlayerName} was special (${cardStr}). Adding its ability to G.pendingAbilities.`);
+      G.pendingAbilities = G.pendingAbilities || [];
+      let stageForDiscardedCard: 'peek' | 'swap' | undefined = undefined;
+      if (cardToMatch.rank === Rank.King || cardToMatch.rank === Rank.Queen) stageForDiscardedCard = 'peek';
+      else if (cardToMatch.rank === Rank.Jack) stageForDiscardedCard = 'swap';
+
+      // Safety check to prevent adding the exact same discard-sourced ability multiple times if this logic path were re-entered.
+      const alreadyPending = G.pendingAbilities.some(
+          ab => ab.playerId === originalPlayerID && 
+                ab.card.rank === cardToMatch.rank && 
+                ab.card.suit === cardToMatch.suit && 
+                ab.source === 'discard'
+      );
+
+      if (!alreadyPending) {
+          G.pendingAbilities.push({
+              playerId: originalPlayerID,
+              card: cardToMatch,
+              source: 'discard',
+              currentAbilityStage: stageForDiscardedCard
+          });
+          console.log(`[GameManager] Added discard-sourced ability for ${cardStr} to ${originalPlayerName}. Stage: ${stageForDiscardedCard}`);
       } else {
-        console.log(`[GameManager] checkMatchingStageEnd (all passed): Original discarder ${originalPlayerID} already has other pending abilities. ${cardToMatch.rank} from discard not added.`);
-        if (G.playerWhoCalledCheck) {
-          console.log(`[GameManager] checkMatchingStageEnd (all passed, no new ability, check called): Restoring phase to finalTurnsPhase and proceeding.`);
-          G.currentPhase = 'finalTurnsPhase'; // Ensure phase is correct before continuing final turns
-          continueOrEndFinalTurns(gameId);
-        } else {
-        setupNextPlayTurn(gameId);
-        }
+          console.log(`[GameManager] Discard-sourced ability for ${cardStr} by ${originalPlayerName} is already in G.pendingAbilities. Not re-adding.`);
       }
+      // Always transition to ability resolution if the discard was special, as per Rule 7.
+      setupAbilityResolutionPhase(gameId);
     } else {
-      console.log(`[GameManager] checkMatchingStageEnd (all passed): No further abilities from discard.`);
+      // Original discard was not special. No ability from discard.
+      console.log(`[GameManager] checkMatchingStageEnd (all passed/timeout): Original discard ${cardStr} by ${originalPlayerName} was not special. No ability triggered from discard.`);
       if (G.playerWhoCalledCheck) {
-        console.log(`[GameManager] checkMatchingStageEnd (all passed, no ability, check called): Restoring phase to finalTurnsPhase and proceeding.`);
+        console.log(`[GameManager] checkMatchingStageEnd (all passed/timeout, no ability from discard, check called): Proceeding to final turns.`);
         G.currentPhase = 'finalTurnsPhase'; // Ensure phase is correct before continuing final turns
         continueOrEndFinalTurns(gameId);
       } else {
-        console.log(`[GameManager] checkMatchingStageEnd (all passed, no ability, no check called): Returning to playPhase.`);
-      setupNextPlayTurn(gameId);
+        console.log(`[GameManager] checkMatchingStageEnd (all passed/timeout, no ability from discard, no check called): Proceeding to next play turn.`);
+        setupNextPlayTurn(gameId);
       }
     }
     activeGames[gameId] = gameRoom;
@@ -953,7 +977,7 @@ export const handlePassMatch = (
 
   const G = gameRoom.gameState;
   if (G.currentPhase !== 'matchingStage') return { success: false, message: "Not in matching stage." };
-  if (!G.activePlayers || !G.activePlayers[playerId]) return { success: false, message: "Player not active for matching or already passed." };
+  if (!G.activePlayers || G.activePlayers[playerId] !== PlayerActivityStatus.AWAITING_MATCH_ACTION) return { success: false, message: "Player not active for matching or already passed." }; // Use enum
 
   console.log(`[GameManager] Player ${G.players[playerId]?.name || playerId} passed in matching stage for game ${gameId}.`);
   delete G.activePlayers[playerId]; 
@@ -1091,7 +1115,7 @@ const setupNextPlayTurn = (gameId: string): ServerCheckGameState | null => {
 
   G.currentPhase = 'playPhase';
   G.currentPlayerId = nextPlayerId;
-  G.activePlayers = { [nextPlayerId]: 'playPhaseActive' };
+  G.activePlayers = { [nextPlayerId]: PlayerActivityStatus.PLAY_PHASE_ACTIVE }; // Use enum
   G.discardPileIsSealed = false; 
 
   // Log if we just entered playPhase
@@ -1165,7 +1189,7 @@ const setupFinalTurnsPhase = (gameId: string, checkerPlayerId: string): ServerCh
   }
 
   G.currentPlayerId = nextPlayerId;
-  G.activePlayers = { [nextPlayerId]: 'finalTurnActive' }; 
+  G.activePlayers = { [nextPlayerId]: PlayerActivityStatus.FINAL_TURN_ACTIVE }; // Use enum
   G.discardPileIsSealed = false; 
   G.currentTurnSegment = 'initialAction'; // Set for the new final turn
 
@@ -1213,7 +1237,7 @@ const setupAbilityResolutionPhase = (gameId: string): ServerCheckGameState | nul
 
   G.currentPhase = 'abilityResolutionPhase';
   G.currentPlayerId = playerToActId;
-  G.activePlayers = { [playerToActId]: 'abilityResolutionActive' };
+  G.activePlayers = { [playerToActId]: PlayerActivityStatus.ABILITY_RESOLUTION_ACTIVE }; // Use enum
   G.discardPileIsSealed = true;
   // G.currentTurnSegment = 'abilityAction'; // Or some other appropriate segment if abilities have their own timed segments
   // For now, assuming ability resolution uses the standard turn timer initiated here.
@@ -1289,7 +1313,7 @@ const continueOrEndFinalTurns = (gameId: string): ServerCheckGameState | null =>
     }
 
     G.currentPlayerId = nextPlayerId;
-    G.activePlayers = { [nextPlayerId]: 'finalTurnActive' };
+    G.activePlayers = { [nextPlayerId]: PlayerActivityStatus.FINAL_TURN_ACTIVE }; // Use enum
     G.discardPileIsSealed = false;
     clearGlobalAbilityTargetsIfNeeded(G);
     clearTransientVisualCues(G);

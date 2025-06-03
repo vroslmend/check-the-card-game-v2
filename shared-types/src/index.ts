@@ -57,6 +57,11 @@ export interface SpecialAbilityInfo {
   source: 'deck' | 'discard' | 'stack' | 'stackSecondOfPair'; // 'deck' implies drawn for ability
 }
 
+export interface AbilityArgs { // This is from shared-types
+  peekTargets?: Array<{ playerID: string; cardIndex: number }>;
+  swapTargets?: Array<{ playerID: string; cardIndex: number }>;
+}
+
 export interface PlayerState {
   hand: Card[];
   hasUsedInitialPeek: boolean;
@@ -136,7 +141,7 @@ export interface CheckGameState {
   currentPlayerId: string;
   turnOrder: string[];
   gameMasterId: string;
-  activePlayers: { [playerID: string]: string };
+  activePlayers: { [playerID: string]: PlayerActivityStatus };
   pendingAbilities: PendingSpecialAbility[];
   matchResolvedDetails: MatchResolvedDetails | null;
   gameover: GameOverData | null; // Uses the above defined GameOverData
@@ -152,6 +157,48 @@ export interface CheckGameState {
   currentTurnSegment: TurnSegment; // Added new field
   matchingStageTimerExpiresAt?: number; // New field for matching stage timer
   logHistory?: RichGameLogMessage[]; // Added for storing recent logs on server
+}
+
+// New Enum for Player Activity Status
+export enum PlayerActivityStatus {
+  AWAITING_READINESS = 'awaitingReadiness',
+  PLAY_PHASE_ACTIVE = 'playPhaseActive',
+  AWAITING_MATCH_ACTION = 'awaitingMatchAction',
+  ABILITY_RESOLUTION_ACTIVE = 'abilityResolutionActive',
+  FINAL_TURN_ACTIVE = 'finalTurnActive',
+  // Add any other distinct statuses used in activePlayers here
+}
+
+// Enum for custom socket event names
+export enum SocketEventName {
+  // Client to Server
+  CREATE_GAME = 'createGame',
+  JOIN_GAME = 'joinGame',
+  ATTEMPT_REJOIN = 'attemptRejoin',
+  PLAYER_ACTION = 'playerAction',
+  SEND_CHAT_MESSAGE = 'sendChatMessage',
+
+  // Server to Client
+  GAME_STATE_UPDATE = 'gameStateUpdate',
+  PLAYER_JOINED = 'playerJoined', // For broadcasting when a new player joins an existing game
+  REJOIN_DENIED = 'rejoinDenied', // Specific event if server denies a rejoin attempt
+  SERVER_LOG_ENTRY = 'serverLogEntry', // For individual log entries sent by the server
+  INITIAL_LOGS = 'initialLogs', // For the batch of logs sent when a player joins/rejoins
+  CHAT_MESSAGE = 'chatMessage', // For broadcasting chat messages to clients
+}
+
+// Enum for player action types (payload for PLAYER_ACTION event)
+export enum PlayerActionType {
+  DRAW_FROM_DECK = 'drawFromDeck',
+  DRAW_FROM_DISCARD = 'drawFromDiscard',
+  SWAP_AND_DISCARD = 'swapAndDiscard',
+  DISCARD_DRAWN_CARD = 'discardDrawnCard',
+  ATTEMPT_MATCH = 'attemptMatch',
+  PASS_MATCH = 'passMatch',
+  CALL_CHECK = 'callCheck',
+  DECLARE_READY_FOR_PEEK = 'declareReadyForPeek',
+  REQUEST_PEEK_REVEAL = 'requestPeekReveal',
+  RESOLVE_SPECIAL_ABILITY = 'resolveSpecialAbility',
 }
 
 // Data structure for players joining a game or being set up initially

@@ -1,20 +1,18 @@
 import 'module-alias/register';
-// import path from 'path'; // No longer needed here
 import http from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { 
-    initializeNewGame, 
-    addPlayerToGame, 
-    handleDrawFromDeck, 
-    handleDrawFromDiscard, 
-    handleSwapAndDiscard, 
-    handleDiscardDrawnCard, 
-    handleAttemptMatch, 
-    handlePassMatch, 
-    handleCallCheck, 
+import {
+    initializeNewGame,
+    addPlayerToGame,
+    handleDrawFromDeck,
+    handleDrawFromDiscard,
+    handleSwapAndDiscard,
+    handleDiscardDrawnCard,
+    handleAttemptMatch,
+    handlePassMatch,
+    handleCallCheck,
     generatePlayerView,
     handleDeclareReadyForPeek,
-    AbilityArgs,
     handleResolveSpecialAbility,
     setTriggerBroadcastFunction,
     markPlayerAsDisconnected,
@@ -23,423 +21,442 @@ import {
     setTriggerLogBroadcastFunction,
     getGameRoom,
 } from './game-manager';
-import { InitialPlayerSetupData, CheckGameState as ServerCheckGameState, ClientCheckGameState, RichGameLogMessage, ChatMessage } from 'shared-types';
+import {
+    InitialPlayerSetupData,
+    CheckGameState as ServerCheckGameState,
+    ClientCheckGameState,
+    RichGameLogMessage,
+    ChatMessage,
+    AbilityArgs as BaseAbilityArgs,
+    SocketEventName,
+    PlayerActionType
+} from 'shared-types';
 
 console.log('Server starting with Socket.IO...');
+
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
+console.log(`[Server] CORS origin set to: ${CORS_ORIGIN}`);
 
 const httpServer = http.createServer();
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: CORS_ORIGIN,
     methods: ["GET", "POST"]
   }
 });
 
-// Define the broadcast function that game-manager will use
-const broadcastGameStateUpdate = async (gameId: string, fullGameState: ServerCheckGameState) => {
-  const socketsInRoom = await io.in(gameId).allSockets();
-  if (socketsInRoom.size === 0) {
-    console.log(`[Server-BroadcastFn] No sockets in room ${gameId} to broadcast to.`);
-    return;
-  }
-  console.log(`[Server-BroadcastFn] Broadcasting to ${socketsInRoom.size} socket(s) in room ${gameId}.`);
-  socketsInRoom.forEach(socketIdInRoom => {
-    const targetSocket = io.sockets.sockets.get(socketIdInRoom) as Socket & { data: { playerId?: string } };
-    const gamePlayerIdForSocket = targetSocket?.data?.playerId;
-
-    if (gamePlayerIdForSocket) {
-      const playerSpecificView = generatePlayerView(fullGameState, gamePlayerIdForSocket);
-      io.to(socketIdInRoom).emit('gameStateUpdate', { gameId, gameState: playerSpecificView });
-      // console.log(`[Server-BroadcastFn] Sent gameStateUpdate to ${gamePlayerIdForSocket} (${socketIdInRoom}) in game ${gameId}`);
-    } else {
-      console.warn(`[Server-BroadcastFn] Could not find game player ID for socket ${socketIdInRoom} in game ${gameId}. Cannot send tailored state.`);
-    }
-  });
-  console.log(`[Server-BroadcastFn] Broadcast complete for game ${gameId}.`);
-};
-
-// Pass the broadcast function to the game-manager
-setTriggerBroadcastFunction(broadcastGameStateUpdate);
-
-// New function to broadcast a single log entry
-const broadcastLogEntry = async (gameId: string, logEntry: RichGameLogMessage) => {
-  const isPublicLog = logEntry.isPublic !== false;
-
-  if (isPublicLog) {
-    if (logEntry.privateVersionRecipientId) {
-      // This public log has a private version for a specific recipient.
-      // Send this public log to everyone EXCEPT that recipient.
-      const recipientPlayerId = logEntry.privateVersionRecipientId;
-      const gameRoom = getGameRoom(gameId);
-      const recipientSocketId = gameRoom?.gameState.players[recipientPlayerId]?.socketId;
-
-      const socketsInRoom = await io.in(gameId).allSockets();
-      socketsInRoom.forEach(socketIdInRoom => {
-        if (socketIdInRoom !== recipientSocketId) {
-          io.to(socketIdInRoom).emit('serverLogEntry', { gameId, logEntry });
-        }
-      });
-      // Optional: console.log(`[Server-LogBroadcast-PublicConditional] Sent to room ${gameId} (excluding ${recipientPlayerId}): ${logEntry.actorName || 'System'} - ${logEntry.message}`);
-    } else {
-      // Standard public log, no specific private version for anyone. Send to all.
-      io.to(gameId).emit('serverLogEntry', { gameId, logEntry });
-      // Optional: console.log(`[Server-LogBroadcast-PublicGlobal] Sent to room ${gameId}: ${logEntry.actorName || 'System'} - ${logEntry.message}`);
-    }
-  } else if (logEntry.recipientPlayerId) {
-    // This is a private log. Send only to the recipient.
-    const gameRoom = getGameRoom(gameId);
-    if (gameRoom && gameRoom.gameState.players[logEntry.recipientPlayerId]) {
-      const recipientSocketId = gameRoom.gameState.players[logEntry.recipientPlayerId].socketId;
-      if (recipientSocketId) {
-        io.to(recipientSocketId).emit('serverLogEntry', { gameId, logEntry });
-        // Optional: console.log(`[Server-LogBroadcast-Private] Sent to player ${logEntry.recipientPlayerId} (socket ${recipientSocketId}): ${logEntry.message}`);
-      } else {
-        console.warn(`[Server-LogBroadcast-Private] Could not send private log to player ${logEntry.recipientPlayerId} in game ${gameId}: Socket ID not found.`);
-      }
-    } else {
-      console.warn(`[Server-LogBroadcast-Private] Could not send private log to player ${logEntry.recipientPlayerId} in game ${gameId}: Player or game room not found.`);
-    }
-  } else {
-    console.warn(`[Server-LogBroadcast] Log entry for game ${gameId} was marked private but no recipientPlayerId was provided. Broadcasting publicly as a fallback:`, logEntry);
-    io.to(gameId).emit('serverLogEntry', { gameId, logEntry });
-  }
-};
-
-// Pass the log broadcast function to the game-manager
-setTriggerLogBroadcastFunction(broadcastLogEntry);
-
-// Store a mapping of socket.id to gameId and playerId for easier disconnect handling
-// This is a simple in-memory store; for production, a more robust solution (e.g., Redis) might be needed
-interface SocketSessionInfo {
-    gameId: string;
-    playerId: string;
-}
-const socketSessionMap = new Map<string, SocketSessionInfo>();
-
-const NUM_RECENT_LOGS_ON_JOIN = 20;
-
 const GAME_ID_REGEX = /^game_[a-zA-Z0-9]{6}$/;
+const NUM_RECENT_LOGS_ON_JOIN_REJOIN = 20;
 
-// Helper function to escape HTML characters
-const escapeHTML = (text: string): string => {
-  return text.replace(/[&<>"'`]/g, (match) => {
-    switch (match) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      case '`': return '&#x60;';
-      default: return match;
-    }
-  });
+const escapeHTML = (str: string) =>
+  str.replace(/[&<>'"]/g, (match) => ({ // Removed / from regex as it's not typically escaped in HTML content unless in specific contexts like script tags.
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[match] || match));
+
+interface BasicResponse {
+  success: boolean;
+  message?: string;
+}
+
+interface CreateGameResponse extends BasicResponse {
+  gameId?: string;
+  playerId?: string;
+  gameState?: ClientCheckGameState;
+}
+
+interface JoinGameResponse extends BasicResponse {
+  gameId?: string;
+  playerId?: string;
+  gameState?: ClientCheckGameState;
+}
+
+interface AttemptRejoinResponse extends BasicResponse {
+  gameState?: ClientCheckGameState;
+}
+
+interface PlayerActionResponse extends BasicResponse {
+  gameState?: ClientCheckGameState;
+  peekJustStarted?: boolean;
+  peekTargets?: Array<{ playerID: string; cardIndex: number }>;
+}
+
+interface ExtendedAbilityArgs extends BaseAbilityArgs {
+  skipAbility?: boolean;
+  skipType?: 'peek' | 'swap' | 'full';
+}
+
+interface ValidTarget {
+  playerID: string;
+  cardIndex: number;
+}
+
+const isValidTargetArray = (targets: any): targets is ValidTarget[] => {
+  return Array.isArray(targets) && targets.every(
+    target => typeof target === 'object' && target !== null &&
+              typeof target.playerID === 'string' &&
+              typeof target.cardIndex === 'number'
+  );
 };
+
+const isExtendedAbilityArgs = (args: any): args is ExtendedAbilityArgs => {
+  if (typeof args !== 'object' || args === null) return false;
+  if ('skipAbility' in args && typeof args.skipAbility !== 'boolean') return false;
+  if ('skipType' in args && (typeof args.skipType !== 'string' || !['peek', 'swap', 'full'].includes(args.skipType))) return false;
+  if ('peekTargets' in args && args.peekTargets !== undefined && !isValidTargetArray(args.peekTargets)) return false;
+  if ('swapTargets' in args && args.swapTargets !== undefined && !isValidTargetArray(args.swapTargets)) return false;
+  return true;
+};
+
+
+const socketSessionMap = new Map<string, { gameId: string; playerId: string }>();
 
 io.on('connection', (socket: Socket) => {
-  console.log(`User connected: ${socket.id}`);
+  console.log(`[Server] New connection: ${socket.id}`);
 
-  // Helper to store game player ID on socket AND in map
-  const registerSocketSession = (gameId: string, gamePlayerId: string) => {
-    (socket as any).data.playerId = gamePlayerId;
-    (socket as any).data.gameId = gameId; // Store gameId on socket as well
-    socketSessionMap.set(socket.id, { gameId, playerId: gamePlayerId });
-    console.log(`[Server] Registered session for socket ${socket.id}: game ${gameId}, player ${gamePlayerId}`);
+  const registerSocketSession = (gameId: string, playerId: string) => {
+    socketSessionMap.set(socket.id, { gameId, playerId });
+    (socket as any).data = { gameId, playerId }; // Also store on socket.data for easier access in some contexts
+    console.log(`[Server] Session registered for socket ${socket.id}: game ${gameId}, player ${playerId}`);
   };
 
-  const getSocketSession = (): SocketSessionInfo | undefined => {
+  const getSocketSession = () => {
     return socketSessionMap.get(socket.id);
   };
 
   const clearSocketSession = () => {
     const session = socketSessionMap.get(socket.id);
     if (session) {
-        console.log(`[Server] Clearing session for socket ${socket.id}: game ${session.gameId}, player ${session.playerId}`);
+      console.log(`[Server] Clearing session for socket ${socket.id}: game ${session.gameId}, player ${session.playerId}`);
+      socketSessionMap.delete(socket.id);
+      delete (socket as any).data.gameId;
+      delete (socket as any).data.playerId;
     }
-    socketSessionMap.delete(socket.id);
-    // Also clear from socket.data if it was set
-    delete (socket as any).data.playerId;
-    delete (socket as any).data.gameId;
   };
 
-  // Handler for receiving and broadcasting chat messages
-  socket.on('sendChatMessage', (chatMessage: ChatMessage, callback: (ack: {success: boolean, messageId?: string, error?: string}) => void) => {
-    const session = getSocketSession();
-    if (!session || !session.gameId) {
-      console.warn(`[Server-Chat] Received chat message from socket ${socket.id} but no game session found.`);
-      if (callback) callback({ success: false, error: 'User not in a game session.' });
-      return;
+  const broadcastGameStateCustom = (gameId: string, fullGameState: ServerCheckGameState | null, specificSocketIdToExclude?: string) => {
+    if (!fullGameState) {
+        console.warn(`[Server-BroadcastFn] No game state to broadcast for game ${gameId}`);
+        return;
     }
-
-    const messageContent = chatMessage.message ? chatMessage.message.trim() : '';
-    if (messageContent.length === 0) {
-      if (callback) callback({ success: false, error: 'Chat message cannot be empty.' });
-      return;
-    }
-    if (messageContent.length > 500) {
-        if (callback) callback({ success: false, error: 'Chat message too long.' });
+    const socketsInRoom = io.sockets.adapter.rooms.get(gameId);
+    if (!socketsInRoom) {
+        console.warn(`[Server-BroadcastFn] No sockets found in room ${gameId} to broadcast to.`);
         return;
     }
 
-    const processedMessage: ChatMessage = {
-      ...chatMessage,
-      message: escapeHTML(messageContent), // Escape HTML in message content
-      id: chatMessage.id || `servermsg_${session.gameId}_${Date.now()}`,
-      senderId: session.playerId,
-      senderName: getGameRoom(session.gameId)?.gameState.players[session.playerId]?.name || chatMessage.senderName || 'Unknown',
-      timestamp: new Date().toISOString(),
-      gameId: session.gameId,
-      type: 'room',
-    };
+    let sentToCount = 0;
+    socketsInRoom.forEach(socketIdInRoom => {
+        if (specificSocketIdToExclude && socketIdInRoom === specificSocketIdToExclude) {
+            return; 
+        }
+        // Try to get playerId from socket.data first, then from the game state as a fallback
+        const targetSocket = io.sockets.sockets.get(socketIdInRoom);
+        const gamePlayerIdForSocket = (targetSocket as any)?.data?.playerId || 
+                                      Object.keys(fullGameState.players).find(pId => fullGameState.players[pId].socketId === socketIdInRoom);
 
-    io.to(session.gameId).emit('chatMessage', processedMessage);
-    if (callback) callback({ success: true, messageId: processedMessage.id });
+        if (gamePlayerIdForSocket) {
+            const playerSpecificView = generatePlayerView(fullGameState, gamePlayerIdForSocket);
+            io.to(socketIdInRoom).emit(SocketEventName.GAME_STATE_UPDATE, { gameId, gameState: playerSpecificView });
+            sentToCount++;
+        } else {
+            console.warn(`[Server-BroadcastFn] Could not find player for socketId ${socketIdInRoom} in game ${gameId}`);
+        }
+    });
+    if (sentToCount > 0) {
+      console.log(`[Server-BroadcastFn] Game state update broadcasted for game ${gameId} to ${sentToCount} players (excluding: ${specificSocketIdToExclude ? 'yes' : 'no'}).`);
+    }
+  };
+  setTriggerBroadcastFunction(broadcastGameStateCustom);
+
+  const broadcastLogEntryCustom = (gameId: string, logEntry: RichGameLogMessage) => {
+    const gameRoomForLog = getGameRoom(gameId); 
+    if (!gameRoomForLog) {
+      console.warn(`[Server-LogBroadcast] Game room ${gameId} not found for broadcasting log.`);
+      return;
+    }
+
+    if (logEntry.isPublic === false && logEntry.recipientPlayerId) {
+      const recipientPlayerState = gameRoomForLog.gameState.players[logEntry.recipientPlayerId];
+      if (recipientPlayerState && recipientPlayerState.socketId) {
+        io.to(recipientPlayerState.socketId).emit(SocketEventName.SERVER_LOG_ENTRY, { gameId, logEntry });
+      } else {
+        console.warn(`[Server-LogBroadcast] Private log for ${logEntry.recipientPlayerId} in game ${gameId} could not be sent: socketId missing or player not found.`);
+      }
+    } else if (logEntry.privateVersionRecipientId) {
+      const socketsInRoom = io.sockets.adapter.rooms.get(gameId);
+      if (socketsInRoom) {
+        socketsInRoom.forEach(socketIdInRoom => {
+          const recipientPlayerState = gameRoomForLog.gameState.players[logEntry.privateVersionRecipientId!];
+          if (recipientPlayerState && recipientPlayerState.socketId === socketIdInRoom) {
+          } else {
+            io.to(socketIdInRoom).emit(SocketEventName.SERVER_LOG_ENTRY, { gameId, logEntry });
+          }
+        });
+      }
+    } else {
+      io.to(gameId).emit(SocketEventName.SERVER_LOG_ENTRY, { gameId, logEntry });
+    }
+  };
+  setTriggerLogBroadcastFunction(broadcastLogEntryCustom);
+  
+  socket.on(SocketEventName.SEND_CHAT_MESSAGE, (chatMessage: ChatMessage, callback: (ack: {success: boolean, messageId?: string, error?: string}) => void) => {
+    try {
+      const session = getSocketSession();
+      if (!session || !session.gameId) {
+        if (callback) callback({success: false, error: 'User not in a game session.'});
+        return;
+      }
+      if (chatMessage.senderId !== session.playerId) {
+        if (callback) callback({success: false, error: 'Sender ID mismatch.'});
+        return;
+      }
+      if (!chatMessage.message || typeof chatMessage.message !== 'string' || chatMessage.message.trim().length === 0) {
+        if (callback) callback({success: false, error: 'Message is empty.'});
+        return;
+      }
+      if (chatMessage.message.length > 256) { 
+        if (callback) callback({success: false, error: 'Message exceeds maximum length.'});
+        return;
+      }
+
+      const processedMessage: ChatMessage = {
+        ...chatMessage,
+        message: escapeHTML(chatMessage.message.trim()),
+        timestamp: new Date().toISOString(), 
+        id: chatMessage.id || `servermsg_${Date.now()}_${Math.random().toString(36).substring(2,7)}` 
+      };
+  
+      io.to(session.gameId).emit(SocketEventName.CHAT_MESSAGE, processedMessage);
+      if (callback) callback({ success: true, messageId: processedMessage.id });
+    } catch (e: any) {
+      console.error(`[Server-Chat] Error: ${e.message}`, e);
+      if (callback) callback({success: false, error: `Server error: ${e.message || 'Unknown error'}`});
+    }
   });
-
-  socket.on('createGame', (playerSetupData: InitialPlayerSetupData, callback: (response: { success: boolean; gameId?: string; playerId?: string; gameState?: ClientCheckGameState; message?: string }) => void) => {
+  
+  socket.on(SocketEventName.CREATE_GAME, (playerSetupData: InitialPlayerSetupData, callback: (response: CreateGameResponse) => void) => {
     try {
       const gameId = `game_${Math.random().toString(36).substring(2, 8)}`;
-      playerSetupData.socketId = socket.id;
-      const gameRoom = initializeNewGame(gameId, [playerSetupData]);
+      playerSetupData.socketId = socket.id; 
 
-      if (gameRoom) {
+      console.log(`[Server] CreateGame: ${playerSetupData.name || playerSetupData.id} (Socket: ${socket.id}) for game ${gameId}`);
+      
+      const newlyCreatedGameRoom = initializeNewGame(gameId, [playerSetupData]);
+      
+      if (newlyCreatedGameRoom) {
         socket.join(gameId);
         registerSocketSession(gameId, playerSetupData.id);
-        const clientGameState = generatePlayerView(gameRoom.gameState, playerSetupData.id);
+        const clientGameState = generatePlayerView(newlyCreatedGameRoom.gameState, playerSetupData.id);
         
-        // Send initial logs to the creator
-        const welcomeMessage: RichGameLogMessage = {
-          message: `Welcome, ${playerSetupData.name || playerSetupData.id.slice(-4)}! You've created Game ${gameId.slice(-6)}.`,
-          type: 'system',
-          timestamp: new Date().toISOString(),
-          logId: `log_welcome_${socket.id}_${Date.now()}`
-        };
-        const recentLogs = gameRoom.gameState.logHistory?.slice(-NUM_RECENT_LOGS_ON_JOIN) || [];
-        const initialLogPayload = [welcomeMessage, ...recentLogs.filter(log => log.message !== welcomeMessage.message)];
-        
-        socket.emit('initialLogs', { logs: initialLogPayload });
+        if (newlyCreatedGameRoom.gameState.logHistory && newlyCreatedGameRoom.gameState.logHistory.length > 0) {
+          socket.emit(SocketEventName.INITIAL_LOGS, { logs: newlyCreatedGameRoom.gameState.logHistory.slice(-NUM_RECENT_LOGS_ON_JOIN_REJOIN) });
+        }
         
         callback({ success: true, gameId, playerId: playerSetupData.id, gameState: clientGameState });
+        console.log(`[Server] Game ${gameId} created for ${playerSetupData.id}.`);
       } else {
-        callback({ success: false, message: "Failed to create game (null gameRoom)." });
+        callback({ success: false, message: 'Failed to initialize game. Invalid parameters or server error.' });
       }
-    } catch (error: any) {
-      console.error(`[Server-CreateGame] Error during game creation: ${error.message}`, error);
-      if (callback) callback({ success: false, message: `Server error: ${error.message || 'Failed to create game.'}` });
+    } catch (e: any) {
+      console.error(`[Server-CreateGame] Error: ${e.message}`, e);
+      callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
     }
   });
-
-  socket.on('joinGame', (gameIdToJoin: string, playerSetupData: InitialPlayerSetupData, callback: (response: { success: boolean; gameId?: string; playerId?: string; gameState?: ClientCheckGameState; message?: string }) => void) => {
+  
+  socket.on(SocketEventName.JOIN_GAME, (gameIdToJoin: string, playerSetupData: InitialPlayerSetupData, callback: (response: JoinGameResponse) => void) => {
     try {
       if (!GAME_ID_REGEX.test(gameIdToJoin)) {
-        console.warn(`[Server-JoinGame] Invalid gameId format received: ${gameIdToJoin}`);
-        if (callback) callback({ success: false, message: "Invalid Game ID format." });
+        callback({ success: false, message: "Invalid Game ID format." });
         return;
       }
-      playerSetupData.socketId = socket.id;
-      const result = addPlayerToGame(gameIdToJoin, playerSetupData, socket.id);
+      playerSetupData.socketId = socket.id; 
+      console.log(`[Server] JoinGame: ${playerSetupData.name || playerSetupData.id} (Socket: ${socket.id}) to game ${gameIdToJoin}`);
 
-      if (result.success && result.gameRoom && result.newPlayerState) {
+      const joinResult = addPlayerToGame(gameIdToJoin, playerSetupData, socket.id);
+
+      if (joinResult.success && joinResult.gameRoom && joinResult.gameRoom.gameState && playerSetupData.id) {
         socket.join(gameIdToJoin);
         registerSocketSession(gameIdToJoin, playerSetupData.id);
-        const clientGameState = generatePlayerView(result.gameRoom.gameState, playerSetupData.id);
+        const clientGameState = generatePlayerView(joinResult.gameRoom.gameState, playerSetupData.id);
 
-        // Send initial logs to the joiner
-        const welcomeMessage: RichGameLogMessage = {
-          message: `Welcome, ${playerSetupData.name || playerSetupData.id.slice(-4)}! You've joined Game ${gameIdToJoin.slice(-6)}.`,
-          type: 'system',
-          timestamp: new Date().toISOString(),
-          logId: `log_welcome_${socket.id}_${Date.now()}`
-        };
-        const recentLogs = result.gameRoom.gameState.logHistory?.slice(-NUM_RECENT_LOGS_ON_JOIN) || [];
-        const initialLogPayload = [welcomeMessage, ...recentLogs.filter(log => log.message !== welcomeMessage.message)];
-        
-        socket.emit('initialLogs', { logs: initialLogPayload });
+        const gameLogs = getGameRoom(gameIdToJoin)?.gameState.logHistory;
+        if (gameLogs && gameLogs.length > 0) {
+          socket.emit(SocketEventName.INITIAL_LOGS, { logs: gameLogs.slice(-20) });
+        }
 
         callback({ success: true, gameId: gameIdToJoin, playerId: playerSetupData.id, gameState: clientGameState });
       } else {
-        callback({ success: false, message: result.message || "Failed to join game." });
+        callback({ success: false, message: joinResult.message || 'Failed to join game.' });
       }
-    } catch (error: any) {
-      console.error(`[Server-JoinGame] Error during game join: ${error.message}`, error);
-      if (callback) callback({ success: false, message: `Server error: ${error.message || 'Failed to join game.'}` });
+    } catch (e: any) {
+      console.error(`[Server-JoinGame] Error: ${e.message}`, e);
+      callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
     }
   });
-
-  socket.on('attemptRejoin', async (data: { gameId: string; playerId: string }, callback: (response: { success: boolean; gameState?: ClientCheckGameState; message?: string }) => void) => {
+  
+  socket.on(SocketEventName.ATTEMPT_REJOIN, async (data: { gameId: string; playerId: string }, callback: (response: AttemptRejoinResponse) => void) => {
     try {
       if (!GAME_ID_REGEX.test(data.gameId)) {
-        console.warn(`[Server-AttemptRejoin] Invalid gameId format received: ${data.gameId}`);
-        if (callback) callback({ success: false, message: "Invalid Game ID format for rejoin." });
+        callback({ success: false, message: "Invalid Game ID format." });
         return;
       }
-      console.log(`[Server] Received attemptRejoin from ${socket.id} for game ${data.gameId}, player ${data.playerId}`);
-      const result = attemptRejoinGame(data.gameId, data.playerId, socket.id);
+      console.log(`[Server] AttemptRejoin: ${data.playerId} to game ${data.gameId} (New Socket: ${socket.id})`);
+      const result = await attemptRejoinGame(data.gameId, data.playerId, socket.id);
 
       if (result.success && result.gameState) {
         socket.join(data.gameId);
         registerSocketSession(data.gameId, data.playerId);
-        console.log(`[Server] Player ${socket.id} (as ${data.playerId}) successfully rejoined game ${data.gameId}.`);
+        const clientGameState = generatePlayerView(result.gameState, data.playerId);
         
-        // Send initial logs if present in the result
         if (result.initialLogsForRejoiner) {
-          socket.emit('initialLogs', { logs: result.initialLogsForRejoiner });
+          socket.emit(SocketEventName.INITIAL_LOGS, { logs: result.initialLogsForRejoiner });
         }
         
-        // Send the latest game state to the rejoining player directly
-        callback({ success: true, gameState: generatePlayerView(result.gameState, data.playerId) });
-        
-        // Broadcast updated game state to all players in the room (including the rejoining one again)
-        // This ensures everyone has the latest, including potentially updated isConnected status.
-        broadcastGameStateUpdate(data.gameId, result.gameState);
-
+        callback({ success: true, gameState: clientGameState });
+        console.log(`[Server] Player ${data.playerId} rejoined ${data.gameId}.`);
       } else {
-        console.warn(`[Server] Player ${socket.id} failed to rejoin game ${data.gameId}. Reason: ${result.message}`);
+        // If server explicitly denies, we can emit this for client UI handling
+        socket.emit(SocketEventName.REJOIN_DENIED, { message: result.message }); 
         callback({ success: false, message: result.message });
       }
-    } catch (error: any) {
-      console.error(`[Server-AttemptRejoin] Error during rejoin attempt: ${error.message}`, error);
-      if (callback) callback({ success: false, message: `Server error: ${error.message || 'Failed to rejoin.'}` });
+    } catch (e: any) {
+      console.error(`[Server-Rejoin] Error: ${e.message}`, e);
+      callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
     }
   });
-
-  socket.on('playerAction', async (action: { gameId: string; playerId: string; type: string; payload?: any }, callback: (response: { success: boolean; gameState?: ClientCheckGameState; message?: string; peekJustStarted?: boolean; peekTargets?: any /* Consider more specific type for peekTargets based on usage */ }) => void) => {
+  
+  socket.on(SocketEventName.PLAYER_ACTION, async (action: { gameId: string; playerId: string; type: string; payload?: any }, callback: (response: PlayerActionResponse) => void) => {
     try {
       const { gameId, playerId, type, payload } = action;
-      console.log(`[Server] Received playerAction: ${type} from ${playerId} (${socket.id}) in game ${gameId} with payload:`, payload);
+      console.log(`[Server] PlayerAction: ${type} from ${playerId} (${socket.id}) in ${gameId}. Payload:`, payload);
 
       const session = getSocketSession();
       if (!session || session.gameId !== gameId || session.playerId !== playerId) {
-          console.warn(`[Server] Action from socket ${socket.id} for player ${playerId}/game ${gameId} rejected due to session mismatch or no session. Current session:`, session);
           if (callback) callback({ success: false, message: "Session validation failed. Action rejected." });
-          return; // Reject the action
+          return; 
       }
 
-      // Specific handling for requestPeekReveal
-      if (type === 'requestPeekReveal') {
-          console.log(`[Server] Handling specific action: ${type} from ${playerId} in ${gameId}`);
-          let peekCallbackResult: { success: boolean; message?: string; gameState?: ClientCheckGameState; peekTargets?: any };
-          if (payload && Array.isArray(payload.peekTargets)) {
-              const peekRevealResult = handleRequestPeekReveal(gameId, playerId, payload.peekTargets);
-              if (peekRevealResult.success && peekRevealResult.updatedPlayerSpecificGameState) {
-                  // Send the player-specific state directly to the requesting socket
-                  socket.emit('gameStateUpdate', { gameId, gameState: peekRevealResult.updatedPlayerSpecificGameState });
-                  console.log(`[Server] Sent player-specific peek reveal state to ${playerId} (${socket.id})`);
-                  // The callback also receives this specific state
-                  peekCallbackResult = { success: true, gameState: peekRevealResult.updatedPlayerSpecificGameState, message: peekRevealResult.message };
-              } else {
-                  peekCallbackResult = { success: false, message: peekRevealResult.message || "Failed to process peek reveal." };
-              }
-          } else {
-              peekCallbackResult = { success: false, message: "Invalid payload: peekTargets must be an array for requestPeekReveal." };
-          }
-          if (callback) callback(peekCallbackResult);
-          return; // Action fully handled, including callback. No further broadcast needed for this action.
-      }
+      let result: { 
+        success: boolean; 
+        message?: string; 
+        updatedGameState?: ServerCheckGameState; 
+        updatedPlayerSpecificGameState?: ClientCheckGameState;
+        peekJustStarted?: boolean;
+        peekTargets?: Array<{ playerID: string; cardIndex: number }>;
+      } | null = null;
 
-      // For all other actions:
-      let result: { success: boolean; message?: string; updatedGameState?: ServerCheckGameState; [key: string]: any; }; // Allow extra fields like peekJustStarted
-      let shouldBroadcastGeneral = true; 
-
-      switch (type) {
-        case 'drawFromDeck': result = handleDrawFromDeck(gameId, playerId); break;
-        case 'drawFromDiscard': result = handleDrawFromDiscard(gameId, playerId); break;
-        case 'swapAndDiscard': 
+      switch (type as PlayerActionType) { // Cast type to PlayerActionType
+        case PlayerActionType.DRAW_FROM_DECK: 
+          result = handleDrawFromDeck(gameId, playerId); 
+          break;
+        case PlayerActionType.DRAW_FROM_DISCARD: 
+          result = handleDrawFromDiscard(gameId, playerId); 
+          break;
+        case PlayerActionType.SWAP_AND_DISCARD: 
           result = typeof payload?.handIndex === 'number' 
             ? handleSwapAndDiscard(gameId, playerId, payload.handIndex) 
             : { success: false, message: "Invalid payload: handIndex must be a number." }; 
           break;
-        case 'discardDrawnCard': result = handleDiscardDrawnCard(gameId, playerId); break;
-        case 'attemptMatch': 
+        case PlayerActionType.DISCARD_DRAWN_CARD: 
+          result = handleDiscardDrawnCard(gameId, playerId); 
+          break;
+        case PlayerActionType.ATTEMPT_MATCH: 
           result = typeof payload?.handIndex === 'number' 
             ? handleAttemptMatch(gameId, playerId, payload.handIndex) 
             : { success: false, message: "Invalid payload: handIndex must be a number for attemptMatch." }; 
           break;
-        case 'passMatch': result = handlePassMatch(gameId, playerId); break;
-        case 'callCheck': result = handleCallCheck(gameId, playerId); break;
-        case 'resolveSpecialAbility': 
-          if (payload && typeof payload === 'object' && 'args' in payload) {
-              result = handleResolveSpecialAbility(gameId, playerId, payload.args as AbilityArgs);
+        case PlayerActionType.PASS_MATCH: 
+          result = handlePassMatch(gameId, playerId); 
+          break;
+        case PlayerActionType.CALL_CHECK: 
+          result = handleCallCheck(gameId, playerId); 
+          break;
+        case PlayerActionType.DECLARE_READY_FOR_PEEK: 
+          result = handleDeclareReadyForPeek(gameId, playerId); 
+          break;
+        case PlayerActionType.REQUEST_PEEK_REVEAL:
+          if (payload && payload.peekTargets && isValidTargetArray(payload.peekTargets)) {
+            result = handleRequestPeekReveal(gameId, playerId, payload.peekTargets);
+            if (result.success && result.updatedPlayerSpecificGameState) {
+                if (callback) callback({ 
+                    success: true, 
+                    message: result.message, 
+                    gameState: result.updatedPlayerSpecificGameState, 
+                    peekTargets: result.peekTargets, // Echo back validated targets
+                    peekJustStarted: result.peekJustStarted
+                });
+                // This direct emit might be redundant if the callback already triggers UI update with gameState.
+                socket.emit(SocketEventName.GAME_STATE_UPDATE, { gameId, gameState: result.updatedPlayerSpecificGameState });
+                console.log(`[Server] Sent player-specific peek reveal state to ${playerId} (${socket.id}) via direct emit and callback.`);
+                return; 
+            }
           } else {
-              console.error(`[Server] Invalid payload structure for resolveSpecialAbility:`, payload);
-              result = { success: false, message: "Invalid payload structure for resolveSpecialAbility." };
+            result = { success: false, message: 'Invalid or missing peekTargets for requestPeekReveal.' };
           }
           break;
-        case 'declareReadyForPeek': 
-          result = handleDeclareReadyForPeek(gameId, playerId); 
-          // The immediate broadcast of result.updatedGameState (if peek starts or player just readies)
-          // will be handled by the generic logic below. The second broadcast (peek ends)
-          // is triggered internally by game-manager via the setTriggerBroadcastFunction.
+        case PlayerActionType.RESOLVE_SPECIAL_ABILITY: 
+          if (payload && typeof payload === 'object' && payload.hasOwnProperty('args') && isExtendedAbilityArgs(payload.args)) {
+              result = handleResolveSpecialAbility(gameId, playerId, payload.args);
+          } else {
+              result = { success: false, message: "Invalid payload: args missing or malformed for resolveSpecialAbility." };
+          }
           break;
         default:
-          console.warn(`[Server] Unknown action type: ${type}`);
-          result = { success: false, message: "Unknown action type." }; 
-          shouldBroadcastGeneral = false; // Don't broadcast for unknown action
-          break;
+          console.error(`[Server] Unknown action type received: '${type}'. Player: ${playerId}, Game: ${gameId}`);
+          result = { success: false, message: `Unknown action type: '${type}'` };
       }
 
-      if (result.success && result.updatedGameState && shouldBroadcastGeneral) {
-        // Use the broadcastGameStateUpdate function for the immediate response
-        broadcastGameStateUpdate(gameId, result.updatedGameState);
-        
-        console.log(`[Server] Action ${type} successful for ${playerId} in ${gameId}. Player-specific states broadcasted by general handler.`);
-        const initiatorPlayerView = generatePlayerView(result.updatedGameState, playerId);
-        // Ensure peekJustStarted is included in the callback if present in the result
-        if (callback) callback({ success: true, gameState: initiatorPlayerView, message: result.message, peekJustStarted: result.peekJustStarted }); 
-      } else if (result.success && !result.updatedGameState && shouldBroadcastGeneral) {
-          // Action was successful but didn't result in a state change that needs immediate broadcast by this general handler
-          console.log(`[Server] Action ${type} successful for ${playerId} in ${gameId}, but no immediate state update from this action to broadcast generally (may be handled internally or no state change).`);
-          if (callback) callback({ success: true, message: result.message });
-      } else if (result.success && result.updatedGameState && !shouldBroadcastGeneral) {
-          // This case is for actions that update server state but explicitly skip general broadcast
-          // (e.g. handleDeclareReadyForPeek when peek hasn't started yet, or if an action handles its own specific broadcast like requestPeekReveal would if not handled separately above)
-          console.log(`[Server] Action ${type} successful for ${playerId}, general broadcast skipped by shouldBroadcastGeneral=false. Informing initiator.`);
-          const initiatorPlayerView = generatePlayerView(result.updatedGameState, playerId);
-          if (callback) callback({ success: true, gameState: initiatorPlayerView, message: result.message, peekJustStarted: result.peekJustStarted });
-      } else if (!result.success) {
-        console.warn(`[Server] Action ${type} failed for ${playerId} in ${gameId}. Reason: ${result.message}`);
+      if (result && result.success) {
+        let responsePayload: PlayerActionResponse = { 
+            success: true, 
+            message: result.message, 
+            peekTargets: result.peekTargets, 
+            peekJustStarted: result.peekJustStarted 
+        };
+        if (result.updatedPlayerSpecificGameState) { 
+            responsePayload.gameState = result.updatedPlayerSpecificGameState;
+        } else if (result.updatedGameState) { 
+            responsePayload.gameState = generatePlayerView(result.updatedGameState, playerId);
+        }
+        if (callback) callback(responsePayload);
+        console.log(`[Server] Action ${type} by ${playerId} successful. Response sent to client.`);
+      } else if (result) {
         if (callback) callback({ success: false, message: result.message });
+        console.warn(`[Server] Action ${type} by ${playerId} failed: ${result.message}`);
+      } else {
+        if (callback) callback({ success: false, message: 'Action resulted in null or undefined result.' });
+        console.error(`[Server] Action ${type} by ${playerId} resulted in null result from handler.`);
       }
-    } catch (error: any) {
-      console.error(`[Server-PlayerAction] Error during player action (${action.type}): ${error.message}`, error);
-      if (callback) callback({ success: false, message: `Server error during action: ${error.message || 'Unknown error.'}` });
+    } catch (e: any) {
+      console.error(`[Server-PlayerAction] Error: ${e.message}`, e);
+      if (typeof callback === 'function') {
+          callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
+      } else {
+          console.error(`[Server-PlayerAction] Callback was not a function for error handling. Socket: ${socket.id}, Action Type: ${action.type}`);
+      }
     }
   });
 
-  socket.on('disconnect', async () => {
+  socket.on('disconnect', (reason: string) => {
     try {
       const session = getSocketSession();
-      console.log(`User disconnected: ${socket.id}`);
-
+      console.log(`[Server] Socket ${socket.id} disconnected. Reason: ${reason}`);
       if (session) {
-        const { gameId, playerId } = session;
-        console.log(`[Server] Player ${playerId} (socket ${socket.id}) disconnected from game ${gameId}.`);
-        
-        const result = markPlayerAsDisconnected(gameId, playerId);
-        clearSocketSession(); // Remove from map
-
-        if (result.success && result.updatedGameState) {
-          console.log(`[Server] Player ${playerId} marked as disconnected in game ${gameId}. Broadcasting update.`);
-          broadcastGameStateUpdate(gameId, result.updatedGameState);
-          
-          // Additional logic: e.g., if game should end or pause if too few players connected.
-          // For now, just marking as disconnected.
-        } else if (result.playerWasFound === false) {
-            console.warn(`[Server] Attempted to mark player ${playerId} as disconnected from game ${gameId}, but player was not found in game state. Game room might have ended or player was already removed.`);
-        } else {
-            console.warn(`[Server] Failed to mark player ${playerId} as disconnected in game-manager for game ${gameId}, or game not found.`);
-        }
-      } else {
-        console.log(`[Server] Socket ${socket.id} disconnected but had no active game session in map.`);
+        console.log(`[Server] Player ${session.playerId} in game ${session.gameId} will be marked as disconnected.`);
+        markPlayerAsDisconnected(session.gameId, session.playerId);
       }
-    } catch (error: any) {
-      console.error(`[Server-Disconnect] Error during disconnect: ${error.message}`, error);
-      // Cannot send callback to client as they are disconnected
+      clearSocketSession();
+    } catch (e: any) {
+      console.error(`[Server-Disconnect] Error: ${e.message}`, e);
     }
   });
 });
 
-const PORT = parseInt(process.env.PORT || '8000', 10);
-
+const PORT = process.env.PORT || 8000;
 httpServer.listen(PORT, () => {
-  console.log(`Socket.IO server running on http://localhost:${PORT}`);
+  console.log(`[Server] Listening on port ${PORT}`);
 });
