@@ -4,11 +4,22 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { motion, AnimatePresence } from 'motion/react'; // Changed from framer-motion
 import CheckGameBoard from './components/CheckGameBoard';
-import type { ClientCheckGameState, InitialPlayerSetupData, Card, RichGameLogMessage, ChatMessage } from 'shared-types';
+import { 
+  SocketEventName, // Changed from import type
+  PlayerActionType // Changed from import type
+} from 'shared-types';
+import type { 
+  ClientCheckGameState, 
+  InitialPlayerSetupData, 
+  Card, 
+  RichGameLogMessage, 
+  ChatMessage
+} from 'shared-types';
 import GameLogComponent from './components/GameLogComponent';
 import ChatComponent from './components/ChatComponent';
 import { FiX, FiCopy } from 'react-icons/fi'; // Added import for FiX and FiCopy
 import ThemeToggle from './components/ThemeToggle';
+import MinimalLayoutTest from './components/MinimalLayoutTest'; // <-- ADD IMPORT
 
 // Define the server URL
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
@@ -153,7 +164,7 @@ export default function HomePage() {
         rejoinAttemptedOnConnect = true;
         addLog({ message: `Attempting to rejoin game ${storedGameId.slice(-4)} as player ${storedPlayerId.slice(-4)}...` });
         setRejoinStatusMessage(`Attempting to rejoin game ${storedGameId.slice(-4)}...`);
-        socket.emit('attemptRejoin', { gameId: storedGameId, playerId: storedPlayerId }, 
+        socket.emit(SocketEventName.ATTEMPT_REJOIN, { gameId: storedGameId, playerId: storedPlayerId }, 
           (response: { success: boolean; gameState?: ClientCheckGameState; message?: string }) => {
             if (response.success && response.gameState) {
               setGameState(response.gameState);
@@ -333,12 +344,12 @@ export default function HomePage() {
     socket.on('connect_error', handleConnectError);
     socket.on('reconnect_attempt', handleReconnectAttempt);
     socket.on('reconnect_failed', handleReconnectFailed);
-    socket.on('gameStateUpdate', handleGameStateUpdate);
-    socket.on('playerJoined', handlePlayerJoined);
-    socket.on('rejoinDenied', handleRejoinDenied);
-    socket.on('serverLogEntry', handleServerLogEntry);
-    socket.on('initialLogs', handleInitialLogs); 
-    socket.on('chatMessage', handleIncomingChatMessage); // Add listener for chat messages
+    socket.on(SocketEventName.GAME_STATE_UPDATE, handleGameStateUpdate);
+    socket.on(SocketEventName.PLAYER_JOINED, handlePlayerJoined);
+    socket.on(SocketEventName.REJOIN_DENIED, handleRejoinDenied);
+    socket.on(SocketEventName.SERVER_LOG_ENTRY, handleServerLogEntry);
+    socket.on(SocketEventName.INITIAL_LOGS, handleInitialLogs); 
+    socket.on(SocketEventName.CHAT_MESSAGE, handleIncomingChatMessage); // Add listener for chat messages
 
     return () => {
       socket.off('connect', handleConnect);
@@ -346,12 +357,12 @@ export default function HomePage() {
       socket.off('connect_error', handleConnectError);
       socket.off('reconnect_attempt', handleReconnectAttempt);
       socket.off('reconnect_failed', handleReconnectFailed);
-      socket.off('gameStateUpdate', handleGameStateUpdate);
-      socket.off('playerJoined', handlePlayerJoined);
-      socket.off('rejoinDenied', handleRejoinDenied);
-      socket.off('serverLogEntry', handleServerLogEntry);
-      socket.off('initialLogs', handleInitialLogs); 
-      socket.off('chatMessage', handleIncomingChatMessage); // Clean up chat message listener
+      socket.off(SocketEventName.GAME_STATE_UPDATE, handleGameStateUpdate);
+      socket.off(SocketEventName.PLAYER_JOINED, handlePlayerJoined);
+      socket.off(SocketEventName.REJOIN_DENIED, handleRejoinDenied);
+      socket.off(SocketEventName.SERVER_LOG_ENTRY, handleServerLogEntry);
+      socket.off(SocketEventName.INITIAL_LOGS, handleInitialLogs); 
+      socket.off(SocketEventName.CHAT_MESSAGE, handleIncomingChatMessage); // Clean up chat message listener
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [socket, addLog, playerId, isAttemptingRejoin, gameId, handleReturnToLobby]); // Added gameId, handleReturnToLobby
@@ -372,7 +383,7 @@ export default function HomePage() {
     setRejoinStatusMessage(""); // Clear rejoin status
     setIsAttemptingRejoin(false); // No longer rejoining
 
-    socket.emit('createGame', playerSetup, (response: { success: boolean; gameId?: string; playerId?: string; gameState?: ClientCheckGameState; message?: string }) => {
+    socket.emit(SocketEventName.CREATE_GAME, playerSetup, (response: { success: boolean; gameId?: string; playerId?: string; gameState?: ClientCheckGameState; message?: string }) => {
       if (response.success && response.gameId && response.playerId && response.gameState) {
         setGameId(response.gameId);
         setPlayerId(response.playerId);
@@ -418,7 +429,7 @@ export default function HomePage() {
         return;
     }
 
-    socket.emit('joinGame', sanitizedGameId, playerSetup, (response: { success: boolean; gameId?: string; playerId?: string; gameState?: ClientCheckGameState; message?: string }) => {
+    socket.emit(SocketEventName.JOIN_GAME, sanitizedGameId, playerSetup, (response: { success: boolean; gameId?: string; playerId?: string; gameState?: ClientCheckGameState; message?: string }) => {
       if (response.success && response.gameId && response.playerId && response.gameState) {
         setGameId(response.gameId);
         setPlayerId(response.playerId);
@@ -437,21 +448,25 @@ export default function HomePage() {
   
   // Handler for actions sent from CheckGameBoard
   const sendPlayerAction = (
-    type: string, 
+    type: PlayerActionType, // Changed from string to PlayerActionType
     payload?: any,
     clientCallback?: (message: string, isError: boolean) => void
   ) => {
     if (!socket || !gameId || !playerId) {
-      setError('Cannot send action: connection or game details missing.');
-      if (clientCallback) clientCallback('Connection or game details missing.', true);
+      const errorMsg = 'Cannot send action: connection or game details missing.';
+      setError(errorMsg);
+      if (clientCallback) clientCallback(errorMsg, true);
       return;
     }
-    socket.emit('playerAction', { gameId, playerId, type, payload }, 
+    socket.emit(SocketEventName.PLAYER_ACTION, { gameId, playerId, type, payload }, 
         (response: {success: boolean, gameState?: ClientCheckGameState, message?: string}) => {
         // Handle the server's response
+        let errorHandledByClientCallback = false;
+
         if (response.message && clientCallback) {
           clientCallback(response.message, !response.success);
-        } else if (clientCallback && type === 'passMatch' && response.success) {
+          if (!response.success) errorHandledByClientCallback = true;
+        } else if (clientCallback && type === PlayerActionType.PASS_MATCH && response.success) { // Used enum
           // For a successful pass, if server sends no specific message, 
           // let CheckGameBoard provide its default by calling callback with empty string.
           clientCallback("", false);
@@ -459,8 +474,9 @@ export default function HomePage() {
           // For other successful actions with no message, indicate success without text
           clientCallback("", false);
         } else if (clientCallback && !response.success && !response.message) {
-            // For failed actions with no message, provide a generic error message
+            // For failed actions with no message, provide a generic error message via clientCallback
             clientCallback(`Action ${type} failed.`, true);
+            errorHandledByClientCallback = true;
         }
 
         // Existing logic for logging or setting global error can remain (or be enhanced)
@@ -469,7 +485,7 @@ export default function HomePage() {
           console.log(`[Page.tsx-playerActionCallback] Received direct gameState for player ${playerId} after action ${type}. Applying...`);
           // If the action was a draw, and it was for the current player, update the trigger
           // This is a bit indirect. A more robust way would be if server confirms segment change in response.
-          if ((type === 'drawFromDeck' || type === 'drawFromDiscard') && response.gameState.currentPlayerId === playerId) {
+          if ((type === PlayerActionType.DRAW_FROM_DECK || type === PlayerActionType.DRAW_FROM_DISCARD) && response.gameState.currentPlayerId === playerId) { // Used enums
             // Check if the segment actually changed to postDrawAction or if it was already that (e.g. error then success)
             // For simplicity, we'll increment if the new state confirms a pending card for the current player, implying a draw just happened.
             const playerSelfState = response.gameState.players[playerId];
@@ -485,9 +501,12 @@ export default function HomePage() {
             // Action-specific logs now come from the server via 'serverLogEntry'
             // addLog({ message: `Action ${type} successful. Waiting for broadcast update.` });
         } else {
-          // Action failed, message handled by clientCallback above or set as general error.
-          setError(response.message || `Action ${type} failed.`);
-          addLog({ message: `Action ${type} failed: ${response.message || 'No specific error message.'}`, type: 'error' });
+          // Action failed
+          const failMessage = response.message || `Action ${type} failed.`;
+          addLog({ message: `Action ${type} failed: ${failMessage}`, type: 'error' });
+          if (!errorHandledByClientCallback) { // Only set global error if not handled by specific callback
+            setError(failMessage);
+          }
         }
     });
   };
@@ -514,7 +533,7 @@ export default function HomePage() {
       return next.length > 100 ? next.slice(-100) : next;
     });
 
-    socket.emit('sendChatMessage', chatMessage, (ack: {success: boolean, messageId?: string, error?: string}) => {
+    socket.emit(SocketEventName.SEND_CHAT_MESSAGE, chatMessage, (ack: {success: boolean, messageId?: string, error?: string}) => {
       if (!ack.success) {
         addLog({ message: `Chat message failed to send: ${ack.error || 'Unknown error'}`, type: 'error' });
         // Optionally, remove the optimistically added message or mark it as failed
@@ -585,6 +604,9 @@ export default function HomePage() {
   if (!gameState || !gameId || !playerId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-neutral-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200">
+        {/* INSERT TEST COMPONENT HERE - START */}
+        <MinimalLayoutTest />
+        {/* INSERT TEST COMPONENT HERE - END */}
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center relative">
             {/* <div className="absolute right-0 top-2">
@@ -655,6 +677,10 @@ export default function HomePage() {
   // If gameState, gameId, and playerId are available, render the game board
   return (
     <div className="flex flex-col md:flex-row h-screen bg-gray-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 select-none">
+      {/* INSERT TEST COMPONENT HERE (Alternative placement for in-game view) - START */}
+      {/* <MinimalLayoutTest /> */}
+      {/* INSERT TEST COMPONENT HERE - END */}
+      
       {/* Main Game Area Container - This now becomes the primary layout container for game + overlays */}
       <div className="relative flex-grow flex flex-col items-center overflow-hidden"> 
         {/* Header */}
