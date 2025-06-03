@@ -23,7 +23,7 @@ import {
     setTriggerLogBroadcastFunction,
     getGameRoom,
 } from './game-manager';
-import { InitialPlayerSetupData, CheckGameState as ServerCheckGameState, ClientCheckGameState, RichGameLogMessage } from 'shared-types';
+import { InitialPlayerSetupData, CheckGameState as ServerCheckGameState, ClientCheckGameState, RichGameLogMessage, ChatMessage } from 'shared-types';
 
 console.log('Server starting with Socket.IO...');
 
@@ -144,6 +144,42 @@ io.on('connection', (socket: Socket) => {
     delete (socket as any).data.gameId;
   };
 
+  // Handler for receiving and broadcasting chat messages
+  socket.on('sendChatMessage', (chatMessage: ChatMessage, callback: (ack: {success: boolean, messageId?: string, error?: string}) => void) => {
+    const session = getSocketSession();
+    if (!session || !session.gameId) {
+      console.warn(`[Server-Chat] Received chat message from socket ${socket.id} but no game session found.`);
+      if (callback) callback({ success: false, error: 'User not in a game session.' });
+      return;
+    }
+
+    if (!chatMessage.message || chatMessage.message.trim().length === 0) {
+      if (callback) callback({ success: false, error: 'Chat message cannot be empty.' });
+      return;
+    }
+    if (chatMessage.message.length > 500) { // Basic length check
+        if (callback) callback({ success: false, error: 'Chat message too long.' });
+        return;
+    }
+
+    // Augment message with server-side info if needed
+    const processedMessage: ChatMessage = {
+      ...chatMessage,
+      id: chatMessage.id || `servermsg_${session.gameId}_${Date.now()}`, // Ensure ID
+      senderId: session.playerId, // Enforce senderId from session
+      senderName: getGameRoom(session.gameId)?.gameState.players[session.playerId]?.name || chatMessage.senderName || 'Unknown', // Use server name
+      timestamp: new Date().toISOString(), // Server authoritative timestamp
+      gameId: session.gameId, // Ensure gameId is set for room chat
+      type: 'room', // All chat via this handler is room chat for now
+    };
+
+    console.log(`[Server-Chat] Broadcasting chat message in room ${session.gameId}:`, processedMessage);
+    // Broadcast to all clients in the same game room, including the sender
+    io.to(session.gameId).emit('chatMessage', processedMessage);
+
+    if (callback) callback({ success: true, messageId: processedMessage.id });
+  });
+
   socket.on('createGame', (playerSetupData: InitialPlayerSetupData, callback: (response: any) => void) => {
     const gameId = `game_${Math.random().toString(36).substring(2, 8)}`;
     playerSetupData.socketId = socket.id; // Add socket.id for game manager
@@ -158,7 +194,8 @@ io.on('connection', (socket: Socket) => {
       const welcomeMessage: RichGameLogMessage = {
         message: `Welcome, ${playerSetupData.name || playerSetupData.id.slice(-4)}! You've created Game ${gameId.slice(-6)}.`,
         type: 'system',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        timestamp: new Date().toISOString(),
+        logId: `log_welcome_${socket.id}_${Date.now()}`
       };
       const recentLogs = gameRoom.gameState.logHistory?.slice(-NUM_RECENT_LOGS_ON_JOIN) || [];
       const initialLogPayload = [welcomeMessage, ...recentLogs.filter(log => log.message !== welcomeMessage.message)];
@@ -184,7 +221,8 @@ io.on('connection', (socket: Socket) => {
       const welcomeMessage: RichGameLogMessage = {
         message: `Welcome, ${playerSetupData.name || playerSetupData.id.slice(-4)}! You've joined Game ${gameIdToJoin.slice(-6)}.`,
         type: 'system',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        timestamp: new Date().toISOString(),
+        logId: `log_welcome_${socket.id}_${Date.now()}`
       };
       const recentLogs = result.gameRoom.gameState.logHistory?.slice(-NUM_RECENT_LOGS_ON_JOIN) || [];
       const initialLogPayload = [welcomeMessage, ...recentLogs.filter(log => log.message !== welcomeMessage.message)];

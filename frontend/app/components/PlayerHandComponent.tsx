@@ -109,14 +109,23 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
     return <div className={`text-xs ${isViewingPlayer ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}`}>Hand data missing.</div>;
   }
 
-  const isCardBeingPeeked = (card: ClientCard | null, cardIndex: number): boolean => {
-    if (!isInitialPeekActive || !cardsBeingPeeked || !card || ('isHidden' in card)) {
+  const isCardBeingPeeked = (handCard: ClientCard | null, handCardIndex: number): boolean => {
+    if (!isInitialPeekActive || !cardsBeingPeeked || !handCard) {
       return false;
     }
-    return cardsBeingPeeked.some(peekedCard => 
-        !('isHidden' in peekedCard) &&
-        peekedCard.rank === (card as Card).rank && peekedCard.suit === (card as Card).suit
-    );
+
+    // 'handCard' for the viewing player can be a HiddenCard object from their hand.
+    // It has an 'id'.
+    // 'cardsBeingPeeked' is an array of actual Card objects (with rank, suit, id).
+    // We need to see if any card in 'cardsBeingPeeked' matches the 'id' of the 'handCard'.
+
+    const handCardId = handCard.id; // All ClientCard types have an id.
+
+    return cardsBeingPeeked.some(peekedCard => {
+        // peekedCard is a full Card object.
+        if ('isHidden' in peekedCard) return false; // Should not happen, cardsBeingPeeked are full cards.
+        return peekedCard.id === handCardId;
+    });
   };
 
   const numberOfCardsToRender = actualHandForDisplay.length;
@@ -212,20 +221,45 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
               const cardIsPresentInHand = originalCardIndex !== -1;
 
               let showFaceUp = false;
-              if (cellCard && cardIsPresentInHand) { // Ensure we are working with a card that's actually in the hand
+              let cardToDisplay: ClientCard | null = cellCard; // Default to the card from the hand
+
+              if (cellCard && cardIsPresentInHand) {
                 if (isViewingPlayer) {
+                  // Handle initial peek for the viewing player
                   if (isCardBeingPeeked(cellCard, originalCardIndex)) {
+                    // Find the actual card data from cardsBeingPeeked (which are full Card objects)
+                    const actualCardDataFromPeek = cardsBeingPeeked?.find(
+                      (peekedCard) => !('isHidden' in peekedCard) && peekedCard.id === cellCard.id
+                    );
+                    if (actualCardDataFromPeek) {
+                      cardToDisplay = actualCardDataFromPeek; // Use the full card data
+                    } else {
+                      // This case should ideally not be hit if isCardBeingPeeked found a match by ID
+                      // and cardsBeingPeeked contains the full card details.
+                      console.warn(`[PlayerHandComponent] Card ${cellCard.id} was marked for peek, but full data not found in cardsBeingPeeked.`);
+                    }
                     showFaceUp = true;
-                  } else if (cardsToForceShowFaceUp[originalCardIndex]) {
+                  } 
+                  // Handle other forced reveals (e.g., abilities) if not already shown by initial peek
+                  else if (cardsToForceShowFaceUp[originalCardIndex]) {
                     showFaceUp = true;
-                  } else if (cellCard && !('isHidden' in cellCard)) {
-                     showFaceUp = false; 
+                    // If cardsToForceShowFaceUp is true, cardToDisplay (which is cellCard)
+                    // should ideally be the full card if the server intended it to be revealed.
+                    // If it's still a HiddenCard, CardComponent will show "privately hidden".
+                  } 
+                  // If the card from hand is already a full card (not isHidden), show it.
+                  else if (!('isHidden' in cellCard)) {
+                    showFaceUp = true; 
                   }
-                } else { // Opponent's hand
-                  showFaceUp = !!cardsToForceShowFaceUp[originalCardIndex];
+                } else { // Opponent's hand (viewed by current player)
+                  // If cellCard (which comes from opponentState.hand, potentially modified by temporaryReveals on server)
+                  // is a full card, then it should be shown face up.
+                  if (cellCard && !('isHidden' in cellCard)) {
+                    showFaceUp = true;
+                    // cardToDisplay is already cellCard, which is correct.
+                  }
+                  // else showFaceUp remains false (default)
                 }
-              } else if (cellCard && !('isHidden' in cellCard)) { // Should not be hit if cardIsPresentInHand is false
-                showFaceUp = true; 
               }
 
               const isSelectedForSingleAction = cardIsPresentInHand && selectedCardIndices.includes(originalCardIndex);
@@ -292,7 +326,7 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
                 >
                   {cellCard ? (
                     <CardComponent
-                      card={cellCard}
+                      card={cardToDisplay}
                       isFaceUp={showFaceUp}
                       isSelected={isSelectedForSingleAction || isSelectedForMultiAction}
                       isInteractive={cardIsPresentInHand && !isLocked && (!isInitialPeekActive || isCardBeingPeeked(cellCard, originalCardIndex)) || (!isViewingPlayer && showFaceUp && cardIsPresentInHand)}

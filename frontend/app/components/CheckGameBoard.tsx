@@ -39,7 +39,6 @@ interface CheckGameBoardProps {
   playerId: string; 
   onPlayerAction: (type: string, payload?: any, clientCallback?: (message: string, isError: boolean) => void) => void; 
   gameId: string; 
-  showDebugPanel: boolean;
   onReturnToLobby: () => void;
   turnSegmentTrigger: string | number; 
 }
@@ -72,7 +71,6 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
   playerId, 
   onPlayerAction, 
   gameId, 
-  showDebugPanel, 
   onReturnToLobby,
   turnSegmentTrigger
 }) => {
@@ -202,6 +200,15 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
   }, []);
 
   useEffect(() => {
+    // Add this log for the creator (assuming gameMasterId is the creator)
+    if (clientPlayerState && gameState.gameMasterId === playerId) {
+        console.log(`[PEEK_DEBUG CREATOR ${playerId}] Phase: ${gameState.currentPhase}, clientPlayerState available: ${!!clientPlayerState}`);
+        console.log(`[PEEK_DEBUG CREATOR ${playerId}] HasCompletedPeek: ${clientPlayerState?.hasCompletedInitialPeek}`);
+        console.log(`[PEEK_DEBUG CREATOR ${playerId}] clientPlayerState.cardsToPeek:`, clientPlayerState?.cardsToPeek);
+        console.log(`[PEEK_DEBUG CREATOR ${playerId}] processedCardsToPeekRef.current:`, processedCardsToPeekRef.current);
+        console.log(`[PEEK_DEBUG CREATOR ${playerId}] peekGetReadyTimer: ${peekGetReadyTimer}, peekRevealTimer: ${peekRevealTimer}`);
+    }
+
     if (!clientPlayerState) {
       clearAllPeekIntervals();
       setPeekGetReadyTimer(null);
@@ -358,13 +365,9 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
         const now = Date.now();
         const timeLeftSeconds = Math.max(0, Math.floor((gameState.matchingStageTimerExpiresAt! - now) / 1000));
         setMatchingStageTimeLeft(timeLeftSeconds);
-        if (timeLeftSeconds === 0) {
-          // Server will handle timeout logic, client just stops countdown
-          setMatchingStageTimeLeft(null);
-        }
       };
       updateTimer(); // Initial call
-      const intervalId = setInterval(updateTimer, 1000);
+      const intervalId = setInterval(updateTimer, 50); // Update timer every 50ms for smoother progress bar
       return () => clearInterval(intervalId);
     } else {
       setMatchingStageTimeLeft(null); // Clear if no timer or not in matching stage
@@ -735,11 +738,25 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
     if (isInMatchingStage && gameState.matchingOpportunityInfo?.potentialMatchers.includes(playerId) && gameState.activePlayers[playerId] === 'awaitingMatchAction') {
       const canAttemptMatch = selectedHandCardIndex !== null;
+      // Access timerDurationSeconds with a type assertion as a temporary workaround
+      // IMPORTANT: For accurate timing, ensure MatchingOpportunityInfo in shared-types
+      // includes timerDurationSeconds and the server provides it.
+      const totalMatchTime = (gameState.matchingOpportunityInfo as any).timerDurationSeconds || 15; 
+      const currentTimeLeft = matchingStageTimeLeft !== null ? matchingStageTimeLeft : totalMatchTime;
+      const elapsedTime = totalMatchTime - currentTimeLeft;
+      const progress = Math.max(0, Math.min(100, (elapsedTime / totalMatchTime) * 100));
+
       currentActions.push({
         label: playerHasUITriggeredPass ? "Passed - Waiting" : "Pass Match", 
         onClick: handlePassMatch, 
         disabled: playerHasUITriggeredPass || !(gameState.activePlayers[playerId] === 'awaitingMatchAction'),
-        className: playerHasUITriggeredPass ? 'bg-neutral-500 text-neutral-300' : 'bg-yellow-500/80 hover:bg-yellow-600/90 text-neutral-800'
+        isProgressButton: !playerHasUITriggeredPass, 
+        progressPercent: progress,
+        progressFillClassName: 'bg-yellow-500/60', 
+        progressLabelClassName: 'text-neutral-100', 
+        className: playerHasUITriggeredPass 
+          ? 'bg-neutral-500 text-neutral-300' // Style when passed
+          : undefined, // Active progress bar: use default styling from ActionBarComponent for track & hover
       });
 
       if (!playerHasUITriggeredPass) { 
@@ -1120,27 +1137,6 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
           />
         )}
       </AnimatePresence>
-      
-      {showDebugPanel && (
-        <div className="w-full mt-2 p-1 bg-neutral-700/80 text-neutral-200 text-[0.5rem] leading-tight rounded shadow max-h-32 overflow-auto">
-          <h4 className="font-semibold text-xs mb-0.5">Debug State:</h4>
-          <pre className="text-[0.45rem]" style={{backgroundColor: 'rgba(0,0,0,0.6)'}}>
-            {JSON.stringify({ 
-              pId: playerId.slice(-4), cur: isCurrentPlayer, phase: gameState.currentPhase.slice(0,10),
-              turn: (gameState.players[gameState.currentPlayerId]?.name || `P-${gameState.currentPlayerId.slice(-4)}`),
-              dk: gameState.deckSize, dcP: gameState.discardPile.length, myH: clientPlayerState.hand.length,
-              passUI: playerHasUITriggeredPass,
-              modal: showEndModal,
-              draw: clientPlayerState.pendingDrawnCard ? (!('isHidden' in clientPlayerState.pendingDrawnCard) ? `${clientPlayerState.pendingDrawnCard.rank}${clientPlayerState.pendingDrawnCard.suit}`: 'H') : 'N',
-              match: gameState.matchingOpportunityInfo ? gameState.matchingOpportunityInfo.cardToMatch.rank : 'N',
-              abil: gameState.pendingAbilities?.map(a => a.card.rank).join(','),
-              selH: selectedHandCardIndex,
-              msl: multiSelectedCardLocations.map(l => `${l.playerID.slice(-1)}${l.cardIndex}`).join(','),
-              abilA: abilityArgs ? JSON.stringify(abilityArgs).length : 0,
-            }, null, 1)}
-          </pre>
-        </div>
-      )}
     </div>
   );
 };

@@ -4,10 +4,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { motion, AnimatePresence } from 'motion/react'; // Changed from framer-motion
 import CheckGameBoard from './components/CheckGameBoard';
-import type { ClientCheckGameState, InitialPlayerSetupData, Card, RichGameLogMessage } from 'shared-types';
+import type { ClientCheckGameState, InitialPlayerSetupData, Card, RichGameLogMessage, ChatMessage } from 'shared-types';
 import GameLogComponent from './components/GameLogComponent';
-import { FaBug } from 'react-icons/fa'; // Import the bug icon
-import { FiX } from 'react-icons/fi'; // Added import for FiX
+import ChatComponent from './components/ChatComponent';
+import { FiX, FiCopy } from 'react-icons/fi'; // Added import for FiX and FiCopy
 
 // Define the server URL
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
@@ -52,27 +52,32 @@ export default function HomePage() {
   const [playerName, setPlayerName] = useState<string>("");
   const [inputGameId, setInputGameId] = useState<string>("");
   const [log, setLog] = useState<RichGameLogMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]); // New state for chat messages
   const [isAttemptingRejoin, setIsAttemptingRejoin] = useState<boolean>(true); // Start true
   const [rejoinStatusMessage, setRejoinStatusMessage] = useState<string>("Attempting to rejoin previous game..."); // More detailed status
   const [copiedGameId, setCopiedGameId] = useState(false);
-  const [showDebugPanel, setShowDebugPanel] = useState(false); // New state for debug panel
   const [turnSegmentTrigger, setTurnSegmentTrigger] = useState<number>(0); // For progress bar reset
   const [visibilityTrigger, setVisibilityTrigger] = useState<number>(0); // For tab focus reset
 
   // Helper to add a log entry
-  const addLog = useCallback((logEntry: Omit<RichGameLogMessage, 'timestamp'>) => {
+  const addLog = useCallback((logEntry: RichGameLogMessage) => {
     setLog((prev) => {
-      const newEntryWithTimestamp: RichGameLogMessage = {
+      const entryWithDefaults: RichGameLogMessage = {
         ...logEntry,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: logEntry.timestamp || new Date().toISOString(),
+        logId: logEntry.logId || `client_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       };
-      const next = [...prev, newEntryWithTimestamp];
+
+      // Prevent adding if a log with the same ID already exists and the ID is not undefined
+      if (entryWithDefaults.logId && prev.some(existingLog => existingLog.logId && existingLog.logId === entryWithDefaults.logId)) {
+        // console.log(`[Page.tsx-addLog] Duplicate logId skipped: ${entryWithDefaults.logId}`);
+        return prev;
+      }
+
+      // Log entry already has timestamp and logId from server, or defaults are applied
+      const next = [...prev, entryWithDefaults]; 
       return next.length > 100 ? next.slice(-100) : next;
     });
-  }, []);
-
-  const toggleDebugPanel = useCallback(() => {
-    setShowDebugPanel(prev => !prev);
   }, []);
 
   const handleReturnToLobby = useCallback(() => {
@@ -235,20 +240,20 @@ export default function HomePage() {
         if (currentGameState) {
             console.log('[Page.tsx-gameStateUpdate] Old CurrentPlayerID:', currentGameState.currentPlayerId, 'Old Segment:', currentGameState.currentTurnSegment);
             
-            // Log phase changes with more descriptive messages (can keep this client-side for immediacy)
-            if (data.gameState.currentPhase !== currentGameState.currentPhase) {
-              let phaseMessage = `Game phase changed to: ${data.gameState.currentPhase}`;
-              switch (data.gameState.currentPhase) {
-                case 'initialPeekPhase': phaseMessage = "Initial Peek phase has begun."; break;
-                case 'playPhase': phaseMessage = "Play phase has started."; break;
-                case 'matchingStage': phaseMessage = "Matching stage has begun!"; break;
-                case 'abilityResolutionPhase': phaseMessage = "Ability resolution in progress."; break;
-                case 'finalTurnsPhase': phaseMessage = "Final Turns phase has started."; break;
-                case 'scoringPhase': phaseMessage = "Scoring phase."; break;
-                case 'gameOver': phaseMessage = "Game Over!"; break; // Winner logged separately by server now
-              }
-              addLog({ message: phaseMessage, type: 'game_event' });
-            }
+            // REMOVED CLIENT-SIDE PHASE CHANGE LOGGING - Rely on server for these logs
+            // if (data.gameState.currentPhase !== currentGameState.currentPhase) {
+            //   let phaseMessage = `Game phase changed to: ${data.gameState.currentPhase}`;
+            //   switch (data.gameState.currentPhase) {
+            //     case 'initialPeekPhase': phaseMessage = "Initial Peek phase has begun."; break;
+            //     case 'playPhase': phaseMessage = "Play phase has started."; break;
+            //     case 'matchingStage': phaseMessage = "Matching stage has begun!"; break;
+            //     case 'abilityResolutionPhase': phaseMessage = "Ability resolution in progress."; break;
+            //     case 'finalTurnsPhase': phaseMessage = "Final Turns phase has started."; break;
+            //     case 'scoringPhase': phaseMessage = "Scoring phase."; break;
+            //     case 'gameOver': phaseMessage = "Game Over!"; break;
+            //   }
+            //   addLog({ message: phaseMessage, type: 'game_event' }); 
+            // }
 
             // Player calling "Check!" and Game Over/Winner are now logged by the server.
             // Turn changes are also now logged by the server.
@@ -310,6 +315,18 @@ export default function HomePage() {
       setLog(data.logs.length > 100 ? data.logs.slice(-100) : data.logs);
     };
 
+    // Listener for incoming chat messages
+    const handleIncomingChatMessage = (chatMessage: ChatMessage) => {
+      setChatMessages((prevMessages) => {
+        // Avoid duplicates based on message ID
+        if (prevMessages.find(msg => msg.id === chatMessage.id)) {
+          return prevMessages;
+        }
+        const next = [...prevMessages, chatMessage];
+        return next.length > 100 ? next.slice(-100) : next; // Keep last 100 messages
+      });
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
@@ -319,7 +336,8 @@ export default function HomePage() {
     socket.on('playerJoined', handlePlayerJoined);
     socket.on('rejoinDenied', handleRejoinDenied);
     socket.on('serverLogEntry', handleServerLogEntry);
-    socket.on('initialLogs', handleInitialLogs); // Add listener for initialLogs
+    socket.on('initialLogs', handleInitialLogs); 
+    socket.on('chatMessage', handleIncomingChatMessage); // Add listener for chat messages
 
     return () => {
       socket.off('connect', handleConnect);
@@ -331,7 +349,8 @@ export default function HomePage() {
       socket.off('playerJoined', handlePlayerJoined);
       socket.off('rejoinDenied', handleRejoinDenied);
       socket.off('serverLogEntry', handleServerLogEntry);
-      socket.off('initialLogs', handleInitialLogs); // Clean up listener
+      socket.off('initialLogs', handleInitialLogs); 
+      socket.off('chatMessage', handleIncomingChatMessage); // Clean up chat message listener
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [socket, addLog, playerId, isAttemptingRejoin, gameId, handleReturnToLobby]); // Added gameId, handleReturnToLobby
@@ -379,6 +398,7 @@ export default function HomePage() {
       const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
       finalPlayerName = `${adj}${noun}`;
     }
+    setPlayerName(finalPlayerName); // Ensure playerName state is updated before join
 
     const playerSetup: InitialPlayerSetupData = { id: newPlayerId, name: finalPlayerName };
 
@@ -468,6 +488,40 @@ export default function HomePage() {
           setError(response.message || `Action ${type} failed.`);
           addLog({ message: `Action ${type} failed: ${response.message || 'No specific error message.'}`, type: 'error' });
         }
+    });
+  };
+
+  // Function to send a chat message
+  const handleSendChatMessage = (messageText: string) => {
+    if (!socket || !playerId || !playerName) {
+      addLog({ message: 'Cannot send chat message: User details or connection missing.', type: 'error' });
+      return;
+    }
+    const chatMessage: ChatMessage = {
+      id: `msg_${socket.id}_${Date.now()}`,
+      senderId: playerId,
+      senderName: playerName,
+      message: messageText,
+      timestamp: new Date().toISOString(),
+      // type: gameId ? 'room' : 'lobby', // Example: set type based on game context
+      // gameId: gameId || undefined,
+    };
+
+    // Optimistically add to local state
+    setChatMessages((prevMessages) => {
+      const next = [...prevMessages, chatMessage];
+      return next.length > 100 ? next.slice(-100) : next;
+    });
+
+    socket.emit('sendChatMessage', chatMessage, (ack: {success: boolean, messageId?: string, error?: string}) => {
+      if (!ack.success) {
+        addLog({ message: `Chat message failed to send: ${ack.error || 'Unknown error'}`, type: 'error' });
+        // Optionally, remove the optimistically added message or mark it as failed
+        setChatMessages(prev => prev.filter(msg => msg.id !== chatMessage.id));
+      } else {
+        // Server acknowledged. If server sends back the message with its own ID, we might update ours.
+        // For now, optimistic update is primary.
+      }
     });
   };
 
@@ -594,75 +648,88 @@ export default function HomePage() {
 
   // If gameState, gameId, and playerId are available, render the game board
   return (
-    <div className="flex flex-col h-screen bg-gray-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 select-none">
-      {/* Header */}
-      <header className="bg-white dark:bg-neutral-800 dark:border-b dark:border-neutral-700 shadow-md p-2.5 sm:p-3 flex items-center justify-between w-full flex-shrink-0">
-        <div className="flex items-center">
-          <h1 className="text-xl sm:text-2xl font-bold text-sky-600 dark:text-sky-400 mr-3 sm:mr-4">Check!</h1>
-          {gameId && (
-            <div className="flex items-center border border-gray-300 dark:border-neutral-700 p-1.5 rounded-md">
-              <span className="text-[0.65rem] sm:text-xs text-gray-500 dark:text-neutral-400 mr-1.5 uppercase">Game:</span>
-              <span className="text-xs sm:text-sm font-mono font-semibold tracking-wider text-gray-700 dark:text-neutral-200">{gameId.slice(-6)}</span>
-              <button 
-                onClick={handleCopyGameId}
-                title="Copy Game ID"
-                className="ml-2 p-1 bg-gray-200 dark:bg-neutral-600 hover:bg-gray-300 dark:hover:bg-neutral-500 rounded transition-colors relative transform hover:scale-110 active:scale-95"
-              >
-                {/* SVG Icon for copy */}
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                <AnimatePresence>
-                  {copiedGameId && (
-                    <motion.span 
-                      className="absolute top-full mt-1.5 left-1/2 transform -translate-x-1/2 text-[0.6rem] bg-sky-500 text-white px-1 py-0.5 rounded-sm shadow-md"
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 8 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      Copied!
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          {playerName && <span className="text-xs sm:text-sm text-gray-500 dark:text-neutral-300 hidden sm:inline truncate max-w-[100px] sm:max-w-[150px]" title={playerName}>{playerName}</span>}
+    <div className="flex flex-col md:flex-row h-screen bg-gray-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 select-none">
+      {/* Main Game Area Container - This now becomes the primary layout container for game + overlays */}
+      <div className="relative flex-grow flex flex-col items-center overflow-hidden"> 
+        {/* Header */}
+        <header className="bg-white dark:bg-neutral-800 dark:border-b dark:border-neutral-700/70 shadow-md py-2.5 sm:py-3 px-2.5 sm:px-4 flex items-center justify-between w-full flex-shrink-0 z-10">
           <div className="flex items-center">
-            <span className="text-[0.65rem] sm:text-xs text-gray-400 dark:text-neutral-400 mr-1 uppercase">P:</span>
-            <span className="text-xs sm:text-sm font-mono text-gray-500 dark:text-neutral-300">{playerId.slice(-4)}</span>
+            <h1 
+              onClick={handleReturnToLobby}
+              className="text-xl sm:text-2xl font-bold text-sky-600 dark:text-sky-400 mr-3 sm:mr-4 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              Check!
+            </h1>
+            {gameId && (
+              <div className="flex items-center border border-gray-300 dark:border-neutral-700/50 p-1.5 sm:p-2 rounded-lg bg-neutral-50 dark:bg-neutral-700/30">
+                <span className="text-[0.65rem] sm:text-xs text-gray-500 dark:text-neutral-400 mr-1.5 uppercase">Game:</span>
+                <span className="text-xs sm:text-sm font-mono font-semibold tracking-wider text-gray-700 dark:text-neutral-200">{gameId.slice(-6)}</span>
+                <button 
+                  onClick={handleCopyGameId}
+                  title="Copy Game ID"
+                  className="ml-2 p-1.5 bg-neutral-200 dark:bg-neutral-600 hover:bg-neutral-300 dark:hover:bg-neutral-500 rounded-md transition-colors relative transform hover:scale-105 active:scale-95 flex items-center justify-center"
+                >
+                  <FiCopy size={14} />
+                  <AnimatePresence>
+                    {copiedGameId && (
+                      <motion.span 
+                        className="absolute top-full mt-1.5 left-1/2 transform -translate-x-1/2 text-[0.6rem] bg-sky-500 text-white px-1 py-0.5 rounded-sm shadow-md"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        Copied!
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+              </div>
+            )}
           </div>
-          {/* Debug Toggle Button */}
-          <button 
-            onClick={toggleDebugPanel}
-            title="Toggle Debug Panel"
-            className={`p-1.5 rounded transition-colors flex items-center justify-center 
-              ${showDebugPanel 
-                ? 'bg-sky-500 text-white hover:bg-sky-600' 
-                : 'bg-gray-200 dark:bg-neutral-600 hover:bg-gray-300 dark:hover:bg-neutral-500 text-gray-700 dark:text-neutral-300'}
-            `}
-          >
-            <span className={`transition-transform duration-300 ease-in-out ${showDebugPanel ? 'rotate-180' : ''}`}>
-              <FaBug size={16} />
-            </span>
-          </button>
-        </div>
-      </header>
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {playerName && (
+              <div className="flex items-center border border-gray-300 dark:border-neutral-700/50 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-700/30">
+                <span className="text-[0.65rem] sm:text-xs text-gray-500 dark:text-neutral-400 mr-1.5 uppercase">Player:</span>
+                <span 
+                  className="text-xs sm:text-sm text-neutral-700 dark:text-neutral-200 hidden sm:inline truncate max-w-[70px] sm:max-w-[120px]"
+                  title={playerName}
+                >
+                  {playerName}
+                </span>
+              </div>
+            )}
+          </div>
+        </header>
 
-      {/* Main Game Area */}
-      <main className="flex-grow flex flex-col items-center overflow-auto p-1 sm:p-2 bg-gray-100 dark:bg-neutral-900">
-        <CheckGameBoard 
-          gameState={gameState} 
-          playerId={playerId} 
-          onPlayerAction={sendPlayerAction} 
-          gameId={gameId}
-          showDebugPanel={showDebugPanel}
-          onReturnToLobby={handleReturnToLobby}
-          turnSegmentTrigger={`${turnSegmentTrigger}-${visibilityTrigger}`}
-        />
-      </main>
-      <GameLogComponent log={log} />
+        {/* Main Game Area */}
+        <main className="flex-grow flex flex-col items-center min-h-0 overflow-auto p-1 sm:p-2 bg-gray-100 dark:bg-neutral-900 w-full">
+          <CheckGameBoard 
+            gameState={gameState} 
+            playerId={playerId} 
+            onPlayerAction={sendPlayerAction} 
+            gameId={gameId}
+            onReturnToLobby={handleReturnToLobby}
+            turnSegmentTrigger={`${turnSegmentTrigger}-${visibilityTrigger}`}
+          />
+        </main>
+        
+        {/* GameLogComponent is already absolutely positioned within this container */}
+        <GameLogComponent log={log} />
+
+        {/* ChatComponent - Positioned absolutely to the bottom-left */}
+        {gameState && gameId && playerId && (
+          <div className="absolute bottom-2 left-2 z-20">
+            <ChatComponent 
+              messages={chatMessages} 
+              onSendMessage={handleSendChatMessage} 
+              currentUserId={playerId}
+              // isVisible={true} // Control visibility based on screen size or other logic if needed
+            />
+          </div>
+        )}
+
+      </div> {/* Closing Main Game Area Container */}
       <AnimatePresence>{errorModal}</AnimatePresence>
     </div>
   );
