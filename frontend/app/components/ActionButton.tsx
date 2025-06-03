@@ -15,10 +15,9 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
         width: `${action.progressPercent || 0}%`,
         transition: { 
           type: "spring", 
-          stiffness: 100, // Moderate stiffness
-          damping: 30,    // Good damping ratio for smoothness
+          stiffness: 60, // Lowered stiffness for a softer glide
+          damping: 16,    // Adjusted damping for the new stiffness (aiming for near critical)
           mass: 1
-          // No explicit duration for spring, it's physics-based
         }
       });
     } else {
