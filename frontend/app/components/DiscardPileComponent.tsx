@@ -81,7 +81,8 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
             animate={{ 
               opacity: 1, 
               scale: 1, 
-              rotate: 0
+              rotate: 0,
+              y: 0
             }}
             exit={{ 
               opacity: 0, 
@@ -91,9 +92,10 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
             transition={(layoutIdForTopCard) 
               ? { 
                   type: 'spring', 
-                  stiffness: 120,
-                  damping: 18,
-                  mass: 1.0,
+                  stiffness: 160,
+                  damping: 15,
+                  mass: 0.9,
+                  bounce: 0.4,
                   restDelta: 0.001,
                   restSpeed: 0.001
                 }
@@ -130,14 +132,22 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
                 <motion.div 
                   className="absolute inset-0 rounded-md md:rounded-lg pointer-events-none"
                   style={{
-                    boxShadow: '0 4px 16px 4px rgba(0,0,0,0.5)',
+                    boxShadow: '0 6px 20px 6px rgba(0,0,0,0.5)',
                     zIndex: -1
                   }}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ 
+                    opacity: 1,
+                    scale: 1
+                  }}
+                  exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ 
-                    opacity: { duration: 0.3, ease: "easeInOut" }
+                    opacity: { duration: 0.5, ease: "easeOut" },
+                    scale: { 
+                      duration: 0.8,
+                      type: "spring",
+                      bounce: 0.4
+                    }
                   }}
                 />
               )}
@@ -165,6 +175,18 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {layoutIdForTopCard && (
+              <motion.div 
+                className="absolute inset-0 bg-transparent rounded-md md:rounded-lg pointer-events-none"
+                initial={{ scale: 1.2, opacity: 0.8 }}
+                animate={{ scale: 1, opacity: 0 }}
+                transition={{ 
+                  duration: 0.4,
+                  ease: "easeOut"
+                }}
+              />
+            )}
           </motion.div>
         ) : (
           <motion.div
@@ -186,23 +208,23 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
           <div className="relative w-full h-4 overflow-hidden flex items-center justify-center">
             <AnimatePresence mode="popLayout">
               <motion.div
-                key={`counter-${animKey}`}
+                key={`counter-${numberOfCards}`}
                 className="absolute inset-0 flex items-center justify-center"
-                initial={{ opacity: 0, scale: 1.5 }}
+                initial={{ opacity: 0, scale: 1.2 }}
                 animate={{ 
                   opacity: 1, 
                   scale: 1,
                   transition: { 
-                    duration: 0.25,
-                    ease: [0.22, 1, 0.36, 1] // Custom bezier curve for a nice pop effect
+                    duration: 0.15,
+                    ease: "easeOut"
                   }
                 }}
                 exit={{ 
                   opacity: 0,
                   scale: 0.8,
                   transition: {
-                    duration: 0.15, 
-                    ease: "easeOut"
+                    duration: 0.1, 
+                    ease: "easeIn"
                   }
                 }}
               >

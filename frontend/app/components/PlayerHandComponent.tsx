@@ -29,23 +29,43 @@ interface PlayerHandComponentProps {
 
 const cardContainerVariants = {
   initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 20 } },
-  normalExit: { opacity: 0, scale: 0.8, transition: { duration: 0.2 } },
+  animate: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { 
+      type: 'spring', 
+      stiffness: 320, 
+      damping: 24,
+      mass: 0.85 
+    } 
+  },
+  normalExit: { 
+    opacity: 0, 
+    scale: 0.8, 
+    transition: { 
+      duration: 0.25,
+      ease: "easeOut"
+    } 
+  },
   swappingOutExit: {
     opacity: 0,
     scale: 0.5,
     rotate: -15,
     y: -50,
-    transition: { duration: 0.4, ease: 'easeOut' },
+    transition: { 
+      duration: 0.5, 
+      ease: [0.16, 1, 0.3, 1], // Custom ease curve for a more natural animation
+    },
   },
   layoutTransition: {
     type: 'spring',
-    stiffness: 300,
+    stiffness: 340,
     damping: 30,
+    mass: 0.9,
   },
 };
 
-const FLIP_ANIMATION_DURATION_MS = 350; // Added for flip timing
+const FLIP_ANIMATION_DURATION_MS = 400; // Increased from 350ms for smoother flip effect
 
 const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
   playerID,
@@ -201,10 +221,10 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
         });
       }
       
-      // Delay setting the card to mid-flip state to avoid immediate visual change
+      // Small delay before starting flip to ensure layout has fully settled
       setTimeout(() => {
         setCardIdMidFlip(justFinishedCardId);
-      }, 10); // Reduced from 50ms to 10ms for faster flip start
+      }, 25); // Small delay for better visual staging
     } 
     else if (cardIdMidFlip && cardIdMovingToHand === cardIdMidFlip) {
       // If a new animation starts for the card that was mid-flip, cancel mid-flip state
@@ -223,7 +243,7 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
     const timer = setTimeout(() => {
       console.log(`[SwapAnimLayout DEBUG] FLIP_SEQ: Clearing mid-flip state for ${cardIdMidFlip} after timeout.`);
       setCardIdMidFlip(null);
-    }, FLIP_ANIMATION_DURATION_MS); // Reduced from 100ms extra to 30ms for smoother transition
+    }, FLIP_ANIMATION_DURATION_MS); 
     
     return () => clearTimeout(timer);
   }, [cardIdMidFlip]);
@@ -593,7 +613,7 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
                 motionAnimateConfig = { 
                   opacity: 1, 
                   y: 0, 
-                  scale: 1,
+                  scale: 1.05, // Slight scale up for better visual presence
                   rotate: 0,
                   zIndex: 200 // Very high z-index to ensure visibility
                 };
@@ -602,9 +622,9 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
                 motionCustomConfig = undefined;
                 motionTransitionConfig = { 
                   type: "spring", 
-                  stiffness: 120, // Reduced for more dramatic animation
-                  damping: 18,  // Reduced for more dramatic animation
-                  mass: 1.0,
+                  stiffness: 150, // Reduced for more dramatic animation
+                  damping: 16,  // Reduced for more dramatic animation
+                  mass: 0.9,
                   restDelta: 0.001,
                   restSpeed: 0.001
                 }; 

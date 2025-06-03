@@ -14,16 +14,14 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
       animationControls.start({
         width: `${action.progressPercent || 0}%`,
         transition: { 
-          type: "spring", 
-          stiffness: 60, // Lowered stiffness for a softer glide
-          damping: 16,    // Adjusted damping for the new stiffness (aiming for near critical)
-          mass: 1
+          type: "tween",
+          duration: 0.1,
+          ease: "linear"
         }
       });
     } else {
       // If it needs to revert or handle non-progress states, do it here.
-      // For instance, if a button could stop being a progress bar:
-      // animationControls.start({ width: '0%' }); // Or some initial/default state
+      animationControls.set({ width: '0%' });
     }
   }, [action.progressPercent, action.isProgressButton, animationControls]);
 
@@ -44,15 +42,25 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
           : 'px-3 md:px-4'
         } 
       `}
-      whileHover={!(action.disabled || action.isLoading) ? { scale: 1.1, boxShadow: "0px 0px 8px rgba(255,255,255,0.3)" } : {}}
+      whileHover={!(action.disabled || action.isLoading) ? { scale: 1.05, boxShadow: "0px 0px 8px rgba(255,255,255,0.2)" } : {}}
       whileTap={!(action.disabled || action.isLoading) ? { scale: 0.95 } : {}}
-      transition={{ type: "spring", stiffness: 400, damping: 17 }}
+      transition={{ 
+        type: "spring", 
+        stiffness: 500, 
+        damping: 20,
+        mass: 0.8
+      }}
     >
       {action.isProgressButton && (
         <motion.div
           className={`absolute top-0 left-0 h-full ${action.progressFillClassName || 'bg-yellow-500/70'}`}
           initial={{ width: '0%' }}
           animate={animationControls}
+          style={{ 
+            borderRadius: 'inherit',
+            boxShadow: 'inset 0 0 10px rgba(255,255,255,0.4)',
+            backdropFilter: 'blur(2px)'
+          }}
         />
       )}
       <span className={`relative z-10 ${ (action.isProgressButton && action.progressLabelClassName) ? action.progressLabelClassName : '' }`}> 

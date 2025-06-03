@@ -17,8 +17,8 @@ const PEEK_REVEAL_SECONDS = 5;
 const INITIAL_PEEK_GET_READY_DURATION_S = 3;
 const INITIAL_PEEK_REVEAL_DURATION_S = 5;
 
-const ANIMATION_ID_CLEAR_DELAY = 1500;
-const FLIP_ANIMATION_DURATION_MS = 350;
+const ANIMATION_ID_CLEAR_DELAY = 1800;
+const FLIP_ANIMATION_DURATION_MS = 400;
 
 interface FeedbackMessage {
   text: string;
@@ -373,7 +373,9 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
       const updateTimer = () => {
         const now = Date.now();
         const timeLeftSeconds = Math.max(0, Math.floor((gameState.matchingStageTimerExpiresAt! - now) / 1000));
-        setMatchingStageTimeLeft(timeLeftSeconds);
+        const timeLeftMillis = Math.max(0, gameState.matchingStageTimerExpiresAt! - now);
+        const secondsWithDecimal = timeLeftMillis / 1000;
+        setMatchingStageTimeLeft(secondsWithDecimal);
       };
       updateTimer(); // Initial call
       const intervalId = setInterval(updateTimer, 50); // Update timer every 50ms for smoother progress bar
@@ -491,7 +493,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
           if (cardToTakeFromHolding && cardToTakeFromHolding.id) {
             setCardIdMovingToHand(cardToTakeFromHolding.id);
           }
-        }, 150); // Increased from 50ms to 150ms to give more time for discard animation
+        }, 200); // Increased from 150ms to 200ms to give more time for discard animation to be noticed
 
         // Clear existing timers if any
         if (animationStatesClearTimerRef.current) {
@@ -518,7 +520,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
             setCardIdMovingToHand(null);
             setSwappingOutCardId(null); 
             console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] Secondary timeout fired - cleared cardIdMovingToHand and swappingOutCardId`);
-          }, 350); // Increased from 200ms to 350ms for better separation
+          }, 450); // Increased from 350ms to 450ms for better separation between animations
           
           console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] State setters called for animation IDs.`);
           if (animationStatesClearTimerRef.current === statesTimerId) {
@@ -773,7 +775,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     gameState.currentPhase === 'matchingStage' && matchingStageTimeLeft !== null && (
       <div className="w-full text-center mb-1">
         <p className="text-sm font-semibold text-accent animate-pulse">
-          Matching Time: {matchingStageTimeLeft}s
+          Matching Time: {Math.ceil(matchingStageTimeLeft)}s
         </p>
       </div>
     )
@@ -845,8 +847,6 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     if (isInMatchingStage && gameState.matchingOpportunityInfo?.potentialMatchers.includes(playerId) && gameState.activePlayers[playerId] === 'awaitingMatchAction') {
       const canAttemptMatch = selectedHandCardIndex !== null;
       // Access timerDurationSeconds with a type assertion as a temporary workaround
-      // IMPORTANT: For accurate timing, ensure MatchingOpportunityInfo in shared-types
-      // includes timerDurationSeconds and the server provides it.
       const totalMatchTime = (gameState.matchingOpportunityInfo as any).timerDurationSeconds || 15; 
       const currentTimeLeft = matchingStageTimeLeft !== null ? matchingStageTimeLeft : totalMatchTime;
       const elapsedTime = totalMatchTime - currentTimeLeft;
@@ -858,8 +858,8 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
         disabled: playerHasUITriggeredPass || !(gameState.activePlayers[playerId] === 'awaitingMatchAction'),
         isProgressButton: !playerHasUITriggeredPass, 
         progressPercent: progress,
-        progressFillClassName: 'bg-yellow-500/60', 
-        progressLabelClassName: 'text-neutral-100', 
+        progressFillClassName: 'bg-yellow-500/80', // Made more visible
+        progressLabelClassName: 'text-neutral-100 font-medium', // Made text more visible
         className: playerHasUITriggeredPass 
           ? 'bg-neutral-500 text-neutral-300' // Style when passed
           : undefined, // Active progress bar: use default styling from ActionBarComponent for track & hover
@@ -895,7 +895,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
         if (abilityRank === Rank.King) {
           if (serverStage === 'peek') {
             if (isAbilityPeekTimerActive) {
-              mainActionLabel = `Peeking... ${abilityPeekTimeLeft}s`;
+              mainActionLabel = `Peeking... ${Math.ceil(abilityPeekTimeLeft || 0)}s`;
             } else {
               mainActionLabel = `King - PEEK: Confirm ${currentSelections === 2 ? 'Selections' : `${2-currentSelections} more`}`;
             }
@@ -905,7 +905,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
         } else if (abilityRank === Rank.Queen) {
           if (serverStage === 'peek') {
             if (isAbilityPeekTimerActive) {
-              mainActionLabel = `Peeking... ${abilityPeekTimeLeft}s`;
+              mainActionLabel = `Peeking... ${Math.ceil(abilityPeekTimeLeft || 0)}s`;
             } else {
               mainActionLabel = `Queen - PEEK: Confirm ${currentSelections === 1 ? 'Selection' : `${1-currentSelections} more`}`;
             }
@@ -995,7 +995,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     const currentSelections = multiSelectedCardLocations.length;
 
     if (isAbilityPeekTimerActive && abilityPeekSelectionsConfirmed) {
-      actionBarPrompt = `Revealing peeked cards... ${abilityPeekTimeLeft}s`;
+      actionBarPrompt = `Revealing peeked cards... ${Math.ceil(abilityPeekTimeLeft || 0)}s`;
     } else if (ability.card.rank === Rank.King) {
         if (serverStage === 'peek') actionBarPrompt = `King - PEEK: Select ${Math.max(0, 2 - currentSelections)} card(s) to peek. Confirm selection.`;
         else if (serverStage === 'swap') actionBarPrompt = `King - SWAP: Select ${Math.max(0, 2 - currentSelections)} card(s) to swap.`;

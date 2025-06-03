@@ -166,7 +166,12 @@ const CardComponent: React.FC<CardComponentProps> = ({
             initial={{ rotateY: -180 }} 
             animate={{ rotateY: 0 }}    
             exit={{ rotateY: 180 }}     
-            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+            transition={{ 
+              type: 'tween', 
+              ease: 'easeInOut', 
+              duration: 0.3 
+            }}
+            style={{ backfaceVisibility: 'hidden' }}
             onAnimationComplete={handleFlipAnimationComplete} 
           >
             {(() => {
@@ -238,7 +243,12 @@ const CardComponent: React.FC<CardComponentProps> = ({
             initial={{ rotateY: 180 }} 
             animate={{ rotateY: 0 }}    
             exit={{ rotateY: -180 }}    
-            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+            transition={{ 
+              type: 'tween', 
+              ease: 'easeInOut', 
+              duration: 0.3 
+            }}
+            style={{ backfaceVisibility: 'hidden' }}
             onAnimationComplete={handleFlipAnimationComplete} 
           >
             {/* Removed inner div for a cleaner back */}

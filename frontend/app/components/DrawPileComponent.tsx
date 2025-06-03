@@ -81,23 +81,23 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
             <div className="relative w-full h-4 overflow-hidden flex items-center justify-center">
               <AnimatePresence mode="popLayout">
                 <motion.div
-                  key={`counter-${animKey}`}
+                  key={`counter-${numberOfCards}`}
                   className="absolute inset-0 flex items-center justify-center"
-                  initial={{ opacity: 0, scale: 1.5 }}
+                  initial={{ opacity: 0, scale: 1.2 }}
                   animate={{ 
                     opacity: 1, 
                     scale: 1,
                     transition: { 
-                      duration: 0.25,
-                      ease: [0.22, 1, 0.36, 1] // Custom bezier curve for a nice pop effect
+                      duration: 0.15,
+                      ease: "easeOut"
                     }
                   }}
                   exit={{ 
                     opacity: 0,
                     scale: 0.8,
                     transition: {
-                      duration: 0.15, 
-                      ease: "easeOut"
+                      duration: 0.1, 
+                      ease: "easeIn"
                     }
                   }}
                 >
