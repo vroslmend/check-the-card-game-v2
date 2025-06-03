@@ -179,12 +179,19 @@ export const initializeNewGame = (gameId: string, playerSetupData: InitialPlayer
   const initialPlayers: { [playerID: string]: PlayerState } = {};
   playerSetupData.forEach((playerInfo) => {
     const playerId = playerInfo.id;
-    // Ensure socketId is provided in playerInfo for new game setup
+    // The socketId is expected to be set by the caller (e.g., server/src/index.ts)
+    // before this function is invoked. If it were missing, it would indicate a
+    // problem in the upstream call sequence rather than something to be patched here.
     if (!playerInfo.socketId) {
-        console.error(`[GameManager] socketId missing for player ${playerId} during game initialization.`);
-        // Potentially throw error or handle as a critical setup failure
-        // For now, we'll assign an empty string, but this is not ideal.
-        playerInfo.socketId = `missing_socket_${Math.random().toString(36).substring(2,7)}`;
+        // This case should ideally not be reached if server/src/index.ts correctly sets it.
+        // Throwing an error or logging a more severe warning might be appropriate
+        // if this path is ever taken, as it indicates a logic flaw elsewhere.
+        console.error(`[GameManager-InitializeGame] CRITICAL: socketId missing for player ${playerId} during game initialization. This should have been set by the server.`);
+        // Proceeding without a socketId will likely lead to issues with disconnect/rejoin or player tracking.
+        // Forcing a placeholder or returning null here are options, but the root cause should be fixed.
+        // For now, let's return null to indicate a critical failure in setup.
+        // Consider making playerInfo.socketId non-optional in InitialPlayerSetupData if it's always required here.
+        return null; 
     }
     initialPlayers[playerId] = {
       hand: shuffledDeck.splice(0, 4).map(card => ({ ...card, isFaceDownToOwner: true })),
@@ -2618,6 +2625,12 @@ const handleDisconnectTimeout = (gameId: string, playerId: string) => {
   );
 
   broadcastService.triggerBroadcast(gameId, G); // Broadcast the forfeit update
+
+  // Check if the game should end due to this forfeit
+  if (checkGameEndDueToForfeits(gameId)) {
+    console.log(`[GameManager-Timer] Game ${gameId} ended due to forfeits after player ${playerName} was marked forfeited by disconnect timeout.`);
+    return; // Game has ended and scoring phase initiated by checkGameEndDueToForfeits
+  }
 
   // After forfeiting, try to advance the game state if it was this player's turn or if their forfeit affects game flow
   // This is important so the game doesn't stall.

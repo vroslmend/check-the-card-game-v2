@@ -587,11 +587,11 @@ export default function HomePage() {
       <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-neutral-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200">
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center relative">
-            <div className="absolute right-0 top-2">
+            {/* <div className="absolute right-0 top-2">
               <div className="h-9 flex items-center">
                 <ThemeToggle />
               </div>
-            </div>
+            </div> */}
             <h1 className="text-5xl font-bold text-sky-600 dark:text-sky-400">Check!</h1>
             <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">The Card Game</p>
           </div>
