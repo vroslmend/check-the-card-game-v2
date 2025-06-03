@@ -218,7 +218,12 @@ const CardComponent: React.FC<CardComponentProps> = ({
                 return (
                   <div className="flex items-center justify-center w-full h-full">
                     <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                      {isActuallyHiddenType ? "Card Privately Hidden" : (cardContent ? "Display Error" : "No Card Data")}
+                      {isPlayerHandCard && isActuallyHiddenType ? (
+                        // Use an empty placeholder for player hand cards to prevent "privately hidden" flash
+                        <span className="opacity-0">Hidden</span>
+                      ) : (
+                        isActuallyHiddenType ? "Card Privately Hidden" : (cardContent ? "Display Error" : "No Card Data")
+                      )}
                     </p>
                   </div>
                 );

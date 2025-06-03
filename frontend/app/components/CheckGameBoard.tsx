@@ -17,6 +17,9 @@ const PEEK_REVEAL_SECONDS = 5;
 const INITIAL_PEEK_GET_READY_DURATION_S = 3;
 const INITIAL_PEEK_REVEAL_DURATION_S = 5;
 
+const ANIMATION_ID_CLEAR_DELAY = 1500;
+const FLIP_ANIMATION_DURATION_MS = 350;
+
 interface FeedbackMessage {
   text: string;
   type: 'success' | 'error' | 'info';
@@ -80,8 +83,8 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
   const [multiSelectedCardLocations, setMultiSelectedCardLocations] = useState<{ playerID: string, cardIndex: number }[]>([]);
   const [abilityArgs, setAbilityArgs] = useState<AbilityClientArgs | null>(null); 
   const [swappingOutCardId, setSwappingOutCardId] = useState<string | null>(null);
-  const swappingOutCardIdClearTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [isAnimatingCardFromDeck, setIsAnimatingCardFromDeck] = useState(false);
+  const animationStatesClearTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const animatedCardDataClearTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [revealDrawnCardFace, setRevealDrawnCardFace] = useState(false);
 
   // New state variables for peek visual staging
@@ -97,6 +100,16 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
   const [isAbilityPeekTimerActive, setIsAbilityPeekTimerActive] = useState<boolean>(false);
   const [abilityPeekTimeLeft, setAbilityPeekTimeLeft] = useState<number | null>(null);
   const [matchingStageTimeLeft, setMatchingStageTimeLeft] = useState<number | null>(null);
+
+  // ### Refactored Animation States ###
+  const [animateDrawPileBriefly, setAnimateDrawPileBriefly] = useState(false);
+  const [whatToShowInHolding, setWhatToShowInHolding] = useState<'none' | 'placeholder' | 'actual_card'>('none');
+  const previousWhatToShowInHoldingRef = useRef<'none' | 'placeholder' | 'actual_card'>('none');
+  // IDs for layout animation during swap
+  const [cardIdMovingToHand, setCardIdMovingToHand] = useState<string | null>(null);
+  const [cardIdMovingToDiscard, setCardIdMovingToDiscard] = useState<string | null>(null);
+  const [animatedCardDataToHand, setAnimatedCardDataToHand] = useState<ClientCard | null>(null);
+  // ### End Refactored Animation States ###
 
   const getReadyIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const revealIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -193,10 +206,6 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     getReadyIntervalRef.current = null;
     if (revealIntervalRef.current) clearInterval(revealIntervalRef.current);
     revealIntervalRef.current = null;
-    if (swappingOutCardIdClearTimerRef.current) {
-      clearTimeout(swappingOutCardIdClearTimerRef.current);
-      swappingOutCardIdClearTimerRef.current = null;
-    }
   }, []);
 
   useEffect(() => {
@@ -259,7 +268,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
   useEffect(() => {
     let flipTimerId: NodeJS.Timeout | null = null;
-    if (clientPlayerState?.pendingDrawnCard && !isAnimatingCardFromDeck && !revealDrawnCardFace) {
+    if (clientPlayerState?.pendingDrawnCard && !revealDrawnCardFace) {
       flipTimerId = setTimeout(() => {
         setRevealDrawnCardFace(true);
       }, 150); 
@@ -269,7 +278,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     return () => {
       if (flipTimerId) clearTimeout(flipTimerId);
     };
-  }, [clientPlayerState?.pendingDrawnCard, isAnimatingCardFromDeck, revealDrawnCardFace]);
+  }, [clientPlayerState?.pendingDrawnCard, revealDrawnCardFace]);
 
   useEffect(() => {
     if (peekGetReadyTimer === null) return;
@@ -374,6 +383,41 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     }
   }, [gameState.matchingStageTimerExpiresAt, gameState.currentPhase]);
 
+  // Effect to manage the brief animation state for the draw pile
+  useEffect(() => {
+    if (animateDrawPileBriefly) {
+      const timer = setTimeout(() => {
+        setAnimateDrawPileBriefly(false);
+      }, 150); // Duration for the draw pile effect to be active before its own exit animation
+      return () => clearTimeout(timer);
+    }
+  }, [animateDrawPileBriefly]);
+
+  // Effect to manage transitions in the holding area based on pendingDrawnCard
+  useEffect(() => {
+    if (clientPlayerState?.pendingDrawnCard) {
+      if (whatToShowInHolding === 'placeholder' || (whatToShowInHolding === 'none' && clientPlayerState.pendingDrawnCardSource === 'discard')) {
+        // If placeholder was shown, or if it's a direct discard draw, transition to actual card.
+        // For discard draw, whatToShowInHolding would be set to 'actual_card' directly by handleDrawFromDiscard.
+        // This handles the deck draw case primarily.
+        setWhatToShowInHolding('actual_card');
+      } else if (whatToShowInHolding === 'none' && clientPlayerState.pendingDrawnCardSource === 'deck') {
+        // This case should ideally be caught by handleDrawFromDeck setting to 'placeholder' first.
+        // However, as a fallback if state somehow gets here:
+        setWhatToShowInHolding('placeholder'); 
+      }
+    } else {
+      // No pending card, so nothing should be in the holding area.
+      if (whatToShowInHolding !== 'none') {
+        setWhatToShowInHolding('none');
+      }
+    }
+  }, [clientPlayerState?.pendingDrawnCard, clientPlayerState?.pendingDrawnCardSource, whatToShowInHolding]);
+
+  useEffect(() => {
+    previousWhatToShowInHoldingRef.current = whatToShowInHolding;
+  }, [whatToShowInHolding]);
+
   if (!gameState || !gameState.players || !clientPlayerState) {
     return <div className="h-screen flex justify-center items-center p-4 text-center text-gray-500">Loading player data...</div>;
   }
@@ -384,7 +428,8 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     }
   }, [onPlayerAction, clientPlayerState, gameState.currentPhase]);
   
-  const isCurrentPlayer = gameState.currentPlayerId === playerId;
+  const clientPlayerId = playerId; 
+  const isCurrentPlayer = gameState.currentPlayerId === clientPlayerId;
   const isInMatchingStage = gameState.currentPhase === 'matchingStage' && !!gameState.matchingOpportunityInfo;
   
   useEffect(() => {
@@ -406,18 +451,21 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
   const handleDrawFromDeck = () => {
     if (canDrawFromDeck) {
-      setIsAnimatingCardFromDeck(true);
+      setAnimateDrawPileBriefly(true);
+      setWhatToShowInHolding('placeholder');
+      setCardIdMovingToHand(null); // Clear swap IDs
+      setCardIdMovingToDiscard(null);
       onPlayerAction('drawFromDeck');
       setSelectedHandCardIndex(null);
       setFeedbackMessage(null); 
-      setTimeout(() => {
-        setIsAnimatingCardFromDeck(false);
-      }, 350); 
     }
   };
 
   const handleDrawFromDiscard = () => {
     if (canDrawFromDiscard) {
+      setWhatToShowInHolding('actual_card');
+      setCardIdMovingToHand(null); // Clear swap IDs
+      setCardIdMovingToDiscard(null);
       onPlayerAction('drawFromDiscard');
       setSelectedHandCardIndex(null);
       setFeedbackMessage(null); 
@@ -426,20 +474,77 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
   const handleSwapAndDiscard = (handIndex: number) => {
     if (isCurrentPlayer && clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase')) {
-      const cardToSwap = clientPlayerState.hand[handIndex];
-      if (cardToSwap && !('isHidden' in cardToSwap) && cardToSwap.id) {
-        if (swappingOutCardIdClearTimerRef.current) {
-          clearTimeout(swappingOutCardIdClearTimerRef.current);
+      const cardToSwapFromHand = clientPlayerState.hand[handIndex];
+      const cardToTakeFromHolding = clientPlayerState.pendingDrawnCard;
+
+      if (cardToSwapFromHand && cardToSwapFromHand.id &&
+          cardToTakeFromHolding && !('isHidden' in cardToTakeFromHolding) && cardToTakeFromHolding.id) {
+        
+        setAnimatedCardDataToHand(clientPlayerState.pendingDrawnCard); 
+        
+        // Set the discard animation first so it gets visual priority
+        setCardIdMovingToDiscard(cardToSwapFromHand.id);
+
+        // Add a small delay before initiating the animation to hand
+        // This helps make the discard animation more noticeable
+        setTimeout(() => {
+          if (cardToTakeFromHolding && cardToTakeFromHolding.id) {
+            setCardIdMovingToHand(cardToTakeFromHolding.id);
+          }
+        }, 150); // Increased from 50ms to 150ms to give more time for discard animation
+
+        // Clear existing timers if any
+        if (animationStatesClearTimerRef.current) {
+          console.log(`[SwapAnimLayout TIMER_MGMT] Clearing existing animation states timer ID: ${animationStatesClearTimerRef.current}`);
+          clearTimeout(animationStatesClearTimerRef.current);
+          animationStatesClearTimerRef.current = null;
         }
-        setSwappingOutCardId(cardToSwap.id); 
-        console.log(`[SwapAnim] Setting swappingOutCardId to ${cardToSwap.id}`);
-        swappingOutCardIdClearTimerRef.current = setTimeout(() => {
-          setSwappingOutCardId(null); 
-          swappingOutCardIdClearTimerRef.current = null;
-          console.log(`[SwapAnim] Cleared swappingOutCardId (was ${cardToSwap.id}).`);
-        }, 600); 
+        if (animatedCardDataClearTimerRef.current) {
+          console.log(`[SwapAnimLayout TIMER_MGMT] Clearing existing animated card data timer ID: ${animatedCardDataClearTimerRef.current}`);
+          clearTimeout(animatedCardDataClearTimerRef.current);
+          animatedCardDataClearTimerRef.current = null;
+        }
+        
+        console.log(`[SwapAnimLayout DEBUG] handleSwapAndDiscard: Setting timeout to clear animation IDs in ${ANIMATION_ID_CLEAR_DELAY}ms.`);
+        const statesTimerId = setTimeout(() => {
+          console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] Attempting to clear animation states (delay: ${ANIMATION_ID_CLEAR_DELAY}ms).`);
+          console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] Values at def: cardIdMovingToHand=${cardIdMovingToHand}, cardIdMovingToDiscard=${cardIdMovingToDiscard}, swappingOutCardId=${swappingOutCardId}`);
+          
+          // Clear states in a specific order to prevent visual hiccups
+          setCardIdMovingToDiscard(null);
+          
+          // Increased delay before clearing the card moving to hand to make the animations more distinct
+          setTimeout(() => {
+            setCardIdMovingToHand(null);
+            setSwappingOutCardId(null); 
+            console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] Secondary timeout fired - cleared cardIdMovingToHand and swappingOutCardId`);
+          }, 350); // Increased from 200ms to 350ms for better separation
+          
+          console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] State setters called for animation IDs.`);
+          if (animationStatesClearTimerRef.current === statesTimerId) {
+             animationStatesClearTimerRef.current = null;
+          }
+        }, ANIMATION_ID_CLEAR_DELAY); // Use constant
+        animationStatesClearTimerRef.current = statesTimerId;
+        console.log(`[SwapAnimLayout TIMER_MGMT] Set new animation states timer ID: ${animationStatesClearTimerRef.current}`);
+
+        // New timer for animatedCardDataToHand
+        const dataClearDelay = ANIMATION_ID_CLEAR_DELAY + FLIP_ANIMATION_DURATION_MS;
+        console.log(`[SwapAnimLayout DEBUG] handleSwapAndDiscard: Setting timeout to clear animated card data in ${dataClearDelay}ms.`);
+        const dataTimerId = setTimeout(() => {
+          console.log(`[SwapAnimLayout TIMEOUT DATA FIRED] Attempting to clear animated card data (delay: ${dataClearDelay}ms).`);
+          console.log(`[SwapAnimLayout TIMEOUT DATA FIRED] animatedCardDataToHand existed: ${!!animatedCardDataToHand}`);
+          setAnimatedCardDataToHand(null);
+          console.log(`[SwapAnimLayout TIMEOUT DATA FIRED] State setter called for animatedCardDataToHand.`);
+          if (animatedCardDataClearTimerRef.current === dataTimerId) {
+            animatedCardDataClearTimerRef.current = null;
+          }
+        }, dataClearDelay);
+        animatedCardDataClearTimerRef.current = dataTimerId;
+        console.log(`[SwapAnimLayout TIMER_MGMT] Set new animated card data timer ID: ${animatedCardDataClearTimerRef.current}`);
+
       } else {
-        console.warn('[SwapAnim] Could not set swappingOutCardId: Card not found or no ID.');
+        console.warn('[SwapAnimLayout] Could not set animation IDs: Card details missing.');
       }
       onPlayerAction('swapAndDiscard', { handIndex });
       setSelectedHandCardIndex(null);
@@ -452,6 +557,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
       onPlayerAction('discardDrawnCard');
       setSelectedHandCardIndex(null);
       setFeedbackMessage(null); 
+      // whatToShowInHolding will become 'none' via useEffect when pendingDrawnCard clears
     }
   };
 
@@ -966,97 +1072,156 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
   const finalHideCondition = isResolvingPlayerForAbility || shouldHideForSelfAfterSwap;
   console.log(`[IconDebug-OwnHand] PlayerID: ${playerId.slice(-4)}, lastResolver: ${gameState.lastPlayerToResolveAbility ? gameState.lastPlayerToResolveAbility.slice(-4) : 'null'}, GATs: ${JSON.stringify(gameState.globalAbilityTargets)}, isResolving: ${isResolvingPlayerForAbility}, shouldHideForSelfAfterSwap: ${shouldHideForSelfAfterSwap}, finalHide: ${finalHideCondition}`);
     
+  console.log(
+    `[SwapAnimLayout DEBUG] CheckGameBoard RENDER: cardIdMovingToHand=${cardIdMovingToHand}, cardIdMovingToDiscard=${cardIdMovingToDiscard}, animatedCardDataToHand.id=${animatedCardDataToHand?.id}, pendingDrawnCard.id=${clientPlayerState?.pendingDrawnCard?.id}`
+  );
+
   return (
-    <div className="flex flex-col flex-grow w-full items-center font-sans select-none px-1 sm:px-2 md:px-3">
-      <div className="w-full flex flex-col flex-grow items-center overflow-y-auto">
-        <div className="w-full flex flex-col items-center flex-shrink-0 pt-0.5 md:pt-1">
-          {phaseBanner}
-          {matchingStageTimerDisplay}
-          {opponentPlayerIds.map((pId) => {
-            const opponentState = gameState.players[pId];
-            if (!opponentState) return null; 
-            return (
-              <div key={pId} className="flex flex-col items-center w-full">
-                <PlayerStatusDisplay
-                  playerID={pId}
-                  playerState={opponentState}
-                  isCurrentPlayer={gameState.currentPlayerId === pId}
-                  turnTimerExpiresAt={gameState.playerTimers?.[pId]?.turnTimerExpiresAt ?? null}
-                  disconnectGraceTimerExpiresAt={gameState.playerTimers?.[pId]?.disconnectGraceTimerExpiresAt ?? null}
-                  isViewingPlayer={false}
-                  turnSegmentIdentifier={pId === gameState.currentPlayerId ? turnSegmentTrigger : undefined}
-                />
-                <PlayerHandComponent
-                  playerID={pId}
-                  playerState={opponentState}
-                  actualHandForDisplay={opponentState.hand} 
-                  onCardClick={handleCardClick}
-                  isViewingPlayer={false}
-                  selectedCardIndices={selectedHandCardIndex !== null && pId === playerId ? [selectedHandCardIndex] : []} 
-                  multiSelectedCardIndices={multiSelectedCardLocations.filter(loc => loc.playerID === pId).map(loc => loc.cardIndex)}
-                  cardsToForceShowFaceUp={{}}
-                  abilityTargetsOnThisHand={getPlayerSpecificGlobalTargets(pId)}
-                  isLocked={opponentState.isLocked}
-                  hasCalledCheck={opponentState.hasCalledCheck}
-                  lastRegularSwapInfo={gameState.lastRegularSwapInfo} 
-                />
-              </div>
-            );
-          })}
-        </div>
-        <div className="flex flex-col items-center justify-center w-full py-1 md:py-1.5 my-1 md:my-2 flex-shrink-0">
-          <motion.div
-            layout
-            layoutScroll
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="flex flex-row items-end justify-center gap-2 md:gap-3"
-          >
-            <LayoutGroup>
+    <LayoutGroup>
+      <div className="flex flex-col flex-grow w-full items-center font-sans select-none px-1 sm:px-2 md:px-3">
+        <div className="w-full flex flex-col flex-grow items-center overflow-y-auto">
+          <div className="w-full flex flex-col items-center flex-shrink-0 pt-0.5 md:pt-1">
+            {phaseBanner}
+            {matchingStageTimerDisplay}
+            {opponentPlayerIds.map((pId) => {
+              const opponentState = gameState.players[pId];
+              if (!opponentState) return null; 
+              return (
+                <div key={pId} className="flex flex-col items-center w-full">
+                  <PlayerStatusDisplay
+                    playerID={pId}
+                    playerState={opponentState}
+                    isCurrentPlayer={gameState.currentPlayerId === pId}
+                    turnTimerExpiresAt={gameState.playerTimers?.[pId]?.turnTimerExpiresAt ?? null}
+                    disconnectGraceTimerExpiresAt={gameState.playerTimers?.[pId]?.disconnectGraceTimerExpiresAt ?? null}
+                    isViewingPlayer={false}
+                    turnSegmentIdentifier={pId === gameState.currentPlayerId ? turnSegmentTrigger : undefined}
+                  />
+                  <PlayerHandComponent
+                    playerID={pId}
+                    playerState={opponentState}
+                    actualHandForDisplay={opponentState.hand} 
+                    onCardClick={handleCardClick}
+                    isViewingPlayer={false}
+                    selectedCardIndices={selectedHandCardIndex !== null && pId === playerId ? [selectedHandCardIndex] : []} 
+                    multiSelectedCardIndices={multiSelectedCardLocations.filter(loc => loc.playerID === pId).map(loc => loc.cardIndex)}
+                    cardsToForceShowFaceUp={{}}
+                    abilityTargetsOnThisHand={getPlayerSpecificGlobalTargets(pId)}
+                    isLocked={opponentState.isLocked}
+                    hasCalledCheck={opponentState.hasCalledCheck}
+                    lastRegularSwapInfo={gameState.lastRegularSwapInfo}
+                    cardIdMovingToHand={null} // Opponent hands don't use these specific animations
+                    cardIdMovingToDiscard={null}
+                    swappingOutCardId={null} // Opponent hands don't use these specific animations
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-col items-center justify-center w-full py-1 md:py-1.5 my-1 md:my-2 flex-shrink-0">
+            <motion.div
+              layout
+              layoutScroll
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="flex flex-row items-end justify-center gap-2 md:gap-3"
+            >
               <DrawPileComponent 
                 numberOfCards={gameState.deckSize} 
                 canDraw={canDrawFromDeck}
                 onClick={handleDrawFromDeck}
-                isAnimatingDraw={isAnimatingCardFromDeck}
+                isAnimatingDraw={animateDrawPileBriefly}
               />
 
               <AnimatePresence mode="popLayout">
-                {(clientPlayerState?.pendingDrawnCard || isAnimatingCardFromDeck) && (
+                {(whatToShowInHolding !== 'none') && (
                   <motion.div
                     key="holding-area-wrapper"
+                    layout // Ensures smooth animation when appearing/disappearing next to other layout elements
                     className="flex flex-col items-center overflow-hidden flex-shrink-0 p-1 origin-top"
                     style={{ height: 105 }} 
                     initial={{ scaleY: 0, opacity: 0 }}
                     animate={{ scaleY: 1, opacity: 1 }}
                     exit={{ scaleY: 0, opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    transition={{ type: "spring", stiffness: 180, damping: 25, duration: 0.4 }}
                   >
                     <motion.div
                       className="flex flex-col items-center w-full h-full"
                     >
-                      {isAnimatingCardFromDeck ? (
-                        <motion.div
-                          key="placeholder-drawn-card"
-                          className="w-full h-full flex items-center justify-center"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                        >
-                          <div className="w-12 md:w-14 aspect-[2.5/3.5]">
-                            <CardComponent card={null} isFaceUp={false} isInteractive={false} disableHoverEffect={true}/>
-                          </div>
-                        </motion.div>
-                      ) : clientPlayerState?.pendingDrawnCard ? (
-                        <motion.div
-                          key="actual-drawn-card"
-                          className="w-full h-full flex flex-col items-center justify-center"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                        >
-                          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-0.5 font-medium">Holding:</p>
-                          <div className="w-12 md:w-14 aspect-[2.5/3.5] ring-2 ring-accent rounded-lg shadow-md">
-                            <CardComponent card={clientPlayerState.pendingDrawnCard} isFaceUp={revealDrawnCardFace} />
-                          </div>
-                        </motion.div>
-                      ) : null}
+                      <AnimatePresence mode="wait">
+                        {whatToShowInHolding === 'placeholder' && (
+                          <motion.div
+                            key="placeholder-drawn-card"
+                            className="w-full h-full flex items-center justify-center"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.15 } }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <div className="w-12 md:w-14 aspect-[2.5/3.5]">
+                              <CardComponent card={null} isFaceUp={false} isInteractive={false} disableHoverEffect={true}/>
+                            </div>
+                          </motion.div>
+                        )}
+                        {whatToShowInHolding === 'actual_card' && clientPlayerState?.pendingDrawnCard && (
+                          <motion.div
+                            key={clientPlayerState.pendingDrawnCard.id}
+                            layoutId={clientPlayerState.pendingDrawnCard ? `card-anim-${clientPlayerState.pendingDrawnCard.id}` : undefined}
+                            className="w-full h-full flex flex-col items-center justify-center"
+                            style={{ 
+                              zIndex: cardIdMovingToHand === clientPlayerState.pendingDrawnCard?.id ? 50 : 30
+                            }}
+                            initial={(
+                              clientPlayerState.pendingDrawnCardSource === 'deck' && 
+                              previousWhatToShowInHoldingRef.current === 'placeholder' && 
+                              whatToShowInHolding === 'actual_card'
+                            ) 
+                              ? { opacity: 0, x: -40, scale: 0.7 } 
+                              : { opacity: 0, scale: 0.7 } 
+                            }
+                            animate={{ 
+                              opacity: 1, 
+                              x: 0, 
+                              scale: 1, 
+                              zIndex: cardIdMovingToHand === clientPlayerState.pendingDrawnCard?.id ? 50 : 30
+                            }}
+                            exit={(clientPlayerState.pendingDrawnCard && cardIdMovingToHand === clientPlayerState.pendingDrawnCard.id)
+                              ? { opacity: 1 } // Maintain opacity during layout transition 
+                              : { opacity: 0, scale: 0.8, transition: { duration: 0.2 } }
+                            } 
+                            transition={clientPlayerState.pendingDrawnCard && (cardIdMovingToHand === clientPlayerState.pendingDrawnCard.id) 
+                              ? { 
+                                type: "spring", 
+                                stiffness: 170, 
+                                damping: 25, 
+                                mass: 1.1,
+                                restDelta: 0.001,
+                                duration: 0.6 
+                              } // Better spring config for layout move to hand
+                              : { type: "spring", stiffness: 220, damping: 25, duration: 0.35 } // Default for appearing
+                            }
+                            onAnimationStart={() => {
+                              if (clientPlayerState.pendingDrawnCard && whatToShowInHolding === 'actual_card') {
+                                const appliedLayoutId = clientPlayerState.pendingDrawnCard ? `card-anim-${clientPlayerState.pendingDrawnCard.id}` : undefined;
+                                console.log(`[SwapAnimLayout DEBUG] HoldingArea CARD ANIMATION START (Card ID: ${clientPlayerState.pendingDrawnCard.id}): current cardIdMovingToHand=${cardIdMovingToHand}, applied layoutId=${appliedLayoutId}, exit prop relevant if exiting? ${(clientPlayerState.pendingDrawnCard && cardIdMovingToHand === clientPlayerState.pendingDrawnCard.id) ? 'undefined (layout move)' : 'standard exit'}`);
+                              }
+                            }}
+                            onLayoutAnimationComplete={() => {
+                               if (clientPlayerState.pendingDrawnCard && whatToShowInHolding === 'actual_card') {
+                                const appliedLayoutId = clientPlayerState.pendingDrawnCard ? `card-anim-${clientPlayerState.pendingDrawnCard.id}` : undefined;
+                                console.log(`[SwapAnimLayout DEBUG] HoldingArea CARD LAYOUT ANIMATION COMPLETE (Card ID: ${clientPlayerState.pendingDrawnCard.id}): current cardIdMovingToHand=${cardIdMovingToHand}, applied layoutId=${appliedLayoutId}`);
+                              }
+                            }}
+                          >
+                            <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-0.5 font-medium">Holding:</p>
+                            <div className="w-12 md:w-14 aspect-[2.5/3.5] ring-2 ring-accent rounded-lg shadow-md">
+                              <CardComponent 
+                                card={clientPlayerState.pendingDrawnCard} 
+                                isFaceUp={clientPlayerState.pendingDrawnCardSource === 'discard' || revealDrawnCardFace} 
+                              />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.div>
                   </motion.div>
                 )}
@@ -1068,76 +1233,74 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
                 isSealed={displayDiscardPileAsLocked}
                 canDraw={canDrawFromDiscard}
                 onClick={handleDrawFromDiscard}
+                animateCardInWithId={cardIdMovingToDiscard} // Changed prop name for clarity
               />
-            </LayoutGroup>
-          </motion.div>
-          {/* Player Turn Indicator */}
-          {gameState.currentPhase !== 'gameOver' && gameState.currentPlayerId !== playerId && (
-            <div className="text-center my-1">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 animate-pulse">Waiting for {gameState.players[gameState.currentPlayerId]?.name || `P-${gameState.currentPlayerId.slice(-4)}`}'s turn...</p>
-            </div>
+            </motion.div>
+          </div>
+          <div className="w-full flex flex-col items-center mt-auto pb-24 sm:pb-28 md:pb-32 flex-shrink-0">
+            <PlayerStatusDisplay
+              playerID={playerId}
+              playerState={clientPlayerState}
+              isCurrentPlayer={playerId === gameState.currentPlayerId}
+              turnTimerExpiresAt={gameState.playerTimers?.[playerId]?.turnTimerExpiresAt ?? null}
+              disconnectGraceTimerExpiresAt={gameState.playerTimers?.[playerId]?.disconnectGraceTimerExpiresAt ?? null}
+              isViewingPlayer={true}
+              turnSegmentIdentifier={playerId === gameState.currentPlayerId ? turnSegmentTrigger : undefined}
+            />
+
+            <PlayerHandComponent
+              playerID={playerId}
+              playerState={clientPlayerState}
+              actualHandForDisplay={clientPlayerState?.hand || []} 
+              onCardClick={handleCardClick}
+              isViewingPlayer={true}
+              selectedCardIndices={selectedHandCardIndex !== null ? [selectedHandCardIndex] : []}
+              multiSelectedCardIndices={multiSelectedCardLocations.filter(loc => loc.playerID === playerId).map(loc => loc.cardIndex)}
+              cardsToForceShowFaceUp={getOwnCardsToShowFaceUp()}
+              abilityTargetsOnThisHand={getPlayerSpecificGlobalTargets(playerId)}
+              isLocked={clientPlayerState?.isLocked || false}
+              hasCalledCheck={clientPlayerState?.hasCalledCheck || false}
+              cardsBeingPeeked={showPeekedCards ? processedCardsToPeekRef.current : null} 
+              isInitialPeekActive={showPeekedCards || (peekGetReadyTimer !== null || peekRevealTimer !== null)}
+              swappingOutCardId={swappingOutCardId}
+              cardIdMovingToHand={cardIdMovingToHand}
+              cardIdMovingToDiscard={cardIdMovingToDiscard}
+              cardArrivingFromHolding={animatedCardDataToHand}
+            />
+            {turnIndicatorForPlayer(playerId)}
+          </div>
+        </div>
+
+        <ActionBarComponent 
+          actions={getActions()} 
+        >
+          {(peekGetReadyTimer !== null) 
+            ? <p className="text-center text-xs text-neutral-300 px-2">Get Ready to Peek: {peekGetReadyTimer}s</p>
+            : (peekRevealTimer !== null && showPeekedCards)
+            ? <p className="text-center text-xs text-neutral-300 px-2">Memorize Your Cards: {peekRevealTimer}s</p>
+            : feedbackMessage 
+            ? <p className={`text-center text-xs px-2 ${feedbackMessage.type === 'error' ? 'text-red-400' : feedbackMessage.type === 'success' ? 'text-green-400' : 'text-sky-400'}`}>{feedbackMessage.text}</p>
+            : (clientPlayerState?.pendingDrawnCard && isCurrentPlayer) 
+            ? <p className="text-center text-xs text-neutral-300 px-2">Click a card in your hand to swap, or use 'Discard Drawn Card' action.</p>
+            : actionBarPrompt && <p className="text-center text-xs text-neutral-300 px-2">{actionBarPrompt}</p>}
+        </ActionBarComponent>
+        
+        <AnimatePresence>
+          {showEndModal && (
+            <EndOfGameModal
+              open={showEndModal}
+              onClose={() => setShowEndModal(false)} 
+              winner={winnerName} 
+              scores={transformedScores} 
+              finalHands={finalHandsForModal}
+              onPlayAgain={handlePlayAgain}
+              totalTurns={totalTurnsForModal}
+              playerStats={playerStatsForModal}
+            />
           )}
-        </div>
-        <div className="w-full flex flex-col items-center mt-auto pb-24 sm:pb-28 md:pb-32 flex-shrink-0">
-          <PlayerStatusDisplay
-            playerID={playerId}
-            playerState={clientPlayerState}
-            isCurrentPlayer={playerId === gameState.currentPlayerId}
-            turnTimerExpiresAt={gameState.playerTimers?.[playerId]?.turnTimerExpiresAt ?? null}
-            disconnectGraceTimerExpiresAt={gameState.playerTimers?.[playerId]?.disconnectGraceTimerExpiresAt ?? null}
-            isViewingPlayer={true}
-            turnSegmentIdentifier={playerId === gameState.currentPlayerId ? turnSegmentTrigger : undefined}
-          />
-
-          <PlayerHandComponent
-            playerID={playerId}
-            playerState={clientPlayerState}
-            actualHandForDisplay={clientPlayerState?.hand || []} 
-            onCardClick={handleCardClick}
-            isViewingPlayer={true}
-            selectedCardIndices={selectedHandCardIndex !== null ? [selectedHandCardIndex] : []}
-            multiSelectedCardIndices={multiSelectedCardLocations.filter(loc => loc.playerID === playerId).map(loc => loc.cardIndex)}
-            cardsToForceShowFaceUp={getOwnCardsToShowFaceUp()}
-            abilityTargetsOnThisHand={getPlayerSpecificGlobalTargets(playerId)}
-            isLocked={clientPlayerState?.isLocked || false}
-            hasCalledCheck={clientPlayerState?.hasCalledCheck || false}
-            cardsBeingPeeked={showPeekedCards ? processedCardsToPeekRef.current : null} 
-            isInitialPeekActive={showPeekedCards || (peekGetReadyTimer !== null || peekRevealTimer !== null)}
-            swappingOutCardId={swappingOutCardId}
-          />
-          {turnIndicatorForPlayer(playerId)}
-        </div>
+        </AnimatePresence>
       </div>
-
-      <ActionBarComponent 
-        actions={getActions()} 
-      >
-        {(peekGetReadyTimer !== null) 
-          ? <p className="text-center text-xs text-neutral-300 px-2">Get Ready to Peek: {peekGetReadyTimer}s</p>
-          : (peekRevealTimer !== null && showPeekedCards)
-          ? <p className="text-center text-xs text-neutral-300 px-2">Memorize Your Cards: {peekRevealTimer}s</p>
-          : feedbackMessage 
-          ? <p className={`text-center text-xs px-2 ${feedbackMessage.type === 'error' ? 'text-red-400' : feedbackMessage.type === 'success' ? 'text-green-400' : 'text-sky-400'}`}>{feedbackMessage.text}</p>
-          : (clientPlayerState?.pendingDrawnCard && isCurrentPlayer) 
-          ? <p className="text-center text-xs text-neutral-300 px-2">Click a card in your hand to swap, or use 'Discard Drawn Card' action.</p>
-          : actionBarPrompt && <p className="text-center text-xs text-neutral-300 px-2">{actionBarPrompt}</p>}
-      </ActionBarComponent>
-      
-      <AnimatePresence>
-        {showEndModal && (
-          <EndOfGameModal
-            open={showEndModal}
-            onClose={() => setShowEndModal(false)} 
-            winner={winnerName} 
-            scores={transformedScores} 
-            finalHands={finalHandsForModal}
-            onPlayAgain={handlePlayAgain}
-            totalTurns={totalTurnsForModal}
-            playerStats={playerStatsForModal}
-          />
-        )}
-      </AnimatePresence>
-    </div>
+    </LayoutGroup>
   );
 };
 

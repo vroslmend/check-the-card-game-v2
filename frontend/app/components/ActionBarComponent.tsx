@@ -29,7 +29,7 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
     <motion.div 
       layout
       transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0 }}
-      className="fixed left-1/2 bottom-3 md:bottom-4 z-20 -translate-x-1/2 flex flex-col items-center w-full max-w-xs sm:max-w-sm md:max-w-md px-2"
+      className="fixed left-1/2 bottom-3 md:bottom-4 z-[1000] -translate-x-1/2 flex flex-col items-center w-full max-w-xs sm:max-w-sm md:max-w-md px-2"
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
     >

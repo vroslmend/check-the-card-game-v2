@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
+/* Add the Tailwind v4 dark mode custom variant */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --color-accent: 14 165 233; /* sky-500 for selection rings */
 }
 
 @theme inline {
@@ -12,11 +16,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Dark mode variables - these are applied via the .dark class now, not prefers-color-scheme */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 body {

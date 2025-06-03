@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { Card, ClientCard, ClientPlayerState, LastRegularSwapInfo } from 'shared-types';
 import CardComponent from './CardComponent';
-import { motion, AnimatePresence, TargetAndTransition, VariantLabels } from 'motion/react';
+import { motion, AnimatePresence, TargetAndTransition, VariantLabels, MotionProps } from 'motion/react';
 
 // Define a local type for a single ability target, matching CheckGameBoard.tsx
 type AbilityTarget = { playerID: string; cardIndex: number; type: 'peek' | 'swap' };
@@ -22,6 +22,9 @@ interface PlayerHandComponentProps {
   isInitialPeekActive?: boolean;
   swappingOutCardId?: string | null; // ID of the card being swapped out, for animation
   lastRegularSwapInfo?: LastRegularSwapInfo | null; // New prop for swap highlight
+  cardIdMovingToHand?: string | null;
+  cardIdMovingToDiscard?: string | null;
+  cardArrivingFromHolding?: ClientCard | null; // New prop
 }
 
 const cardContainerVariants = {
@@ -42,6 +45,8 @@ const cardContainerVariants = {
   },
 };
 
+const FLIP_ANIMATION_DURATION_MS = 350; // Added for flip timing
+
 const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
   playerID,
   playerState,
@@ -58,9 +63,22 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
   isInitialPeekActive = false,
   swappingOutCardId,
   lastRegularSwapInfo,
+  cardIdMovingToHand,
+  cardIdMovingToDiscard,
+  cardArrivingFromHolding,
 }) => {
   const [highlightedSwapIndex, setHighlightedSwapIndex] = useState<number | null>(null);
   const lastProcessedSwapTimestampRef = useRef<number | null>(null);
+  const prevCardIdMovingToHandRef = useRef<string | null | undefined>(null);
+  const [permanentlySettledCardIds, setPermanentlySettledCardIds] = useState<Set<string>>(new Set());
+  const [settledCardFullData, setSettledCardFullData] = useState<Map<string, ClientCard>>(new Map()); // New state
+
+  // New state for managing the flip sequence
+  const [cardIdMidFlip, setCardIdMidFlip] = useState<string | null>(null);
+
+  useEffect(() => {
+    prevCardIdMovingToHandRef.current = cardIdMovingToHand;
+  }, [cardIdMovingToHand]);
 
   useEffect(() => {
     let timerId: NodeJS.Timeout | null = null;
@@ -100,6 +118,124 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
       }
     };
   }, [lastRegularSwapInfo, playerID, isViewingPlayer]); // Dependency array is crucial
+
+  useEffect(() => {
+    // This effect runs when cardIdMovingToHand (the prop) changes.
+    // We look at what prevCardIdMovingToHandRef.current *was* before this change.
+    if (prevCardIdMovingToHandRef.current && // It was a card ID in the previous render cycle
+        cardIdMovingToHand === null &&       // And now cardIdMovingToHand prop is null
+        prevCardIdMovingToHandRef.current !== cardIdMovingToHand) { // Ensure it actually changed from an ID to null
+      // The card with ID prevCardIdMovingToHandRef.current has just completed its layout animation.
+      const settledId = prevCardIdMovingToHandRef.current!;
+      setPermanentlySettledCardIds(prevSet => {
+        const newSet = new Set(prevSet);
+        newSet.add(settledId);
+        console.log(`[SwapAnimLayout DEBUG] SETTLED_LOG: Added ${settledId} to permanentlySettledCardIds. New set:`, Array.from(newSet));
+        return newSet;
+      });
+
+      if (cardArrivingFromHolding && cardArrivingFromHolding.id === settledId) {
+        setSettledCardFullData(prevMap => {
+            const newMap = new Map(prevMap);
+            newMap.set(settledId, cardArrivingFromHolding);
+            console.log(`[SwapAnimLayout DEBUG] LATCH_DATA: Latched data for ${settledId}. New map size: ${newMap.size}`);
+            return newMap;
+        });
+      }
+    }
+  }, [cardIdMovingToHand, cardArrivingFromHolding]); // Added cardArrivingFromHolding dependency
+
+  useEffect(() => {
+    // Clean up IDs from permanentlySettledCardIds if they are no longer in hand
+    // or if they are starting a new layout animation (i.e., they become cardIdMovingToHand again).
+    const currentHandIds = new Set(actualHandForDisplay.map(c => c ? c.id : null).filter(Boolean) as string[]);
+    
+    setPermanentlySettledCardIds(currentSettledIds => {
+      let changed = false;
+      const newSet = new Set(currentSettledIds);
+      for (const id of currentSettledIds) {
+        if (!currentHandIds.has(id) || id === cardIdMovingToHand) {
+          newSet.delete(id);
+          changed = true;
+          console.log(`[SwapAnimLayout DEBUG] SETTLED_LOG: Removed ${id} from permanentlySettledCardIds (Reason: ${!currentHandIds.has(id) ? 'not in hand' : 're-animating'}). New set:`, Array.from(newSet));
+        }
+      }
+      return changed ? newSet : currentSettledIds;
+    });
+
+    setSettledCardFullData(currentMap => {
+        let mapChanged = false;
+        const newMap = new Map(currentMap);
+        for (const id of currentMap.keys()) {
+            if (!currentHandIds.has(id) || id === cardIdMovingToHand) {
+                if (newMap.delete(id)) {
+                    mapChanged = true;
+                    console.log(`[SwapAnimLayout DEBUG] LATCH_DATA: Removed latched data for ${id} (Reason: ${!currentHandIds.has(id) ? 'not in hand' : 're-animating'}). New map size: ${newMap.size}`);
+                }
+            }
+        }
+        return mapChanged ? newMap : currentMap;
+    });
+  }, [actualHandForDisplay, cardIdMovingToHand]);
+
+  // Effect to manage the flip sequence
+  useEffect(() => {
+    if (cardIdMovingToHand === null && prevCardIdMovingToHandRef.current) {
+      // Card animation to hand has just ended
+      const justFinishedCardId = prevCardIdMovingToHandRef.current;
+      console.log(`[SwapAnimLayout DEBUG] FLIP_SEQ: Card ${justFinishedCardId} landed. Starting stabilization period.`);
+      
+      // Add to permanently settled cards without delay
+      setPermanentlySettledCardIds(prev => {
+        const newSet = new Set(prev);
+        newSet.add(justFinishedCardId);
+        return newSet;
+      });
+      
+      // Save the card data immediately to prevent flicker
+      if (cardArrivingFromHolding && cardArrivingFromHolding.id === justFinishedCardId) {
+        setSettledCardFullData(prev => {
+          const newMap = new Map(prev);
+          newMap.set(justFinishedCardId, cardArrivingFromHolding);
+          return newMap;
+        });
+      }
+      
+      // Delay setting the card to mid-flip state to avoid immediate visual change
+      setTimeout(() => {
+        setCardIdMidFlip(justFinishedCardId);
+      }, 10); // Reduced from 50ms to 10ms for faster flip start
+    } 
+    else if (cardIdMidFlip && cardIdMovingToHand === cardIdMidFlip) {
+      // If a new animation starts for the card that was mid-flip, cancel mid-flip state
+      setCardIdMidFlip(null);
+    }
+    
+    // Update reference for next comparison
+    prevCardIdMovingToHandRef.current = cardIdMovingToHand;
+  }, [cardIdMovingToHand, cardIdMidFlip, cardArrivingFromHolding]);
+
+  // Effect to clear the "mid-flip" state after the flip animation duration
+  useEffect(() => {
+    if (!cardIdMidFlip) return;
+    
+    console.log(`[SwapAnimLayout DEBUG] FLIP_SEQ: Card ${cardIdMidFlip} is mid-flip. Scheduling clear in ${FLIP_ANIMATION_DURATION_MS}ms.`);
+    const timer = setTimeout(() => {
+      console.log(`[SwapAnimLayout DEBUG] FLIP_SEQ: Clearing mid-flip state for ${cardIdMidFlip} after timeout.`);
+      setCardIdMidFlip(null);
+    }, FLIP_ANIMATION_DURATION_MS); // Reduced from 100ms extra to 30ms for smoother transition
+    
+    return () => clearTimeout(timer);
+  }, [cardIdMidFlip]);
+
+  // Effect for permanentlySettledCardIds (ensure this integrates or is correctly replaced)
+  useEffect(() => {
+    if (cardIdMovingToHand === null && prevCardIdMovingToHandRef.current) {
+      const settledId = prevCardIdMovingToHandRef.current;
+      setPermanentlySettledCardIds(prev => new Set(prev).add(settledId));
+    }
+    // prevCardIdMovingToHandRef is updated in the other useEffect now
+  }, [cardIdMovingToHand]);
 
   if (!playerState) {
     return <div className={`text-xs ${isViewingPlayer ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}`}>Loading player data...</div>;
@@ -186,6 +322,9 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
 
   const playerHand = actualHandForDisplay;
 
+  const DEFAULT_LAYOUT_TRANSITION_CONFIG = cardContainerVariants.layoutTransition;
+  const LAYOUT_SPRING_CONFIG = { type: "spring", stiffness: 170, damping: 25 };
+
   return (
     <div
       className={handAreaClasses}
@@ -200,15 +339,13 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
             gridTemplateColumns: `repeat(${numVisualCols}, minmax(0, 1fr))`,
             gridTemplateRows: `repeat(${numVisualRows}, auto)`,
           }}
+          layout
+          transition={cardContainerVariants.layoutTransition}
         >
-          <AnimatePresence>
+          <AnimatePresence mode="popLayout">
             {visualGridCells.map((cellCard, cellIndex) => {
-              // cellCard is actualHandForDisplay[cellIndex] if a card exists at this slot,
-              // otherwise it's null (for empty grid slots if hand is smaller than grid dimensions)
-              // originalCardIndex is effectively cellIndex if cellCard is not null and cellIndex < numberOfCardsToRender
               const originalCardIndex = cellCard ? actualHandForDisplay.findIndex(c => {
-                if (!cellCard) return false; // Should not happen if cellCard is truthy
-                // Compare by ID for object equality since cards can be recreated
+                if (!cellCard) return false;
                 if (('isHidden' in c && 'isHidden' in cellCard && c.id === cellCard.id) || 
                     (!('isHidden' in c) && !('isHidden' in cellCard) && c.id === cellCard.id)) {
                   return true;
@@ -216,62 +353,72 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
                 return false;
               }) : -1;
 
-              // Fallback if findIndex fails but cellCard exists (should imply cellIndex is the originalIndex)
-              // This is more a safeguard; findIndex should work if IDs are stable and cellCard is from actualHandForDisplay
               const cardIsPresentInHand = originalCardIndex !== -1;
+              const currentCardId = cellCard?.id;
 
+              let determinadoLayoutId: string | undefined = undefined;
+              if (currentCardId) { 
+                if (currentCardId === cardIdMovingToHand) {
+                  determinadoLayoutId = `card-anim-${currentCardId}`;
+                } else if (currentCardId === cardIdMovingToDiscard) {
+                  determinadoLayoutId = `card-anim-${currentCardId}`;
+                }
+              }
+              console.log(`[SwapAnimLayout DEBUG] INITIAL SET: Card ${currentCardId}: determinadoLayoutId=${determinadoLayoutId}, isDiscard=${currentCardId === cardIdMovingToDiscard}`);
+
+              // Capture information at definition time for onLayoutAnimationComplete
+              const idOfCardInSlotThisRender = currentCardId;
+              const wasLayoutTargetForArrivalThisRender = !!(determinadoLayoutId && currentCardId && currentCardId === cardIdMovingToHand);
+              const wasLayoutTargetForDepartureThisRender = !!(determinadoLayoutId && currentCardId && currentCardId === cardIdMovingToDiscard);
+              const originalCIdMTH_atDefinition = cardIdMovingToHand; // Capture prop value at definition
+              const originalCIdMTD_atDefinition = cardIdMovingToDiscard; // Capture prop value at definition
+
+              const isArrivingLayout = cardIdMovingToHand === currentCardId;
+              let cardToDisplay: ClientCard | null = cellCard;
               let showFaceUp = false;
-              let cardToDisplay: ClientCard | null = cellCard; // Default to the card from the hand
 
               if (cellCard && cardIsPresentInHand) {
                 if (isViewingPlayer) {
-                  // Handle initial peek for the viewing player
-                  if (isCardBeingPeeked(cellCard, originalCardIndex)) {
-                    // Find the actual card data from cardsBeingPeeked (which are full Card objects)
-                    const actualCardDataFromPeek = cardsBeingPeeked?.find(
-                      (peekedCard) => !('isHidden' in peekedCard) && peekedCard.id === cellCard.id
-                    );
-                    if (actualCardDataFromPeek) {
-                      cardToDisplay = actualCardDataFromPeek; // Use the full card data
-                    } else {
-                      // This case should ideally not be hit if isCardBeingPeeked found a match by ID
-                      // and cardsBeingPeeked contains the full card details.
-                      console.warn(`[PlayerHandComponent] Card ${cellCard.id} was marked for peek, but full data not found in cardsBeingPeeked.`);
+                  // A. During the layout animation of an arriving card (it's "flying in")
+                  if (isArrivingLayout && cardArrivingFromHolding && cardArrivingFromHolding.id === currentCardId) {
+                    cardToDisplay = cardArrivingFromHolding; // Use the full data of the card from holding
+                    showFaceUp = true; // Show it face-up *during* its travel animation
+                  }
+                  // B. Card has settled, or was never part of the layout animation
+                  else {
+                    // Standard logic for determining face-up status for cards in hand
+                    if (isCardBeingPeeked(cellCard, originalCardIndex)) {
+                      const actualCardDataFromPeek = cardsBeingPeeked?.find(
+                        (peekedCard) => !('isHidden' in peekedCard) && peekedCard.id === cellCard.id
+                      );
+                      if (actualCardDataFromPeek) {
+                        cardToDisplay = actualCardDataFromPeek;
+                      } else {
+                        console.warn(`[PlayerHandComponent] Card ${cellCard.id} was marked for peek, but full data not found in cardsBeingPeeked.`);
+                      }
+                      showFaceUp = true;
+                    } else if (cardsToForceShowFaceUp[originalCardIndex]) {
+                      showFaceUp = true;
+                      // cardToDisplay remains cellCard. If cellCard is HiddenCard, CardComponent shows "privately hidden".
+                    } else if (!('isHidden' in cellCard)) { // If the card from actualHandForDisplay is already a full card
+                      cardToDisplay = cellCard;
+                      showFaceUp = true;
                     }
-                    showFaceUp = true;
-                  } 
-                  // Handle other forced reveals (e.g., abilities) if not already shown by initial peek
-                  else if (cardsToForceShowFaceUp[originalCardIndex]) {
-                    showFaceUp = true;
-                    // If cardsToForceShowFaceUp is true, cardToDisplay (which is cellCard)
-                    // should ideally be the full card if the server intended it to be revealed.
-                    // If it's still a HiddenCard, CardComponent will show "privately hidden".
-                  } 
-                  // If the card from hand is already a full card (not isHidden), show it.
-                  else if (!('isHidden' in cellCard)) {
-                    showFaceUp = true; 
+                    // else, cardToDisplay is cellCard (which might be HiddenCard), and showFaceUp remains false.
                   }
-                } else { // Opponent's hand (viewed by current player)
-                  // If cellCard (which comes from opponentState.hand, potentially modified by temporaryReveals on server)
-                  // is a full card, then it should be shown face up.
+                } else { // Opponent's hand
                   if (cellCard && !('isHidden' in cellCard)) {
+                    cardToDisplay = cellCard;
                     showFaceUp = true;
-                    // cardToDisplay is already cellCard, which is correct.
                   }
-                  // else showFaceUp remains false (default)
                 }
               }
 
               const isSelectedForSingleAction = cardIsPresentInHand && selectedCardIndices.includes(originalCardIndex);
               const isSelectedForMultiAction = cardIsPresentInHand && multiSelectedCardIndices.includes(originalCardIndex);
 
-              const cardId = cellCard && !('isHidden' in cellCard) ? (cellCard as Card).id : null;
-              const isThisCardSwappingOut = !!(swappingOutCardId && cardId && cardId === swappingOutCardId);
+              const isThisCardSwappingOut = !!(swappingOutCardId && cellCard && cellCard.id === swappingOutCardId);
               
-              // Use cellIndex for the key of the motion.div wrapper for grid stability,
-              // but originalCardIndex for logic tied to the card data itself.
-              const stableCardSlotKey = `${playerID}-slot-${cellIndex}`;
-
               // Check if this card is being targeted by a global ability
               const currentGlobalTarget = cardIsPresentInHand ? abilityTargetsOnThisHand?.find(target => target.cardIndex === originalCardIndex) : undefined;
               const isBeingTargetedForPeek = currentGlobalTarget?.type === 'peek';
@@ -279,7 +426,7 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
               
               // Logging for opponent peek (can be removed after debugging)
               if (!isViewingPlayer && showFaceUp && cardIsPresentInHand) {
-                console.log(`[PlayerHandComponent-OPPONENT-PEEK-DEBUG] Key: ${stableCardSlotKey}`, {
+                console.log(`[PlayerHandComponent-OPPONENT-PEEK-DEBUG] Key: ${`player-${playerID}-slot-${cellIndex}`}`, {
                   cardForDisplay: cellCard,
                   isFaceUpProp: showFaceUp,
                   forceShowFrontProp: (isInitialPeekActive && isCardBeingPeeked(cellCard, originalCardIndex)) || (!isViewingPlayer && showFaceUp),
@@ -292,7 +439,7 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
               const isMultiSelected = multiSelectedCardIndices?.includes(originalCardIndex) ?? false;
               const isAbilityTargetedForPeek = abilityTargetsOnThisHand?.some(target => target.cardIndex === originalCardIndex && target.type === 'peek') ?? false;
               const isAbilityTargetedForSwap = abilityTargetsOnThisHand?.some(target => target.cardIndex === originalCardIndex && target.type === 'swap') ?? false;
-              const isBeingSwappedByPlayer = swappingOutCardId === cardId;
+              const isBeingSwappedByPlayer = swappingOutCardId === currentCardId;
 
               // Determine if this specific card should get the temporary swap highlight
               const showSwapHighlight = !isViewingPlayer && highlightedSwapIndex === originalCardIndex;
@@ -302,19 +449,240 @@ const PlayerHandComponent: React.FC<PlayerHandComponentProps> = React.memo(({
               if (isSelectedForSingleAction || isSelectedForMultiAction) {
                 cardWrapperClassName += " ring-2 ring-accent ring-offset-2 ring-offset-neutral-800";
               }
+
+              const cardKey = cellCard ? cellCard.id : `player-${playerID}-empty-slot-${cellIndex}`;
+              const cardExitProp = (currentCardId && currentCardId === cardIdMovingToDiscard) ? undefined : "normalExit";
               
+              const wasArrivingLayoutPreviousRender = useRef(false);
+              const justFinishedLayoutArrival = wasArrivingLayoutPreviousRender.current && !isArrivingLayout && !cardIdMovingToHand;
+
+              if (isArrivingLayout) {
+                wasArrivingLayoutPreviousRender.current = true;
+              } else {
+                if (cardIdMovingToHand !== currentCardId) {
+                   wasArrivingLayoutPreviousRender.current = false;
+                }
+              }
+              
+              const isMidFlipVisualPhase = cardIdMidFlip === currentCardId;
+
+              let slotInitial: MotionProps['initial'] = "initial";
+              let slotAnimate: MotionProps['animate'] = "animate";
+              let slotTransition: MotionProps['transition'] = determinadoLayoutId ? LAYOUT_SPRING_CONFIG : DEFAULT_LAYOUT_TRANSITION_CONFIG;
+
+              if (isArrivingLayout) {
+                if (cardArrivingFromHolding && cardArrivingFromHolding.id === currentCardId) {
+                  cardToDisplay = cardArrivingFromHolding;
+                }
+                showFaceUp = true;
+              } else if (justFinishedLayoutArrival) {
+                console.log(`[SwapAnimLayout DEBUG] FLIP_SEQ: SNAP RENDER for ${currentCardId}.`);
+                if (cardArrivingFromHolding && cardArrivingFromHolding.id === currentCardId) {
+                  cardToDisplay = cardArrivingFromHolding;
+                } else {
+                  cardToDisplay = cellCard; 
+                }
+                showFaceUp = true; 
+                slotInitial = false;
+                slotAnimate = { opacity: 1, y: 0 };
+                slotTransition = { duration: 0 };
+              } else if (isMidFlipVisualPhase) {
+                console.log(`[SwapAnimLayout DEBUG] FLIP_SEQ: MID-FLIP RENDER for ${currentCardId}.`);
+                if (cardArrivingFromHolding && cardArrivingFromHolding.id === currentCardId) {
+                  cardToDisplay = cardArrivingFromHolding;
+                } else {
+                  cardToDisplay = cellCard; 
+                }
+                showFaceUp = true; 
+                slotInitial = false; 
+                slotAnimate = { opacity: 1, y: 0 }; 
+                slotTransition = cardContainerVariants.layoutTransition;
+              } else {
+                // This is the final 'else' for rendering a card just sitting in hand.
+                // It's not arriving, not just finished, not mid-flip.
+                // We will now always use variants for its base animation config.
+                // The cardToDisplay and showFaceUp logic for settled cards is still important for visuals.
+
+                const isPermanentlySettled = currentCardId && permanentlySettledCardIds.has(currentCardId);
+
+                if (isPermanentlySettled && currentCardId) {
+                  const latchedData = settledCardFullData.get(currentCardId);
+                  if (latchedData) {
+                    console.log(`[SwapAnimLayout DEBUG] FLICKER_FIX: PlayerHand SETTLED RENDER for ${currentCardId} using latched data (Will use variants for base anim).`);
+                    cardToDisplay = latchedData;
+                    showFaceUp = true; 
+                  } else {
+                    console.log(`[SwapAnimLayout DEBUG] FLICKER_FIX: PlayerHand SETTLED RENDER for ${currentCardId} - NO LATCHED DATA (Will use variants for base anim).`);
+                    cardToDisplay = cellCard; // Fallback
+                    // Standard showFaceUp logic for a settled card if no latched data, but it should exist
+                    const isCardOriginallyHidden = cellCard && 'isHidden' in cellCard && cellCard.isHidden;
+                    const isCardEffectivelyPeeked = isCardBeingPeeked(cellCard, originalCardIndex);
+                    const isCardForcedFaceUp = cardsToForceShowFaceUp[originalCardIndex];
+                    if (isCardEffectivelyPeeked) {
+                      showFaceUp = true;
+                      if (cellCard && 'isHidden' in cellCard && cardsBeingPeeked) {
+                        const peekedCardDataTemporary = cardsBeingPeeked.find(
+                          (peekedCard) => !('isHidden' in peekedCard) && peekedCard.id === cellCard.id
+                        );
+                        if (peekedCardDataTemporary) cardToDisplay = peekedCardDataTemporary;
+                      }
+                    } else if (isCardForcedFaceUp) {
+                      showFaceUp = true;
+                    } else {
+                      showFaceUp = !isCardOriginallyHidden;
+                    }
+                  }
+                } else {
+                  // Not permanently settled, and not in any other special animation phase.
+                  cardToDisplay = cellCard;
+                  const isCardOriginallyHidden = cellCard && 'isHidden' in cellCard && cellCard.isHidden;
+                  const isCardEffectivelyPeeked = isCardBeingPeeked(cellCard, originalCardIndex);
+                  const isCardForcedFaceUp = cardsToForceShowFaceUp[originalCardIndex];
+                  if (isCardEffectivelyPeeked) {
+                    showFaceUp = true;
+                     if (cellCard && 'isHidden' in cellCard && cardsBeingPeeked) {
+                        const peekedCardDataTemporary = cardsBeingPeeked.find(
+                          (peekedCard) => !('isHidden' in peekedCard) && peekedCard.id === cellCard.id
+                        );
+                        if (peekedCardDataTemporary) cardToDisplay = peekedCardDataTemporary;
+                      }
+                  } else if (isCardForcedFaceUp) {
+                    showFaceUp = true;
+                  } else {
+                    showFaceUp = !isCardOriginallyHidden;
+                  }
+                }
+                
+                // ALWAYS use variants for cards not in active layout transition phases.
+                slotInitial = "initial"; 
+                slotAnimate = "animate";
+                slotTransition = cardContainerVariants.layoutTransition; // Default transition from variants
+              }
+              
+              // Maintain face-up appearance during flip animation to prevent "privately hidden" flash
+              if (isMidFlipVisualPhase && cardArrivingFromHolding && cardArrivingFromHolding.id === currentCardId) {
+                cardToDisplay = cardArrivingFromHolding;
+                showFaceUp = true;
+              }
+
+              if (isViewingPlayer && cellCard?.id && (cellCard.id === cardIdMovingToHand || prevCardIdMovingToHandRef.current === cellCard.id || cardIdMidFlip === cellCard.id || (settledCardFullData.has(cellCard.id) && !cardIdMovingToHand && !cardIdMidFlip))) { // Enhanced logging condition
+                const logPlayerId = playerID.length > 10 ? playerID.substring(playerID.length - 6) : playerID;
+                console.log(
+                  `[SwapAnimLayout DEBUG] FLICKER_CHECK: PlayerHand (Target: ${prevCardIdMovingToHandRef.current || cardIdMovingToHand || cardIdMidFlip || 'N/A'}, LoggedFor: ${cellCard.id}): ` +
+                    `Player: ${logPlayerId}, CIdMTH: ${cardIdMovingToHand}, PrevCIdMTH: ${prevCardIdMovingToHandRef.current}, ` +
+                    `layoutId: ${determinadoLayoutId || '-'}, initial: ${JSON.stringify(slotInitial)}, animate: ${JSON.stringify(slotAnimate)}, trans: ${JSON.stringify(slotTransition)}, ` +
+                    `justFinished: ${justFinishedLayoutArrival}, midFlip: ${isMidFlipVisualPhase}, ` +
+                    `cell: ${cellCard?.id}(${cellCard ? ('isHidden' in cellCard ? 'H' : 'F') : 'N/A'}), ` +
+                    `display: ${cardToDisplay ? ( (!('isHidden' in cardToDisplay) && cardToDisplay.rank && cardToDisplay.suit) ? `${cardToDisplay.rank}${cardToDisplay.suit}` : `Hidden(${cardToDisplay.id})` ) : 'N/A'}, ` +
+                    `showFaceUp: ${showFaceUp}`
+                );
+              }
+
+              let motionInitialConfig: MotionProps['initial'] = "initial";
+              let motionAnimateConfig: MotionProps['animate'] = "animate";
+              let motionVariantsConfig = cardContainerVariants;
+              let motionCustomConfig: any = isThisCardSwappingOut; // isThisCardSwappingOut is for a different type of swap
+              let motionTransitionConfig: MotionProps['transition'] = cardContainerVariants.layoutTransition;
+              let cardSpecificExitProp: MotionProps['exit'] = cardExitProp; // cardExitProp is 'undefined' or 'normalExit'
+
+              // **Explicit override for card moving to discard**
+              if (currentCardId && currentCardId === cardIdMovingToDiscard) {
+                console.log(`[SwapAnimLayout DEBUG] PlayerHand DEPARTING OVERRIDE (Phase 1) for ${currentCardId}, determinadoLayoutId=${determinadoLayoutId}`);
+                determinadoLayoutId = `card-anim-${currentCardId}`; // Ensure it's set
+                console.log(`[SwapAnimLayout DEBUG] AFTER OVERRIDE: Card ${currentCardId}: determinadoLayoutId=${determinadoLayoutId}`);
+                motionAnimateConfig = { 
+                  opacity: 1, 
+                  y: 0, 
+                  scale: 1,
+                  rotate: 0,
+                  zIndex: 200 // Very high z-index to ensure visibility
+                };
+                cardSpecificExitProp = undefined; // Changed from minimal exit prop to undefined for layout animation
+                motionVariantsConfig = undefined as any;
+                motionCustomConfig = undefined;
+                motionTransitionConfig = { 
+                  type: "spring", 
+                  stiffness: 120, // Reduced for more dramatic animation
+                  damping: 18,  // Reduced for more dramatic animation
+                  mass: 1.0,
+                  restDelta: 0.001,
+                  restSpeed: 0.001
+                }; 
+                console.log(`[SwapAnimLayout DEBUG] PlayerHand DEPARTING OVERRIDE (Phase 2) for ${currentCardId}: initial=UNDEFINED_OR_DEFAULT, animate=${JSON.stringify(motionAnimateConfig)}, exit=${cardSpecificExitProp}, variants=undefined, custom=undefined, transition=${JSON.stringify(motionTransitionConfig)}`);
+              }
+              // This block is now mutually exclusive with the one above if cardIdMovingToDiscard matches.
+              else if (determinadoLayoutId) { 
+                // This applies to cardIdMovingToHand or other generic layout ID cases if any
+                console.log(`[SwapAnimLayout DEBUG] ELSE-IF BLOCK: Card ${currentCardId}: determinadoLayoutId=${determinadoLayoutId}`);
+                motionTransitionConfig = { type: "spring", stiffness: 170, damping: 25 };
+                motionInitialConfig = false;
+                motionAnimateConfig = { opacity: 1, y: 0, scale: 1, rotate: 0 }; // Ensure all transform props are neutral
+
+                if (currentCardId && currentCardId === cardIdMovingToHand) {
+                  // Specific overrides for the card ARRIVING in the hand via layoutId
+                   motionVariantsConfig = undefined as any; 
+                   motionCustomConfig = undefined;
+                   cardSpecificExitProp = "normalExit"; // Arriving card should have a normal exit if it's subsequently removed
+                }
+              } else {
+                console.log(`[SwapAnimLayout DEBUG] FINAL ELSE BLOCK: Card ${currentCardId}: determinadoLayoutId=${determinadoLayoutId}`);
+                // If not a layout-driven animation, ensure exit is not accidentally undefined
+                // unless it's the specific swappingOutCardId case (which has its own variant)
+                if (cardSpecificExitProp === undefined && !(currentCardId && currentCardId === swappingOutCardId)) {
+                    cardSpecificExitProp = "normalExit";
+                }
+              }
+
+              // FINAL SAFETY CHECK - Ensure departing card always has layoutId set
+              if (currentCardId && currentCardId === cardIdMovingToDiscard) {
+                const finalLayoutId = `card-anim-${currentCardId}`;
+                if (determinadoLayoutId !== finalLayoutId) {
+                  console.log(`[SwapAnimLayout DEBUG] CRITICAL FIX: Layout ID for departing card ${currentCardId} was reset to ${determinadoLayoutId}! Restoring to ${finalLayoutId}`);
+                  determinadoLayoutId = finalLayoutId;
+                }
+              }
+              
+              console.log(`[SwapAnimLayout DEBUG] FINAL BEFORE RENDER: Card ${currentCardId}: determinadoLayoutId=${determinadoLayoutId}, isDiscard=${currentCardId === cardIdMovingToDiscard}`);
+
               return (
                 <motion.div
-                  key={stableCardSlotKey}
-                  layoutId={cardId ? `card-${cardId}` : undefined}
+                  key={cardKey}
                   layout
-                  variants={cardContainerVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit={determineExitVariant(isThisCardSwappingOut)}
-                  custom={isThisCardSwappingOut}
-                  transition={cardContainerVariants.layoutTransition}
+                  layoutId={determinadoLayoutId}
+                  variants={motionVariantsConfig}
+                  initial={currentCardId && currentCardId === cardIdMovingToDiscard ? undefined : motionInitialConfig}
+                  animate={motionAnimateConfig}
+                  exit={cardSpecificExitProp}
+                  custom={motionCustomConfig}
+                  transition={motionTransitionConfig}
+                  onAnimationStart={() => {
+                    if (determinadoLayoutId && cellCard) {
+                      if (cellCard.id === cardIdMovingToHand) {
+                        console.log(`[SwapAnimLayout DEBUG] PlayerHand CARD ANIMATION START (Arriving Card ID: ${cellCard.id}): cardIdMovingToHand_PROP=${cardIdMovingToHand}, determinedLayoutId=${determinadoLayoutId}`);
+                      } else if (cellCard.id === cardIdMovingToDiscard) {
+                        console.log(`[SwapAnimLayout DEBUG] PlayerHand CARD ANIMATION START (Departing Card ID: ${cellCard.id}): cardIdMovingToDiscard_PROP=${cardIdMovingToDiscard}, determinedLayoutId=${determinadoLayoutId}`);
+                      }
+                    }
+                  }}
+                  onLayoutAnimationComplete={() => {
+                    // Use captured values from the render scope of this motion.div
+                    // determinadoLayoutId is from closure, idOfCardInSlotThisRender, wasLayoutTargetForArrivalThisRender, wasLayoutTargetForDepartureThisRender are from closure.
+                    // cardIdMovingToHand & cardIdMovingToDiscard accessed here are the *current* props of PlayerHandComponent when the callback executes.
+                    if (determinadoLayoutId && idOfCardInSlotThisRender) {
+                      if (wasLayoutTargetForArrivalThisRender) {
+                        console.log(`[SwapAnimLayout DEBUG] PlayerHand CARD LAYOUT ANIMATION COMPLETE (Arrived Card ID: ${idOfCardInSlotThisRender}): DefTime CIdMTH=${originalCIdMTH_atDefinition}, CallbackTime CIdMTH=${cardIdMovingToHand}, layoutId=${determinadoLayoutId}`);
+                      } else if (wasLayoutTargetForDepartureThisRender) {
+                        console.log(`[SwapAnimLayout DEBUG] PlayerHand CARD LAYOUT ANIMATION COMPLETE (Departed Card ID: ${idOfCardInSlotThisRender}): DefTime CIdMTD=${originalCIdMTD_atDefinition}, CallbackTime CIdMTD=${cardIdMovingToDiscard}, layoutId=${determinadoLayoutId}`);
+                      }
+                    }
+                  }}
                   className={cardWrapperClassName}
+                  style={{
+                    zIndex: currentCardId === cardIdMovingToDiscard ? 200 : (currentCardId === cardIdMovingToHand ? 90 : 'auto'),
+                    filter: currentCardId === cardIdMovingToDiscard ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' : 'none',
+                    position: currentCardId === cardIdMovingToDiscard ? 'relative' : 'relative',
+                    transformOrigin: 'center center'
+                  }}
                   onClick={() => {
                     if (cardIsPresentInHand) { // Ensure click is on an actual card
                       onCardClick(playerID, originalCardIndex);

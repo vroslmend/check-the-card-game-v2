@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import CardComponent from './CardComponent';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -17,6 +17,18 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
 }) => {
   const cardWidth = "w-12 md:w-14";
   const cardAspectRatio = "aspect-[2.5/3.5]";
+  
+  // Use a ref to keep track of the previous value for animation
+  const prevCountRef = useRef(numberOfCards);
+  const [animKey, setAnimKey] = useState(0);
+  
+  // When the count changes, update the animation key to force a re-render
+  useEffect(() => {
+    if (numberOfCards !== prevCountRef.current) {
+      setAnimKey(key => key + 1);
+      prevCountRef.current = numberOfCards;
+    }
+  }, [numberOfCards]);
 
   const pileContent = (
     <AnimatePresence mode="wait">
@@ -64,20 +76,37 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Card count overlay at the bottom of the card */}
-          <div className="absolute bottom-0 left-0 right-0 p-0.5 bg-black/30 rounded-b-md md:rounded-b-lg pointer-events-none z-10">
-            <AnimatePresence mode="wait">
-              <motion.span
-                key={`count-${numberOfCards}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="block text-center text-[0.55rem] md:text-[0.6rem] text-white font-semibold leading-tight"
-              >
-                {numberOfCards}
-              </motion.span>
-            </AnimatePresence>
+          {/* Card count overlay with improved animation */}
+          <div className="absolute bottom-0 left-0 right-0 p-0.5 bg-black/30 rounded-b-md md:rounded-b-lg pointer-events-none z-[250]">
+            <div className="relative w-full h-4 overflow-hidden flex items-center justify-center">
+              <AnimatePresence mode="popLayout">
+                <motion.div
+                  key={`counter-${animKey}`}
+                  className="absolute inset-0 flex items-center justify-center"
+                  initial={{ opacity: 0, scale: 1.5 }}
+                  animate={{ 
+                    opacity: 1, 
+                    scale: 1,
+                    transition: { 
+                      duration: 0.25,
+                      ease: [0.22, 1, 0.36, 1] // Custom bezier curve for a nice pop effect
+                    }
+                  }}
+                  exit={{ 
+                    opacity: 0,
+                    scale: 0.8,
+                    transition: {
+                      duration: 0.15, 
+                      ease: "easeOut"
+                    }
+                  }}
+                >
+                  <span className="text-[0.5rem] md:text-[0.55rem] text-white font-semibold">
+                    {numberOfCards}
+                  </span>
+                </motion.div>
+              </AnimatePresence>
+            </div>
           </div>
         </motion.div>
       ) : (

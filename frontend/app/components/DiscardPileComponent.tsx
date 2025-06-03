@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Card } from 'shared-types';
 import CardComponent from './CardComponent';
 import { motion, AnimatePresence } from 'motion/react';
@@ -9,6 +9,7 @@ interface DiscardPileComponentProps {
   canDraw: boolean;
   isSealed: boolean;
   numberOfCards: number;
+  animateCardInWithId?: string | null;
 }
 
 const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
@@ -16,11 +17,39 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
   onClick,
   canDraw,
   isSealed,
-  numberOfCards
+  numberOfCards,
+  animateCardInWithId,
 }) => {
   const cardWidth = "w-12 md:w-14";
   const cardAspectRatio = "aspect-[2.5/3.5]";
   const effectiveCanDraw = canDraw && !isSealed;
+
+  // Use a ref to keep track of the previous value for animation
+  const prevCountRef = useRef(numberOfCards);
+  const [animKey, setAnimKey] = useState(0);
+  
+  // When the count changes, update the animation key to force a re-render
+  useEffect(() => {
+    if (numberOfCards !== prevCountRef.current) {
+      setAnimKey(key => key + 1);
+      prevCountRef.current = numberOfCards;
+    }
+  }, [numberOfCards]);
+
+  const layoutIdForTopCard = (animateCardInWithId && topCard && topCard.id === animateCardInWithId) ? `card-anim-${topCard.id}` : undefined;
+
+  // Add a visual debug marker for receiving cards with animations
+  const isReceivingAnimatedCard = !!layoutIdForTopCard;
+  
+  // Capture values for onLayoutAnimationComplete
+  const wasLayoutTargetForArrivalThisRender = !!layoutIdForTopCard;
+  const originalAnimateCardInWithId_atDefinition = animateCardInWithId;
+  const originalTopCardId_atDefinition = topCard?.id;
+  const originalLayoutId_atDefinition = layoutIdForTopCard;
+
+  if (topCard && animateCardInWithId && topCard.id === animateCardInWithId) {
+    console.log(`[SwapAnimLayout DEBUG] DiscardPile RENDER: topCard.id=${topCard.id}, animateCardInWithId_PROP=${animateCardInWithId}, appliedLayoutId=${layoutIdForTopCard}`);
+  }
 
   const pileVisualContent = (
     <div className={`relative ${cardWidth} ${cardAspectRatio} mx-auto`}>
@@ -34,16 +63,86 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
         <div className={`absolute w-full h-full rounded-md md:rounded-lg bg-gradient-to-br from-neutral-500 to-neutral-700 dark:from-neutral-600 dark:to-neutral-800 shadow-xs transform translate-x-[1.5px] translate-y-[1.5px] pointer-events-none opacity-50`} />
       )}
       
-      <AnimatePresence mode='wait'>
+      <AnimatePresence mode="popLayout">
         {topCard ? (
           <motion.div
-            key={topCard.id || `${topCard.rank}-${topCard.suit}`}
-            initial={{ opacity: 0, scale: 0.7, rotate: -15 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            exit={{ opacity: 0, scale: 0.7, rotate: 15 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="w-full h-full absolute inset-0 z-10"
+            key={layoutIdForTopCard && animateCardInWithId ? animateCardInWithId : (topCard.id || `${topCard.rank}-${topCard.suit}`)}
+            layoutId={layoutIdForTopCard}
+            layout={!!layoutIdForTopCard}
+            initial={layoutIdForTopCard ? { 
+              opacity: 1,
+              scale: 1,
+              rotate: 0
+            } : { 
+              opacity: 0, 
+              scale: 0.7, 
+              rotate: -15
+            }}
+            animate={{ 
+              opacity: 1, 
+              scale: 1, 
+              rotate: 0
+            }}
+            exit={{ 
+              opacity: 0, 
+              scale: 0.7, 
+              rotate: 15
+            }}
+            transition={(layoutIdForTopCard) 
+              ? { 
+                  type: 'spring', 
+                  stiffness: 120,
+                  damping: 18,
+                  mass: 1.0,
+                  restDelta: 0.001,
+                  restSpeed: 0.001
+                }
+              : { 
+                  type: 'spring', 
+                  stiffness: 300, 
+                  damping: 30
+                }
+            }
+            className={`w-full h-full absolute inset-0 ${isReceivingAnimatedCard ? 'z-50' : 'z-10'}`}
+            style={{
+              zIndex: layoutIdForTopCard ? 200 : 10,
+              pointerEvents: 'none',
+              transformOrigin: 'center center'
+            }}
+            onAnimationStart={() => {
+              if (layoutIdForTopCard && topCard && topCard.id === animateCardInWithId) {
+                console.log(`[SwapAnimLayout DEBUG] DiscardPile CARD ANIMATION START (Arriving Card ID: ${topCard.id}): animateCardInWithId_PROP=${animateCardInWithId}, applied layoutId=${layoutIdForTopCard}`);
+              }
+            }}
+            onLayoutAnimationComplete={
+              wasLayoutTargetForArrivalThisRender ? () => {
+                if (originalLayoutId_atDefinition && originalTopCardId_atDefinition === originalAnimateCardInWithId_atDefinition) {
+                  console.log(`[SwapAnimLayout DEBUG] DiscardPile CARD LAYOUT ANIMATION COMPLETE (Arrived Card ID: ${originalTopCardId_atDefinition}): animateCardInWithId_PROP_AT_DEF=${originalAnimateCardInWithId_atDefinition}, appliedLayoutId_AT_DEF=${originalLayoutId_atDefinition}`);
+                } else {
+                  console.log(`[SwapAnimLayout DEBUG] DiscardPile LAYOUT ANIMATION COMPLETE called BUT MISMATCH or PROPS CHANGED: originalLayoutId=${originalLayoutId_atDefinition}, originalTopCardId=${originalTopCardId_atDefinition}, originalAnimateId=${originalAnimateCardInWithId_atDefinition}. Current topCardId=${topCard?.id}, current animateId=${animateCardInWithId}, current layoutIdForTopCard=${layoutIdForTopCard}`);
+                }
+              } : undefined
+            }
           >
+            {/* Shadow overlay with separate animation */}
+            <AnimatePresence>
+              {layoutIdForTopCard && (
+                <motion.div 
+                  className="absolute inset-0 rounded-md md:rounded-lg pointer-events-none"
+                  style={{
+                    boxShadow: '0 4px 16px 4px rgba(0,0,0,0.5)',
+                    zIndex: -1
+                  }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ 
+                    opacity: { duration: 0.3, ease: "easeInOut" }
+                  }}
+                />
+              )}
+            </AnimatePresence>
+
             <CardComponent
               card={topCard}
               isFaceUp={true}
@@ -83,19 +182,36 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
       </AnimatePresence>
       
       {numberOfCards > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 p-0.5 bg-black/30 rounded-b-md md:rounded-b-lg pointer-events-none z-10">
-          <AnimatePresence mode="wait">
-            <motion.span
-              key={`count-${numberOfCards}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="block text-center text-[0.55rem] md:text-[0.6rem] text-white font-semibold leading-tight"
-            >
-              {numberOfCards}
-            </motion.span>
-          </AnimatePresence>
+        <div className="absolute bottom-0 left-0 right-0 p-0.5 bg-black/30 rounded-b-md md:rounded-b-lg pointer-events-none z-[250]">
+          <div className="relative w-full h-4 overflow-hidden flex items-center justify-center">
+            <AnimatePresence mode="popLayout">
+              <motion.div
+                key={`counter-${animKey}`}
+                className="absolute inset-0 flex items-center justify-center"
+                initial={{ opacity: 0, scale: 1.5 }}
+                animate={{ 
+                  opacity: 1, 
+                  scale: 1,
+                  transition: { 
+                    duration: 0.25,
+                    ease: [0.22, 1, 0.36, 1] // Custom bezier curve for a nice pop effect
+                  }
+                }}
+                exit={{ 
+                  opacity: 0,
+                  scale: 0.8,
+                  transition: {
+                    duration: 0.15, 
+                    ease: "easeOut"
+                  }
+                }}
+              >
+                <span className="text-[0.5rem] md:text-[0.55rem] text-white font-semibold">
+                  {numberOfCards}
+                </span>
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
       )}
     </div>

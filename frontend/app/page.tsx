@@ -8,6 +8,7 @@ import type { ClientCheckGameState, InitialPlayerSetupData, Card, RichGameLogMes
 import GameLogComponent from './components/GameLogComponent';
 import ChatComponent from './components/ChatComponent';
 import { FiX, FiCopy } from 'react-icons/fi'; // Added import for FiX and FiCopy
+import ThemeToggle from './components/ThemeToggle';
 
 // Define the server URL
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
@@ -585,7 +586,12 @@ export default function HomePage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-neutral-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200">
         <div className="w-full max-w-sm space-y-8">
-          <div className="text-center">
+          <div className="text-center relative">
+            <div className="absolute right-0 top-2">
+              <div className="h-9 flex items-center">
+                <ThemeToggle />
+              </div>
+            </div>
             <h1 className="text-5xl font-bold text-sky-600 dark:text-sky-400">Check!</h1>
             <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">The Card Game</p>
           </div>
@@ -661,13 +667,13 @@ export default function HomePage() {
               Check!
             </h1>
             {gameId && (
-              <div className="flex items-center border border-gray-300 dark:border-neutral-700/50 p-1.5 sm:p-2 rounded-lg bg-neutral-50 dark:bg-neutral-700/30">
+              <div className="flex items-center h-9 border border-gray-300 dark:border-neutral-700/50 p-1.5 sm:p-2 rounded-lg bg-neutral-50 dark:bg-neutral-700/30">
                 <span className="text-[0.65rem] sm:text-xs text-gray-500 dark:text-neutral-400 mr-1.5 uppercase">Game:</span>
                 <span className="text-xs sm:text-sm font-mono font-semibold tracking-wider text-gray-700 dark:text-neutral-200">{gameId.slice(-6)}</span>
                 <button 
                   onClick={handleCopyGameId}
                   title="Copy Game ID"
-                  className="ml-2 p-1.5 bg-neutral-200 dark:bg-neutral-600 hover:bg-neutral-300 dark:hover:bg-neutral-500 rounded-md transition-colors relative transform hover:scale-105 active:scale-95 flex items-center justify-center"
+                  className="ml-2 p-1 bg-neutral-200 dark:bg-neutral-600 hover:bg-neutral-300 dark:hover:bg-neutral-500 rounded-md transition-colors relative transform hover:scale-105 active:scale-95 flex items-center justify-center"
                 >
                   <FiCopy size={14} />
                   <AnimatePresence>
@@ -689,7 +695,7 @@ export default function HomePage() {
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3">
             {playerName && (
-              <div className="flex items-center border border-gray-300 dark:border-neutral-700/50 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-700/30">
+              <div className="flex items-center h-9 border border-gray-300 dark:border-neutral-700/50 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-700/30">
                 <span className="text-[0.65rem] sm:text-xs text-gray-500 dark:text-neutral-400 mr-1.5 uppercase">Player:</span>
                 <span 
                   className="text-xs sm:text-sm text-neutral-700 dark:text-neutral-200 hidden sm:inline truncate max-w-[70px] sm:max-w-[120px]"
@@ -699,6 +705,9 @@ export default function HomePage() {
                 </span>
               </div>
             )}
+            <div className="h-9 flex items-center">
+              <ThemeToggle />
+            </div>
           </div>
         </header>
 

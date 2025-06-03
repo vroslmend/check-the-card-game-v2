@@ -24,7 +24,7 @@ const PlayerStatusDisplay: React.FC<PlayerStatusDisplayProps> = ({
   const [remainingTurnTime, setRemainingTurnTime] = useState<number | null>(null);
   const [remainingGraceTime, setRemainingGraceTime] = useState<number | null>(null);
 
-  console.log(`[PlayerStatusDisplay-PROP_CHECK] P:${playerID.slice(-4)}, Received turnSegmentIdentifier:`, turnSegmentIdentifier, typeof turnSegmentIdentifier);
+  // console.log(`[PlayerStatusDisplay-PROP_CHECK] P:${playerID.slice(-4)}, Received turnSegmentIdentifier:`, turnSegmentIdentifier, typeof turnSegmentIdentifier);
 
   // Effect for Turn Timer
   useEffect(() => {
@@ -126,7 +126,7 @@ const PlayerStatusDisplay: React.FC<PlayerStatusDisplayProps> = ({
             {(() => {
               const initialWidthPercent = Math.max(0, (remainingTurnTime / TURN_DURATION_MS_CLIENT_REF)) * 100;
               const transitionDurationSeconds = Math.max(0.1, remainingTurnTime / 1000);
-              console.log(`[PlayerStatusDisplay-TimerRender] P:${playerID.slice(-4)}, Key:'${turnSegmentIdentifier}', RTT:${remainingTurnTime}, InitWidth:${initialWidthPercent.toFixed(2)}%, TransDur:${transitionDurationSeconds.toFixed(2)}s`);
+              // console.log(`[PlayerStatusDisplay-TimerRender] P:${playerID.slice(-4)}, Key:'${turnSegmentIdentifier}', RTT:${remainingTurnTime}, InitWidth:${initialWidthPercent.toFixed(2)}%, TransDur:${transitionDurationSeconds.toFixed(2)}s`);
               return (
                 <motion.div
                   key={turnSegmentIdentifier} // Resets animation on new segment/turn
