@@ -28,6 +28,7 @@ A standard 52-card deck (no Jokers) is used.
 *   The deck is shuffled.
 *   Each player is dealt four cards, placed face-down in a **2x2 grid** in front of them. This is their initial hand.
 *   **Initial Peek Phase:** After cards are dealt, each player secretly looks at their **bottom two cards** in their 2x2 grid. They must try to memorize these cards and their positions. Cards in a player's hand remain face-down after the initial peek unless explicitly revealed or swapped due to game actions. All such reveals are temporary.
+*   **Joining a Game:** Players can only join a game before it officially starts (i.e., before the initial peek phase starts). Once the game is in progress, new players cannot join.
 
 **6. Card Layout and Hand Expansion:**
 *   Players' hands are visualized as a grid, starting as 2x2.

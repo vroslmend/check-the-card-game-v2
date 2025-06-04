@@ -314,3 +314,49 @@ export interface ChatMessage {
   type?: 'lobby' | 'room'; // To distinguish context if needed
   gameId?: string; // Relevant if type is 'room'
 }
+
+// Game Machine Specific Types
+
+export interface GameMachineContext extends CheckGameState {
+  gameId: string;
+  // Potentially other machine-specific, non-serializable state like actor refs if not using XState v5 features that handle this better.
+  // For now, keeping it aligned with CheckGameState + gameId.
+}
+
+export type GameMachineInput = {
+  gameId: string;
+  // playerSetupDataArray?: InitialPlayerSetupData[]; // If initializing with players directly
+};
+
+// Base events from PlayerActionType
+type PlayerActionEvents = {
+  [K in PlayerActionType]: { type: K; playerId: string; } & // Common playerId
+    (K extends PlayerActionType.SWAP_AND_DISCARD ? { handIndex: number } :
+    K extends PlayerActionType.ATTEMPT_MATCH ? { handIndex: number } :
+    K extends PlayerActionType.REQUEST_PEEK_REVEAL ? { peekTargets: Array<{ playerID: string; cardIndex: number }> } :
+    K extends PlayerActionType.RESOLVE_SPECIAL_ABILITY ? { abilityResolutionArgs?: AbilityArgs & { skipAbility?: boolean; skipType?: 'peek' | 'swap' | 'full' } } :
+    // Add other actions that have specific payloads here
+    Record<string, any>) // Default for actions with no extra payload beyond playerId
+};
+
+// Union of all player action event types
+type ConcretePlayerActionEvents = PlayerActionEvents[PlayerActionType];
+
+export type GameMachineEvent =
+  | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData }
+  | ConcretePlayerActionEvents // All events derived from PlayerActionType
+  // Internal events
+  | { type: 'PEEK_TIMER_EXPIRED' }
+  | { type: 'MATCHING_STAGE_TIMER_EXPIRED' }
+  | { type: 'TURN_TIMER_EXPIRED'; timedOutPlayerId: string } // Ensure payload identifies player
+  | { type: 'DISCONNECT_GRACE_TIMER_EXPIRED'; timedOutGracePlayerId: string }
+  | { type: 'PLAYER_DISCONNECTED'; playerId: string }
+  | { type: 'PLAYER_RECONNECTED'; playerId: string; newSocketId: string }
+  | { type: '_HANDLE_FORFEITURE_CONSEQUENCES'; forfeitedPlayerId: string };
+
+export type GameMachineEmittedEvents =
+  | { type: 'EMIT_LOG_PUBLIC'; gameId: string; publicLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'recipientPlayerId' | 'logId'> & { actorId?: string }; privateLogConfig?: { message: string; recipientPlayerId: string; cardContext?: string; type?: RichGameLogMessage['type']; actorId?: string; } }
+  | { type: 'EMIT_LOG_PRIVATE'; gameId: string; privateLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'logId'> & { actorId?: string }; recipientPlayerId: string; }
+  | { type: 'BROADCAST_GAME_STATE'; gameId: string; }
+  | { type: 'BROADCAST_PLAYER_SPECIFIC_STATE'; gameId: string; playerId: string; } // For peek reveal type scenarios
+  | { type: 'EMIT_ERROR_TO_CLIENT'; gameId: string; playerId?: string; message: string; errorDetails?: any; };

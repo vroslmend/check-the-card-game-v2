@@ -201,100 +201,49 @@ The project has undergone a significant refactor to replace the `boardgame.io` l
 - Better animations.
 - Fix inconsistent ui size bug when penalty card is added (placeholder card visual difference)
 
-*Last Updated: 2025-06-2*
+*Last Updated: 2025-06-03*
 
 ---
 
-## Session Notes (YYYY-MM-DD) - Logging, Core Mechanics, Rule Verification & UI Fixes
+## Session Notes (YYYY-MM-DD) - XState Game Machine Refactor & Forfeiture Logic
 
-This session covered several key areas: refining the logging system, ensuring core gameplay mechanics align with the intended rules (especially card visibility), verifying server logic against the game overview, and fixing a UI bug.
+This major refactoring session focused on migrating the core game logic from `game-manager.ts` into a new XState v5 state machine (`server/src/game-machine.ts`). The primary goals were to improve robustness, maintainability, and facilitate better client-side animation control via emitted events.
 
-*   **Sensitive & Targeted Logging Enhancements:**
-    *   **Redundancy Reduction:** Implemented a mechanism to prevent players from receiving both a detailed private log and a generic public log for the same event.
-        *   Added `privateVersionRecipientId?: string` to `RichGameLogMessage` in `shared-types`.
-        *   Updated `emitLogEntry` (`game-manager.ts`) to set this field on the public log if a private version is sent.
-        *   Modified `broadcastLogEntry` (`server/src/index.ts`) to check `privateVersionRecipientId` and exclude that recipient from the public broadcast, ensuring they only get the detailed private log.
-*   **Comprehensive Server-Side Event Logging:**
-    *   Added new `emitLogEntry` calls in `game-manager.ts` for previously unlogged critical game events:
-        *   Player reconnection (`attemptRejoin`).
-        *   Player disconnection (`markPlayerAsDisconnected`).
-        *   Player forfeiture due to disconnect timeout (`handleDisconnectTimeout`).
-        *   Game Over: Winner, final scores, total turns (`setupScoringPhase`).
-        *   Matching stage ending without a match (all passed) (`checkMatchingStageEnd`).
-        *   Matching stage timeout (`handleMatchingStageTimeout`).
-        *   Turn timeouts with context for different segments (initial action, draw/discard choice, swap/discard choice, ability choice) (`handleTurnTimeout`).
-*   **Core Gameplay Mechanic: "Always Face-Down in Hand" & Penalty Cards:**
-    *   **Clarification:** Established that penalty cards are drawn face-down and remain unknown to the drawing player.
-    *   **Implementation:**
-        *   Added `isFaceDownToOwner?: boolean` to `Card` interface in `shared-types`.
-        *   `handleAttemptMatch` (`game-manager.ts`): When a penalty card is drawn, it's now marked `isFaceDownToOwner: true`. The private log to the attempter now states "You drew a face-down card..." instead of revealing the card.
-        *   `generatePlayerView` (`game-manager.ts`): Updated to send a `HiddenCard` object if `card.isFaceDownToOwner` is true for the viewing player's hand.
-    *   **Reinforced "Always Face-Down In Hand" Principle:**
-        *   Ensured cards are dealt initially with `isFaceDownToOwner: true` in `initializeNewGame`.
-        *   Corrected `handleDeclareReadyForPeek` (initial peek timeout logic) to *not* permanently reveal peeked cards in hand; knowledge is temporary via `cardsToPeek`.
-        *   Corrected `handleResolveSpecialAbility` (King/Queen peek confirmation) to *not* permanently reveal self-peeked cards in hand.
-        *   Ensured cards swapped into hand via `handleSwapAndDiscard` are set with `isFaceDownToOwner: true`.
-*   **Game Rule Verification & Server Logic Alignment (vs. `GAME_OVERVIEW.md`):**
-    *   Confirmed card point values in `shared-types` match the overview.
-    *   Verified that `setupNextPlayTurn` correctly unseals the discard pile.
-    *   Confirmed `handleDrawFromDiscard` correctly prevents drawing special cards (K, Q, J, A) as per overview.
-    *   Discussed and clarified the discard pile locking mechanism: locked if top card is special OR if it was placed as a match.
-        *   Current server implementation of `topDiscardFlagForClient` in `generatePlayerView` correctly flags special cards and just-matched cards, aligning with this.
-*   **UI Fixes:**
-    *   **Draw Pile Count Visibility:**
-        *   The card count for the draw pile was not showing.
-        *   Fixed by adding `z-10` to the `className` of the `div` wrapping the card count display in `frontend/app/components/DrawPileComponent.tsx` to ensure it renders above other pile elements.
+*   **XState Migration & `emitLogEntry` Replacement:**
+    *   The core game logic previously in `game-manager.ts` was successfully transitioned into `server/src/game-machine.ts`.
+    *   All direct calls to the temporary `emitLogEntry` function were replaced with XState's `emit()` action creator, using new event types like `EMIT_LOG_PUBLIC` and `EMIT_LOG_PRIVATE`. The temporary `emitLogEntry` function was removed.
 
-*Last Updated: 2025-06-02*
+*   **Dynamic Player Joining & Game Start:**
+    *   A new `awaitingPlayers` state was introduced as the initial state.
+    *   Players now join via a `PLAYER_JOIN_REQUEST` event.
+    *   Players signal readiness for the initial peek using `DECLARE_READY_FOR_PEEK`.
+    *   The game transitions from `awaitingPlayers` to `initialPeekPhase` only when a minimum number of players have joined AND all joined players are ready.
+    *   The `CREATE_GAME` event was removed. `GameMachineContext` was updated to initialize `players` and `turnOrder` as empty. `gameMasterId` is set when the first player joins.
+    *   Game rules (`docs/GAME_RULES.md`) updated: players can only join before the initial peek phase begins.
 
----
+*   **Scoring Logic Enhancement:**
+    *   The `assign` action in the `scoringPhase` was updated to correctly calculate scores based on `cardValues` (Rule 4).
+    *   The `gameover` context object now includes `playerStats` (name, numMatches, numPenalties for each player), which was previously missing.
 
-## Session Notes (2025-06-02) - UI/UX Refinements & Visual Cues
+*   **Automatic "Check" Flow with Abilities (Rule 10.B):**
+    *   If an `ATTEMPT_MATCH` leads to an auto-check and requires ability resolution, the machine now correctly transitions to `abilityResolutionPhase` first, then to `finalTurnsPhase`.
+    *   The `entry` action of `abilityResolutionPhase` and the `RESOLVE_SPECIAL_ABILITY` action were updated to correctly determine the next phase (e.g., `finalTurnsPhase` if an auto-check occurred, otherwise `playPhase`) when `pendingAbilities` becomes empty.
 
-This session focused on significant UI/UX enhancements, particularly around visual feedback for player actions and game state changes.
+*   **Forfeiture Logic (`DISCONNECT_GRACE_TIMER_EXPIRED`):**
+    *   A simplified two-step process for handling forfeitures was implemented:
+        1.  `DISCONNECT_GRACE_TIMER_EXPIRED` action: Marks the player as forfeited (setting `forfeited: true`, `isConnected: false`), clears their pending card, emits a log, broadcasts state, and raises a new internal event `_HANDLE_FORFEITURE_CONSEQUENCES`.
+        2.  A new global handler for `_HANDLE_FORFEITURE_CONSEQUENCES` was added to:
+            *   Check for game end (if < 2 non-forfeited players, transition to `scoringPhase`).
+            *   If the game continues: handle turn/activity skips (clear `currentPlayerId` if it was their turn, remove from `activePlayers` in `matchingStage`, or shift `pendingAbilities` if it was their ability to resolve and re-enter `abilityResolutionPhase`).
+            *   Assign changes, emit logs, and broadcast state.
 
-*   **Global Ability Target Icons (Peek/Swap):**
-    *   **Initial Problem:** Icons for peek/swap abilities were not showing correctly for all players or were persisting incorrectly.
-    *   **Fixes (Client & Server):**
-        *   Numerous iterations on server-side logic (`server/src/game-manager.ts`) for setting and clearing `globalAbilityTargets` in `ServerCheckGameState`.
-        *   Refined `handleResolveSpecialAbility` to manage GATs for peek vs. swap stages, ensuring they are present for the immediate broadcast after an action and correctly cleared by subsequent phase/turn setups.
-        *   Added `clearGlobalAbilityTargetsIfNeeded` calls to `handleDrawFromDeck` and `handleDrawFromDiscard` to ensure GATs from previous turns are cleared when a new player starts their draw action.
-        *   Updated client-side logic (`frontend/app/components/CheckGameBoard.tsx`) to correctly interpret and display these icons, including hiding them from the player who initiated the ability or just resolved a swap (using `lastPlayerToResolveAbility`).
-*   **Empty Pile Styling (Draw & Discard):**
-    *   **Problem:** The empty state UI for the discard pile was inconsistent with the draw pile and the overall dark theme.
-    *   **Fix (Client - `DiscardPileComponent.tsx`, `DrawPileComponent.tsx`):**
-        *   Updated the placeholder for empty discard and draw piles to use a dark theme (`bg-neutral-700`, `text-neutral-300`, `border-neutral-600`).
-        *   Removed the redundant "Cards: 0" text from the `DiscardPileComponent` when empty, as the "Empty" placeholder implies this.
-*   **Discard Pile Interactivity:**
-    *   **Problem:** The "Draw From Discard" action button was clickable even when the discard pile was empty.
-    *   **Fix (Client - `CheckGameBoard.tsx`):**
-        *   Modified the `canDrawFromDiscard` constant to include a check for `gameState.discardPile.length > 0`, ensuring the action button is disabled if the pile is empty.
-*   **Card Selection Restrictions:**
-    *   **Problem:** Players could select cards in their hand or opponents' hands even when no relevant action (like an ability or pending swap) was active.
-    *   **Fix (Client - `CheckGameBoard.tsx`):**
-        *   Removed fallback logic in `handleCardClick` that allowed selecting one's own card for general feedback. Card clicks are now only processed if a specific action context (pending drawn card, matching stage, ability resolution) is active.
-*   **Visual Cue for Regular Swaps (Non-Ability):**
-    *   **Goal:** Provide a visual highlight on a player's hand to indicate to *other* players which card slot was just affected by a regular swap (drawing a card and swapping it into their hand).
-    *   **Implementation:**
-        *   **Shared Types (`shared-types/src/index.ts`):**
-            *   Added `LastRegularSwapInfo { playerId: string; handIndex: number; timestamp: number; }` interface.
-            *   Added `lastRegularSwapInfo: LastRegularSwapInfo | null` to `CheckGameState` and `ClientCheckGameState`.
-        *   **Server (`server/src/game-manager.ts`):**
-            *   Populated `lastRegularSwapInfo` in `handleSwapAndDiscard` with the `playerId`, `handIndex`, and `Date.now()`.
-            *   Added a new helper `clearTransientVisualCues` (which clears `lastRegularSwapInfo`) and called it in phase/turn setup functions (`setupNextPlayTurn`, `setupFinalTurnsPhase`, `setupAbilityResolutionPhase`, `setupScoringPhase`, `continueOrEndFinalTurns`) to ensure the highlight is temporary.
-        *   **Client (`PlayerHandComponent.tsx`, `CheckGameBoard.tsx`):**
-            *   Passed `gameState.lastRegularSwapInfo` as a prop to `PlayerHandComponent`.
-            *   In `PlayerHandComponent`, used `useEffect` to watch for changes to `lastRegularSwapInfo`.
-            *   When `lastRegularSwapInfo` updates for the displayed player (and it's not the viewing player), a `highlightedSwapIndex` state is set.
-            *   A `setTimeout` clears `highlightedSwapIndex` after 2 seconds, making the highlight temporary.
-            *   A `lastProcessedSwapTimestampRef` was added to the `useEffect` to ensure the highlight only triggers for new swap events and not due to unrelated re-renders if `lastRegularSwapInfo` hasn't changed its timestamp.
-        *   **Animation:**
-            *   The highlighted card slot initially used a yellow ring.
-            *   This was enhanced with a Framer Motion animation:
-                *   First attempt: A keyframe-based "pulse" for the ring.
-                *   Second attempt (current): A "shimmer" or "glint" effect where a semi-transparent white band sweeps across the card. This involves animating the `backgroundPosition` of a `linear-gradient` on a `motion.div`.
-*   **Timer Animation Key Fix (`PlayerStatusDisplay.tsx`, `CheckGameBoard.tsx`):**
-    *   **Problem:** The progress bar animation for player timers (especially when viewed by an opponent) could be inconsistent or not reset properly due to an incorrect or `undefined` `key` prop (`turnSegmentIdentifier`) on the `motion.div`.
-    *   **Fix:** Modified `CheckGameBoard.tsx` to correctly pass the `turnSegmentTrigger` (combined with `visibilityTrigger` from `page.tsx`) as `turnSegmentIdentifier` to the `PlayerStatusDisplay` component for the player whose turn is currently active, regardless of whether it's the viewing player or an opponent. This ensures the animation `key` is always a consistent, defined string, allowing `motion/react` to reliably reset the animation when the key changes (e.g., on turn changes or segment changes).
+*   **State Cleanup:**
+    *   Comprehensive cleanup of transient context fields (`globalAbilityTargets`, `lastRegularSwapInfo`, `matchResolvedDetails`, `lastResolvedAbilityCardForCleanup`, `lastResolvedAbilitySource`, `lastPlayerToResolveAbility`) was implemented.
+    *   These fields are now reset to `null` or their default empty states in the `entry` actions of `playPhase.determiningPlayer`, `finalTurnsPhase.determiningFinalTurnPlayer`, and in the `scoringPhase`'s transition to `gameOver`.
 
-*Overall, this session involved deep debugging of special ability logic on both client and server, culminating in a critical fix for argument passing on the server, and a separate fix for discard pile ordering to resolve visual inconsistencies.*
+*   **Game Rule Verification (Logic in State Machine):**
+    *   `discardIsDrawable` Guard (Rule 7.A): Verified to correctly prevent drawing K, Q, J and check for a non-empty, unsealed discard pile.
+    *   `discardPileIsSealed` Management (Rule 8): Verified it's set to `true` after successful matches/ability entry and `false` when starting matching opportunities or new turns.
+    *   LIFO for Stacked Special Abilities (Rule 9): Verified correct queuing for paired special abilities (`stack`, `stackSecondOfPair`) and proper sorting of `pendingAbilities` in `abilityResolutionPhase` entry (considering `lastPlayerToResolveAbility`).
+
+*Last Updated: 2025-06-04*
