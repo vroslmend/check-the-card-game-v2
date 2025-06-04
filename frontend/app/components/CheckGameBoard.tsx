@@ -415,7 +415,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
       if (!clientPlayerState?.pendingDrawnCard && !cardIdAnimatingOutFromDeck && deckDrawLayoutAnimationId) {
         console.log('[SwapAnimLayout DEBUG] Clearing deckDrawLayoutAnimationId due to no pending card/animation out:', deckDrawLayoutAnimationId);
         setDeckDrawLayoutAnimationId(null);
-      }
+    }
     }
   }, [clientPlayerState?.pendingDrawnCard, cardIdAnimatingOutFromDeck, whatToShowInHolding, cardIdMovingToHand, deckDrawLayoutAnimationId]);
 

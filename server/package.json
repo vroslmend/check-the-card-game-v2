@@ -22,7 +22,9 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "immer": "^10.1.1",
     "module-alias": "^2.2.3",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "xstate": "^5.19.4"
   }
 }
