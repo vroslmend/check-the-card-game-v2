@@ -39,6 +39,30 @@ const getPlayerNameForLog = (playerId: string, context: GameMachineContext): str
     return context.players[playerId]?.name || 'P-' + playerId.slice(-4);
 };
 
+// Helper function to create a standard 52-card deck
+// Ensure this function (or similar logic elsewhere) assigns the mandatory 'id'
+const createDeckWithIds = (): Card[] => {
+  const suits = Object.values(Suit);
+  const ranks = Object.values(Rank);
+  const deck: Card[] = [];
+  for (const suit of suits) {
+    for (const rank of ranks) {
+      deck.push({ suit, rank, id: `${suit}_${rank}` }); // Assign unique ID
+    }
+  }
+  return deck;
+};
+
+// Helper function to shuffle the deck
+const shuffleDeck = (deck: Card[]): Card[] => {
+  // Fisher-Yates (Knuth) Shuffle
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+};
+
 export const gameMachine = setup({
   types: {
     context: {} as GameMachineContext,
@@ -52,6 +76,27 @@ export const gameMachine = setup({
   // },
   
   actions: {
+    // Example of where deck might be initialized - adjust if your logic is different
+    // _initializeGameSetup: assign((contextDetails: { context: GameMachineContext; event: GameMachineEvent }) => {
+    //   const newDeck = shuffleDeck(createDeckWithIds());
+    //   // Further logic for dealing cards or setting up initial player hands would go here,
+    //   // ensuring that any cards dealt or assigned also carry their IDs.
+    //   // For now, just placing the shuffled deck into context.
+    //   // If player hands are initialized here, ensure cards retain their IDs.
+    //   // This is a placeholder, actual dealing logic might be more complex and distributed.
+
+    //   // Initial turn order (if not already set by player joins)
+    //   // This is simplified; actual turn order might be set as players join.
+    //   // const turnOrder = Object.keys(contextDetails.context.players);
+    //   // const currentPlayerId = turnOrder.length > 0 ? turnOrder[0] : '';
+      
+    //   return {
+    //     deck: newDeck,
+    //     // currentPlayerId: currentPlayerId, // Set current player if game starts
+    //     // currentPhase: 'initialPeekPhase' as GamePhase, // Example: Move to next phase
+    //     // logHistory: undefined // Clear log history or append setup message
+    //   };
+    // }),
   },
   guards: {
     canPlayerJoin: ({ context, event }: { context: GameMachineContext, event: GameMachineEvent }) => {
@@ -156,7 +201,7 @@ export const gameMachine = setup({
   id: 'checkGame',
     context: ({ input }: { input?: GameMachineInput }) => ({ // Input here is optional
       gameId: input?.gameId || '', // Provide default for gameId here
-      deck: [],
+      deck: shuffleDeck(createDeckWithIds()), // Initialize and shuffle the deck here
     players: {},
     discardPile: [],
     discardPileIsSealed: false,
@@ -350,6 +395,18 @@ export const gameMachine = setup({
           if (!pendingAbility) {
             console.warn('[GameMachine] REQUEST_PEEK_REVEAL received but no matching pending peek ability found for player.');
             return; 
+          }
+
+          // MODIFICATION: Validate peek targets against locked players
+          for (const target of event.peekTargets) {
+            const targetPlayer = context.players[target.playerID];
+            if (targetPlayer && targetPlayer.isLocked) {
+              const requestingPlayerName = getPlayerNameForLog(event.playerId, context);
+              const targetPlayerName = getPlayerNameForLog(target.playerID, context);
+              console.warn(`[GameMachine] REQUEST_PEEK_REVEAL: Player ${requestingPlayerName} attempted to peek at a card of locked player ${targetPlayerName}. Action denied.`);
+              // Optionally emit an error/notification to the requesting player here
+              return; // Deny action if a locked player is targeted
+            }
           }
 
           const logEventsToEmit: Array<Omit<RichGameLogMessage, 'timestamp' | 'logId' | 'isPublic' | 'recipientPlayerId'> & { actorId?: string, cardContext?: string, targetName?: string }> = [];
@@ -561,12 +618,39 @@ export const gameMachine = setup({
           }
 
           if (pendingAbility.currentAbilityStage === 'swap' || abilityRank === Rank.Jack) {
-            // ... (validation for swap targets) ... 
-            if (!args.swapTargets || args.swapTargets.length !== 2 /* ... other validation ... */) {
-                console.warn('[GameMachine-ResolveAbility] Swap targets issue.'); 
-                // Potentially emit error to client if appropriate
+            // MODIFICATION: Enhanced validation for swap targets, including locked check
+            if (!args.swapTargets || !Array.isArray(args.swapTargets) || args.swapTargets.length !== 2) {
+                console.warn('[GameMachine-ResolveAbility] Swap targets issue: Missing, not an array, or incorrect number of targets.'); 
                 return; 
             }
+
+            for (const target of args.swapTargets) {
+              if (typeof target.playerID !== 'string' || typeof target.cardIndex !== 'number' || target.cardIndex < 0) {
+                console.warn(`[GameMachine-ResolveAbility] Swap target invalid: Malformed target object ${JSON.stringify(target)}.`);
+                return; // Malformed target
+              }
+              const targetPlayer = playersToAssign[target.playerID]; 
+              if (!targetPlayer) {
+                  console.warn(`[GameMachine-ResolveAbility] Swap target invalid: Player ${target.playerID} not found.`);
+                  return; // Target player not found
+              }
+              if (target.cardIndex >= targetPlayer.hand.length) {
+                  console.warn(`[GameMachine-ResolveAbility] Swap target invalid: cardIndex ${target.cardIndex} out of bounds for player ${target.playerID} (hand length: ${targetPlayer.hand.length}).`);
+                  return; // Target cardIndex out of bounds
+              }
+              if (targetPlayer.isLocked) {
+                const instigatingPlayerName = getPlayerNameForLog(event.playerId, context);
+                const lockedPlayerName = getPlayerNameForLog(target.playerID, context);
+                console.warn(`[GameMachine-ResolveAbility] Player ${instigatingPlayerName} attempted to swap with a locked player ${lockedPlayerName}. Action denied.`);
+                return; // Deny action if a locked player is targeted
+              }
+            }
+            // Check if targets are identical after individual validation
+            if (args.swapTargets[0].playerID === args.swapTargets[1].playerID && args.swapTargets[0].cardIndex === args.swapTargets[1].cardIndex) {
+              console.warn('[GameMachine-ResolveAbility] Swap targets issue: Targets must be two different cards.');
+              return;
+            }
+
             // ... (perform swap logic on playersToAssign, set globalAbilityTargetsToAssign, prepare logs for swap in logEventsToEmit) ...
             // Example: (assuming swap logic from previous attempt is correct and has populated playersToAssign and globalAbilityTargetsToAssign)
             const t1Name = getPlayerNameForLog(args.swapTargets[0].playerID, context);
@@ -848,6 +932,15 @@ export const gameMachine = setup({
               enqueue.emit({ type: 'BROADCAST_GAME_STATE', gameId: context.gameId });
             })
           ]
+        },
+        // Example: Transition to game setup when enough players are ready
+        // This is illustrative; your actual transition might be different
+        on: {
+          // Assuming an event like START_GAME_SETUP when conditions are met
+          // _FORCE_GAME_START_DEBUG: { // Placeholder for a trigger to initialize deck
+          //   target: 'initialPeekPhase', // Or an intermediate setup state
+          //   actions: ['_initializeGameSetup'] // Initialize deck here
+          // }
         }
       },
       always: [ // Check to transition to initialPeekPhase
@@ -1437,19 +1530,31 @@ export const gameMachine = setup({
                       discardPileToAssign.unshift(drawnCard);
                       playersToAssign[timedOutPlayerId] = { ...timedOutPlayerState, pendingDrawnCard: null, pendingDrawnCardSource: null };
                       
+                      // MODIFIED: Logic for finalTurnsPhase timeout post-draw from DECK
                       if (context.currentPhase === 'finalTurnsPhase') {
-                        nextPhaseToAssign = 'finalTurnsPhase';
-                        const isDiscardedSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(drawnCard.rank);
-                        if (isDiscardedSpecial) {
-                            let stage: 'peek' | 'swap' | undefined = undefined;
-                            if (drawnCard.rank === Rank.King || drawnCard.rank === Rank.Queen) stage = 'peek';
-                            else if (drawnCard.rank === Rank.Jack) stage = 'swap';
-                            if (!pendingAbilitiesToAssign.some(ab => ab.playerId === timedOutPlayerId && ab.card.id === drawnCard.id && ab.source === 'discard')) {
-                                pendingAbilitiesToAssign.push({ playerId: timedOutPlayerId, card: drawnCard, source: 'discard', currentAbilityStage: stage });
-                            }
-                            nextPhaseToAssign = 'abilityResolutionPhase';
-                        }
-                      } else {
+                        nextPhaseToAssign = 'matchingStage' as GamePhase;
+                        discardPileIsSealedToAssign = false;
+                        const potentialMatchers = Object.keys(playersToAssign).filter(pId => {
+                          const p = playersToAssign[pId];
+                          return p && !p.isLocked && !p.hasCalledCheck && pId !== context.playerWhoCalledCheck;
+                        });
+                        matchingOpportunityInfoToAssign = { cardToMatch: drawnCard, originalPlayerID: timedOutPlayerId, potentialMatchers };
+                        activePlayersToAssign = potentialMatchers.reduce((acc, pId) => {
+                            acc[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION;
+                            return acc;
+                        }, {} as { [playerID: string]: PlayerActivityStatus });
+                        // REMOVED: Direct ability queuing for finalTurnsPhase timeout
+                        // const isDiscardedSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(drawnCard.rank);
+                        // if (isDiscardedSpecial) {
+                        //     let stage: 'peek' | 'swap' | undefined = undefined;
+                        //     if (drawnCard.rank === Rank.King || drawnCard.rank === Rank.Queen) stage = 'peek';
+                        //     else if (drawnCard.rank === Rank.Jack) stage = 'swap';
+                        //     if (!pendingAbilitiesToAssign.some(ab => ab.playerId === timedOutPlayerId && ab.card.id === drawnCard.id && ab.source === 'discard')) {
+                        //         pendingAbilitiesToAssign.push({ playerId: timedOutPlayerId, card: drawnCard, source: 'discard', currentAbilityStage: stage });
+                        //     }
+                        //     nextPhaseToAssign = 'abilityResolutionPhase';
+                        // }
+                      } else { // For playPhase timeouts
                         nextPhaseToAssign = 'matchingStage' as GamePhase;
                         discardPileIsSealedToAssign = false;
                         const potentialMatchers = Object.keys(playersToAssign).filter(pId => {
@@ -1463,13 +1568,13 @@ export const gameMachine = setup({
                         }, {} as { [playerID: string]: PlayerActivityStatus });
                       }
                     } else if (timedOutPlayerState.pendingDrawnCardSource === 'discard') {
-                      let discardedCardFromHandForAbility: Card | null = null;
+                      let cardToUseForMatchingAndAbilities: Card | null = null;
                       if (timedOutPlayerState.hand.length > 0) {
                         const cardFromHand = timedOutPlayerState.hand[0]; 
-                        discardedCardFromHandForAbility = cardFromHand;
+                        cardToUseForMatchingAndAbilities = cardFromHand;
                         const cardFromHandStr = cardFromHand.rank + cardFromHand.suit;
                         const newHand = [...timedOutPlayerState.hand];
-                        newHand.splice(0, 1, drawnCard);
+                        newHand.splice(0, 1, drawnCard); // drawnCard is from discard pile
                         discardPileToAssign.unshift(cardFromHand);
                         playersToAssign[timedOutPlayerId] = { ...timedOutPlayerState, hand: newHand, pendingDrawnCard: null, pendingDrawnCardSource: null };
                         logEventsToEmit.push({ 
@@ -1477,7 +1582,7 @@ export const gameMachine = setup({
                             type: 'game_event', actorId: timedOutPlayerId, cardContext: `Kept ${drawnCardStr}, Discarded ${cardFromHandStr}`
                         });
                       } else {
-                        discardedCardFromHandForAbility = drawnCard;
+                        cardToUseForMatchingAndAbilities = drawnCard; // drawnCard is from discard pile
                         logEventsToEmit.push({ 
                             message: `${actorNameForLog} timed out. Card ${drawnCardStr} (from discard) auto-discarded (hand empty).`, 
                             type: 'game_event', actorId: timedOutPlayerId, cardContext: drawnCardStr
@@ -1486,29 +1591,42 @@ export const gameMachine = setup({
                         playersToAssign[timedOutPlayerId] = { ...timedOutPlayerState, pendingDrawnCard: null, pendingDrawnCardSource: null };
                       }
 
+                      // MODIFIED: Logic for finalTurnsPhase timeout post-draw from DISCARD
                       if (context.currentPhase === 'finalTurnsPhase') {
-                        nextPhaseToAssign = 'finalTurnsPhase';
-                        if (discardedCardFromHandForAbility) {
-                            const isDiscardedSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(discardedCardFromHandForAbility.rank);
-                            if (isDiscardedSpecial) {
-                                let stage: 'peek' | 'swap' | undefined = undefined;
-                                if (discardedCardFromHandForAbility.rank === Rank.King || discardedCardFromHandForAbility.rank === Rank.Queen) stage = 'peek';
-                                else if (discardedCardFromHandForAbility.rank === Rank.Jack) stage = 'swap';
-                                if (!pendingAbilitiesToAssign.some(ab => ab.playerId === timedOutPlayerId && ab.card.id === discardedCardFromHandForAbility!.id && ab.source === 'discard')) {
-                                    pendingAbilitiesToAssign.push({ playerId: timedOutPlayerId, card: discardedCardFromHandForAbility, source: 'discard', currentAbilityStage: stage });
-                                }
-                                nextPhaseToAssign = 'abilityResolutionPhase';
-                            }
-                        }
-                      } else {
                         nextPhaseToAssign = 'matchingStage' as GamePhase;
                         discardPileIsSealedToAssign = false;
-                        const cardForMatcher = discardedCardFromHandForAbility || drawnCard;
+                        const potentialMatchers = Object.keys(playersToAssign).filter(pId => {
+                            const p = playersToAssign[pId];
+                            return p && !p.isLocked && !p.hasCalledCheck && pId !== context.playerWhoCalledCheck;
+                        });
+                        // cardToUseForMatchingAndAbilities is the card that landed on the discard pile
+                        matchingOpportunityInfoToAssign = { cardToMatch: cardToUseForMatchingAndAbilities!, originalPlayerID: timedOutPlayerId, potentialMatchers };
+                        activePlayersToAssign = potentialMatchers.reduce((acc, pId) => {
+                            acc[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION;
+                            return acc;
+                        }, {} as { [playerID: string]: PlayerActivityStatus });
+                        // REMOVED: Direct ability queuing for finalTurnsPhase timeout
+                        // if (discardedCardFromHandForAbility) {
+                        //     const isDiscardedSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(discardedCardFromHandForAbility.rank);
+                        //     if (isDiscardedSpecial) {
+                        //         let stage: 'peek' | 'swap' | undefined = undefined;
+                        //         if (discardedCardFromHandForAbility.rank === Rank.King || discardedCardFromHandForAbility.rank === Rank.Queen) stage = 'peek';
+                        //         else if (discardedCardFromHandForAbility.rank === Rank.Jack) stage = 'swap';
+                        //         if (!pendingAbilitiesToAssign.some(ab => ab.playerId === timedOutPlayerId && ab.card.id === discardedCardFromHandForAbility!.id && ab.source === 'discard')) {
+                        //             pendingAbilitiesToAssign.push({ playerId: timedOutPlayerId, card: discardedCardFromHandForAbility, source: 'discard', currentAbilityStage: stage });
+                        //         }
+                        //         nextPhaseToAssign = 'abilityResolutionPhase';
+                        //     }
+                        // }
+                      } else { // For playPhase timeouts
+                        nextPhaseToAssign = 'matchingStage' as GamePhase;
+                        discardPileIsSealedToAssign = false;
                         const potentialMatchers = Object.keys(playersToAssign).filter(pId => {
                             const p = playersToAssign[pId];
                             return p && !p.isLocked && !p.hasCalledCheck;
                         });
-                        matchingOpportunityInfoToAssign = { cardToMatch: cardForMatcher, originalPlayerID: timedOutPlayerId, potentialMatchers };
+                        // cardToUseForMatchingAndAbilities is the card that landed on the discard pile
+                        matchingOpportunityInfoToAssign = { cardToMatch: cardToUseForMatchingAndAbilities!, originalPlayerID: timedOutPlayerId, potentialMatchers };
                         activePlayersToAssign = potentialMatchers.reduce((acc, pId) => {
                             acc[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION;
                             return acc;
@@ -2251,8 +2369,8 @@ export const gameMachine = setup({
               entry: assign({ currentTurnSegment: 'postDrawAction' as TurnSegment }),
               on: {
                 [PlayerActionType.SWAP_AND_DISCARD]: {
-                  target: 'determiningFinalTurnPlayer', 
-                  guard: { type: 'isValidSwapAndDiscard' }, 
+                  target: '#checkGame.matchingStage', // MODIFIED: Transition to matchingStage
+                  guard: { type: 'isValidSwapAndDiscard' },
                   actions: [
                     assign(( { context, event }: { context: GameMachineContext, event: Extract<GameMachineEvent, { type: PlayerActionType.SWAP_AND_DISCARD; handIndex: number }>} ) => {
                       const player = context.players[event.playerId];
@@ -2262,19 +2380,30 @@ export const gameMachine = setup({
                       const updatedPlayer = { ...player, hand: newHand, pendingDrawnCard: null, pendingDrawnCardSource: null };
                       const newDiscardPile = [cardFromHandToDiscard, ...context.discardPile];
                       
-                      let nextPhaseOverride: GamePhase | undefined = undefined;
-                      let newPendingAbilities = [...context.pendingAbilities];
-                      const isDiscardedSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardFromHandToDiscard.rank);
-                      if (isDiscardedSpecial) {
-                          let stage: 'peek' | 'swap' | undefined = undefined;
-                          if (cardFromHandToDiscard.rank === Rank.King || cardFromHandToDiscard.rank === Rank.Queen) stage = 'peek';
-                          else if (cardFromHandToDiscard.rank === Rank.Jack) stage = 'swap';
-                          // Ensure no duplicates if ability somehow already queued by other means (defensive)
-                          if (!newPendingAbilities.some(ab => ab.playerId === event.playerId && ab.card.id === cardFromHandToDiscard.id && ab.source === 'discard')) {
-                              newPendingAbilities.push({ playerId: event.playerId, card: cardFromHandToDiscard, source: 'discard', currentAbilityStage: stage });
-                          }
-                          nextPhaseOverride = 'abilityResolutionPhase';
-                      }
+                      // MODIFIED: Setup for matchingStage
+                      const potentialMatchers = Object.keys(context.players).filter((pId: string) => {
+                        const p = context.players[pId];
+                        return p && !p.isLocked && !p.hasCalledCheck && pId !== context.playerWhoCalledCheck; // Exclude playerWhoCalledCheck
+                      });
+                      const newMatchingOpportunityInfo = { cardToMatch: cardFromHandToDiscard, originalPlayerID: event.playerId, potentialMatchers };
+                      const newActivePlayers = potentialMatchers.reduce((acc, pId) => {
+                        acc[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION;
+                        return acc;
+                      }, {} as { [playerID: string]: PlayerActivityStatus });
+
+                      // REMOVED: Direct ability queuing and phase override from here
+                      // let nextPhaseOverride: GamePhase | undefined = undefined;
+                      // let newPendingAbilities = [...context.pendingAbilities];
+                      // const isDiscardedSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(cardFromHandToDiscard.rank);
+                      // if (isDiscardedSpecial) {
+                      //     let stage: 'peek' | 'swap' | undefined = undefined;
+                      //     if (cardFromHandToDiscard.rank === Rank.King || cardFromHandToDiscard.rank === Rank.Queen) stage = 'peek';
+                      //     else if (cardFromHandToDiscard.rank === Rank.Jack) stage = 'swap';
+                      //     if (!newPendingAbilities.some(ab => ab.playerId === event.playerId && ab.card.id === cardFromHandToDiscard.id && ab.source === 'discard')) {
+                      //         newPendingAbilities.push({ playerId: event.playerId, card: cardFromHandToDiscard, source: 'discard', currentAbilityStage: stage });
+                      //     }
+                      //     nextPhaseOverride = 'abilityResolutionPhase';
+                      // }
 
                       return {
                           players: { ...context.players, [event.playerId]: updatedPlayer },
@@ -2282,7 +2411,11 @@ export const gameMachine = setup({
                           discardPileIsSealed: false,
                           currentTurnSegment: null,
                           logHistory: undefined,
-                          ...(nextPhaseOverride && { currentPhase: nextPhaseOverride, pendingAbilities: newPendingAbilities })
+                          // ADDED: matching stage setup
+                          matchingOpportunityInfo: newMatchingOpportunityInfo,
+                          activePlayers: newActivePlayers,
+                          currentPhase: 'matchingStage' as GamePhase // Ensure phase is matchingStage
+                          // REMOVED: ...(nextPhaseOverride && { currentPhase: nextPhaseOverride, pendingAbilities: newPendingAbilities })
                       };
                     }),
                     enqueueActions(({ context, event, enqueue }) => {
@@ -2318,32 +2451,32 @@ export const gameMachine = setup({
                           }
                         });
 
-                        // New: Log if special ability was queued
-                        if (context.currentPhase === 'abilityResolutionPhase') {
-                          const queuedAbility = context.pendingAbilities.find(ab => 
-                            ab.playerId === swapEvent.playerId && 
-                            ab.card.id === discardedCard.id && 
-                            ab.source === 'discard'
-                          );
-                          if (queuedAbility) {
-                            enqueue.emit({
-                              type: 'EMIT_LOG_PUBLIC',
-                              gameId: context.gameId,
-                              publicLogData: {
-                                message: `${playerName}'s discarded ${discardedCardStr} was special. Its ability is now queued (final turn).`,
-                                type: 'game_event',
-                                actorId: swapEvent.playerId,
-                                cardContext: discardedCardStr
-                              }
-                            });
-                          }
-                        }
+                        // REMOVED: Logging for direct ability queueing, will be handled by matchingStage logs
+                        // if (context.currentPhase === 'abilityResolutionPhase') {
+                        //   const queuedAbility = context.pendingAbilities.find(ab => 
+                        //     ab.playerId === swapEvent.playerId && 
+                        //     ab.card.id === discardedCard.id && 
+                        //     ab.source === 'discard'
+                        //   );
+                        //   if (queuedAbility) {
+                        //     enqueue.emit({
+                        //       type: 'EMIT_LOG_PUBLIC',
+                        //       gameId: context.gameId,
+                        //       publicLogData: {
+                        //         message: `${playerName}'s discarded ${discardedCardStr} was special. Its ability is now queued (final turn).`,
+                        //         type: 'game_event',
+                        //         actorId: swapEvent.playerId,
+                        //         cardContext: discardedCardStr
+                        //       }
+                        //     });
+                        //   }
+                        // }
                       }
                     })
                   ]
                 },
                 [PlayerActionType.DISCARD_DRAWN_CARD]: {
-                  target: 'determiningFinalTurnPlayer',
+                  target: '#checkGame.matchingStage', // MODIFIED: Transition to matchingStage
                   guard: { type: 'isValidDiscardDrawnCard' }, 
                   actions: [
                     assign(( { context, event }: { context: GameMachineContext, event: Extract<GameMachineEvent, { type: PlayerActionType.DISCARD_DRAWN_CARD }>} ) => {
@@ -2352,19 +2485,31 @@ export const gameMachine = setup({
                       const updatedPlayer = { ...player, pendingDrawnCard: null, pendingDrawnCardSource: null };
                       const newDiscardPile = [drawnCardToDiscard, ...context.discardPile];
 
-                      let nextPhaseOverride: GamePhase | undefined = undefined;
-                      let updatedPendingAbilities = [...context.pendingAbilities]; // Use a different name to avoid conflict if newPendingAbilities is a common pattern
-                      const isDiscardedSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(drawnCardToDiscard.rank);
+                      // MODIFIED: Setup for matchingStage
+                      const potentialMatchers = Object.keys(context.players).filter((pId: string) => {
+                        const p = context.players[pId];
+                        return p && !p.isLocked && !p.hasCalledCheck && pId !== context.playerWhoCalledCheck; // Exclude playerWhoCalledCheck
+                      });
+                      const newMatchingOpportunityInfo = { cardToMatch: drawnCardToDiscard, originalPlayerID: event.playerId, potentialMatchers };
+                      const newActivePlayers = potentialMatchers.reduce((acc, pId) => {
+                        acc[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION;
+                        return acc;
+                      }, {} as { [playerID: string]: PlayerActivityStatus });
+                      
+                      // REMOVED: Direct ability queuing and phase override
+                      // let nextPhaseOverride: GamePhase | undefined = undefined;
+                      // let updatedPendingAbilities = [...context.pendingAbilities]; 
+                      // const isDiscardedSpecial = [Rank.King, Rank.Queen, Rank.Jack].includes(drawnCardToDiscard.rank);
 
-                      if (isDiscardedSpecial) {
-                          let stage: 'peek' | 'swap' | undefined = undefined;
-                          if (drawnCardToDiscard.rank === Rank.King || drawnCardToDiscard.rank === Rank.Queen) stage = 'peek';
-                          else if (drawnCardToDiscard.rank === Rank.Jack) stage = 'swap';
-                          if (!updatedPendingAbilities.some(ab => ab.playerId === event.playerId && ab.card.id === drawnCardToDiscard.id && ab.source === 'discard')) {
-                            updatedPendingAbilities.push({ playerId: event.playerId, card: drawnCardToDiscard, source: 'discard', currentAbilityStage: stage });
-                          }
-                          nextPhaseOverride = 'abilityResolutionPhase';
-                      }
+                      // if (isDiscardedSpecial) {
+                      //     let stage: 'peek' | 'swap' | undefined = undefined;
+                      //     if (drawnCardToDiscard.rank === Rank.King || drawnCardToDiscard.rank === Rank.Queen) stage = 'peek';
+                      //     else if (drawnCardToDiscard.rank === Rank.Jack) stage = 'swap';
+                      //     if (!updatedPendingAbilities.some(ab => ab.playerId === event.playerId && ab.card.id === drawnCardToDiscard.id && ab.source === 'discard')) {
+                      //       updatedPendingAbilities.push({ playerId: event.playerId, card: drawnCardToDiscard, source: 'discard', currentAbilityStage: stage });
+                      //     }
+                      //     nextPhaseOverride = 'abilityResolutionPhase';
+                      // }
                       
                       const baseChanges = {
                         players: { ...context.players, [event.playerId]: updatedPlayer },
@@ -2372,15 +2517,19 @@ export const gameMachine = setup({
                         discardPileIsSealed: false,
                         currentTurnSegment: null,
                         logHistory: undefined,
+                        // ADDED: matching stage setup
+                        matchingOpportunityInfo: newMatchingOpportunityInfo,
+                        activePlayers: newActivePlayers,
+                        currentPhase: 'matchingStage' as GamePhase // Ensure phase is matchingStage
                       };
 
-                      if (nextPhaseOverride) {
-                        return {
-                          ...baseChanges,
-                          currentPhase: nextPhaseOverride,
-                          pendingAbilities: updatedPendingAbilities,
-                        };
-                      }
+                      // if (nextPhaseOverride) {
+                      //   return {
+                      //     ...baseChanges,
+                      //     currentPhase: nextPhaseOverride,
+                      //     pendingAbilities: updatedPendingAbilities,
+                      //   };
+                      // }
                       return baseChanges;
                     }),
                     enqueueActions(({ context, event, enqueue }) => {
@@ -2402,26 +2551,26 @@ export const gameMachine = setup({
                           }
                         });
 
-                        // Log if special ability was queued
-                        if (context.currentPhase === 'abilityResolutionPhase') {
-                          const queuedAbility = context.pendingAbilities.find(ab => 
-                            ab.playerId === discardEvent.playerId && 
-                            ab.card.id === discardedCardFromContext.id && 
-                            ab.source === 'discard'
-                          );
-                          if (queuedAbility) {
-                            enqueue.emit({
-                              type: 'EMIT_LOG_PUBLIC',
-                              gameId: context.gameId,
-                              publicLogData: {
-                                message: `${playerName}'s discarded ${discardedCardStr} was special. Its ability is now queued (final turn).`,
-                                type: 'game_event',
-                                actorId: discardEvent.playerId,
-                                cardContext: discardedCardStr
-                              }
-                            });
-                          }
-                        }
+                        // REMOVED: Logging for direct ability queueing
+                        // if (context.currentPhase === 'abilityResolutionPhase') {
+                        //   const queuedAbility = context.pendingAbilities.find(ab => 
+                        //     ab.playerId === discardEvent.playerId && 
+                        //     ab.card.id === discardedCardFromContext.id && 
+                        //     ab.source === 'discard'
+                        //   );
+                        //   if (queuedAbility) {
+                        //     enqueue.emit({
+                        //       type: 'EMIT_LOG_PUBLIC',
+                        //       gameId: context.gameId,
+                        //       publicLogData: {
+                        //         message: `${playerName}'s discarded ${discardedCardStr} was special. Its ability is now queued (final turn).`,
+                        //         type: 'game_event',
+                        //         actorId: discardEvent.playerId,
+                        //         cardContext: discardedCardStr
+                        //       }
+                        //     });
+                        //   }
+                        // }
                       }
                     })
                   ]

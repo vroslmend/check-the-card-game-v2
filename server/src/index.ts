@@ -347,7 +347,7 @@ io.on('connection', (socket: Socket) => {
         if (callback) callback({ success: false, message: "Invalid Game ID format." });
         return;
       }
-      playerSetupData.socketId = socket.id; 
+      playerSetupData.socketId = socket.id;
       console.log(`[Server] JoinGame: ${playerSetupData.name || playerSetupData.id} (Socket: ${socket.id}) to game ${gameIdToJoin}`);
 
       const gameActor = activeGameMachines.get(gameIdToJoin);
@@ -357,21 +357,13 @@ io.on('connection', (socket: Socket) => {
         return;
       }
 
-      // Ensure the player is not already in the game via the machine's context (idempotency)
       const currentSnapshot = gameActor.getSnapshot();
       if (currentSnapshot.context.players[playerSetupData.id]) {
-        // Player is already in the game according to the machine.
-        // This could be a rejoin attempt via JOIN_GAME, or a double-join.
-        // For now, treat as success and let them get state via normal broadcast.
-        // Or, if rejoining, they should use ATTEMPT_REJOIN.
         console.warn(`[Server-JoinGame] Player ${playerSetupData.id} attempting to join game ${gameIdToJoin} but already present in machine context.`);
-        socket.join(gameIdToJoin); // Ensure they are in the socket room
+        socket.join(gameIdToJoin);
         registerSocketSession(gameIdToJoin, playerSetupData.id);
-        // Optionally, send current state if desired, or let next broadcast handle it.
-        // For now, just ack and let regular broadcasts handle state.
         const clientGameState = generatePlayerView(currentSnapshot.context, playerSetupData.id);
-        if (callback) callback({ success: true, gameId: gameIdToJoin, playerId: playerSetupData.id, gameState: clientGameState }); 
-        // Send recent logs
+        if (callback) callback({ success: true, gameId: gameIdToJoin, playerId: playerSetupData.id, gameState: clientGameState });
         if (currentSnapshot.context.logHistory && currentSnapshot.context.logHistory.length > 0) {
             socket.emit(SocketEventName.INITIAL_LOGS, { logs: currentSnapshot.context.logHistory.slice(-NUM_RECENT_LOGS_ON_JOIN_REJOIN) });
         }
@@ -387,35 +379,16 @@ io.on('connection', (socket: Socket) => {
       socket.join(gameIdToJoin);
       registerSocketSession(gameIdToJoin, playerSetupData.id);
 
-      // Simplified callback: Acknowledges the join request.
-      // The player will receive game state and logs via emitted events from the machine
-      // (BROADCAST_GAME_STATE and EMIT_LOG_PUBLIC/PRIVATE caught by the system listener).
-      // If an EMIT_INITIAL_CLIENT_STATE specific to this joiner is implemented in the machine,
-      // the system listener would handle sending them their state.
-      // For now, we send a simple success, and they will get logs + state via general broadcasts.
-
       if (callback) callback({ success: true, gameId: gameIdToJoin, playerId: playerSetupData.id });
       console.log(`[Server] Player ${playerSetupData.id} join request for ${gameIdToJoin} sent to machine.`);
 
-      // Old logic (to be removed once JOIN_GAME is fully tested with machine flows)
-      /*
-      const joinResult = addPlayerToGame(gameIdToJoin, playerSetupData, socket.id);
-
-      if (joinResult.success && joinResult.gameRoom && joinResult.gameRoom.gameState && playerSetupData.id) {
-        socket.join(gameIdToJoin);
-        registerSocketSession(gameIdToJoin, playerSetupData.id);
-        const clientGameState = generatePlayerView(joinResult.gameRoom.gameState, playerSetupData.id);
-
-        const gameLogs = getGameRoom(gameIdToJoin)?.gameState.logHistory;
-        if (gameLogs && gameLogs.length > 0) {
-          socket.emit(SocketEventName.INITIAL_LOGS, { logs: gameLogs.slice(-20) });
-        }
-
-        callback({ success: true, gameId: gameIdToJoin, playerId: playerSetupData.id, gameState: clientGameState });
-      } else {
-        callback({ success: false, message: joinResult.message || 'Failed to join game.' });
+      // ADDED: Send recent logs for a fresh successful join
+      const freshJoinSnapshot = gameActor.getSnapshot();
+      if (freshJoinSnapshot.context.logHistory && freshJoinSnapshot.context.logHistory.length > 0) {
+        socket.emit(SocketEventName.INITIAL_LOGS, { logs: freshJoinSnapshot.context.logHistory.slice(-NUM_RECENT_LOGS_ON_JOIN_REJOIN) });
+        console.log(`[Server-JoinGame] Sent initial logs to newly joined player ${playerSetupData.id} in game ${gameIdToJoin}.`);
       }
-      */
+
     } catch (e: any) {
       console.error(`[Server-JoinGame] Error: ${e.message}`, e);
       if (callback) callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
@@ -444,24 +417,16 @@ io.on('connection', (socket: Socket) => {
         return;
       }
 
-      // If player is already marked as connected with the current socket, it might be a redundant call
       if (playerInMachine.isConnected && playerInMachine.socketId === socket.id) {
         console.warn(`[Server-Rejoin] Player ${data.playerId} already connected with this socket ${socket.id}.`);
-        // Proceed to send state and logs as if it were a fresh rejoin success.
       } else {
-        // Send reconnected event to the machine
-        gameActor.send({ 
-          type: 'PLAYER_RECONNECTED', 
-          playerId: data.playerId, 
-          newSocketId: socket.id 
+        gameActor.send({
+          type: 'PLAYER_RECONNECTED',
+          playerId: data.playerId,
+          newSocketId: socket.id
         });
       }
-      
-      // It might take a moment for the machine to process the PLAYER_RECONNECTED event.
-      // For an immediate response with the most up-to-date state after rejoining,
-      // we could subscribe to a specific emitted event or wait for a snapshot change.
-      // For now, we'll get a fresh snapshot. This might not capture the absolute latest if machine processing is slow,
-      // but should be sufficient for most cases. Subsequent broadcasts will catch up.
+
       const postRejoinSnapshot = gameActor.getSnapshot();
       const clientGameState = generatePlayerView(postRejoinSnapshot.context, data.playerId);
 
@@ -471,30 +436,10 @@ io.on('connection', (socket: Socket) => {
       if (postRejoinSnapshot.context.logHistory && postRejoinSnapshot.context.logHistory.length > 0) {
         socket.emit(SocketEventName.INITIAL_LOGS, { logs: postRejoinSnapshot.context.logHistory.slice(-NUM_RECENT_LOGS_ON_JOIN_REJOIN) });
       }
-      
+
       if (callback) callback({ success: true, gameState: clientGameState });
       console.log(`[Server] Player ${data.playerId} reconnected to ${data.gameId}. State and logs sent.`);
 
-      // Old logic (to be removed)
-      /*
-      const result = await attemptRejoinGame(data.gameId, data.playerId, socket.id);
-
-      if (result.success && result.gameState) {
-        socket.join(data.gameId);
-        registerSocketSession(data.gameId, data.playerId);
-        const clientGameState = generatePlayerView(result.gameState, data.playerId);
-        
-        if (result.initialLogsForRejoiner) {
-          socket.emit(SocketEventName.INITIAL_LOGS, { logs: result.initialLogsForRejoiner });
-        }
-        
-        callback({ success: true, gameState: clientGameState });
-        console.log(`[Server] Player ${data.playerId} rejoined ${data.gameId}.`);
-      } else {
-        socket.emit(SocketEventName.REJOIN_DENIED, { message: result.message }); 
-        callback({ success: false, message: result.message });
-      }
-      */
     } catch (e: any) {
       console.error(`[Server-Rejoin] Error: ${e.message}`, e);
       if (callback) callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
@@ -618,9 +563,6 @@ io.on('connection', (socket: Socket) => {
         } else {
           console.warn(`[Server-Disconnect] Game machine for ${session.gameId} not found. Cannot send PLAYER_DISCONNECTED event.`);
         }
-        
-        // Old logic (to be removed)
-        // markPlayerAsDisconnected(session.gameId, session.playerId);
       } else {
         console.log(`[Server-Disconnect] No active game session found for socket ${socket.id}.`);
       }

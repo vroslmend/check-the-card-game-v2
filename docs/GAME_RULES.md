@@ -55,8 +55,9 @@ Turns proceed in a chosen direction. A player's turn consists of a primary draw 
 
 **8. Matching/Stacking Opportunity (Unified Rule):**
 *   Triggered immediately after the current player discards a card (Card X) to the top of the Discard Pile, setting `G.matchingOpportunityInfo`. The game enters the `matchingStage`.
+    *   *Note: This applies during regular `playPhase` and also for players taking their turn during `finalTurnsPhase` (see Section 10.C).*
 *   **During `matchingStage`:**
-    *   Any one player (including the current player) can use the `attemptMatch` move with a card (Card Y) from their hand of the **exact same rank** as Card X.
+    *   Any one player (including the current player, unless they are the one who originally called "Check!" and are thus locked) can use the `attemptMatch` move with a card (Card Y) from their hand of the **exact same rank** as Card X.
     *   Any player can choose to `passMatch`.
     *   The stage ends once one player successfully matches, or all players have passed/attempted a match.
 *   **If a Match Occurs (Card Y is played on Card X via `attemptMatch`):**
@@ -108,7 +109,13 @@ Turns proceed in a chosen direction. A player's turn consists of a primary draw 
 *   **C. Final Turns Phase (`finalTurnsPhase`):**
     *   Players cannot use the manual `callCheck` move during this phase.
     *   `G.finalTurnsTaken` is managed as each eligible player takes their turn (it is typically reset to `0` only when `finalTurnsPhase` is first initiated).
-    *   The player who originally called/triggered "Check" (the `G.playerWhoCalledCheck`) is effectively skipped for taking a final turn.
+    *   The player who originally called/triggered "Check" (the `G.playerWhoCalledCheck`) is `isLocked`, does not take any further actions (including a final turn), and their cards cannot be targeted by other players' abilities (e.g., King, Queen, or Jack abilities).
+    *   Other eligible players (not the `G.playerWhoCalledCheck` and not otherwise locked or forfeited) each take one final turn.
+    *   During a player's final turn, standard gameplay rules apply:
+        *   They perform a primary draw action (from Draw Pile or eligible Discard Pile card).
+        *   They then discard a card. This discard creates a "Matching/Stacking Opportunity" as per Section 8.
+        *   If the discard (or a subsequent match) triggers special card abilities, the game will proceed to `abilityResolutionStage` as per Section 9 before the next final turn (or transition to scoring if all final turns are complete).
+    *   After all eligible players have taken their final turn, the game proceeds to the `scoringPhase`.
 
 **11. Scoring Phase (`scoringPhase`):**
 *   All players' hand cards are revealed. Scores are calculated per card values (section 4).

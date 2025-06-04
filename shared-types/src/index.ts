@@ -29,7 +29,7 @@ export enum Rank {
 export interface Card {
   suit: Suit;
   rank: Rank;
-  id?: string; // Make id optional for React keys, added by server when sending to client
+  id: string; // Mandatory unique identifier for the card (e.g., "H_A" for Ace of Hearts). Essential for animations and React keys.
   isFaceDownToOwner?: boolean; // Server-side flag: if true, this card is hidden from its owner in their client view
 }
 
