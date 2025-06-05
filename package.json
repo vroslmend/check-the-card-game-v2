@@ -1,0 +1,42 @@
+{
+  "name": "check-the-game-v2",
+  "version": "1.0.0",
+  "description": "\"Check!\" is a web-based, free-to-play online multiplayer card game. The primary goal is to have the lowest total card value in your hand at the end of a round. This project implements the card game with a Node.js/Socket.IO backend and a new, modern Next.js/React frontend.",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared-types"
+  ],
+  "homepage": "https://github.com/vroslmend/check-the-card-game-v2#readme",
+  "bugs": {
+    "url": "https://github.com/vroslmend/check-the-card-game-v2/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vroslmend/check-the-card-game-v2.git"
+  },
+  "license": "ISC",
+  "author": "Vroslmend",
+  "type": "commonjs",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build": "npm run build -w shared-types && npm run build -w server && npm run build -w client",
+    "build:server-deps": "npm run build:shared && npm run build:server",
+    "build:server": "npm run build -w server",
+    "build:client": "npm run build -w client",
+    "build:shared": "npm run build -w shared-types",
+    "start:server": "npm start -w server",
+    "start:client": "npm start -w client",
+    "dev:client": "npm run dev -w client",
+    "dev": "concurrently \"npm:dev:client\" \"npm:start:server\"",
+    "start": "concurrently \"npm:start:client\" \"npm:start:server\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

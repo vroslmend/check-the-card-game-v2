@@ -1,0 +1,111 @@
+---
+title: 'Inspection'
+---
+
+The Inspect API is a way to inspect the state transitions of your state machines and every aspect of actors in an actor system. Including:
+
+- Actor lifecycle
+- Actor event communication
+- Actor snapshot updates
+
+:::new
+
+[We’ve recently released Stately Inspector](/blog/2024-01-15-stately-inspector/), a universal tool that enables you to visually inspect the state of any application, frontend or backend, with the visualization of Stately’s editor.
+
+[Learn more about Stately Inspector](inspector.mdx)
+
+:::
+
+The Inspect API lets you attach an “inspector,” an observer that observes inspection events, to the root of an actor system:
+
+```tsx
+const actor = createActor(machine, {
+  inspect: (inspectionEvent) => {
+    // type: '@xstate.actor' or
+    // type: '@xstate.snapshot' or
+    // type: '@xstate.event'
+    console.log(inspectionEvent);
+  },
+});
+```
+
+The inspector will receive inspection events for every actor in the system, giving you granular visibility into everything happening, from how an individual actor is changing to how actors communicate with each other.
+
+## Inspection events
+
+Inspection events are event objects that have a `type` property that indicates the type of inspection event. There are three types of inspection events:
+
+- `@xstate.actor` for [Actor inspection events](#actor-inspection-events)
+- `@xstate.event` for [Event inspection events](#event-inspection-events)
+- `@xstate.snapshot` for [Snapshot inspection events](#snapshot-inspection-events)
+
+## Actor inspection events
+
+The actor inspection event (`@xstate.actor`) is emitted when an actor in the system is created. It contains the following properties:
+
+- `type` - the type of inspection event, always `'@xstate.actor'`
+- `actorRef` - the reference to the actor
+- `rootId` - the session ID of the root actor of the system
+
+Example of an actor inspection event:
+
+```js
+{
+  type: '@xstate.actor',
+  actorRef: {/* Actor reference */},
+  rootId: 'x:0',
+}
+```
+
+## Event inspection events
+
+The event inspection event (`@xstate.event`) is emitted when an event is sent to an actor. It contains the following properties:
+
+- `type` - the type of inspection event, always `'@xstate.event'`
+- `actorRef` - the reference to the target actor of the event
+- `rootId` - the session ID of the root actor of the system
+- `event` - the event object that was sent
+- `sourceRef` - the reference to the source actor that sent the event, or `undefined` if the source is not known or an event was sent directly to the actor
+
+Example of an event inspection event:
+
+```js
+{
+  type: '@xstate.event',
+  actorRef: {/* Actor reference */},
+  rootId: 'x:0',
+  event: {
+    type: 'someEvent',
+    message: 'hello'
+  },
+  sourceRef: {/* Actor reference */},
+}
+```
+
+## Snapshot inspection events
+
+The snapshot inspection event (`@xstate.snapshot`) is emitted when an actor's snapshot is updated. It contains the following properties:
+
+- `type` - the type of inspection event, always `'@xstate.snapshot'`
+- `actorRef` - the reference to the actor
+- `rootId` - the session ID of the root actor of the system
+- `snapshot` - the most recent snapshot of the actor
+- `event` - the event that caused the snapshot to be updated
+
+Example of a snapshot inspection event:
+
+```js
+{
+  type: '@xstate.snapshot',
+  actorRef: {/* Actor reference */},
+  rootId: 'x:0',
+  snapshot: {
+    status: 'active',
+    context: { count: 31 },
+    // ...
+  },
+  event: {
+    type: 'increment'
+  }
+}
+```

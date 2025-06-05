@@ -24,18 +24,6 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
   const cardAspectRatio = "aspect-[2.5/3.5]";
   const effectiveCanDraw = canDraw && !isSealed;
 
-  // Use a ref to keep track of the previous value for animation
-  const prevCountRef = useRef(numberOfCards);
-  const [animKey, setAnimKey] = useState(0);
-  
-  // When the count changes, update the animation key to force a re-render
-  useEffect(() => {
-    if (numberOfCards !== prevCountRef.current) {
-      setAnimKey(key => key + 1);
-      prevCountRef.current = numberOfCards;
-    }
-  }, [numberOfCards]);
-
   const layoutIdForTopCard = (animateCardInWithId && topCard && topCard.id === animateCardInWithId) ? `card-anim-${topCard.id}` : undefined;
 
   // Add a visual debug marker for receiving cards with animations
@@ -141,7 +129,7 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
                     scale: 1
                   }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ 
+                  transition={{
                     opacity: { duration: 0.5, ease: "easeOut" },
                     scale: { 
                       duration: 0.8,
@@ -153,12 +141,14 @@ const DiscardPileComponent: React.FC<DiscardPileComponentProps> = ({
               )}
             </AnimatePresence>
 
-            <CardComponent
+            {/* <CardComponent
               card={topCard}
               isFaceUp={true}
               isInteractive={false}
               disableHoverEffect={true}
-            />
+            /> */}
+            <div className="w-full h-full bg-blue-500 rounded-md shadow-lg"></div>
+
             <AnimatePresence>
               {isSealed && (
                 <motion.div 

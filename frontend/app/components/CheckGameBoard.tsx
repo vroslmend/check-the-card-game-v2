@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { ClientCheckGameState, Card, ClientPlayerState, InitialPlayerSetupData, ClientCard } from 'shared-types'; 
-import { Rank } from 'shared-types'; 
+// import type { ClientCheckGameState, Card, ClientPlayerState, InitialPlayerSetupData, ClientCard, PlayerActionType } from 'shared-types'; 
+import { Rank, PlayerActionType } from 'shared-types'; // Moved PlayerActionType here
+import type { ClientCheckGameState, Card, ClientPlayerState, InitialPlayerSetupData, ClientCard } from 'shared-types'; // PlayerActionType removed from here
 import PlayerHandComponent from './PlayerHandComponent';
 import DrawPileComponent from './DrawPileComponent';
 import DiscardPileComponent from './DiscardPileComponent';
@@ -9,6 +10,7 @@ import ActionBarComponent, { createDrawDeckAction, createDrawDiscardAction } fro
 import EndOfGameModal from './EndOfGameModal';
 import PlayerStatusDisplay from './PlayerStatusDisplay';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
+import HoldingAreaComponent from './HoldingAreaComponent';
 
 const PEEK_COUNTDOWN_SECONDS = 3; 
 const PEEK_REVEAL_SECONDS = 5;    
@@ -19,6 +21,9 @@ const INITIAL_PEEK_REVEAL_DURATION_S = 5;
 
 const ANIMATION_ID_CLEAR_DELAY = 1800;
 const FLIP_ANIMATION_DURATION_MS = 400;
+const SWAP_ANIMATION_DISCARD_NOTICE_DELAY_MS = 200;
+const SWAP_ANIMATION_HAND_CLEAR_SECONDARY_DELAY_MS = 450;
+const SWAP_ANIMATION_DATA_CLEAR_ADDITIONAL_DELAY_MS = FLIP_ANIMATION_DURATION_MS;
 
 interface FeedbackMessage {
   text: string;
@@ -40,7 +45,7 @@ interface AbilityClientArgs {
 interface CheckGameBoardProps {
   gameState: ClientCheckGameState;
   playerId: string; 
-  onPlayerAction: (type: string, payload?: any, clientCallback?: (message: string, isError: boolean) => void) => void; 
+  onPlayerAction: (type: PlayerActionType, payload?: any, clientCallback?: (message: string, isError: boolean) => void) => void;
   gameId: string; 
   onReturnToLobby: () => void;
   turnSegmentTrigger: string | number; 
@@ -79,7 +84,6 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 }) => {
   const clientPlayerState = gameState.players[playerId]; 
   const [selectedHandCardIndex, setSelectedHandCardIndex] = useState<number | null>(null);
-  const [revealedCardLocations, setRevealedCardLocations] = useState<{ [playerID: string]: { [cardIndex: number]: boolean } }>({});
   const [multiSelectedCardLocations, setMultiSelectedCardLocations] = useState<{ playerID: string, cardIndex: number }[]>([]);
   const [abilityArgs, setAbilityArgs] = useState<AbilityClientArgs | null>(null); 
   const [swappingOutCardId, setSwappingOutCardId] = useState<string | null>(null);
@@ -102,14 +106,18 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
   const [matchingStageTimeLeft, setMatchingStageTimeLeft] = useState<number | null>(null);
 
   // ### Refactored Animation States ###
-  const [animateDrawPileBriefly, setAnimateDrawPileBriefly] = useState(false);
+  const [cardIdAnimatingOutFromDeck, setCardIdAnimatingOutFromDeck] = useState<string | null>(null);
   const [whatToShowInHolding, setWhatToShowInHolding] = useState<'none' | 'placeholder' | 'actual_card'>('none');
   const previousWhatToShowInHoldingRef = useRef<'none' | 'placeholder' | 'actual_card'>('none');
   // IDs for layout animation during swap
   const [cardIdMovingToHand, setCardIdMovingToHand] = useState<string | null>(null);
   const [cardIdMovingToDiscard, setCardIdMovingToDiscard] = useState<string | null>(null);
   const [animatedCardDataToHand, setAnimatedCardDataToHand] = useState<ClientCard | null>(null);
+  const [idOfCardActuallyMovingToHand, setIdOfCardActuallyMovingToHand] = useState<string | null>(null);
   // ### End Refactored Animation States ###
+
+  // New state for dedicated deck draw layout animation ID
+  const [deckDrawLayoutAnimationId, setDeckDrawLayoutAnimationId] = useState<string | null>(null);
 
   const getReadyIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const revealIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -178,7 +186,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
       } 
       
       console.log(`[Client] Skipping ability: ${abilityRank}, Server Stage: ${serverStage}, Effective Skip Type: ${skipType}`);
-      onPlayerAction('resolveSpecialAbility', {
+      onPlayerAction(PlayerActionType.RESOLVE_SPECIAL_ABILITY, {
         abilityCard: abilityToResolve.card,
         args: { skipAbility: true, skipType: skipType } 
       });
@@ -334,7 +342,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
       const abilityToResolve = gameState.pendingAbilities && gameState.pendingAbilities.length > 0 ? gameState.pendingAbilities[0] : null;
       if (abilityToResolve && abilityPeekSelectionsConfirmed) {
         console.log(`[Client-AbilityPeek] Timed reveal finished. Sending completion to server.`);
-        onPlayerAction('resolveSpecialAbility', { 
+        onPlayerAction(PlayerActionType.RESOLVE_SPECIAL_ABILITY, { 
           abilityCard: abilityToResolve.card, 
           args: { peekTargets: abilityPeekSelectionsConfirmed } 
         });
@@ -385,36 +393,31 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     }
   }, [gameState.matchingStageTimerExpiresAt, gameState.currentPhase]);
 
-  // Effect to manage the brief animation state for the draw pile
-  useEffect(() => {
-    if (animateDrawPileBriefly) {
-      const timer = setTimeout(() => {
-        setAnimateDrawPileBriefly(false);
-      }, 150); // Duration for the draw pile effect to be active before its own exit animation
-      return () => clearTimeout(timer);
-    }
-  }, [animateDrawPileBriefly]);
-
   // Effect to manage transitions in the holding area based on pendingDrawnCard
   useEffect(() => {
-    if (clientPlayerState?.pendingDrawnCard) {
-      if (whatToShowInHolding === 'placeholder' || (whatToShowInHolding === 'none' && clientPlayerState.pendingDrawnCardSource === 'discard')) {
-        // If placeholder was shown, or if it's a direct discard draw, transition to actual card.
-        // For discard draw, whatToShowInHolding would be set to 'actual_card' directly by handleDrawFromDiscard.
-        // This handles the deck draw case primarily.
-        setWhatToShowInHolding('actual_card');
-      } else if (whatToShowInHolding === 'none' && clientPlayerState.pendingDrawnCardSource === 'deck') {
-        // This case should ideally be caught by handleDrawFromDeck setting to 'placeholder' first.
-        // However, as a fallback if state somehow gets here:
-        setWhatToShowInHolding('placeholder'); 
+    if (clientPlayerState?.pendingDrawnCard || cardIdAnimatingOutFromDeck) {
+      if (whatToShowInHolding === 'none') {
+        setWhatToShowInHolding(clientPlayerState?.pendingDrawnCard ? 'actual_card' : 'placeholder');
+      }
+      // If pendingDrawnCard is now present, the deck draw animation target state is reached for data.
+      // We can clear the dedicated layout animation ID after a short delay to ensure animation completes.
+      if (clientPlayerState?.pendingDrawnCard && deckDrawLayoutAnimationId) {
+        setTimeout(() => {
+          console.log('[SwapAnimLayout DEBUG] Clearing deckDrawLayoutAnimationId due to pendingDrawnCard presence:', deckDrawLayoutAnimationId);
+          setDeckDrawLayoutAnimationId(null);
+        }, ANIMATION_ID_CLEAR_DELAY); // Use existing clear delay, or a new one if needed
       }
     } else {
-      // No pending card, so nothing should be in the holding area.
-      if (whatToShowInHolding !== 'none') {
+      if (whatToShowInHolding !== 'none' && !cardIdMovingToHand) { 
         setWhatToShowInHolding('none');
       }
+      // If no pending card and no animation out from deck, clear dedicated ID
+      if (!clientPlayerState?.pendingDrawnCard && !cardIdAnimatingOutFromDeck && deckDrawLayoutAnimationId) {
+        console.log('[SwapAnimLayout DEBUG] Clearing deckDrawLayoutAnimationId due to no pending card/animation out:', deckDrawLayoutAnimationId);
+        setDeckDrawLayoutAnimationId(null);
     }
-  }, [clientPlayerState?.pendingDrawnCard, clientPlayerState?.pendingDrawnCardSource, whatToShowInHolding]);
+    }
+  }, [clientPlayerState?.pendingDrawnCard, cardIdAnimatingOutFromDeck, whatToShowInHolding, cardIdMovingToHand, deckDrawLayoutAnimationId]);
 
   useEffect(() => {
     previousWhatToShowInHoldingRef.current = whatToShowInHolding;
@@ -426,7 +429,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
   const handleDeclareReadyForPeek = useCallback(() => {
     if (clientPlayerState && !clientPlayerState.isReadyForInitialPeek && gameState.currentPhase === 'initialPeekPhase') {
-      onPlayerAction('declareReadyForPeek');
+      onPlayerAction(PlayerActionType.DECLARE_READY_FOR_PEEK);
     }
   }, [onPlayerAction, clientPlayerState, gameState.currentPhase]);
   
@@ -453,11 +456,20 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
   const handleDrawFromDeck = () => {
     if (canDrawFromDeck) {
-      setAnimateDrawPileBriefly(true);
+      const tempAnimatingCardId = `drawn_card_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const dedicatedLayoutId = `deck-to-holding-anim-${tempAnimatingCardId}`;
+      console.log('[SwapAnimLayout DEBUG] CheckGameBoard|handleDrawFromDeck - Setting cardIdAnimatingOutFromDeck:', tempAnimatingCardId, 'DedicatedLayoutId:', dedicatedLayoutId);
+      setCardIdAnimatingOutFromDeck(tempAnimatingCardId);
+      setDeckDrawLayoutAnimationId(dedicatedLayoutId); // Set dedicated ID
+
       setWhatToShowInHolding('placeholder');
       setCardIdMovingToHand(null); // Clear swap IDs
       setCardIdMovingToDiscard(null);
-      onPlayerAction('drawFromDeck');
+      onPlayerAction(PlayerActionType.DRAW_FROM_DECK, undefined, () => {
+        // Callback after server acknowledges draw action (or an optimistic update completes)
+        // We might clear the dedicated layout ID here if the next state (pendingDrawnCard) is ready
+        // For now, let's clear it when pendingDrawnCard appears or after a timeout
+      });
       setSelectedHandCardIndex(null);
       setFeedbackMessage(null); 
     }
@@ -465,10 +477,11 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
   const handleDrawFromDiscard = () => {
     if (canDrawFromDiscard) {
+      setDeckDrawLayoutAnimationId(null); // Clear if drawing from discard
       setWhatToShowInHolding('actual_card');
       setCardIdMovingToHand(null); // Clear swap IDs
       setCardIdMovingToDiscard(null);
-      onPlayerAction('drawFromDiscard');
+      onPlayerAction(PlayerActionType.DRAW_FROM_DISCARD);
       setSelectedHandCardIndex(null);
       setFeedbackMessage(null); 
     }
@@ -492,8 +505,9 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
         setTimeout(() => {
           if (cardToTakeFromHolding && cardToTakeFromHolding.id) {
             setCardIdMovingToHand(cardToTakeFromHolding.id);
+            setIdOfCardActuallyMovingToHand(cardToTakeFromHolding.id);
           }
-        }, 200); // Increased from 150ms to 200ms to give more time for discard animation to be noticed
+        }, SWAP_ANIMATION_DISCARD_NOTICE_DELAY_MS);
 
         // Clear existing timers if any
         if (animationStatesClearTimerRef.current) {
@@ -518,20 +532,21 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
           // Increased delay before clearing the card moving to hand to make the animations more distinct
           setTimeout(() => {
             setCardIdMovingToHand(null);
+            setIdOfCardActuallyMovingToHand(null);
             setSwappingOutCardId(null); 
-            console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] Secondary timeout fired - cleared cardIdMovingToHand and swappingOutCardId`);
-          }, 450); // Increased from 350ms to 450ms for better separation between animations
+            console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] Secondary timeout fired - cleared cardIdMovingToHand, idOfCardActuallyMovingToHand and swappingOutCardId`);
+          }, SWAP_ANIMATION_HAND_CLEAR_SECONDARY_DELAY_MS);
           
           console.log(`[SwapAnimLayout TIMEOUT STATES FIRED] State setters called for animation IDs.`);
           if (animationStatesClearTimerRef.current === statesTimerId) {
              animationStatesClearTimerRef.current = null;
           }
-        }, ANIMATION_ID_CLEAR_DELAY); // Use constant
+        }, ANIMATION_ID_CLEAR_DELAY);
         animationStatesClearTimerRef.current = statesTimerId;
         console.log(`[SwapAnimLayout TIMER_MGMT] Set new animation states timer ID: ${animationStatesClearTimerRef.current}`);
 
         // New timer for animatedCardDataToHand
-        const dataClearDelay = ANIMATION_ID_CLEAR_DELAY + FLIP_ANIMATION_DURATION_MS;
+        const dataClearDelay = ANIMATION_ID_CLEAR_DELAY + SWAP_ANIMATION_DATA_CLEAR_ADDITIONAL_DELAY_MS;
         console.log(`[SwapAnimLayout DEBUG] handleSwapAndDiscard: Setting timeout to clear animated card data in ${dataClearDelay}ms.`);
         const dataTimerId = setTimeout(() => {
           console.log(`[SwapAnimLayout TIMEOUT DATA FIRED] Attempting to clear animated card data (delay: ${dataClearDelay}ms).`);
@@ -548,7 +563,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
       } else {
         console.warn('[SwapAnimLayout] Could not set animation IDs: Card details missing.');
       }
-      onPlayerAction('swapAndDiscard', { handIndex });
+      onPlayerAction(PlayerActionType.SWAP_AND_DISCARD, { handIndex });
       setSelectedHandCardIndex(null);
       setFeedbackMessage(null); 
     }
@@ -556,7 +571,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
   const handleDiscardDrawnCard = () => {
     if (isCurrentPlayer && clientPlayerState?.pendingDrawnCard && (gameState.currentPhase === 'playPhase' || gameState.currentPhase === 'finalTurnsPhase')) {
-      onPlayerAction('discardDrawnCard');
+      onPlayerAction(PlayerActionType.DISCARD_DRAWN_CARD);
       setSelectedHandCardIndex(null);
       setFeedbackMessage(null); 
       // whatToShowInHolding will become 'none' via useEffect when pendingDrawnCard clears
@@ -566,7 +581,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
   const handleAttemptMatch = (handIndex: number) => {
     if (isInMatchingStage && gameState.matchingOpportunityInfo?.potentialMatchers.includes(playerId)) {
       setFeedbackMessage(null); 
-      onPlayerAction('attemptMatch', { handIndex }, (responseMessage: string, isError: boolean) => {
+      onPlayerAction(PlayerActionType.ATTEMPT_MATCH, { handIndex }, (responseMessage: string, isError: boolean) => {
         if(responseMessage) {
           setFeedbackMessage({ text: responseMessage, type: isError ? 'error' : 'success' });
         }
@@ -582,7 +597,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
         gameState.activePlayers[playerId] === 'awaitingMatchAction' 
       ) {
       setFeedbackMessage(null); 
-      onPlayerAction('passMatch', undefined, (responseMessage: string, isError: boolean) => {
+      onPlayerAction(PlayerActionType.PASS_MATCH, undefined, (responseMessage: string, isError: boolean) => {
         if(responseMessage) {
          setFeedbackMessage({ text: responseMessage, type: isError ? 'error' : 'info' });
         } else {
@@ -598,7 +613,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
 
   const handleCallCheck = () => {
     if (canCallCheck) {
-      onPlayerAction('callCheck');
+      onPlayerAction(PlayerActionType.CALL_CHECK);
       setFeedbackMessage(null); 
     }
   };
@@ -636,7 +651,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
       
       if (actionToSend) {
         console.log(`[Client] Resolving ability: ${abilityToResolve.card.rank}. Sending args:`, finalArgs);
-        onPlayerAction('resolveSpecialAbility', { abilityCard: abilityToResolve.card, args: finalArgs });
+        onPlayerAction(PlayerActionType.RESOLVE_SPECIAL_ABILITY, { abilityCard: abilityToResolve.card, args: finalArgs });
       } else {
         console.warn(`[Client] handleResolveSpecialAbility: Action NOT sent.`);
       }
@@ -922,7 +937,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
             if (isResolvingPlayerForAbility && abilityDetails && serverStage === 'peek' && (abilityRank === Rank.King || abilityRank === Rank.Queen) && !isAbilityPeekTimerActive) {
               if (canPlayerPerformAbilityAction()) { 
                 console.log("[Client-AbilityPeek] Requesting server reveal for peek selections:", multiSelectedCardLocations);
-                onPlayerAction('requestPeekReveal', { peekTargets: multiSelectedCardLocations }, (responseMessage, isError) => {
+                onPlayerAction(PlayerActionType.REQUEST_PEEK_REVEAL, { peekTargets: multiSelectedCardLocations }, (responseMessage, isError) => {
                   if (isError) {
                     setFeedbackMessage({ text: responseMessage || "Error requesting peek reveal from server.", type: 'error' });
                     return; 
@@ -1076,6 +1091,8 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
     `[SwapAnimLayout DEBUG] CheckGameBoard RENDER: cardIdMovingToHand=${cardIdMovingToHand}, cardIdMovingToDiscard=${cardIdMovingToDiscard}, animatedCardDataToHand.id=${animatedCardDataToHand?.id}, pendingDrawnCard.id=${clientPlayerState?.pendingDrawnCard?.id}`
   );
 
+  console.log(`[SwapAnimLayout DEBUG] CheckGameBoard|Render - cardIdAnimatingOutFromDeck state: ${cardIdAnimatingOutFromDeck}, Player ID: ${playerId}`);
+
   return (
     <LayoutGroup>
       <div className="flex flex-col flex-grow w-full items-center font-sans select-none px-1 sm:px-2 md:px-3">
@@ -1119,123 +1136,62 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
             })}
           </div>
           <div className="flex flex-col items-center justify-center w-full py-1 md:py-1.5 my-1 md:my-2 flex-shrink-0">
-            <motion.div
-              layout
-              layoutScroll
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="flex flex-row items-end justify-center gap-2 md:gap-3"
-            >
-              <DrawPileComponent 
-                numberOfCards={gameState.deckSize} 
-                canDraw={canDrawFromDeck}
-                onClick={handleDrawFromDeck}
-                isAnimatingDraw={animateDrawPileBriefly}
-              />
+            <LayoutGroup>
+              <motion.div
+                // layout // This was already removed
+                layoutScroll
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className="flex flex-row items-end justify-center gap-2 md:gap-3 relative"
+              >
+                <DrawPileComponent 
+                  numberOfCards={gameState.deckSize} 
+                  canDraw={canDrawFromDeck}
+                  onClick={handleDrawFromDeck}
+                  cardIdAnimatingOut={cardIdAnimatingOutFromDeck}
+                  deckDrawLayoutId={deckDrawLayoutAnimationId}
+                />
 
-              <AnimatePresence mode="popLayout">
-                {(whatToShowInHolding !== 'none') && (
-                  <motion.div
-                    key="holding-area-wrapper"
-                    layout // Ensures smooth animation when appearing/disappearing next to other layout elements
-                    className="flex flex-col items-center overflow-hidden flex-shrink-0 p-1 origin-top"
-                    style={{ height: 105 }} 
-                    initial={{ scaleY: 0, opacity: 0 }}
-                    animate={{ scaleY: 1, opacity: 1 }}
-                    exit={{ scaleY: 0, opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 180, damping: 25, duration: 0.4 }}
-                  >
-                    <motion.div
-                      className="flex flex-col items-center w-full h-full"
-                    >
-                      <AnimatePresence mode="wait">
-                        {whatToShowInHolding === 'placeholder' && (
-                          <motion.div
-                            key="placeholder-drawn-card"
-                            className="w-full h-full flex items-center justify-center"
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.15 } }}
-                            transition={{ duration: 0.3 }}
-                          >
-                            <div className="w-12 md:w-14 aspect-[2.5/3.5]">
-                              <CardComponent card={null} isFaceUp={false} isInteractive={false} disableHoverEffect={true}/>
-                            </div>
-                          </motion.div>
-                        )}
-                        {whatToShowInHolding === 'actual_card' && clientPlayerState?.pendingDrawnCard && (
-                          <motion.div
-                            key={clientPlayerState.pendingDrawnCard.id}
-                            layoutId={clientPlayerState.pendingDrawnCard ? `card-anim-${clientPlayerState.pendingDrawnCard.id}` : undefined}
-                            className="w-full h-full flex flex-col items-center justify-center"
-                            style={{ 
-                              zIndex: cardIdMovingToHand === clientPlayerState.pendingDrawnCard?.id ? 50 : 30
-                            }}
-                            initial={(
-                              clientPlayerState.pendingDrawnCardSource === 'deck' && 
-                              previousWhatToShowInHoldingRef.current === 'placeholder' && 
-                              whatToShowInHolding === 'actual_card'
-                            ) 
-                              ? { opacity: 0, x: -40, scale: 0.7 } 
-                              : { opacity: 0, scale: 0.7 } 
-                            }
-                            animate={{ 
-                              opacity: 1, 
-                              x: 0, 
-                              scale: 1, 
-                              zIndex: cardIdMovingToHand === clientPlayerState.pendingDrawnCard?.id ? 50 : 30
-                            }}
-                            exit={(clientPlayerState.pendingDrawnCard && cardIdMovingToHand === clientPlayerState.pendingDrawnCard.id)
-                              ? { opacity: 1 } // Maintain opacity during layout transition 
-                              : { opacity: 0, scale: 0.8, transition: { duration: 0.2 } }
-                            } 
-                            transition={clientPlayerState.pendingDrawnCard && (cardIdMovingToHand === clientPlayerState.pendingDrawnCard.id) 
-                              ? { 
-                                type: "spring", 
-                                stiffness: 170, 
-                                damping: 25, 
-                                mass: 1.1,
-                                restDelta: 0.001,
-                                duration: 0.6 
-                              } // Better spring config for layout move to hand
-                              : { type: "spring", stiffness: 220, damping: 25, duration: 0.35 } // Default for appearing
-                            }
-                            onAnimationStart={() => {
-                              if (clientPlayerState.pendingDrawnCard && whatToShowInHolding === 'actual_card') {
-                                const appliedLayoutId = clientPlayerState.pendingDrawnCard ? `card-anim-${clientPlayerState.pendingDrawnCard.id}` : undefined;
-                                console.log(`[SwapAnimLayout DEBUG] HoldingArea CARD ANIMATION START (Card ID: ${clientPlayerState.pendingDrawnCard.id}): current cardIdMovingToHand=${cardIdMovingToHand}, applied layoutId=${appliedLayoutId}, exit prop relevant if exiting? ${(clientPlayerState.pendingDrawnCard && cardIdMovingToHand === clientPlayerState.pendingDrawnCard.id) ? 'undefined (layout move)' : 'standard exit'}`);
-                              }
-                            }}
-                            onLayoutAnimationComplete={() => {
-                               if (clientPlayerState.pendingDrawnCard && whatToShowInHolding === 'actual_card') {
-                                const appliedLayoutId = clientPlayerState.pendingDrawnCard ? `card-anim-${clientPlayerState.pendingDrawnCard.id}` : undefined;
-                                console.log(`[SwapAnimLayout DEBUG] HoldingArea CARD LAYOUT ANIMATION COMPLETE (Card ID: ${clientPlayerState.pendingDrawnCard.id}): current cardIdMovingToHand=${cardIdMovingToHand}, applied layoutId=${appliedLayoutId}`);
-                              }
-                            }}
-                          >
-                            <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-0.5 font-medium">Holding:</p>
-                            <div className="w-12 md:w-14 aspect-[2.5/3.5] ring-2 ring-accent rounded-lg shadow-md">
-                              <CardComponent 
-                                card={clientPlayerState.pendingDrawnCard} 
-                                isFaceUp={clientPlayerState.pendingDrawnCardSource === 'discard' || revealDrawnCardFace} 
-                              />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              
-              <DiscardPileComponent
-                topCard={gameState.discardPile.length > 0 ? gameState.discardPile[0] : null}
-                numberOfCards={gameState.discardPile.length}
-                isSealed={displayDiscardPileAsLocked}
-                canDraw={canDrawFromDiscard}
-                onClick={handleDrawFromDiscard}
-                animateCardInWithId={cardIdMovingToDiscard} // Changed prop name for clarity
-              />
-            </motion.div>
+                {(() => {
+                  let visualType: 'empty_slot' | 'placeholder_color' | 'actual_card_debug_color' = 'empty_slot';
+                  let colorForDebug: string | undefined = undefined;
+
+                  if (deckDrawLayoutAnimationId) {
+                    colorForDebug = "bg-red-500";
+                    visualType = 'actual_card_debug_color';
+                  } else if (clientPlayerState?.pendingDrawnCard && (whatToShowInHolding === 'actual_card' || whatToShowInHolding === 'placeholder')) {
+                    colorForDebug = revealDrawnCardFace ? "bg-purple-500" : "bg-red-400";
+                    visualType = 'actual_card_debug_color';
+                  } else if (whatToShowInHolding === 'placeholder') {
+                    colorForDebug = "bg-orange-400";
+                    visualType = 'placeholder_color';
+                  } else {
+                    visualType = 'empty_slot';
+                  }
+
+                  // The HoldingAreaComponent is always rendered.
+                  // It decides internally if it's truly empty or showing a placeholder/card.
+                  return (
+                    <HoldingAreaComponent
+                      cardToDisplay={clientPlayerState?.pendingDrawnCard || null}
+                      showFaceUp={revealDrawnCardFace}
+                      layoutId={deckDrawLayoutAnimationId}
+                      isDebugMode={true} // Keep debug mode on
+                      debugVisual={visualType}
+                      debugColor={colorForDebug}
+                    />
+                  );
+                })()}
+                
+                <DiscardPileComponent
+                  topCard={gameState.discardPile.length > 0 ? gameState.discardPile[0] : null}
+                  numberOfCards={gameState.discardPile.length}
+                  isSealed={displayDiscardPileAsLocked}
+                  canDraw={canDrawFromDiscard}
+                  onClick={handleDrawFromDiscard}
+                  animateCardInWithId={cardIdMovingToDiscard}
+                />
+              </motion.div>
+            </LayoutGroup>
           </div>
           <div className="w-full flex flex-col items-center mt-auto pb-24 sm:pb-28 md:pb-32 flex-shrink-0">
             <PlayerStatusDisplay
@@ -1262,7 +1218,7 @@ const CheckGameBoard: React.FC<CheckGameBoardProps> = ({
               hasCalledCheck={clientPlayerState?.hasCalledCheck || false}
               cardsBeingPeeked={showPeekedCards ? processedCardsToPeekRef.current : null} 
               isInitialPeekActive={showPeekedCards || (peekGetReadyTimer !== null || peekRevealTimer !== null)}
-              swappingOutCardId={swappingOutCardId}
+              swappingOutCardId={swappingOutCardId === null ? undefined : swappingOutCardId}
               cardIdMovingToHand={cardIdMovingToHand}
               cardIdMovingToDiscard={cardIdMovingToDiscard}
               cardArrivingFromHolding={animatedCardDataToHand}

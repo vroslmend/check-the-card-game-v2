@@ -3,6 +3,8 @@
 // For example:
 // export * from './card.types'; 
 
+export type PlayerId = string; // Added PlayerId type
+
 export enum Suit {
   Hearts = 'H',
   Diamonds = 'D',
@@ -29,7 +31,7 @@ export enum Rank {
 export interface Card {
   suit: Suit;
   rank: Rank;
-  id?: string; // Make id optional for React keys, added by server when sending to client
+  id: string; // Mandatory unique identifier for the card (e.g., "H_A" for Ace of Hearts). Essential for animations and React keys.
   isFaceDownToOwner?: boolean; // Server-side flag: if true, this card is hidden from its owner in their client view
 }
 
@@ -172,19 +174,37 @@ export enum PlayerActivityStatus {
 // Enum for custom socket event names
 export enum SocketEventName {
   // Client to Server
-  CREATE_GAME = 'createGame',
-  JOIN_GAME = 'joinGame',
-  ATTEMPT_REJOIN = 'attemptRejoin',
-  PLAYER_ACTION = 'playerAction',
-  SEND_CHAT_MESSAGE = 'sendChatMessage',
+  CREATE_GAME = 'CREATE_GAME',
+  JOIN_GAME = 'JOIN_GAME',
+  ATTEMPT_REJOIN = 'ATTEMPT_REJOIN',
+  PLAYER_ACTION = 'PLAYER_ACTION',
+  SEND_CHAT_MESSAGE = 'SEND_CHAT_MESSAGE',
+  REQUEST_CARD_DETAILS_FOR_ABILITY = 'REQUEST_CARD_DETAILS_FOR_ABILITY',
 
   // Server to Client
-  GAME_STATE_UPDATE = 'gameStateUpdate',
-  PLAYER_JOINED = 'playerJoined', // For broadcasting when a new player joins an existing game
-  REJOIN_DENIED = 'rejoinDenied', // Specific event if server denies a rejoin attempt
-  SERVER_LOG_ENTRY = 'serverLogEntry', // For individual log entries sent by the server
-  INITIAL_LOGS = 'initialLogs', // For the batch of logs sent when a player joins/rejoins
-  CHAT_MESSAGE = 'chatMessage', // For broadcasting chat messages to clients
+  GAME_STATE_UPDATE = 'GAME_STATE_UPDATE',
+  PLAYER_JOINED = 'PLAYER_JOINED', // For broadcasting when a new player joins an existing game
+  REJOIN_DENIED = 'REJOIN_DENIED', // Specific event if server denies a rejoin attempt
+  SERVER_LOG_ENTRY = 'SERVER_LOG_ENTRY', // For individual log entries sent by the server
+  INITIAL_LOGS = 'INITIAL_LOGS', // For the batch of logs sent when a player joins/rejoins
+  CHAT_MESSAGE = 'CHAT_MESSAGE', // For broadcasting chat messages to clients
+  GAME_LOG_MESSAGE = 'gameLogMessage', // Added for generic game log messages
+  ERROR_MESSAGE = 'errorMessage', // Added for server-sent errors
+  RESPOND_CARD_DETAILS_FOR_ABILITY = 'RESPOND_CARD_DETAILS_FOR_ABILITY',
+  SERVER_EVENT = 'SERVER_EVENT'
+}
+
+// Payload Types for new Socket Events
+export interface RequestCardDetailsPayload {
+  targetPlayerId: PlayerId;
+  cardIndex: number;
+  gameId: string;
+}
+
+export interface RespondCardDetailsPayload {
+  card: Card;
+  playerId: PlayerId; // The player whose card is being revealed
+  cardIndex: number;  // The index of the card in that player's hand
 }
 
 // Enum for player action types (payload for PLAYER_ACTION event)
@@ -314,3 +334,49 @@ export interface ChatMessage {
   type?: 'lobby' | 'room'; // To distinguish context if needed
   gameId?: string; // Relevant if type is 'room'
 }
+
+// Game Machine Specific Types
+
+export interface GameMachineContext extends CheckGameState {
+  gameId: string;
+  // Potentially other machine-specific, non-serializable state like actor refs if not using XState v5 features that handle this better.
+  // For now, keeping it aligned with CheckGameState + gameId.
+}
+
+export type GameMachineInput = {
+  gameId: string;
+  // playerSetupDataArray?: InitialPlayerSetupData[]; // If initializing with players directly
+};
+
+// Base events from PlayerActionType
+type PlayerActionEvents = {
+  [K in PlayerActionType]: { type: K; playerId: string; } & // Common playerId
+    (K extends PlayerActionType.SWAP_AND_DISCARD ? { handIndex: number } :
+    K extends PlayerActionType.ATTEMPT_MATCH ? { handIndex: number } :
+    K extends PlayerActionType.REQUEST_PEEK_REVEAL ? { peekTargets: Array<{ playerID: string; cardIndex: number }> } :
+    K extends PlayerActionType.RESOLVE_SPECIAL_ABILITY ? { abilityResolutionArgs?: AbilityArgs & { skipAbility?: boolean; skipType?: 'peek' | 'swap' | 'full' } } :
+    // Add other actions that have specific payloads here
+    Record<string, any>) // Default for actions with no extra payload beyond playerId
+};
+
+export type ConcretePlayerActionEvents = PlayerActionEvents[PlayerActionType]; // Added export
+
+// GameMachineEvent represents all possible events the game machine can handle.
+export type GameMachineEvent =
+  | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData }
+  | ConcretePlayerActionEvents // All events derived from PlayerActionType
+  // Internal events
+  | { type: 'PEEK_TIMER_EXPIRED' }
+  | { type: 'MATCHING_STAGE_TIMER_EXPIRED' }
+  | { type: 'TURN_TIMER_EXPIRED'; timedOutPlayerId: string } // Ensure payload identifies player
+  | { type: 'DISCONNECT_GRACE_TIMER_EXPIRED'; timedOutGracePlayerId: string }
+  | { type: 'PLAYER_DISCONNECTED'; playerId: string }
+  | { type: 'PLAYER_RECONNECTED'; playerId: string; newSocketId: string }
+  | { type: '_HANDLE_FORFEITURE_CONSEQUENCES'; forfeitedPlayerId: string };
+
+export type GameMachineEmittedEvents =
+  | { type: 'EMIT_LOG_PUBLIC'; gameId: string; publicLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'recipientPlayerId' | 'logId'> & { actorId?: string }; privateLogConfig?: { message: string; recipientPlayerId: string; cardContext?: string; type?: RichGameLogMessage['type']; actorId?: string; } }
+  | { type: 'EMIT_LOG_PRIVATE'; gameId: string; privateLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'logId'> & { actorId?: string }; recipientPlayerId: string; }
+  | { type: 'BROADCAST_GAME_STATE'; gameId: string; }
+  | { type: 'BROADCAST_PLAYER_SPECIFIC_STATE'; gameId: string; playerId: string; } // For peek reveal type scenarios
+  | { type: 'EMIT_ERROR_TO_CLIENT'; gameId: string; playerId?: string; message: string; errorDetails?: any; };
