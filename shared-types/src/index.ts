@@ -174,21 +174,37 @@ export enum PlayerActivityStatus {
 // Enum for custom socket event names
 export enum SocketEventName {
   // Client to Server
-  CREATE_GAME = 'createGame',
-  JOIN_GAME = 'joinGame',
-  ATTEMPT_REJOIN = 'attemptRejoin',
-  PLAYER_ACTION = 'playerAction',
-  SEND_CHAT_MESSAGE = 'sendChatMessage',
+  CREATE_GAME = 'CREATE_GAME',
+  JOIN_GAME = 'JOIN_GAME',
+  ATTEMPT_REJOIN = 'ATTEMPT_REJOIN',
+  PLAYER_ACTION = 'PLAYER_ACTION',
+  SEND_CHAT_MESSAGE = 'SEND_CHAT_MESSAGE',
+  REQUEST_CARD_DETAILS_FOR_ABILITY = 'REQUEST_CARD_DETAILS_FOR_ABILITY',
 
   // Server to Client
-  GAME_STATE_UPDATE = 'gameStateUpdate',
-  PLAYER_JOINED = 'playerJoined', // For broadcasting when a new player joins an existing game
-  REJOIN_DENIED = 'rejoinDenied', // Specific event if server denies a rejoin attempt
-  SERVER_LOG_ENTRY = 'serverLogEntry', // For individual log entries sent by the server
-  INITIAL_LOGS = 'initialLogs', // For the batch of logs sent when a player joins/rejoins
-  CHAT_MESSAGE = 'chatMessage', // For broadcasting chat messages to clients
+  GAME_STATE_UPDATE = 'GAME_STATE_UPDATE',
+  PLAYER_JOINED = 'PLAYER_JOINED', // For broadcasting when a new player joins an existing game
+  REJOIN_DENIED = 'REJOIN_DENIED', // Specific event if server denies a rejoin attempt
+  SERVER_LOG_ENTRY = 'SERVER_LOG_ENTRY', // For individual log entries sent by the server
+  INITIAL_LOGS = 'INITIAL_LOGS', // For the batch of logs sent when a player joins/rejoins
+  CHAT_MESSAGE = 'CHAT_MESSAGE', // For broadcasting chat messages to clients
   GAME_LOG_MESSAGE = 'gameLogMessage', // Added for generic game log messages
   ERROR_MESSAGE = 'errorMessage', // Added for server-sent errors
+  RESPOND_CARD_DETAILS_FOR_ABILITY = 'RESPOND_CARD_DETAILS_FOR_ABILITY',
+  SERVER_EVENT = 'SERVER_EVENT'
+}
+
+// Payload Types for new Socket Events
+export interface RequestCardDetailsPayload {
+  targetPlayerId: PlayerId;
+  cardIndex: number;
+  gameId: string;
+}
+
+export interface RespondCardDetailsPayload {
+  card: Card;
+  playerId: PlayerId; // The player whose card is being revealed
+  cardIndex: number;  // The index of the card in that player's hand
 }
 
 // Enum for player action types (payload for PLAYER_ACTION event)

@@ -51,7 +51,6 @@ This project utilizes a modern technology stack for a robust and interactive exp
 check-the-card-game-v2/
 ├── client/                 # Next.js Frontend Application (New Architecture)
 │   ├── app/                # App Router: layouts, pages
-│   ├── components/         # React components
 │   │   ├── ui/             # Reusable UI elements from shadcn/ui or custom
 │   │   └── game/           # Game-specific components (GameBoard, CardComponent, etc.)
 │   ├── lib/                # Client-side utility functions, constants
@@ -99,62 +98,73 @@ The new frontend is being rebuilt from scratch to leverage modern state manageme
     cd check-the-card-game-v2
     ```
 
-2.  **Install Dependencies and Build `shared-types`:**
+2.  **Install All Dependencies:**
+    NPM workspaces will handle installing dependencies for `client`, `server`, and `shared-types` simultaneously. From the project root:
     ```bash
-    cd shared-types
     npm install
+    ```
+
+3.  **Build All Packages:**
+    It's crucial to build `shared-types` first, as both `server` and `client` depend on its output. The root build script handles this order. From the project root:
+    ```bash
     npm run build
-    cd ..
     ```
+    This command will:
+    *   Build `shared-types`
+    *   Build `server`
+    *   Build `client`
 
-3.  **Install Dependencies for the Backend Server:**
+4.  **Managing UI Components (shadcn/ui in Frontend):**
+    This project uses `shadcn/ui` for its frontend components. The initial setup for `shadcn/ui` is already completed and its configuration is part of the repository.
+    If you need to add *new* `shadcn/ui` components during development, navigate to the client directory and use the `shadcn/ui` CLI:
     ```bash
-    cd server
-    npm install
-    # `npm run build` for production, `npm run dev` for development (handles TS compilation)
+    cd client
+    # Example: Add new button and input components
+    # npx shadcn@latest add button input
     cd ..
     ```
-
-4.  **Set up the New Frontend (`client/`) Application:**
-    *   The `client/` directory will be initialized as a new Next.js project. If it doesn't exist yet, create it:
-        ```bash
-        npx create-next-app@latest client --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
-        # Follow the prompts. It's recommended to use the defaults.
-        ```
-    *   Install client-specific dependencies:
-        ```bash
-        cd client
-        npm install zustand xstate @xstate/react framer-motion socket.io-client clsx lucide-react
-        # Initialize shadcn/ui (follow its CLI instructions)
-        npx shadcn-ui@latest init
-        # Add shadcn/ui components as needed, e.g.:
-        # npx shadcn-ui@latest add button input modal
-        cd ..
-        ```
-    *   Ensure `shared-types` is built and accessible (Next.js might need a path alias in `tsconfig.json` or direct relative imports if symlinking isn't used via npm workspaces).
 
 ## ▶️ How to Run the Game
 
 ### Development Mode
 
-1.  **Start the Backend Server:**
-    Ensure `shared-types` has been built.
+With the monorepo setup, you can start both the backend server and the frontend development server with a single command from the project root:
+
+1.  **Start Both Server and Client:**
+    Ensure all packages have been built at least once (see Setup step 3).
+    From the project root (`check-the-card-game-v2/`):
     ```bash
-    cd server
     npm run dev
     ```
-    (Typically starts on `http://localhost:8000`)
+    This command uses `concurrently` to:
+    *   Start the backend server (equivalent to `cd server && npm start` or `npm run start:server` from root).
+    *   Start the Next.js frontend development server (equivalent to `cd client && npm run dev` or `npm run dev:client` from root).
 
-2.  **Start the Frontend Application (`client/`):**
-    In a **new terminal**, ensure `shared-types` has been built.
-    ```bash
-    cd client
-    npm run dev
-    ```
-    (Typically starts on `http://localhost:3000`)
+    You should see output from both processes in your terminal.
+    *   The server typically starts on `http://localhost:8000`.
+    *   The client typically starts on `http://localhost:3000`.
 
-3.  **Access the Game:**
+2.  **Access the Game:**
     Open your browser to `http://localhost:3000`.
+
+### Running Services Individually (Optional)
+
+If you need to run the client or server independently (e.g., for focused debugging or after building for production):
+
+*   **Start Only the Backend Server:**
+    ```bash
+    npm run start:server 
+    ```
+*   **Start Only the Frontend Development Server:**
+    ```bash
+    npm run dev:client
+    ```
+*   **Build Individual Packages:**
+    ```bash
+    npm run build:shared
+    npm run build:server
+    npm run build:client
+    ```
 
 ## 📝 Current Development Status & Focus
 

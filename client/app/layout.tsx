@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { UIMachineProvider } from "@/machines/uiMachineProvider";
+import { SocketProvider } from "@/context/SocketContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,7 +32,9 @@ export default function RootLayout({
         {/* SocketContext Provider will wrap here */}
         {/* Zustand setup (usually no explicit provider needed, but if using createActorContext with Zustand) */}
         {/* XState Animation Machine ActorProvider will wrap here */}
-        <UIMachineProvider>{children}</UIMachineProvider>
+        <SocketProvider>
+          <UIMachineProvider>{children}</UIMachineProvider>
+        </SocketProvider>
       </body>
     </html>
   );

@@ -2,13 +2,10 @@
 
 import { useCallback } from 'react';
 import { Socket } from 'socket.io-client';
-import {
-  PlayerActionType,
-  SocketEventName,
-  AbilityArgs, // For RESOLVE_SPECIAL_ABILITY payload
-  // GameMachineEvent, // For deriving ConcretePlayerActionEvents if needed, or import directly
-  // For now, we'll construct payloads explicitly based on PlayerActionEvents structure
-} from '@shared';
+// import { useSocket } from '@/context/SocketContext'; // Removed unused import
+import { useGameStore } from '@/store/gameStore';
+import { PlayerActionType, SocketEventName } from 'shared-types';
+import type { PlayerId, Card, AbilityArgs } from 'shared-types';
 
 // Assuming ConcretePlayerActionEvents structure from shared-types is implicitly followed by constructing objects:
 // type PlayerActionEvents = {

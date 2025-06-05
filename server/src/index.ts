@@ -18,14 +18,30 @@ import {
     GameMachineContext,
     GameMachineEvent,
     GameMachineInput,
-    GameMachineEmittedEvents
-} from '../../shared-types/src/index';
+    GameMachineEmittedEvents,
+    RequestCardDetailsPayload,
+    RespondCardDetailsPayload
+} from 'shared-types';
 
 console.log('Server starting with Socket.IO...');
 
-// For XState machine instances - MOVED TO TOP LEVEL
+// For XState machine instances
 type GameMachineActorRef = ActorRefFrom<typeof gameMachine>;
 const activeGameMachines = new Map<string, GameMachineActorRef>();
+
+// Helper to get a socket instance from a player ID
+const getSocketForPlayer = (playerId: string): Socket | undefined => {
+    const sessionEntry = Object.entries(socketSessionMap).find(
+        ([, sessionData]) => sessionData.playerId === playerId
+    );
+
+    if (sessionEntry) {
+        const [socketId] = sessionEntry;
+        return io.sockets.sockets.get(socketId);
+    }
+    
+    return undefined;
+};
 
 // Helper function for logging - DEFINED AT TOP LEVEL
 const getPlayerNameForLog = (playerId: string, context: GameMachineContext): string => {
@@ -214,121 +230,79 @@ io.on('connection', (socket: Socket) => {
   
   socket.on(SocketEventName.CREATE_GAME, (playerSetupData: InitialPlayerSetupData, callback: (response: CreateGameResponse) => void) => {
     try {
-      const gameId = `game_${Math.random().toString(36).substring(2, 8)}`;
-      playerSetupData.socketId = socket.id; 
+      // Use the player's ID as the game ID for simplicity
+      const gameId = playerSetupData.id;
 
-      console.log(`[Server] CreateGame: ${playerSetupData.name || playerSetupData.id} (Socket: ${socket.id}) for game ${gameId}`);
-      
-      const gameActorInput: GameMachineInput = { gameId };
+      // 1. Create the game machine actor
       const gameActor = createActor(gameMachine, {
-        input: gameActorInput,
-      }).start();
-
-      activeGameMachines.set(gameId, gameActor);
+        input: {
+          gameId: gameId,
+          // Pass any other initial context if needed
+        },
+      });
 
       let createGameCallbackCalled = false;
 
+      // 2. Subscribe to actor changes to broadcast updates
       const snapshotSubscription = gameActor.subscribe({
         next: (snapshot) => {
-          if (!snapshot || createGameCallbackCalled) return;
+          if (!snapshot) return;
 
-          if (snapshot.context && snapshot.context.players && snapshot.context.players[playerSetupData.id]) {
-            const clientGameState = generatePlayerView(snapshot.context as any, playerSetupData.id);
-            
-            if (callback && !createGameCallbackCalled) {
-              callback({ success: true, gameId, playerId: playerSetupData.id, gameState: clientGameState });
-              createGameCallbackCalled = true;
-              console.log(`[Server] Game ${gameId} created for ${playerSetupData.id}. Initial state sent via CREATE_GAME callback.`);
-              
-              if (snapshot.context.logHistory && snapshot.context.logHistory.length > 0) {
-                socket.emit(SocketEventName.INITIAL_LOGS, { logs: snapshot.context.logHistory.slice(-NUM_RECENT_LOGS_ON_JOIN_REJOIN) });
+          // Handle emitted events from the machine
+          for (const emitted of (snapshot as any).emitted || []) {
+            if (emitted.type === 'SEND_TO_PLAYER') {
+              const playerSocket = getSocketForPlayer(emitted.payload.playerId);
+              if (playerSocket) {
+                playerSocket.emit(SocketEventName.SERVER_EVENT, emitted.payload.event);
               }
-              
-              snapshotSubscription.unsubscribe();
             }
+          }
+
+          // On the very first state emission, send the initial state back to the creator
+          if (callback && !createGameCallbackCalled) {
+            const clientGameState = generatePlayerView(snapshot.context, playerSetupData.id);
+            callback({ success: true, gameId, playerId: playerSetupData.id, gameState: clientGameState });
+            createGameCallbackCalled = true;
+            console.log(`[Server] Game ${gameId} created for ${playerSetupData.id}. Initial state sent via CREATE_GAME callback.`);
+          }
+
+          // Broadcast the updated state to all players in the game
+          const { context } = snapshot;
+          if (context.players) {
+            Object.keys(context.players).forEach(playerId => {
+              const playerSocket = getSocketForPlayer(playerId);
+              if (playerSocket) {
+                const playerView = generatePlayerView(context, playerId);
+                playerSocket.emit(SocketEventName.GAME_STATE_UPDATE, playerView);
+              }
+            });
           }
         },
         error: (error: unknown) => {
-          console.error(`[Server] Game machine actor for ${gameId} reported an error in snapshot subscription:`, error);
+          console.error(`[Server] Game machine actor for ${gameId} reported an error:`, error);
           if (callback && !createGameCallbackCalled) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown machine error';
-            callback({ success: false, message: `Machine error: ${errorMessage}` });
+            callback({ success: false, message: `Machine error on game creation: ${errorMessage}` });
             createGameCallbackCalled = true;
           }
         },
         complete: () => {
-          console.log(`[Server] Game machine actor for ${gameId} has completed (snapshot subscription).`);
+          console.log(`[Server] Game machine actor for ${gameId} has completed. Cleaning up.`);
+          activeGameMachines.delete(gameId);
+          snapshotSubscription.unsubscribe();
         }
       });
 
-      const system = gameActor.system;
-      if (system) {
-        (system as any).on('xstate.emitted', (emittedPayload: any) => {
-          if (emittedPayload.id === gameActor.id) {
-            const actualEmittedEvent = emittedPayload.event as GameMachineEmittedEvents;
-            const currentSnapshot = gameActor.getSnapshot();
+      // 3. Start the actor and store it
+      gameActor.start();
+      activeGameMachines.set(gameId, gameActor);
+      console.log(`[Server] Game actor created and started for game ${gameId}.`);
 
-            if (actualEmittedEvent.type === 'BROADCAST_GAME_STATE') {
-              broadcastGameStateCustom(actualEmittedEvent.gameId || currentSnapshot.context.gameId, currentSnapshot.context);
-            } else if (actualEmittedEvent.type === 'EMIT_LOG_PUBLIC' && actualEmittedEvent.publicLogData) {
-              const logGameId = actualEmittedEvent.gameId || currentSnapshot.context.gameId;
-              const richLogEntry: RichGameLogMessage = {
-                ...actualEmittedEvent.publicLogData,
-                logId: `log_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                timestamp: new Date().toISOString(),
-                isPublic: true,
-              };
-              if (actualEmittedEvent.publicLogData.actorId) {
-                richLogEntry.actorName = getPlayerNameForLog(actualEmittedEvent.publicLogData.actorId, currentSnapshot.context);
-              }
-              broadcastLogEntryCustom(logGameId, richLogEntry);
-
-            } else if (actualEmittedEvent.type === 'EMIT_LOG_PRIVATE' && actualEmittedEvent.privateLogData && actualEmittedEvent.recipientPlayerId) {
-              const logGameId = actualEmittedEvent.gameId || currentSnapshot.context.gameId;
-              const richLogEntry: RichGameLogMessage = {
-                ...actualEmittedEvent.privateLogData,
-                logId: `log_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                timestamp: new Date().toISOString(),
-                isPublic: false,
-                recipientPlayerId: actualEmittedEvent.recipientPlayerId,
-              };
-              if (actualEmittedEvent.privateLogData.actorId) {
-                richLogEntry.actorName = getPlayerNameForLog(actualEmittedEvent.privateLogData.actorId, currentSnapshot.context);
-              }
-              broadcastLogEntryCustom(logGameId, richLogEntry);
-            
-            } else if (actualEmittedEvent.type === 'EMIT_ERROR_TO_CLIENT') {
-                const targetPlayer = currentSnapshot.context.players[actualEmittedEvent.playerId || ''];
-                if (targetPlayer && targetPlayer.socketId) {
-                    io.to(targetPlayer.socketId).emit('serverError', {
-                        message: actualEmittedEvent.message,
-                        details: actualEmittedEvent.errorDetails
-                    });
-                } else if (!actualEmittedEvent.playerId) {
-                     console.error(`[Server] Machine emitted global error for game ${actualEmittedEvent.gameId}: ${actualEmittedEvent.message}`, actualEmittedEvent.errorDetails);
-                }
-            }
-            else if (actualEmittedEvent.type === 'BROADCAST_PLAYER_SPECIFIC_STATE') {
-                const targetPlayerState = currentSnapshot.context.players[actualEmittedEvent.playerId];
-                if (targetPlayerState && targetPlayerState.socketId) {
-                    const playerSpecificView = generatePlayerView(currentSnapshot.context as any, actualEmittedEvent.playerId);
-                    io.to(targetPlayerState.socketId).emit(SocketEventName.GAME_STATE_UPDATE, { gameId: actualEmittedEvent.gameId, gameState: playerSpecificView });
-                }
-            }
-          }
-        });
-        
-        gameActor.subscribe({
-            complete: () => {
-                console.log(`[Server] Game machine actor for ${gameId} has completed. Cleaning up.`);
-                activeGameMachines.delete(gameId);
-            }
-         });
-      }
-
+      // 4. Join the socket to the game room and register the session
       socket.join(gameId);
       registerSocketSession(gameId, playerSetupData.id);
 
+      // 5. Send the initial event to the machine to add the creator as a player
       const joinEvent: GameMachineEvent = {
         type: 'PLAYER_JOIN_REQUEST',
         playerSetupData
@@ -336,8 +310,10 @@ io.on('connection', (socket: Socket) => {
       gameActor.send(joinEvent);
 
     } catch (e: any) {
-      console.error(`[Server-CreateGame] Error: ${e.message}`, e);
-      if (callback) callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
+      console.error(`[Server] Error in CREATE_GAME:`, e);
+      if (callback) {
+        callback({ success: false, message: e.message || 'An unexpected error occurred.' });
+      }
     }
   });
   
@@ -543,6 +519,53 @@ io.on('connection', (socket: Socket) => {
       } else {
           console.error(`[Server-PlayerAction] Callback was not a function for error handling. Socket: ${socket.id}, Action Type: ${action.type}`);
       }
+    }
+  });
+
+  socket.on(SocketEventName.REQUEST_CARD_DETAILS_FOR_ABILITY, async (payload: RequestCardDetailsPayload, callback?: (response: BasicResponse & { cardDetails?: RespondCardDetailsPayload }) => void) => {
+    try {
+      const session = getSocketSession();
+      if (!session || !session.gameId || session.gameId !== payload.gameId) {
+        console.warn(`[Server-${SocketEventName.REQUEST_CARD_DETAILS_FOR_ABILITY}] Invalid session for socket ${socket.id} or gameId mismatch. Session: ${JSON.stringify(session)}, Payload: ${JSON.stringify(payload)}`);
+        if (callback) callback({ success: false, message: 'Invalid session or game ID mismatch.' });
+        return;
+      }
+
+      const gameActor = activeGameMachines.get(payload.gameId);
+      if (!gameActor) {
+        console.warn(`[Server-${SocketEventName.REQUEST_CARD_DETAILS_FOR_ABILITY}] Game not found for id: ${payload.gameId}`);
+        if (callback) callback({ success: false, message: 'Game not found.' });
+        return;
+      }
+
+      const currentFullState = gameActor.getSnapshot().context as GameMachineContext;
+      
+      const targetPlayerState = currentFullState.players[payload.targetPlayerId];
+      if (!targetPlayerState || payload.cardIndex < 0 || payload.cardIndex >= targetPlayerState.hand.length) {
+        console.warn(`[Server-${SocketEventName.REQUEST_CARD_DETAILS_FOR_ABILITY}] Target player ${payload.targetPlayerId} or card index ${payload.cardIndex} invalid in game ${payload.gameId}.`);
+        if (callback) callback({ success: false, message: 'Target player or card index invalid.' });
+        return;
+      }
+
+      const cardToReveal = targetPlayerState.hand[payload.cardIndex];
+
+      // Further validation could be added here to check if the requesting player (session.playerId)
+      // is legitimately in an ability state that allows peeking/interacting with this card.
+      // For now, trust client state is reflecting server-allowed pending abilities.
+
+      const responsePayload: RespondCardDetailsPayload = {
+        card: cardToReveal,
+        playerId: payload.targetPlayerId,
+        cardIndex: payload.cardIndex
+      };
+
+      socket.emit(SocketEventName.RESPOND_CARD_DETAILS_FOR_ABILITY, responsePayload);
+      console.log(`[Server-${SocketEventName.REQUEST_CARD_DETAILS_FOR_ABILITY}] Responded to ${session.playerId} in game ${payload.gameId} with card details for P:${payload.targetPlayerId}[${payload.cardIndex}].`);
+      if (callback) callback({ success: true, cardDetails: responsePayload });
+
+    } catch (error: any) {
+      console.error(`[Server] Error handling ${SocketEventName.REQUEST_CARD_DETAILS_FOR_ABILITY} for game ${payload?.gameId}:`, error);
+      if (callback) callback({ success: false, message: error.message || 'Internal server error while requesting card details.' });
     }
   });
 

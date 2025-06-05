@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 // Import actual types from shared-types
 import type {
+  Card,
+  PlayerId,
   ClientCheckGameState,
   RichGameLogMessage,
   ChatMessage,
-} from '@shared'; // Updated path alias
+} from 'shared-types'; // Updated path alias
 
 // Placeholder types removed
 

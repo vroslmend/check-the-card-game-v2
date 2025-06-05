@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClientCard, Card } from '../../../shared-types/src/index'; // Assuming Card can be used for discard pile top
+import { Card } from 'shared-types'; // Changed to alias
 import CardDisplay from '../ui/CardDisplay';
 
 interface GameBoardAreaProps {

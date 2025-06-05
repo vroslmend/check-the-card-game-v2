@@ -5,7 +5,9 @@ interface CardDisplayProps {
   card: ClientCard;
   onClick?: () => void;
   isSelected?: boolean;
+  isAbilitySelected?: boolean;
   className?: string;
+  isTemporarilyRevealed?: boolean;
 }
 
 const suitSymbols: Record<Suit, string> = {
@@ -31,22 +33,33 @@ const rankSymbols: Record<Rank, string> = {
   [Rank.King]: 'K',
 };
 
-const CardDisplay: React.FC<CardDisplayProps> = ({ card, onClick, isSelected, className }) => {
+const CardDisplay: React.FC<CardDisplayProps> = ({ card, onClick, isSelected, isAbilitySelected, className, isTemporarilyRevealed }) => {
   const isHiddenCard = (c: ClientCard): c is HiddenCard => (c as HiddenCard).isHidden === true;
-  // A card is considered face down for display if it's a HiddenCard or if it's a regular Card with isFaceDownToOwner true.
-  // For now, we'll simplify: if it's HiddenCard, it's a back. If it's a Card, we check isFaceDownToOwner.
-  // This might need refinement based on exactly how `isFaceDownToOwner` is used by the client for the *actual* owner.
-  // For this component, we assume if `isFaceDownToOwner` is present and true, it's a back.
-  const showBack = isHiddenCard(card) || (card as Card).isFaceDownToOwner === true;
 
-  const baseStyle = "w-20 h-28 border-2 rounded-lg flex flex-col items-center justify-center shadow-md transition-all select-none";
-  const selectedStyle = isSelected ? "ring-4 ring-blue-500 shadow-lg scale-105" : "hover:shadow-lg";
+  // Determine if the card back should be shown
+  let showBackInitially = isHiddenCard(card) || (card as Card).isFaceDownToOwner === true;
+
+  // If isTemporarilyRevealed is true, always show the face (i.e., don't show back)
+  // unless the card itself is fundamentally a HiddenCard (e.g. an opponent's non-peeked card)
+  // and we don't actually have its face details.
+  // However, for the local player's hand, `card` will be a full Card object.
+  const showBack = isTemporarilyRevealed ? false : showBackInitially;
+
+  const baseStyle = "w-20 h-28 border-2 rounded-lg flex flex-col items-center justify-center shadow-md transition-all select-none relative";
+  
+  let ringStyle = "";
+  if (isAbilitySelected) {
+    ringStyle = "ring-4 ring-purple-500 shadow-lg scale-105";
+  } else if (isSelected) {
+    ringStyle = "ring-4 ring-blue-500 shadow-lg scale-105";
+  }
+  
   const clickableStyle = onClick ? "cursor-pointer hover:border-blue-400" : "";
 
   if (showBack) {
     return (
       <div
-        className={`${baseStyle} bg-gray-500 ${clickableStyle} ${selectedStyle} ${className || ''}`}
+        className={`${baseStyle} bg-gray-500 ${clickableStyle} ${ringStyle} ${className || ''}`}
         onClick={onClick}
         aria-label="Card back"
       >
@@ -62,10 +75,10 @@ const CardDisplay: React.FC<CardDisplayProps> = ({ card, onClick, isSelected, cl
 
   return (
     <div
-      className={`${baseStyle} bg-white ${suitColor} ${clickableStyle} ${selectedStyle} ${className || ''}`}
+      className={`${baseStyle} bg-white ${suitColor} ${clickableStyle} ${ringStyle} ${className || ''}`}
       onClick={onClick}
       role="button"
-      aria-pressed={isSelected}
+      aria-pressed={isSelected || isAbilitySelected}
       aria-label={`Card ${rankSymbols[displayableCard.rank]} of ${suitSymbols[displayableCard.suit]}`}
     >
       <div className="absolute top-1 left-1 text-lg font-semibold">{rankSymbols[displayableCard.rank]}</div>

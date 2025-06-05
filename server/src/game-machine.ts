@@ -1,4 +1,4 @@
-import { setup, assign, sendParent, sendTo, ActorRefFrom, raise, enqueueActions, fromPromise, emit } from 'xstate';
+import { setup, assign, sendParent, sendTo, ActorRefFrom, raise, enqueueActions, fromPromise, emit, and } from 'xstate';
 import {
   CheckGameState,
   PlayerState,
@@ -25,7 +25,8 @@ import {
   GameMachineEvent,
   GameMachineInput,
   GameMachineEmittedEvents
-} from '../../shared-types/src/index';
+} from 'shared-types';
+import { createDeckWithIds, shuffleDeck } from './lib/deck-utils';
 
 // Durations (configurable in game-manager, hardcoded here for now)
 const PEEK_TOTAL_DURATION_MS = 10000; // 10 seconds
@@ -37,30 +38,6 @@ const DISCONNECT_GRACE_PERIOD_MS = 30000; // 30 seconds
 // TODO: Move to a shared utility or ensure context always has player names resolved
 const getPlayerNameForLog = (playerId: string, context: GameMachineContext): string => {
     return context.players[playerId]?.name || 'P-' + playerId.slice(-4);
-};
-
-// Helper function to create a standard 52-card deck
-// Ensure this function (or similar logic elsewhere) assigns the mandatory 'id'
-const createDeckWithIds = (): Card[] => {
-  const suits = Object.values(Suit);
-  const ranks = Object.values(Rank);
-  const deck: Card[] = [];
-  for (const suit of suits) {
-    for (const rank of ranks) {
-      deck.push({ suit, rank, id: `${suit}_${rank}` }); // Assign unique ID
-    }
-  }
-  return deck;
-};
-
-// Helper function to shuffle the deck
-const shuffleDeck = (deck: Card[]): Card[] => {
-  // Fisher-Yates (Knuth) Shuffle
-  for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-  return deck;
 };
 
 export const gameMachine = setup({
@@ -935,13 +912,7 @@ export const gameMachine = setup({
         },
         // Example: Transition to game setup when enough players are ready
         // This is illustrative; your actual transition might be different
-        on: {
-          // Assuming an event like START_GAME_SETUP when conditions are met
-          // _FORCE_GAME_START_DEBUG: { // Placeholder for a trigger to initialize deck
-          //   target: 'initialPeekPhase', // Or an intermediate setup state
-          //   actions: ['_initializeGameSetup'] // Initialize deck here
-          // }
-        }
+
       },
       always: [ // Check to transition to initialPeekPhase
         {
@@ -1116,7 +1087,7 @@ export const gameMachine = setup({
                   actions: assign({ currentPhase: 'playPhase' as GamePhase }) // Ensure phase is correctly playPhase
                 },
                 { 
-                  target: 'scoringPhase', 
+                  target: '#checkGame.scoringPhase', 
                   // This transition is taken if currentPlayerId is '' (no valid player found)
                   actions: [
                     assign({ currentPhase: 'scoringPhase' as GamePhase }), // Set phase for scoring
@@ -1158,10 +1129,10 @@ export const gameMachine = setup({
       on: {
         [PlayerActionType.DRAW_FROM_DECK]: {
           target: 'awaitingPostDrawAction',
-          guards: [
+          guard: and([
               { type: 'canPerformInitialDrawAction' },
               { type: 'deckIsNotEmpty' }
-          ],
+          ]),
           actions: [
             assign(
               ({ context, event }: { 
@@ -1216,10 +1187,10 @@ export const gameMachine = setup({
         },
         [PlayerActionType.DRAW_FROM_DISCARD]: {
           target: 'awaitingPostDrawAction',
-          guards: [
+          guard: and([
               { type: 'canPerformInitialDrawAction' },
               { type: 'discardIsDrawable' } 
-          ],
+          ]),
           actions: [
             assign((
               { context, event }: { 
@@ -2123,10 +2094,10 @@ export const gameMachine = setup({
         },
         always: [
         // If entry action decided to move to a different phase (no abilities pending)
-        { target: 'finalTurnsPhase', guard: ({context}: { context: GameMachineContext }) => context.currentPhase === 'finalTurnsPhase' && context.pendingAbilities.length === 0 },
-        { target: 'playPhase', guard: ({context}: { context: GameMachineContext }) => context.currentPhase === 'playPhase' && context.pendingAbilities.length === 0 },
+        { target: '#checkGame.finalTurnsPhase', guard: ({context}: { context: GameMachineContext }) => context.currentPhase === 'finalTurnsPhase' && context.pendingAbilities.length === 0 },
+        { target: '#checkGame.playPhase', guard: ({context}: { context: GameMachineContext }) => context.currentPhase === 'playPhase' && context.pendingAbilities.length === 0 },
         // If still in abilityResolutionPhase but something went wrong and no player/abilities (fallback)
-        { target: 'playPhase', guard: ({context}: { context: GameMachineContext }) => context.currentPhase === 'abilityResolutionPhase' && (context.pendingAbilities.length === 0 || !context.currentPlayerId) }
+        { target: '#checkGame.playPhase', guard: ({context}: { context: GameMachineContext }) => context.currentPhase === 'abilityResolutionPhase' && (context.pendingAbilities.length === 0 || !context.currentPlayerId) }
       ]
     },
     finalTurnsPhase: {
@@ -2270,11 +2241,11 @@ export const gameMachine = setup({
               on: {
                 [PlayerActionType.DRAW_FROM_DECK]: {
                   target: 'awaitingFinalPostDrawAction',
-                  guards: [
+                  guard: and([
                       { type: 'isPlayersTurn' }, 
                       { type: 'hasNoPendingCard' },
                       { type: 'deckIsNotEmpty' }
-                  ],
+                  ]),
                   actions: [
                     assign(( { context, event } : { context: GameMachineContext, event: Extract<GameMachineEvent, { type: PlayerActionType.DRAW_FROM_DECK}> } ) => {
                       const player = context.players[event.playerId];
@@ -2323,11 +2294,11 @@ export const gameMachine = setup({
                 },
                 [PlayerActionType.DRAW_FROM_DISCARD]: {
                   target: 'awaitingFinalPostDrawAction',
-                  guards: [
+                  guard: and([
                       { type: 'isPlayersTurn' },
                       { type: 'hasNoPendingCard' },
                       { type: 'discardIsDrawable' } 
-                  ],
+                  ]),
                   actions: [
                     assign(( { context, event }: { context: GameMachineContext, event: Extract<GameMachineEvent, { type: PlayerActionType.DRAW_FROM_DISCARD}> } ) => {
                       const player = context.players[event.playerId];
@@ -2591,8 +2562,6 @@ export const gameMachine = setup({
         }
       }
     }, // END of finalTurnsPhase states
-    
-    },
     scoringPhase: {
     always: {
         target: 'gameOver',
@@ -2749,21 +2718,5 @@ export const gameMachine = setup({
           });
         }
       }),
-      invoke: {
-        // ... existing code ...
-      }
     }
-}
-// Implementations are now in setup()
-// {
-//   delays: {
-//     peekDuration: 10000, // PEEK_TOTAL_DURATION_MS (10 seconds)
-//   },
-//   guards: {
-//     allPlayersReadyAndPeekNotYetStarted: ({ context }: { context: GameMachineContext }) => {
-//       // This guard is still useful for other potential logic or if we revert to choose/enqueueActions
-//       return context.turnOrder.every((pid: string) => context.players[pid]?.isReadyForInitialPeek) && !context.initialPeekAllReadyTimestamp;
-//     }
-//   },
-// }
-); 
+  }});

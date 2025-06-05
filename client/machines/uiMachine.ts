@@ -1,6 +1,17 @@
 import { setup, assign, ActorRefFrom, emit } from 'xstate';
-import { PlayerActionType, SocketEventName } from '@shared';
-import type { ClientCheckGameState, ConcretePlayerActionEvents, Card, PlayerId, RichGameLogMessage, ChatMessage, AbilityArgs } from '@shared';
+import { PlayerActionType, SocketEventName } from 'shared-types';
+import type {
+  PlayerId,
+  Card,
+  ClientCheckGameState,
+  RichGameLogMessage,
+  ConcretePlayerActionEvents,
+  ChatMessage,
+  AbilityArgs
+} from 'shared-types';
+
+// import type { GameStore } from '@/store/gameStore'; // Commenting out for now, will address if still an issue
+import type { useGameStore } from '@/store/gameStore'; // Linter suggested this
 
 // --- Placeholder & Helper Types ---
 export type AnimationCue =
@@ -72,47 +83,48 @@ export interface UIMachineContext {
 }
 
 export type UIMachineEvent =
-  // Core
-  | { type: 'INITIALIZE'; localPlayerId: PlayerId; gameId: string }
-  | { type: 'GAME_STATE_RECEIVED'; gameState: ClientCheckGameState } // For direct state setting if ever needed
-  // Server Pushed Events (handled by provider, sent to machine)
-  | { type: 'CLIENT_GAME_STATE_UPDATED'; gameState: ClientCheckGameState }
-  | { type: 'NEW_GAME_LOG'; logMessage: RichGameLogMessage }
-  | { type: 'NEW_CHAT_MESSAGE'; chatMessage: ChatMessage }
-  | { type: 'ERROR_RECEIVED'; error: string }
-  // User Interactions (UI Clicks)
-  | { type: 'DRAW_FROM_DECK_CLICKED' }
-  | { type: 'DRAW_FROM_DISCARD_CLICKED' }
-  | { type: 'HAND_CARD_CLICKED'; cardIndex: number }
-  | { type: 'PLAYER_SLOT_CLICKED'; playerId: PlayerId; cardIndex: number }
-  | { type: 'DISCARD_SELECTED_HAND_CARD_CONFIRMED' }
-  | { type: 'SWAP_WITH_SELECTED_HAND_CARD_CONFIRMED' }
-  | { type: 'CALL_CHECK_CLICKED' }
-  | { type: 'PASS_MATCH_CLICKED' }
-  | { type: 'ATTEMPT_MATCH_WITH_SELECTED_CARD_CLICKED'; cardId: string }
-  | { type: 'READY_FOR_INITIAL_PEEK_CLICKED' }
-  | { type: 'INITIAL_PEEK_ACKNOWLEDGED_CLICKED' }
-  // Actions on a pending drawn card (after DRAW_FROM_DECK/DISCARD resolves and pendingDrawnCard is set in context.currentGameState)
-  | { type: 'CONFIRM_SWAP_PENDING_CARD_WITH_HAND'; handCardIndex: number }
-  | { type: 'CONFIRM_DISCARD_PENDING_DRAWN_CARD' }
-  // Ability Flow
-  | { type: 'START_ABILITY'; ability: AbilityContextContent['type'] }
-  | { type: 'ABILITY_CARD_TARGET_SELECTED'; playerId: PlayerId; cardIndex: number; card: Card }
-  | { type: 'ABILITY_CONFIRM_ACTION' }
-  | { type: 'ABILITY_CANCEL_ACTION' }
-  | { type: 'ABILITY_SKIP_PEEK' }
-  | { type: 'ABILITY_SKIP_SWAP' }
-  | { type: 'RESOLVE_ABILITY_SUCCESS' } // Event from server after ability resolution
-  // UI Management
-  | { type: 'SHOW_TOAST'; toast: Omit<ToastPayload, 'id'> }
-  | { type: 'DISMISS_TOAST'; toastId: string }
-  | { type: 'SHOW_MODAL'; modal: ModalPayload }
-  | { type: 'SHOW_CONFIRM_MODAL'; modalPayload: ModalPayload; }
-  | { type: 'DISMISS_MODAL' }
-  | { type: 'TRIGGER_ANIMATION'; cue: AnimationCue }
-  | { type: 'ANIMATION_COMPLETED'; cueType: AnimationCue['type'] }
-  // Chat
-  | { type: 'SUBMIT_CHAT_MESSAGE'; message: string; senderId: PlayerId; senderName: string; gameId: string };
+// Core
+| { type: 'INITIALIZE'; localPlayerId: PlayerId; gameId: string }
+| { type: 'GAME_STATE_RECEIVED'; gameState: ClientCheckGameState } // For direct state setting if ever needed
+// Server Pushed Events (handled by provider, sent to machine)
+| { type: 'CLIENT_GAME_STATE_UPDATED'; gameState: ClientCheckGameState }
+| { type: 'NEW_GAME_LOG'; logMessage: RichGameLogMessage }
+| { type: 'NEW_CHAT_MESSAGE'; chatMessage: ChatMessage }
+| { type: 'ERROR_RECEIVED'; error: string }
+// User Interactions (UI Clicks)
+| { type: 'DRAW_FROM_DECK_CLICKED' }
+| { type: 'DRAW_FROM_DISCARD_CLICKED' }
+| { type: 'HAND_CARD_CLICKED'; cardIndex: number } // For local player's hand selection
+| { type: 'DISCARD_SELECTED_HAND_CARD_CONFIRMED' }
+| { type: 'SWAP_WITH_SELECTED_HAND_CARD_CONFIRMED' }
+| { type: 'CALL_CHECK_CLICKED' }
+| { type: 'PASS_MATCH_CLICKED' }
+| { type: 'ATTEMPT_MATCH_WITH_SELECTED_CARD_CLICKED'; cardId: string }
+| { type: 'READY_FOR_INITIAL_PEEK_CLICKED' }
+| { type: 'INITIAL_PEEK_ACKNOWLEDGED_CLICKED' }
+// Actions on a pending drawn card
+| { type: 'CONFIRM_SWAP_PENDING_CARD_WITH_HAND'; handCardIndex: number }
+| { type: 'CONFIRM_DISCARD_PENDING_DRAWN_CARD' }
+// Ability Flow
+| { type: 'START_ABILITY'; ability: AbilityContextContent['type'] }
+// | { type: 'ABILITY_CARD_TARGET_SELECTED'; playerId: PlayerId; cardIndex: number; card: Card } // Replaced by new flow
+| { type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY'; targetPlayerId: PlayerId; cardIndex: number } // New: User clicks a slot for ability
+| { type: 'SERVER_PROVIDED_CARD_FOR_ABILITY'; card: Card; playerId: PlayerId; cardIndex: number } // New: Server sends card details for that slot
+| { type: 'ABILITY_CONFIRM_ACTION' }
+| { type: 'ABILITY_CANCEL_ACTION' }
+| { type: 'ABILITY_SKIP_PEEK' }
+| { type: 'ABILITY_SKIP_SWAP' }
+| { type: 'RESOLVE_ABILITY_SUCCESS' } // Event from server after ability resolution
+// UI Management
+| { type: 'SHOW_TOAST'; toast: Omit<ToastPayload, 'id'> }
+| { type: 'DISMISS_TOAST'; toastId: string }
+| { type: 'SHOW_MODAL'; modal: ModalPayload }
+| { type: 'SHOW_CONFIRM_MODAL'; modalPayload: ModalPayload; }
+| { type: 'DISMISS_MODAL' }
+| { type: 'TRIGGER_ANIMATION'; cue: AnimationCue }
+| { type: 'ANIMATION_COMPLETED'; cueType: AnimationCue['type'] }
+// Chat
+| { type: 'SUBMIT_CHAT_MESSAGE'; message: string; senderId: PlayerId; senderName: string; gameId: string };
 
 export const uiMachine = setup({
   types: {
@@ -153,7 +165,7 @@ export const uiMachine = setup({
     updateAbilityPeekedInfo: assign({
       abilityContext: ({ context, event }) => {
         if (!context.abilityContext) return null;
-        const { card, cardIndex, playerId } = event as Extract<UIMachineEvent, { type: 'ABILITY_CARD_TARGET_SELECTED' }>;
+        const { card, cardIndex, playerId } = event as Extract<UIMachineEvent, { type: 'SERVER_PROVIDED_CARD_FOR_ABILITY' }>;
 
         if (context.abilityContext.type === 'king' && (context.abilityContext.step === 'peeking1' || context.abilityContext.step === 'peeking2')) {
           const currentPeeked = context.abilityContext.peekedCardsInfo || [];
@@ -171,25 +183,63 @@ export const uiMachine = setup({
     updateAbilitySwapSlot: assign({
       abilityContext: ({ context, event }) => {
         if (!context.abilityContext) return null;
-        if (!['swapping1', 'swapping2'].includes(context.abilityContext.step)) return context.abilityContext;
-        // Ensure the ability type is one that uses swapSlots in this manner
-        if (context.abilityContext.type !== 'jack' && context.abilityContext.type !== 'king' && context.abilityContext.type !== 'queen') return context.abilityContext;
 
-        const { card, cardIndex, playerId } = event as Extract<UIMachineEvent, { type: 'ABILITY_CARD_TARGET_SELECTED' }>;
-        
-        const currentSwapSlots = context.abilityContext.swapSlots || { slot1: undefined, slot2: undefined };
-        const newSwapSlots = { ...currentSwapSlots };
+        const abilityType = context.abilityContext.type;
+        const currentStep = context.abilityContext.step;
 
-        if (!newSwapSlots.slot1) {
-          newSwapSlots.slot1 = { card, cardIndex, playerId };
-        } else if (!newSwapSlots.slot2) {
-          // Avoid selecting the exact same card instance for both slots
-          if (newSwapSlots.slot1.playerId === playerId && newSwapSlots.slot1.cardIndex === cardIndex && newSwapSlots.slot1.card.id === card.id) {
-            return context.abilityContext; 
-          }
-          newSwapSlots.slot2 = { card, cardIndex, playerId };
+        if (!((abilityType === 'king' || abilityType === 'queen' || abilityType === 'jack') && 
+              (currentStep === 'swapping1' || currentStep === 'swapping2' || currentStep === 'confirmingSwap'))) {
+          // Not in a swappable ability or correct step, return context unchanged
+          return context.abilityContext;
         }
-        return { ...context.abilityContext, swapSlots: newSwapSlots };
+
+        const { card: clickedCard, cardIndex: clickedCardIndex, playerId: clickedPlayerId } = event as Extract<UIMachineEvent, { type: 'SERVER_PROVIDED_CARD_FOR_ABILITY' }>;
+        const clickedCardInfo = { card: clickedCard, cardIndex: clickedCardIndex, playerId: clickedPlayerId };
+
+        const currentSwapSlots = context.abilityContext.swapSlots || {};
+        let slot1 = currentSwapSlots.slot1;
+        let slot2 = currentSwapSlots.slot2;
+        let nextStep = currentStep;
+
+        const isSameSlot = (slot: typeof slot1, targetInfo: typeof clickedCardInfo) => {
+          if (!slot) return false;
+          return slot.playerId === targetInfo.playerId && slot.cardIndex === targetInfo.cardIndex;
+        };
+
+        if (isSameSlot(slot1, clickedCardInfo)) { // Clicked on slot1 card
+          slot1 = slot2; // Move slot2 to slot1 (if slot2 existed)
+          slot2 = undefined;
+          nextStep = slot1 ? 'swapping2' : 'swapping1';
+        } else if (isSameSlot(slot2, clickedCardInfo)) { // Clicked on slot2 card
+          slot2 = undefined;
+          nextStep = 'swapping2'; // Since slot1 must be filled if slot2 was
+        } else if (!slot1) { // Slot1 is empty
+          slot1 = clickedCardInfo;
+          nextStep = 'swapping2';
+        } else if (!slot2) { // Slot1 is full, Slot2 is empty
+          slot2 = clickedCardInfo;
+          nextStep = 'confirmingSwap';
+        } else { // Both slots are full, and it's a new card (implicitly changing slot2)
+          slot2 = clickedCardInfo;
+          nextStep = 'confirmingSwap'; // Stays in confirmingSwap, just changes the card for slot2
+        }
+        
+        const updatedAbilityContextBase = {
+            ...context.abilityContext,
+            swapSlots: { slot1, slot2 },
+            step: nextStep as any, // Cast to any to satisfy specific step types of king/queen/jack
+        };
+
+        // Refine step type for specific ability
+        if (abilityType === 'king') {
+            return { ...updatedAbilityContextBase, step: nextStep as Extract<AbilityContextContent, {type: 'king'}>['step'] } as Extract<AbilityContextContent, {type: 'king'}>;
+        } else if (abilityType === 'queen') {
+            return { ...updatedAbilityContextBase, step: nextStep as Extract<AbilityContextContent, {type: 'queen'}>['step'] } as Extract<AbilityContextContent, {type: 'queen'}>;
+        } else if (abilityType === 'jack') {
+            return { ...updatedAbilityContextBase, step: nextStep as Extract<AbilityContextContent, {type: 'jack'}>['step'] } as Extract<AbilityContextContent, {type: 'jack'}>;
+        }
+        
+        return context.abilityContext; // Should not be reached given initial checks
       }
     }),
     showToast: assign({
@@ -432,6 +482,16 @@ export const uiMachine = setup({
       return (context.abilityContext.type === 'king' && (context.abilityContext.step === 'swapping1' || context.abilityContext.step === 'swapping2')) || 
              (context.abilityContext.type === 'queen' && (context.abilityContext.step === 'swapping1' || context.abilityContext.step === 'swapping2')) ||
              (context.abilityContext.type === 'jack' && (context.abilityContext.step === 'swapping1' || context.abilityContext.step === 'swapping2'));
+    },
+    canConfirmSwapAction: ({ context }: { context: UIMachineContext }): boolean => {
+      if (!context.abilityContext) return false;
+      const { type, step, swapSlots } = context.abilityContext;
+      return (
+        (type === 'king' || type === 'queen' || type === 'jack') &&
+        step === 'confirmingSwap' &&
+        !!swapSlots?.slot1 &&
+        !!swapSlots?.slot2
+      );
     }
   },
 }).createMachine({
@@ -753,126 +813,155 @@ export const uiMachine = setup({
       // ... existing code ...
     },
     abilityActive: {
-      on: {
-        CLIENT_GAME_STATE_UPDATED: [
-          {
-            guard: ({ context }) => !!context.currentGameState?.players[context.localPlayerId!]?.pendingDrawnCard,
-            target: '#uiMachine.playerAction.promptPendingCardDecision',
-            actions: ['setCurrentGameState', 'clearAbilityContext']
-          },
-          {
-            guard: ({ context }) => {
-              const gs = context.currentGameState;
-              const localPlayerId = context.localPlayerId;
-              if (!gs || !localPlayerId || !gs.matchingOpportunityInfo) return false;
-              return gs.matchingOpportunityInfo.potentialMatchers.includes(localPlayerId);
+      initial: 'promptingSelection',
+      states: {
+        promptingSelection: {
+          on: {
+            PLAYER_SLOT_CLICKED_FOR_ABILITY: {
+              target: 'awaitingCardDetails',
+              actions: [
+                emit(({ event, context }: { event: UIMachineEvent, context: UIMachineContext }) => {
+                  const { targetPlayerId, cardIndex } = event as Extract<UIMachineEvent, { type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY' }>;
+                  return {
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.REQUEST_CARD_DETAILS_FOR_ABILITY,
+                    payload: { targetPlayerId, cardIndex, gameId: context.gameId }
+                  };
+                })
+              ]
             },
-            target: '#uiMachine.playerAction.promptMatchDecision',
-            actions: ['setCurrentGameState', 'clearAbilityContext']
-          },
-          {
-            guard: ({ context }) => !context.currentGameState?.players[context.localPlayerId!]?.pendingSpecialAbility,
-            target: '#uiMachine.idle',
-            actions: ['setCurrentGameState', 'clearAbilityContext']
-          },
-          { actions: ['setCurrentGameState'] }
-        ],
-        NEW_GAME_LOG: { /* ... */ },
-        NEW_CHAT_MESSAGE: { /* ... */ },
-        ERROR_RECEIVED: { target: '#uiMachine.idle', actions: [/* show error */ 'clearAbilityContext'] },
-        ABILITY_CARD_TARGET_SELECTED: {
-          actions: [
-            assign({
-              abilityContext: ({ context, event }) => {
-                const { abilityContext } = context;
-                if (!abilityContext) return context.abilityContext;
-                const { playerId, cardIndex, card } = event as Extract<UIMachineEvent, { type: 'ABILITY_CARD_TARGET_SELECTED' }>;
-
-                // Peek logic (King, Queen)
-                if (abilityContext.type === 'king' && (abilityContext.step === 'peeking1' || abilityContext.step === 'peeking2')) {
-                  const currentPeeked = abilityContext.peekedCardsInfo || [];
-                  if (currentPeeked.length < 2) {
-                    const newPeekedItem = { playerId, cardIndex: cardIndex, card };
-                    return { ...abilityContext, peekedCardsInfo: [...currentPeeked, newPeekedItem] };
-                  }
-                } else if (abilityContext.type === 'queen' && abilityContext.step === 'peeking') {
-                  return { ...abilityContext, peekedCardInfo: { playerId, cardIndex: cardIndex, card } };
-                }
-                // Swap logic (King, Queen, Jack)
-                else if ((abilityContext.type === 'king' || abilityContext.type === 'queen' || abilityContext.type === 'jack') &&
-                         (abilityContext.step === 'swapping1' || abilityContext.step === 'swapping2')) {
-                  const currentSwapSlots = abilityContext.swapSlots || { slot1: undefined, slot2: undefined };
-                  const newSwapSlots = { ...currentSwapSlots };
-                  if (!newSwapSlots.slot1) {
-                    newSwapSlots.slot1 = { playerId, cardIndex, card };
-                  } else if (!newSwapSlots.slot2) {
-                     if (newSwapSlots.slot1.playerId === playerId && newSwapSlots.slot1.cardIndex === cardIndex && newSwapSlots.slot1.card.id === card.id) {
-                        return abilityContext; // Avoid selecting the same card twice
+            ABILITY_CONFIRM_ACTION: {
+              target: '#uiMachine.awaitingServerResponse', // Transition to top-level awaiting state
+              actions: [
+                emit(({ context }) => {
+                  let abilityResolutionArgs: AbilityArgs = {};
+                  if (context.abilityContext) {
+                    if (context.abilityContext.swapSlots?.slot1 && context.abilityContext.swapSlots?.slot2) {
+                      abilityResolutionArgs.swapTargets = [
+                        { playerID: context.abilityContext.swapSlots.slot1.playerId, cardIndex: context.abilityContext.swapSlots.slot1.cardIndex },
+                        { playerID: context.abilityContext.swapSlots.slot2.playerId, cardIndex: context.abilityContext.swapSlots.slot2.cardIndex },
+                      ];
                     }
-                    newSwapSlots.slot2 = { playerId, cardIndex, card };
                   }
-                  return { ...abilityContext, swapSlots: newSwapSlots };
-                }
-                return abilityContext;
-              }
-            }),
-            'advanceAbilityStep'
-          ]
-        },
-        ABILITY_CONFIRM_ACTION: {
-          target: 'awaitingServerResponse',
-          actions: [
-            emit(({ context }) => {
-              let abilityResolutionArgs: AbilityArgs = {};
-
-              if (context.abilityContext) {
-                if (context.abilityContext.swapSlots?.slot1 && context.abilityContext.swapSlots?.slot2) {
-                  abilityResolutionArgs.swapTargets = [
-                    { playerID: context.abilityContext.swapSlots.slot1.playerId, cardIndex: context.abilityContext.swapSlots.slot1.cardIndex },
-                    { playerID: context.abilityContext.swapSlots.slot2.playerId, cardIndex: context.abilityContext.swapSlots.slot2.cardIndex },
-                  ];
-                }
-              }
-
-              const serverPayload: ConcretePlayerActionEvents = {
-                type: PlayerActionType.RESOLVE_SPECIAL_ABILITY,
-                playerId: context.localPlayerId!,
-                abilityResolutionArgs: abilityResolutionArgs,
-              };
-
-              return {
+                  const serverPayload: ConcretePlayerActionEvents = {
+                    type: PlayerActionType.RESOLVE_SPECIAL_ABILITY,
+                    playerId: context.localPlayerId!,
+                    abilityResolutionArgs: abilityResolutionArgs,
+                  };
+                  return {
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: PlayerActionType.RESOLVE_SPECIAL_ABILITY,
+                    payload: serverPayload
+                  };
+                }),
+                'clearAbilityContext'
+              ]
+            },
+            ABILITY_CANCEL_ACTION: {
+              target: '#uiMachine.idle',
+              actions: ['clearAbilityContext'],
+            },
+            ABILITY_SKIP_PEEK: {
+              target: '#uiMachine.awaitingServerResponse',
+              actions: [emit(({ context }) => ({
                 type: 'EMIT_TO_SOCKET',
                 eventName: PlayerActionType.RESOLVE_SPECIAL_ABILITY,
-                payload: serverPayload
-              };
-            }),
-            'clearAbilityContext'
-          ]
+                payload: { type: PlayerActionType.RESOLVE_SPECIAL_ABILITY, playerId: context.localPlayerId!, abilityResolutionArgs: { skipAbility: true, skipType: 'peek' } } as ConcretePlayerActionEvents
+              })), 'clearAbilityContext']
+            },
+            ABILITY_SKIP_SWAP: {
+              target: '#uiMachine.awaitingServerResponse',
+              actions: [emit(({ context }) => ({
+                type: 'EMIT_TO_SOCKET',
+                eventName: PlayerActionType.RESOLVE_SPECIAL_ABILITY,
+                payload: { type: PlayerActionType.RESOLVE_SPECIAL_ABILITY, playerId: context.localPlayerId!, abilityResolutionArgs: { skipAbility: true, skipType: 'swap' } } as ConcretePlayerActionEvents
+              })), 'clearAbilityContext']
+            },
+            // Global handlers within promptingSelection if not caught by more specific states
+            CLIENT_GAME_STATE_UPDATED: [
+              {
+                guard: ({ context }) => !!context.currentGameState?.players[context.localPlayerId!]?.pendingDrawnCard,
+                target: '#uiMachine.playerAction.promptPendingCardDecision',
+                actions: ['setCurrentGameState', 'clearAbilityContext']
+              },
+              {
+                guard: ({ context }) => {
+                  const gs = context.currentGameState;
+                  const localPlayerId = context.localPlayerId;
+                  if (!gs || !localPlayerId || !gs.matchingOpportunityInfo) return false;
+                  return gs.matchingOpportunityInfo.potentialMatchers.includes(localPlayerId);
+                },
+                target: '#uiMachine.playerAction.promptMatchDecision',
+                actions: ['setCurrentGameState', 'clearAbilityContext']
+              },
+              {
+                guard: ({ context }) => !context.currentGameState?.players[context.localPlayerId!]?.pendingSpecialAbility,
+                target: '#uiMachine.idle',
+                actions: ['setCurrentGameState', 'clearAbilityContext']
+              },
+              { actions: ['setCurrentGameState'] }
+            ],
+            NEW_GAME_LOG: { actions: ['logGameEventToast'] }, // Moved from top level of abilityActive
+            NEW_CHAT_MESSAGE: { actions: ['showToastFromChatMessage'] }, // Moved from top level of abilityActive
+            ERROR_RECEIVED: { target: '#uiMachine.idle', actions: ['showErrorModal', 'clearAbilityContext'] }, // Combined showErrorModal
+          }
         },
-        ABILITY_CANCEL_ACTION: {
-          target: 'idle',
-          actions: ['clearAbilityContext'],
-        },
-        ABILITY_SKIP_PEEK: {
-          target: 'awaitingServerResponse',
-          actions: [emit(({ context }) => ({
-            type: 'EMIT_TO_SOCKET',
-            eventName: PlayerActionType.RESOLVE_SPECIAL_ABILITY,
-            payload: { type: PlayerActionType.RESOLVE_SPECIAL_ABILITY, playerId: context.localPlayerId!, abilityResolutionArgs: { skipAbility: true, skipType: 'peek' } } as ConcretePlayerActionEvents
-          })), 'clearAbilityContext']
-        },
-        ABILITY_SKIP_SWAP: {
-          target: 'awaitingServerResponse',
-          actions: [emit(({ context }) => ({
-            type: 'EMIT_TO_SOCKET',
-            eventName: PlayerActionType.RESOLVE_SPECIAL_ABILITY,
-            payload: { type: PlayerActionType.RESOLVE_SPECIAL_ABILITY, playerId: context.localPlayerId!, abilityResolutionArgs: { skipAbility: true, skipType: 'swap' } } as ConcretePlayerActionEvents
-          })), 'clearAbilityContext']
-        },
-        RESOLVE_ABILITY_SUCCESS: {
-          target: 'idle',
+        awaitingCardDetails: {
+          on: {
+            SERVER_PROVIDED_CARD_FOR_ABILITY: {
+              target: 'promptingSelection',
+              actions: [
+                'updateAbilityPeekedInfo',
+                'updateAbilitySwapSlot',
+                'advanceAbilityStep'
+              ]
+            },
+            CLIENT_GAME_STATE_UPDATED: [
+              {
+                guard: ({ context }: { context: UIMachineContext }): boolean => {
+                  const playerState = context.currentGameState?.players[context.localPlayerId!];
+
+                  // Condition 1: No player state, or no pending special ability object for this player.
+                  if (!playerState || !playerState.pendingSpecialAbility) {
+                    return true;
+                  }
+
+                  // At this point, playerState.pendingSpecialAbility is a SpecialAbilityInfo object.
+                  const pendingServerAbility = playerState.pendingSpecialAbility;
+
+                  // Condition 2: The UI has an active ability context, and it's tracking a specific ability card.
+                  if (
+                    context.abilityContext &&
+                    'activeCardId' in context.abilityContext && 
+                    context.abilityContext.activeCardId &&      
+                    typeof context.abilityContext.activeCardId === 'string' 
+                  ) {
+                    if (pendingServerAbility.card.id !== context.abilityContext.activeCardId) {
+                      return true;
+                    }
+                  }
+                  
+                  return false; 
+                },
+                target: '#uiMachine.idle',
+                actions: ['setCurrentGameState', 'clearAbilityContext']
+              },
+              { actions: ['setCurrentGameState'] }
+            ],
+            ERROR_RECEIVED: {
+              target: 'promptingSelection',
+              actions: ['showErrorModal'] // Show error, but stay in ability context to allow cancel/retry?
+            }
+          }
+        }
+      },
+      on: { // Events that can occur from any substate of abilityActive and lead to exit
+        RESOLVE_ABILITY_SUCCESS: { 
+          target: '#uiMachine.idle',
           actions: ['setCurrentGameState', 'clearAbilityContext']
         }
+        // Removed top-level CLIENT_GAME_STATE_UPDATED, NEW_GAME_LOG etc. as they are now in promptingSelection
+        // or need specific handling in awaitingCardDetails.
       }
     },
   },

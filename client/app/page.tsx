@@ -1,102 +1,190 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSocket } from '@/context/SocketContext';
+import { useGameStore } from '@/store/gameStore';
+import { SocketEventName, ClientCheckGameState, InitialPlayerSetupData } from 'shared-types';
+import { v4 as uuidv4 } from 'uuid'; // For generating unique player IDs
+
+// Response types for callbacks, matching server/index.ts structure
+interface CreateGameResponse {
+  success: boolean;
+  message?: string;
+  gameId?: string;
+  playerId?: string;
+  gameState?: ClientCheckGameState;
+}
+
+interface JoinGameResponse {
+  success: boolean;
+  message?: string;
+  gameId?: string; // gameId is part of the response for join as well
+  playerId?: string;
+  gameState?: ClientCheckGameState; // gameState might be sent if rejoining or player already known
+}
+
+export default function HomePage() {
+  const router = useRouter();
+  const { socket, emitEvent, isConnected } = useSocket();
+  const { setLocalPlayerId, setGameState, localPlayerId: storePlayerId, currentGameState: storeGameState } = useGameStore();
+
+  const [playerName, setPlayerName] = useState('');
+  const [gameIdToJoin, setGameIdToJoin] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // If already in a game (e.g., after a refresh on game page and then navigating back),
+  // potentially redirect to the game page.
+  useEffect(() => {
+    if (storePlayerId && storeGameState && storeGameState.gameId) {
+      // router.push(`/game/${storeGameState.gameId}`);
+      // Decided against auto-redirect for now to allow explicit create/join actions.
+      // User might want to start a new game or join a different one.
+      console.log('Player is already in a game in store:', storeGameState.gameId, storePlayerId);
+    }
+  }, [storePlayerId, storeGameState, router]);
+
+  const handleCreateGame = async () => {
+    if (!playerName.trim()) {
+      setError('Player name is required.');
+      return;
+    }
+    if (!isConnected || !socket) {
+      setError('Not connected to the server.');
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+
+    const newPlayerId = uuidv4();
+    const playerSetupData: InitialPlayerSetupData = { id: newPlayerId, name: playerName.trim() };
+
+    emitEvent(
+      SocketEventName.CREATE_GAME,
+      playerSetupData,
+      (response: CreateGameResponse) => {
+        setIsLoading(false);
+        if (response.success && response.gameId && response.playerId && response.gameState) {
+          setLocalPlayerId(response.playerId);
+          setGameState(response.gameState);
+          router.push(`/game/${response.gameId}`);
+        } else {
+          setError(response.message || 'Failed to create game.');
+        }
+      }
+    );
+  };
+
+  const handleJoinGame = async () => {
+    if (!playerName.trim()) {
+      setError('Player name is required.');
+      return;
+    }
+    if (!gameIdToJoin.trim()) {
+      setError('Game ID is required to join.');
+      return;
+    }
+    if (!isConnected || !socket) {
+      setError('Not connected to the server.');
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+
+    const newPlayerId = uuidv4();
+    const playerSetupData: InitialPlayerSetupData = { id: newPlayerId, name: playerName.trim() };
+
+    emitEvent(
+      SocketEventName.JOIN_GAME,
+      gameIdToJoin.trim(),
+      playerSetupData,
+      (response: JoinGameResponse) => {
+        setIsLoading(false);
+        if (response.success && response.gameId && response.playerId) {
+          setLocalPlayerId(response.playerId);
+          if (response.gameState) { // Game state might not always be sent on join, depends on server logic
+            setGameState(response.gameState);
+          }
+          router.push(`/game/${response.gameId}`);
+        } else {
+          setError(response.message || 'Failed to join game.');
+        }
+      }
+    );
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 font-[family-name:var(--font-geist-sans)]">
+      <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-xl">
+        <h1 className="text-3xl font-bold text-center text-indigo-400">Check! The Card Game</h1>
+        
+        <p className="text-sm text-center text-gray-400">
+          Connection Status: {isConnected ? <span className='text-green-400'>Connected</span> : <span className='text-red-400'>Disconnected</span>}
+        </p>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+        {error && (
+          <p className="text-sm text-center text-red-400 bg-red-900 p-3 rounded-md">Error: {error}</p>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="playerName" className="block text-sm font-medium text-gray-300">
+              Player Name
+            </label>
+            <input
+              type="text"
+              id="playerName"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Enter your name"
+              className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-white"
+              disabled={isLoading}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+        <div className="space-y-6 pt-4 border-t border-gray-700">
+          <h2 className="text-xl font-semibold text-center text-indigo-300">Create a New Game</h2>
+          <button
+            onClick={handleCreateGame}
+            disabled={isLoading || !isConnected}
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Creating...' : 'Create Game'}
+          </button>
+        </div>
+
+        <div className="space-y-6 pt-4 border-t border-gray-700">
+          <h2 className="text-xl font-semibold text-center text-indigo-300">Join an Existing Game</h2>
+          <div>
+            <label htmlFor="gameIdToJoin" className="block text-sm font-medium text-gray-300">
+              Game ID
+            </label>
+            <input
+              type="text"
+              id="gameIdToJoin"
+              value={gameIdToJoin}
+              onChange={(e) => setGameIdToJoin(e.target.value)}
+              placeholder="Enter Game ID"
+              className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-white"
+              disabled={isLoading}
+            />
+          </div>
+          <button
+            onClick={handleJoinGame}
+            disabled={isLoading || !isConnected}
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Joining...' : 'Join Game'}
+          </button>
+        </div>
+
+      </div>
+      <footer className="mt-8 text-center">
+        <p className="text-xs text-gray-500">
+          Powered by Next.js, XState, Zustand, Socket.IO & Tailwind CSS
+        </p>
       </footer>
     </div>
   );

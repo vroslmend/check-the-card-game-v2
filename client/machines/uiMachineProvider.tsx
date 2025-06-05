@@ -1,119 +1,125 @@
 'use client';
 
-import { createActorContext } from '@xstate/react';
-import { uiMachine, UIMachineLogic } from './uiMachine'; 
-import { useSocketManager } from '@/hooks/useSocketManager'; 
-import { useGameStore } from '@/store/gameStore'; 
-import { useEffect } from 'react';
-import { SocketEventName, ClientCheckGameState, RichGameLogMessage, ChatMessage } from '@shared'; // Ensure all types are imported
+import React, { useEffect, createContext, useContext } from 'react';
+import { useActorRef, useSelector } from '@xstate/react';
+import { uiMachine } from './uiMachine';
+import { useSocket } from '@/context/SocketContext';
+import { useGameStore } from '@/store/gameStore';
+import {
+  SocketEventName,
+  ClientCheckGameState,
+  RichGameLogMessage,
+  ChatMessage,
+  RespondCardDetailsPayload,
+} from 'shared-types';
+import { ActorRefFrom, InterpreterFrom } from 'xstate';
 
-// 1. Create the Actor Context
-export const UIMachineContext = createActorContext<UIMachineLogic>(
-  uiMachine,
-  {
-    // devTools: process.env.NODE_ENV === 'development', // Enable for XState dev tools visualization
-  }
-);
+// 1. Create a standard React Context for the actor reference
+const UIMachineContext = createContext<ActorRefFrom<typeof uiMachine> | null>(null);
 
-// 2. Export hooks directly from the created context
-export const useUIMachineRef = UIMachineContext.useActorRef;
-export const useUIMachineSelector = UIMachineContext.useSelector;
-
-// 3. Custom Provider Component
+// 2. Create our custom Provider component that orchestrates everything
 export const UIMachineProvider = ({ children }: { children: React.ReactNode }) => {
-  const socketManager = useSocketManager();
+  const { registerListener, emitEvent, isConnected } = useSocket();
   const gameStore = useGameStore();
   
-  // Get the actor ref from the context. This hook also starts the actor if it hasn't been started.
-  const actorRef = UIMachineContext.useActorRef(); 
+  // Create a stable actor reference using the correct hook.
+  // This hook creates and starts the actor for the component's lifetime.
+  const actorRef = useActorRef(uiMachine);
 
-  // Effect for initializing socket connection and listeners
+  // EFFECT #1: Listening for events FROM the server
   useEffect(() => {
-    socketManager.connect();
+    if (!registerListener) {
+      return; // Socket not ready yet
+    }
 
-    const unregisterGameState = socketManager.registerListener(
-      SocketEventName.GAME_STATE_UPDATE,
-      (newState: ClientCheckGameState) => {
-        gameStore.setGameState(newState);
-        actorRef.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState: newState });
-      }
+    const cleanupFunctions: (() => void)[] = [];
+
+    cleanupFunctions.push(
+      registerListener(
+        SocketEventName.GAME_STATE_UPDATE,
+        (data: { gameState: ClientCheckGameState }) => {
+          gameStore.setGameState(data.gameState);
+        }
+      )
     );
 
-    const unregisterGameLog = socketManager.registerListener(
-      SocketEventName.GAME_LOG_MESSAGE,
-      (logMessage: RichGameLogMessage) => {
-        gameStore.addLogMessage(logMessage);
-        actorRef.send({ type: 'NEW_GAME_LOG', logMessage });
-      }
+    cleanupFunctions.push(
+      registerListener(
+        SocketEventName.SERVER_LOG_ENTRY,
+        (data: { logEntry: RichGameLogMessage }) => {
+          gameStore.addLogMessage(data.logEntry);
+          actorRef.send({ type: 'NEW_GAME_LOG', logMessage: data.logEntry });
+        }
+      )
     );
 
-    const unregisterChatMessage = socketManager.registerListener(
-      SocketEventName.CHAT_MESSAGE,
-      (chatMessage: ChatMessage) => {
-        gameStore.addChatMessage(chatMessage);
-        actorRef.send({ type: 'NEW_CHAT_MESSAGE', chatMessage });
-      }
+    cleanupFunctions.push(
+      registerListener(
+        SocketEventName.CHAT_MESSAGE,
+        (chatMessage: ChatMessage) => {
+          gameStore.addChatMessage(chatMessage);
+          actorRef.send({ type: 'NEW_CHAT_MESSAGE', chatMessage });
+        }
+      )
     );
-    
-    const unregisterError = socketManager.registerListener(
-      SocketEventName.ERROR_MESSAGE,
-      (error: { message: string; details?: any }) => {
-        console.error("Received error from server:", error);
-        // Optionally, send an event to the UI machine to display the error
+
+    cleanupFunctions.push(
+      registerListener('serverError', (error: { message: string }) => {
         actorRef.send({ type: 'ERROR_RECEIVED', error: error.message });
-      }
+      })
+    );
+
+    cleanupFunctions.push(
+      registerListener(
+        SocketEventName.RESPOND_CARD_DETAILS_FOR_ABILITY,
+        (data: RespondCardDetailsPayload) => {
+          actorRef.send({ type: 'SERVER_PROVIDED_CARD_FOR_ABILITY', ...data });
+        }
+      )
     );
 
     return () => {
-      unregisterGameState();
-      unregisterGameLog();
-      unregisterChatMessage();
-      unregisterError();
-      socketManager.disconnect();
+      cleanupFunctions.forEach((cleanup) => cleanup());
     };
-  // actorRef should be stable, but gameStore and socketManager might not be if they are not memoized.
-  // Adding them to dependencies if they can change.
-  }, [socketManager, gameStore, actorRef]);
+  }, [registerListener, gameStore, actorRef]);
 
-  // Effect for sending events from XState machine to Socket.IO
+  // EFFECT #2: Sending events TO the server
   useEffect(() => {
-    // The `on` method returns a subscription object.
-    const subscription = actorRef.on('EMIT_TO_SOCKET', (emittedEvent) => {
-      // The emittedEvent is the object defined in uiMachine's setup.types.emitted
-      // It should be of shape: { type: 'EMIT_TO_SOCKET', eventName: string, payload: any }
-      // We directly access eventName and payload from the emittedEvent.
-      socketManager.emitEvent(emittedEvent.eventName, emittedEvent.payload);
+    const subscription = actorRef.on('EMIT_TO_SOCKET', (event: any) => {
+      if (isConnected) {
+        emitEvent(event.eventName, event.payload);
+      }
     });
 
     return () => {
-      // Call unsubscribe on the subscription object for cleanup.
       subscription.unsubscribe();
     };
-  }, [actorRef, socketManager]);
+  }, [actorRef, emitEvent, isConnected]);
 
-  // The UIMachineContext.Provider component is used to provide the actor instance to the component tree.
-  // It does not take a `machine` prop if createActorContext was already given the machine logic.
-  return <UIMachineContext.Provider>{children}</UIMachineContext.Provider>;
+  // Provide the actorRef we created to all children
+  return (
+    <UIMachineContext.Provider value={actorRef}>
+      {children}
+    </UIMachineContext.Provider>
+  );
 };
 
-/*
-// 4. (Optional) Composed hook to easily get state and send function for the UI machine
-// We can re-introduce this once the core provider and basic hooks are confirmed to work.
-export const useUIMachine = () => {
-  const actorRef = useUIMachineRef(); // Get the actor reference
-  const state = useUIMachineSelector(actorRef, (snapshot) => snapshot); // Get the full snapshot
-  return {
-    state,
-    send: actorRef.send,
-    actorRef,
-  };
+// 3. Export hooks that components will use. These now use the standard context.
+export const useUIMachineRef = () => {
+  const actorRef = useContext(UIMachineContext);
+  if (!actorRef) {
+    throw new Error('useUIMachineRef must be used within a UIMachineProvider');
+  }
+  return actorRef;
 };
 
-// 5. (Optional) More specific composed hook if you only need the actor (state and send)
-// This is similar to the old useActor behavior for a specific actor ref.
-export const useUIMachineActor = () => {
+// Define the type of the interpreter to help the selector hook
+type UIMachineInterpreter = InterpreterFrom<typeof uiMachine>;
+
+export const useUIMachineSelector = <T,>(
+  selector: (state: ReturnType<UIMachineInterpreter['getSnapshot']>) => T,
+  equalityFn?: (a: T, b: T) => boolean
+) => {
   const actorRef = useUIMachineRef();
-  const snapshot = useUIMachineSelector(actorRef, s => s);
-  return [snapshot, actorRef.send, actorRef] as const; // [snapshot, send, actorRef]
+  return useSelector(actorRef, selector, equalityFn);
 };
-*/ 

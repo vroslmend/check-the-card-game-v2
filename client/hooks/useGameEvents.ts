@@ -3,12 +3,12 @@
 import { useEffect } from 'react';
 import { Socket } from 'socket.io-client';
 import { useGameStore } from '../store';
+import { SocketEventName } from 'shared-types'; // Updated path alias
 import type {
   ClientCheckGameState,
   RichGameLogMessage,
   ChatMessage,
-} from '@shared'; // Updated path alias
-import { SocketEventName } from '@shared'; // Updated path alias
+} from 'shared-types'; // Updated path alias
 
 interface UseGameEventsParams {
   socket: Socket | null;

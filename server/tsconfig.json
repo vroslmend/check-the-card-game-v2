@@ -15,8 +15,6 @@
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "shared-types/*": ["../shared-types/dist/*"],
-      "shared-types": ["../shared-types/dist/index"]
     }
   },
   "include": ["src/**/*"],

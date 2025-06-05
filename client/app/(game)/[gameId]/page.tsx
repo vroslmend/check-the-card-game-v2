@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import PlayerHand from '../../../components/game/PlayerHand';
 import GameBoardArea from '../../../components/game/GameBoardArea';
 import { useGameStore } from '../../../store/gameStore';
-import { ClientCard, Card, ClientPlayerState } from '../../../../shared-types/src/index'; // Removed Suit, Rank as they are not directly used here
+import { ClientCard, Card, ClientPlayerState } from 'shared-types'; // Changed to alias
 import { useUIMachineRef, useUIMachineSelector } from '@/machines/uiMachineProvider';
+import CardDisplay from '../../../components/ui/CardDisplay';
 
 // Mock data for initial display - will be replaced by store data
 // const mockPlayerHand: ClientCard[] = [
@@ -87,6 +88,42 @@ const GamePage: React.FC<GamePageProps> = ({ params }) => {
     state.context.localPlayerId ? !!state.context.currentGameState?.players[state.context.localPlayerId]?.hasCompletedInitialPeek : false
   );
 
+  const abilityPeekContext = useUIMachineSelector((state) => state.context.abilityContext);
+
+  const isInAbilityPeekingPhase = useUIMachineSelector((state) => 
+    !!state.context.abilityContext && (
+      (state.context.abilityContext.type === 'king' && (state.context.abilityContext.step === 'peeking1' || state.context.abilityContext.step === 'peeking2')) ||
+      (state.context.abilityContext.type === 'queen' && state.context.abilityContext.step === 'peeking')
+    )
+  );
+
+  const isInAbilitySwappingPhase = useUIMachineSelector((state) => 
+    !!state.context.abilityContext && (
+      (state.context.abilityContext.type === 'king' && (state.context.abilityContext.step === 'swapping1' || state.context.abilityContext.step === 'swapping2')) ||
+      (state.context.abilityContext.type === 'queen' && (state.context.abilityContext.step === 'swapping1' || state.context.abilityContext.step === 'swapping2')) ||
+      (state.context.abilityContext.type === 'jack' && (state.context.abilityContext.step === 'swapping1' || state.context.abilityContext.step === 'swapping2'))
+    )
+  );
+
+  const canConfirmSwapAction = useUIMachineSelector((state) => 
+    state.can({ type: 'ABILITY_CONFIRM_ACTION' }) &&
+    !!state.context.abilityContext?.swapSlots?.slot1 &&
+    !!state.context.abilityContext?.swapSlots?.slot2 &&
+    state.context.abilityContext.step === 'confirmingSwap'
+  );
+
+  const canSkipPeek = useUIMachineSelector((state) => 
+    state.can({ type: 'ABILITY_SKIP_PEEK' })
+  );
+
+  const canSkipSwap = useUIMachineSelector((state) => 
+    state.can({ type: 'ABILITY_SKIP_SWAP' })
+  );
+
+  const canCancelAbility = useUIMachineSelector((state) => 
+    state.can({ type: 'ABILITY_CANCEL_ACTION' })
+  );
+
   const [chatInput, setChatInput] = useState('');
 
   // Effect to initialize the UI machine once gameId and localPlayerId are available
@@ -96,8 +133,8 @@ const GamePage: React.FC<GamePageProps> = ({ params }) => {
     }
   }, [gameId, localPlayerId, uiMachineActorRef]);
 
-  const handleCardClick = (cardId: string, cardIndex: number) => {
-    console.log(`Card clicked: ${cardId} at index ${cardIndex}`);
+  const handleCardClick = (targetPlayerId: string, clickedCard: ClientCard, cardIndex: number) => {
+    console.log(`Local player hand card clicked: Player ${targetPlayerId}, Card ID ${clickedCard.id} at index ${cardIndex}`);
     uiMachineActorRef.send({ type: 'HAND_CARD_CLICKED', cardIndex });
   };
 
@@ -146,6 +183,34 @@ const GamePage: React.FC<GamePageProps> = ({ params }) => {
 
   const handleAcknowledgePeek = () => {
     uiMachineActorRef.send({ type: 'INITIAL_PEEK_ACKNOWLEDGED_CLICKED' });
+  };
+
+  const handleAbilityConfirm = () => {
+    uiMachineActorRef.send({ type: 'ABILITY_CONFIRM_ACTION' });
+  };
+
+  const handleAbilityCancel = () => {
+    uiMachineActorRef.send({ type: 'ABILITY_CANCEL_ACTION' });
+  };
+
+  const handleAbilitySkipPeek = () => {
+    uiMachineActorRef.send({ type: 'ABILITY_SKIP_PEEK' });
+  };
+
+  const handleAbilitySkipSwap = () => {
+    uiMachineActorRef.send({ type: 'ABILITY_SKIP_SWAP' });
+  };
+
+  const handlePlayerSlotClick = (targetPlayerId: string, clickedCard: ClientCard, cardIndex: number) => {
+    console.log(`Player slot clicked for ability: Player ${targetPlayerId}, Card Index ${cardIndex}`);
+    
+    // No need to pass the full card object to PLAYER_SLOT_CLICKED_FOR_ABILITY
+    // The machine will request details from the server if needed.
+    uiMachineActorRef.send({ 
+      type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY', 
+      targetPlayerId, 
+      cardIndex 
+    });
   };
 
   const handleSendChatMessage = (e: React.FormEvent<HTMLFormElement>) => {
@@ -206,7 +271,12 @@ const GamePage: React.FC<GamePageProps> = ({ params }) => {
               <div className="my-4">
                 <h3 className="text-xl mb-2">These are your initial two cards:</h3>
                 <div className="flex justify-center">
-                  <PlayerHand cards={peekableCards as ClientCard[]} /> 
+                  <PlayerHand 
+                    cards={peekableCards as ClientCard[]}
+                    playerId={localPlayerId!}
+                    localPlayerId={localPlayerId!}
+                    initialPeekCardsForDisplay={peekableCards}
+                  /> 
                 </div>
                 <button
                   onClick={handleAcknowledgePeek}
@@ -231,6 +301,89 @@ const GamePage: React.FC<GamePageProps> = ({ params }) => {
           </section>
         )}
 
+        {/* Ability Control Section */}
+        {abilityPeekContext && (
+          <section aria-labelledby="ability-control-label" className="bg-purple-700 p-4 rounded-lg shadow-lg text-center mt-4">
+            <h2 id="ability-control-label" className="text-2xl font-semibold mb-3 text-white">
+              Ability: {abilityPeekContext.type.toUpperCase()}
+            </h2>
+            <p className="text-purple-200 mb-1">Step: {abilityPeekContext.step}</p>
+            
+            {/* Dynamic Instructions */}
+            <div className="text-purple-100 mb-4 p-2 bg-purple-600 rounded">
+              {abilityPeekContext.type === 'king' && abilityPeekContext.step === 'peeking1' && "King: Select the first card to peek."}
+              {abilityPeekContext.type === 'king' && abilityPeekContext.step === 'peeking2' && "King: Select the second card to peek."}
+              {abilityPeekContext.type === 'king' && abilityPeekContext.step === 'swapping1' && "King: Select the first card for your swap."}
+              {abilityPeekContext.type === 'king' && abilityPeekContext.step === 'swapping2' && `King: Select the second card. Slot 1: ${abilityPeekContext.swapSlots?.slot1?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot1?.card.suit || '_'}`}
+              {abilityPeekContext.type === 'king' && abilityPeekContext.step === 'confirmingSwap' && `King: Confirm swap - ${abilityPeekContext.swapSlots?.slot1?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot1?.card.suit || '_'} with ${abilityPeekContext.swapSlots?.slot2?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot2?.card.suit || '_'}?`}
+
+              {abilityPeekContext.type === 'queen' && abilityPeekContext.step === 'peeking' && "Queen: Select one card anywhere to peek."}
+              {abilityPeekContext.type === 'queen' && abilityPeekContext.step === 'swapping1' && `Queen: Select the first card for swap (peeked: ${abilityPeekContext.peekedCardInfo?.card.rank || '_'}$${abilityPeekContext.peekedCardInfo?.card.suit || '_'}).`}
+              {abilityPeekContext.type === 'queen' && abilityPeekContext.step === 'swapping2' && `Queen: Select the second card. Slot 1: ${abilityPeekContext.swapSlots?.slot1?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot1?.card.suit || '_'}`}
+              {abilityPeekContext.type === 'queen' && abilityPeekContext.step === 'confirmingSwap' && `Queen: Confirm swap - ${abilityPeekContext.swapSlots?.slot1?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot1?.card.suit || '_'} with ${abilityPeekContext.swapSlots?.slot2?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot2?.card.suit || '_'}?`}
+
+              {abilityPeekContext.type === 'jack' && abilityPeekContext.step === 'swapping1' && "Jack: Select the first card for swap."}
+              {abilityPeekContext.type === 'jack' && abilityPeekContext.step === 'swapping2' && `Jack: Select the second card. Slot 1: ${abilityPeekContext.swapSlots?.slot1?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot1?.card.suit || '_'}`}
+              {abilityPeekContext.type === 'jack' && abilityPeekContext.step === 'confirmingSwap' && `Jack: Confirm swap - ${abilityPeekContext.swapSlots?.slot1?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot1?.card.suit || '_'} with ${abilityPeekContext.swapSlots?.slot2?.card.rank || '_'}$${abilityPeekContext.swapSlots?.slot2?.card.suit || '_'}?`}
+            </div>
+
+            {/* Display Selected Cards Info (Simplified) */}
+            {abilityPeekContext.swapSlots?.slot1 && (
+              <p className="text-sm text-purple-300">Swap Slot 1: {abilityPeekContext.swapSlots.slot1.card.rank}{abilityPeekContext.swapSlots.slot1.card.suit} (P:{abilityPeekContext.swapSlots.slot1.playerId.slice(-4)} Idx:{abilityPeekContext.swapSlots.slot1.cardIndex})</p>
+            )}
+            {abilityPeekContext.swapSlots?.slot2 && (
+              <p className="text-sm text-purple-300">Swap Slot 2: {abilityPeekContext.swapSlots.slot2.card.rank}{abilityPeekContext.swapSlots.slot2.card.suit} (P:{abilityPeekContext.swapSlots.slot2.playerId.slice(-4)} Idx:{abilityPeekContext.swapSlots.slot2.cardIndex})</p>
+            )}
+            {abilityPeekContext.type === 'king' && abilityPeekContext.peekedCardsInfo && abilityPeekContext.peekedCardsInfo.length > 0 && (
+              <div className="text-sm text-purple-300">
+                Peeked:
+                {abilityPeekContext.peekedCardsInfo.map((peek, index) => (
+                  <span key={`king-peek-${index}`} className="ml-2">{peek.card.rank}{peek.card.suit} (P:{peek.playerId.slice(-4)} Idx:{peek.cardIndex})</span>
+                ))}
+              </div>
+            )}
+            {abilityPeekContext.type === 'queen' && abilityPeekContext.peekedCardInfo && (
+              <p className="text-sm text-purple-300">Peeked: {abilityPeekContext.peekedCardInfo.card.rank}{abilityPeekContext.peekedCardInfo.card.suit} (P:{abilityPeekContext.peekedCardInfo.playerId.slice(-4)} Idx:{abilityPeekContext.peekedCardInfo.cardIndex})</p>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap justify-center gap-2 mt-4">
+              {canConfirmSwapAction && (
+                <button
+                  onClick={handleAbilityConfirm}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md shadow"
+                >
+                  Confirm Ability
+                </button>
+              )}
+              {canSkipPeek && (
+                <button
+                  onClick={handleAbilitySkipPeek}
+                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-md shadow"
+                >
+                  Skip Peek
+                </button>
+              )}
+              {canSkipSwap && (
+                <button
+                  onClick={handleAbilitySkipSwap}
+                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-md shadow"
+                >
+                  Skip Swap
+                </button>
+              )}
+              {canCancelAbility && (
+                <button
+                  onClick={handleAbilityCancel}
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md shadow"
+                >
+                  Cancel Ability
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Hide main game board and player hand if in initial setup and peek not complete, or show a message */}
         {(!isInitialSetupPhase || hasCompletedInitialPeek) && (
           <>
@@ -248,16 +401,31 @@ const GamePage: React.FC<GamePageProps> = ({ params }) => {
 
             <section aria-labelledby="player-hand-label">
               <h2 id="player-hand-label" className="text-xl font-semibold mb-2">Your Hand ({currentHand.length})</h2>
-              <PlayerHand
-                cards={currentHand}
-                onCardClick={handleCardClick}
-                selectedCardId={selectedHandCardIndex !== null && currentHand[selectedHandCardIndex] ? currentHand[selectedHandCardIndex].id : null}
-              />
+              {viewingPlayer && localPlayerId && (
+                <PlayerHand
+                  cards={currentHand}
+                  playerId={localPlayerId}
+                  localPlayerId={localPlayerId}
+                  onCardClick={(isInAbilityPeekingPhase || isInAbilitySwappingPhase) ? handlePlayerSlotClick : handleCardClick}
+                  selectedHandCardIndex={selectedHandCardIndex}
+                  abilityPeekContext={abilityPeekContext}
+                />
+              )}
             </section>
 
             {/* Player Actions Section */}
             <section aria-labelledby="actions-label" className="my-4">
               <h2 id="actions-label" className="sr-only">Player Actions</h2>
+
+              {/* Display Pending Drawn Card */}
+              {pendingDrawnCard && (
+                <div className="mb-4 flex flex-col items-center">
+                  <h3 className="text-lg font-semibold mb-2">You Drew:</h3>
+                  <CardDisplay card={pendingDrawnCard as Card} /> 
+                  {/* We cast to Card; generatePlayerView ensures it's not HiddenCard for local player */}
+                </div>
+              )}
+
               <div className="flex space-x-2 justify-center">
                 {canCallCheck && (
                   <button
@@ -309,18 +477,24 @@ const GamePage: React.FC<GamePageProps> = ({ params }) => {
               </div>
             </section>
 
-            <section aria-labelledby="opponents-label">
-              <h2 id="opponents-label" className="text-xl font-semibold mb-2">Opponents</h2>
-              {opponentPlayers.map((opponent: ClientPlayerState & { id: string }) => (
-                <div key={opponent.id} className="my-2 opacity-80">
-                  <p className="text-sm mb-1">{opponent.name || opponent.id} (Score: {opponent.score}, Cards: {opponent.hand.length})</p>
-                  <PlayerHand
-                    cards={opponent.hand.map(card => ({ ...card, isFaceDownToOwner: true }))} 
-                    isViewingPlayer={false}
-                  />
-                </div>
-              ))}
-              {opponentPlayers.length === 0 && <p className="text-sm italic">Waiting for opponents...</p>}
+            {/* Opponent Hands */}
+            <section aria-labelledby="opponent-hands-label">
+              <h2 id="opponent-hands-label" className="text-xl font-semibold mb-2">Opponents</h2>
+              <div className="space-y-4">
+                {opponentPlayers.map((opponent) => (
+                  <div key={opponent.id}>
+                    <h3 className="text-lg mb-1">{opponent.name || opponent.id} ({opponent.hand.length} cards)</h3>
+                    <PlayerHand
+                      cards={opponent.hand}
+                      playerId={opponent.id}
+                      localPlayerId={localPlayerId}
+                      onCardClick={(isInAbilityPeekingPhase || isInAbilitySwappingPhase) ? handlePlayerSlotClick : undefined}
+                      abilityPeekContext={abilityPeekContext}
+                      // selectedHandCardIndex is not applicable for opponent hands from local player's direct view
+                    />
+                  </div>
+                ))}
+              </div>
             </section>
 
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
