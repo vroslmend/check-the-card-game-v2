@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import PlayerHand from '../../../components/game/PlayerHand';
-import GameBoardArea from '../../../components/game/GameBoardArea';
-import { useGameStore } from '../../../store/gameStore';
+import { useParams } from 'next/navigation';
+import PlayerHand from '@/components/game/PlayerHand';
+import GameBoardArea from '@/components/game/GameBoardArea';
+import { useGameStore } from '@/store/gameStore';
 import { ClientCard, Card, ClientPlayerState } from 'shared-types'; // Changed to alias
 import { useUIMachineRef, useUIMachineSelector } from '@/machines/uiMachineProvider';
-import CardDisplay from '../../../components/ui/CardDisplay';
+import CardDisplay from '@/components/ui/CardDisplay';
 
 // Mock data for initial display - will be replaced by store data
 // const mockPlayerHand: ClientCard[] = [
@@ -17,14 +18,9 @@ import CardDisplay from '../../../components/ui/CardDisplay';
 // ];
 // const mockDiscardTop: Card = { id: 'H_Q', suit: Suit.Hearts, rank: Rank.Queen };
 
-interface GamePageProps {
-  params: {
-    gameId: string;
-  };
-}
-
-const GamePage: React.FC<GamePageProps> = ({ params }) => {
-  const gameId = params.gameId;
+const GamePage: React.FC = () => {
+  const params = useParams();
+  const gameId = params.gameId as string;
 
   const uiMachineActorRef = useUIMachineRef();
 

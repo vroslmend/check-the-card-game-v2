@@ -1,11 +1,10 @@
-import 'module-alias/register';
 import http from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { createActor, ActorRefFrom } from 'xstate';
-import { gameMachine } from './game-machine';
+import { gameMachine } from './game-machine.js';
 import {
-    generatePlayerView,
-} from './game-manager';
+    generatePlayerView
+} from './game-manager.js';
 import {
     InitialPlayerSetupData,
     CheckGameState as ServerCheckGameState,

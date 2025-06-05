@@ -15,7 +15,7 @@ export interface SocketManager {
   isConnected: boolean;
   connect: () => void;
   disconnect: () => void; // Ensure disconnect is part of the interface
-  emitEvent: (eventName: string, payload?: any) => void;
+  emitEvent: (eventName: string, ...args: any[]) => void;
   registerListener: (eventName: string, callback: (...args: any[]) => void) => () => void; // Added registerListener
 }
 
@@ -79,12 +79,12 @@ export const useSocketManager = (): SocketManager => {
   }, [socket]);
 
   const emitEvent = useCallback(
-    (eventName: string, payload?: any) => {
+    (eventName: string, ...args: any[]) => {
       if (socket?.connected) {
-        console.log(`Emitting event [${eventName}]:`, payload);
-        socket.emit(eventName, payload);
+        console.log(`Emitting event [${eventName}]:`, args);
+        socket.emit(eventName, ...args);
       } else {
-        console.warn('Socket not connected. Cannot emit event:', eventName, payload);
+        console.warn('Socket not connected. Cannot emit event:', eventName, args);
       }
     },
     [socket],

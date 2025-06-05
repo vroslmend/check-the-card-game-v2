@@ -26,8 +26,8 @@ import {
   GameMachineInput,
   GameMachineEmittedEvents
 } from 'shared-types';
-import { createDeckWithIds, shuffleDeck } from './lib/deck-utils';
-
+import { createDeckWithIds, shuffleDeck } from './lib/deck-utils.js';
+import 'xstate/guards';
 // Durations (configurable in game-manager, hardcoded here for now)
 const PEEK_TOTAL_DURATION_MS = 10000; // 10 seconds
 const TURN_DURATION_MS = 60000;      // 60 seconds
