@@ -13,19 +13,24 @@ The core architectural philosophy for "Check!" centers around creating a seamles
 ## 2. System Components
 
 *   ### 2.1. Frontend (Client)
-    *   **Technology:** Next.js (React), TypeScript, Framer Motion
+    *   **Technology:** Next.js (App Router), TypeScript, Tailwind CSS, XState, Zustand, Framer Motion (planned for animations)
     *   **Responsibilities:**
         *   Rendering the game interface (board, cards, player hands, actions).
         *   Handling user input and interactions.
-        *   Managing local UI state and complex animation sequences.
+        *   Managing local UI state, interaction flows, and complex animation sequences.
         *   Communicating with the backend via WebSockets (Socket.IO client).
-        *   Receiving and displaying game state updates from the server.
+        *   Receiving and displaying game state updates (e.g., `ClientCheckGameState`, game logs, chat) from the server and storing them in a global client-side store.
     *   **Key Directories/Modules:**
-        *   `frontend/app/page.tsx`: Main entry point for the game UI.
-        *   `frontend/app/components/`: Reusable UI components (e.g., `CardComponent`, `PlayerHandComponent`, `CheckGameBoard`, `DrawPileComponent`, `DiscardPileComponent`, `HoldingAreaComponent`).
-        *   `frontend/lib/`: Client-side utilities, services (e.g., WebSocket connection management).
-        *   `frontend/app/contexts/`: React contexts for sharing global concerns like WebSocket connections or game state.
-        *   *(Soon to be added)* `frontend/state/`: Client-side XState machine for animation and complex UI logic orchestration.
+        *   `client/app/`: Core Next.js App Router structure (layouts, pages).
+        *   `client/components/`: Reusable UI components (e.g., `CardComponent`, `PlayerHandComponent`, `GameBoard`, `DrawPileComponent`, `DiscardPileComponent`).
+            *   `client/components/ui/`: General UI elements (buttons, modals, etc.).
+            *   `client/components/game/`: Game-specific components.
+            *   `client/components/layout/`: Layout components (header, footer, nav).
+        *   `client/hooks/`: Custom React hooks (e.g., `useSocketManager`).
+        *   `client/lib/`: Client-side utilities, helper functions.
+        *   `client/machines/`: Client-side XState machine definitions (e.g., `uiMachine.ts` for UI/interaction orchestration).
+        *   `client/store/`: Zustand store setup (e.g., `gameStore.ts` for `ClientCheckGameState`, logs, chat).
+        *   `client/styles/`: Global styles (e.g., `globals.css` for Tailwind).
 
 *   ### 2.2. Backend (Server)
     *   **Technology:** Node.js, Express, Socket.IO, TypeScript
@@ -54,11 +59,22 @@ The core architectural philosophy for "Check!" centers around creating a seamles
         *   An XState machine (`GameMachine`) will define all possible game states (e.g., `InitialPeekPhase`, `PlayPhase`, `MatchingStage`, `AbilityResolutionPhase`, `GameOver`), valid transitions, actions (game logic execution), and context (the full game state). Immer will be used for immutable context updates within actions.
         *   This will provide a robust, declarative, and visualizable model for the complex game flow.
 *   **3.2. Client-Side (UI State & Animation Orchestration):**
-    *   **Current:** Primarily React `useState` and `useEffect` hooks, leading to some complexity in managing animation sequences.
-    *   **Planned:** Introduce a client-side **XState machine** (e.g., `AnimationOrchestrationMachine` or `GameViewMachine`).
-        *   This machine will listen to game state updates from the server.
-        *   It will manage local UI states related to animations (e.g., which card is animating where, visibility of elements), potentially using Immer for easier immutable context updates.
-        *   It will help sequence Framer Motion animations more predictably, especially for multi-step animations like drawing a card and then deciding to swap or discard.
+    *   **Primary State Stores:**
+        *   **Zustand (`client/store/gameStore.ts`):** Manages global client-side state that is primarily derived from server updates. This includes:
+            *   The latest `ClientCheckGameState`.
+            *   Game logs.
+            *   Chat messages.
+            *   Other shared data that components might need to subscribe to directly.
+        *   **XState (`client/machines/uiMachine.ts`):** Orchestrates UI logic, user interaction flows, and manages temporary or derived UI-specific state. Its responsibilities include:
+            *   Listening to game state updates from the server (via events from a provider that interacts with Zustand and the socket manager).
+            *   Managing client-side UI states (e.g., `idle`, `awaitingServerResponse`, `playerAction.promptPendingCardDecision`, `abilityActive`, modal visibility, active animation cues).
+            *   Handling user interactions (e.g., button clicks) and translating them into events for itself or preparing actions to be emitted to the server.
+            *   Sequencing animations (using its state to trigger Framer Motion effects in components).
+            *   Managing transient UI data like `selectedHandCardIndex` or `abilityContext` during multi-step operations.
+    *   **Interaction Model:**
+        *   Components primarily subscribe to Zustand for displaying core game data.
+        *   Components interact with and subscribe to the `uiMachine` for UI state-dependent rendering (e.g., disabling buttons, showing modals) and to send user action events.
+        *   The `uiMachine` processes these events, potentially updates its own context, and emits events (via `EMIT_TO_SOCKET`) that are then sent to the server by a socket manager (likely coordinated through a React provider that owns the XState actor).
 
 ## 4. Real-Time Communication
 

@@ -3,6 +3,8 @@
 // For example:
 // export * from './card.types'; 
 
+export type PlayerId = string; // Added PlayerId type
+
 export enum Suit {
   Hearts = 'H',
   Diamonds = 'D',
@@ -185,6 +187,8 @@ export enum SocketEventName {
   SERVER_LOG_ENTRY = 'serverLogEntry', // For individual log entries sent by the server
   INITIAL_LOGS = 'initialLogs', // For the batch of logs sent when a player joins/rejoins
   CHAT_MESSAGE = 'chatMessage', // For broadcasting chat messages to clients
+  GAME_LOG_MESSAGE = 'gameLogMessage', // Added for generic game log messages
+  ERROR_MESSAGE = 'errorMessage', // Added for server-sent errors
 }
 
 // Enum for player action types (payload for PLAYER_ACTION event)
@@ -339,9 +343,9 @@ type PlayerActionEvents = {
     Record<string, any>) // Default for actions with no extra payload beyond playerId
 };
 
-// Union of all player action event types
-type ConcretePlayerActionEvents = PlayerActionEvents[PlayerActionType];
+export type ConcretePlayerActionEvents = PlayerActionEvents[PlayerActionType]; // Added export
 
+// GameMachineEvent represents all possible events the game machine can handle.
 export type GameMachineEvent =
   | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData }
   | ConcretePlayerActionEvents // All events derived from PlayerActionType
