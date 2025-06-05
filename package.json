@@ -30,8 +30,10 @@
     "build:client": "npm run build -w client",
     "build:shared": "npm run build -w shared-types",
     "start:server": "npm start -w server",
+    "start:client": "npm start -w client",
     "dev:client": "npm run dev -w client",
     "dev": "concurrently \"npm:dev:client\" \"npm:start:server\"",
+    "start": "concurrently \"npm:start:client\" \"npm:start:server\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {

@@ -4,7 +4,7 @@
 
 "Check!" is a web-based, free-to-play online multiplayer card game. The primary goal is to have the lowest total card value in your hand at the end of a round. This project implements the card game with a Node.js/Socket.IO backend and a new, modern Next.js/React frontend.
 
-This README provides a comprehensive guide to understanding, setting up, and running the project. For detailed game rules, refer to `GAME_OVERVIEW.md`. For a chronological log of development changes and specific bug fixes, see `PROJECT_NOTES.md`.
+This README provides a comprehensive guide to understanding, setting up, and running the project. Detailed documentation, including game rules and architecture, can be found in the `/docs` directory.
 
 ## 🚀 Core Objective of the Game
 
@@ -12,7 +12,7 @@ Be the player with the lowest total card value in your hand when a round ends. A
 
 ## ✨ Key Game Mechanics
 
-(Refer to `GAME_OVERVIEW.md` for full details)
+(Refer to the documentation in the `/docs` directory for full details)
 
 *   **Hand Management:** Players manage their cards (initially four) in a conceptual grid, with an initial peek at two of them.
 *   **Turn Actions:** Draw from the deck or discard pile, then discard a card by either swapping with a hand card or discarding the drawn card directly.
@@ -50,17 +50,19 @@ This project utilizes a modern technology stack for a robust and interactive exp
 ```
 check-the-card-game-v2/
 ├── client/                 # Next.js Frontend Application (New Architecture)
-│   ├── app/                # App Router: layouts, pages
-│   │   ├── ui/             # Reusable UI elements from shadcn/ui or custom
-│   │   └── game/           # Game-specific components (GameBoard, CardComponent, etc.)
-│   ├── lib/                # Client-side utility functions, constants
+│   ├── app/                # App Router: layouts, pages, global styles
+│   ├── components/         # Reusable UI components (custom or from shadcn/ui)
+│   ├── context/            # React Context providers
 │   ├── hooks/              # Custom React hooks (e.g., useSocketManager)
-│   ├── state/              # Client-side state management (Zustand store, XState machines)
+│   ├── lib/                # Client-side utility functions, constants
+│   ├── machines/           # XState machines for UI/animation logic
 │   ├── public/             # Static assets
-│   ├── next.config.mjs     # Next.js configuration
-│   ├── tailwind.config.ts  # Tailwind CSS configuration
+│   ├── store/              # Zustand global state store
+│   ├── next.config.ts      # Next.js configuration
+│   ├── postcss.config.mjs  # PostCSS config (for Tailwind CSS)
 │   ├── tsconfig.json       # TypeScript configuration
 │   └── package.json        # Dependencies and scripts
+├── docs/                   # Project documentation
 ├── server/                 # Node.js Socket.IO Game Server
 │   ├── src/                # TypeScript source files
 │   │   ├── index.ts        # Main server entry point, Socket.IO setup
@@ -73,9 +75,6 @@ check-the-card-game-v2/
 │   ├── tsconfig.json       # TypeScript configuration
 │   └── package.json        # Dependencies and scripts
 ├── .gitignore
-├── GAME_OVERVIEW.md        # Authoritative game rules and mechanics
-├── PROJECT_NOTES.md        # Detailed developer log
-├── XSTATE_REFACTOR_PLAN.md # Plan for XState integration (backend & new frontend)
 └── README.md               # This file
 ```
 
@@ -119,26 +118,26 @@ The new frontend is being rebuilt from scratch to leverage modern state manageme
     If you need to add *new* `shadcn/ui` components during development, navigate to the client directory and use the `shadcn/ui` CLI:
     ```bash
     cd client
-    # Example: Add new button and input components
-    # npx shadcn@latest add button input
+    npx shadcn@latest add button input
     cd ..
     ```
 
 ## ▶️ How to Run the Game
 
-### Development Mode
+The application can be run in two modes: **Development** for active coding and **Production** for the final, optimized version.
 
-With the monorepo setup, you can start both the backend server and the frontend development server with a single command from the project root:
+### Development Mode (For Coding)
+
+This mode is ideal for development, providing hot-reloading and detailed error messages.
 
 1.  **Start Both Server and Client:**
-    Ensure all packages have been built at least once (see Setup step 3).
-    From the project root (`check-the-card-game-v2/`):
+    Ensure all packages have been built at least once (see Setup step 3). From the project root (`check-the-card-game-v2/`):
     ```bash
     npm run dev
     ```
     This command uses `concurrently` to:
-    *   Start the backend server (equivalent to `cd server && npm start` or `npm run start:server` from root).
-    *   Start the Next.js frontend development server (equivalent to `cd client && npm run dev` or `npm run dev:client` from root).
+    *   Start the backend server.
+    *   Start the Next.js frontend development server.
 
     You should see output from both processes in your terminal.
     *   The server typically starts on `http://localhost:8000`.
@@ -147,9 +146,26 @@ With the monorepo setup, you can start both the backend server and the frontend 
 2.  **Access the Game:**
     Open your browser to `http://localhost:3000`.
 
+### Production Mode (After Building)
+
+This mode runs the fully optimized, production-ready version of the application. This is how the game would run if it were deployed on a live server.
+
+1.  **Build the Application:**
+    First, ensure you have a complete production build of all packages. From the project root:
+    ```bash
+    npm run build
+    ```
+
+2.  **Start the Production Server:**
+    Once the build is complete, start the application with:
+    ```bash
+    npm start
+    ```
+    This will launch both the optimized backend server and the frontend client.
+
 ### Running Services Individually (Optional)
 
-If you need to run the client or server independently (e.g., for focused debugging or after building for production):
+If you need to run the client or server individually (e.g., for focused debugging or after building for production):
 
 *   **Start Only the Backend Server:**
     ```bash
@@ -194,7 +210,7 @@ If you need to run the client or server independently (e.g., for focused debuggi
     *   Define and provide the initial client-side XState `AnimationMachine`.
 4.  **Develop UI Components:** Re-implement game UI components using shadcn/ui and Tailwind, driven by the new state management.
 5.  **Implement Animation Sequences:** Integrate Framer Motion, orchestrated by the `AnimationMachine`, for key interactions (card drawing, playing, etc.).
-6.  **Iterative Feature Implementation:** Continue building out all game phases, player actions, and UI feedback according to the `XSTATE_REFACTOR_PLAN.md`.
+6.  **Iterative Feature Implementation:** Continue building out all game phases, player actions, and UI feedback.
 7.  **Thorough Testing:** Unit, integration, and end-to-end testing for both client and server.
 
 ---
