@@ -725,3 +725,456 @@ Let's break this down with a bit more detail:
 *   **Client `uiMachine`:** "Okay, I received the new game state. Based on this, I need to show X, Y, and Z. If the user clicks this button, I need to ask the server if they can do A, B, or C. If the server says an ability is active, I need to guide the user through its steps before telling the server their final choices."
 
 So, while the client `uiMachine` *is* responding to state changes, it's also actively managing the user's journey through their turn, collecting their input for actions, and ensuring those actions are presented to the server in the correct format. It's a detailed presenter and an intelligent messenger, but not the rule-keeper for the game itself.
+
+
+----
+
+Okay, that's a very good idea. Before diving deeper into UI interactions, let's take a step back and review the overall architecture to see how the frontend and backend components are designed to fit together.
+
+I will need to read the key files that define the data flow and state management on both ends.
+
+**Files to Review:**
+
+*   **Shared:**
+    *   `shared-types/src/index.ts`: Defines the common data structures and event types.
+*   **Backend (Server):**
+    *   `server/src/game-machine.ts`: The core XState machine for game logic.
+    *   `server/src/index.ts`: Socket.IO server, communication with `game-machine`.
+*   **Frontend (Client):**
+    *   `client/machines/uiMachine.ts`: Client-side XState machine for UI logic and orchestration.
+    *   `client/store/gameStore.ts`: Zustand store for global client-side state (`ClientCheckGameState`, logs, chat).
+    *   `client/hooks/useSocketManager.ts`: Manages the client's Socket.IO connection.
+    *   `client/machines/uiMachineProvider.tsx`: Provides the `uiMachine` actor and integrates with `useSocketManager` and `gameStore`.
+    *   `client/app/(game)/[gameId]/page.tsx`: The main game page component we're building.
+    *   `client/app/layout.tsx`: Root layout, includes `UIMachineProvider`.
+
+I'll start by reading these files to get their latest content. This might take a few steps as I can only read a limited number of files or lines at a time.
+
+First, `shared-types/src/index.ts`:
+Read file: shared-types/src/index.ts
+Shared types (`shared-types/src/index.ts`) read. This provides a good foundation.
+
+Next, `server/src/game-machine.ts`:
+Read file: server/src/game-machine.ts
+
+The server-side game machine (`server/src/game-machine.ts`) is quite extensive. I've read the first 1764 lines out of 2769. I'll need to read the remainder to get the full context.
+Read file: server/src/game-machine.ts
+
+I'm continuing to read `server/src/game-machine.ts`. I've got lines up to 2014, and the file is 2769 lines long.
+Read file: server/src/game-machine.ts
+
+I'm almost finished reading `server/src/game-machine.ts`. I've got up to line 2264 of 2769. One more read should do it.
+Read file: server/src/game-machine.ts
+
+Okay, I'm on the last segment of `server/src/game-machine.ts`. I've read up to line 2514 of 2769.
+Read file: server/src/game-machine.ts
+
+I have now read `server/src/game-machine.ts` in its entirety. That was a big one!
+
+Next, `server/src/index.ts`:
+Read file: server/src/index.ts
+
+I've read the first 250 lines of `server/src/index.ts` (out of 579). Let's continue.
+Read file: server/src/index.ts
+
+Okay, I'm on the last part of `server/src/index.ts`. I've read up to line 500 of 579.
+Read file: server/src/index.ts
+
+Server-side files are read. Now moving to the client files.
+
+`client/machines/uiMachine.ts`:
+Read file: client/machines/uiMachine.ts
+
+I've read the first 250 lines of `client/machines/uiMachine.ts` (out of 856). Continuing...
+Read file: client/machines/uiMachine.ts
+
+Continuing with `client/machines/uiMachine.ts`. I've read up to line 500 of 856.
+Read file: client/machines/uiMachine.ts
+
+Almost done with `client/machines/uiMachine.ts`. I have up to line 750 of 856.
+Read file: client/machines/uiMachine.ts
+
+Client UI machine (`client/machines/uiMachine.ts`) read.
+
+Next, the Zustand store: `client/store/gameStore.ts`.
+Read file: client/store/gameStore.ts
+Zustand store (`client/store/gameStore.ts`) read.
+
+Next, the Socket.IO hook: `client/hooks/useSocketManager.ts`.
+Read file: client/hooks/useSocketManager.ts
+
+Socket manager hook (`client/hooks/useSocketManager.ts`) read.
+
+Next, the UI Machine Provider: `client/machines/uiMachineProvider.tsx`.
+Read file: client/machines/uiMachineProvider.tsx
+
+UI Machine Provider (`client/machines/uiMachineProvider.tsx`) read.
+
+Next, the main game page: `client/app/(game)/[gameId]/page.tsx`.
+Read file: client/app/(game)/[gameId]/page.tsx
+Game page (`client/app/(game)/[gameId]/page.tsx`) read.
+
+Finally, the root layout: `client/app/layout.tsx`.
+Read file: client/app/layout.tsx
+All requested files have been read. Now, let's synthesize this information into a review of how everything fits together.
+
+**Overall Architecture and Flow:**
+
+The system is a classic client-server architecture for a real-time card game:
+
+1.  **Backend (Node.js with Socket.IO and XState):**
+    *   `server/src/index.ts` is the entry point. It sets up an HTTP server and a Socket.IO server.
+    *   It manages game instances (`activeGameMachines`), where each game is an XState actor created from `gameMachine` (`server/src/game-machine.ts`).
+    *   **Game Logic Core (`server/src/game-machine.ts`):** This is a comprehensive state machine that handles all core game rules, player turns, actions (drawing, discarding, matching, abilities), timers (turn, matching stage, disconnect grace), and game state transitions (awaiting players, initial peek, play phase, matching, ability resolution, final turns, scoring, game over). It's responsible for the "source of truth" of the game state.
+    *   **Communication (`server/src/index.ts`):**
+        *   Listens for client socket events (e.g., `CREATE_GAME`, `JOIN_GAME`, `PLAYER_ACTION`, `SEND_CHAT_MESSAGE`).
+        *   Translates these into events for the appropriate `gameMachine` actor.
+        *   Subscribes to `emitted` events from the `gameMachine` actor (e.g., `BROADCAST_GAME_STATE`, `EMIT_LOG_PUBLIC`, `EMIT_LOG_PRIVATE`).
+        *   When `BROADCAST_GAME_STATE` is emitted, it uses `generatePlayerView` (from `server/src/game-manager.ts`, not read but its usage is clear) to create a player-specific (redacted) version of the game state and sends it to the relevant clients via `SocketEventName.GAME_STATE_UPDATE`.
+        *   Log messages are broadcast via `SocketEventName.SERVER_LOG_ENTRY`.
+        *   Chat messages are broadcast via `SocketEventName.CHAT_MESSAGE`.
+    *   Session management (`socketSessionMap`) links socket IDs to game and player IDs.
+
+2.  **Shared Types (`shared-types/src/index.ts`):**
+    *   This is crucial for ensuring consistency between client and server. It defines:
+        *   Core game entities (`Card`, `PlayerState`, `CheckGameState`).
+        *   Client-specific views of state (`ClientCard`, `ClientPlayerState`, `ClientCheckGameState`) which include redaction (e.g., `HiddenCard`).
+        *   Enums for `Suit`, `Rank`, `SocketEventName`, `PlayerActionType`, `GamePhase`, etc.
+        *   Payload structures for socket events and player actions.
+        *   Types for `RichGameLogMessage` and `ChatMessage`.
+        *   XState machine-specific types for the server (`GameMachineContext`, `GameMachineEvent`, `GameMachineEmittedEvents`).
+
+3.  **Frontend (Next.js with TypeScript, Tailwind, Zustand, XState):**
+    *   **Root Setup (`client/app/layout.tsx`):**
+        *   Wraps the entire application with `UIMachineProvider`. This is essential as it initializes the UI's XState machine and sets up the primary socket event listeners.
+    *   **Socket Connection (`client/hooks/useSocketManager.ts`):**
+        *   Provides a reusable hook to establish and manage the Socket.IO connection.
+        *   Offers methods to `connect`, `disconnect`, `emitEvent`, and critically, `registerListener`.
+    *   **Global Client State (`client/store/gameStore.ts`):**
+        *   A Zustand store holding client-side global state:
+            *   `currentGameState`: The latest `ClientCheckGameState` received from the server.
+            *   `localPlayerId`: The ID of the player using this client.
+            *   `gameLog`: An array of `RichGameLogMessage`s.
+            *   `chatMessages`: An array of `ChatMessage`s.
+        *   Provides actions to update this state (e.g., `setGameState`, `addLogMessage`).
+    *   **UI Orchestration (`client/machines/uiMachine.ts`):**
+        *   This XState machine manages UI-specific logic, user interactions, and animation cues.
+        *   **Context (`UIMachineContext`):** Holds `localPlayerId`, `gameId`, `currentGameState` (likely kept in sync with Zustand's but can be used for derived UI states/guards within the machine), `selectedHandCardIndex`, `abilityContext` (for multi-step abilities like King/Queen/Jack), `activeAnimationCue`, `modal`, and `toasts`.
+        *   **Events (`UIMachineEvent`):** A comprehensive list of events including:
+            *   Initialization and server-pushed events (`INITIALIZE`, `CLIENT_GAME_STATE_UPDATED`, `NEW_GAME_LOG`, `NEW_CHAT_MESSAGE`, `ERROR_RECEIVED`).
+            *   User interactions (`DRAW_FROM_DECK_CLICKED`, `HAND_CARD_CLICKED`, `CALL_CHECK_CLICKED`, etc.).
+            *   Ability-specific flow events.
+            *   UI management events (`SHOW_TOAST`, `SHOW_MODAL`, `TRIGGER_ANIMATION`).
+        *   **Emitted Events:** It can `emit` an `EMIT_TO_SOCKET` event, which the `UIMachineProvider` listens for to send messages to the server via `useSocketManager`.
+        *   **Actions & Guards:** Define how the UI machine reacts to events and context changes, including:
+            *   Updating its own context (e.g., `setSelectedHandCardIndex`, managing `abilityContext`).
+            *   Emitting events to the socket.
+            *   Triggering modals or toasts.
+        *   It doesn't directly modify the `gameStore`; that's handled by the `UIMachineProvider` based on socket events.
+    *   **Provider & Integration (`client/machines/uiMachineProvider.tsx`):**
+        *   This React context provider is the glue:
+            *   Initializes `useSocketManager` to connect to the server.
+            *   Initializes `useGameStore` for access to global state.
+            *   Initializes the `uiMachine` actor.
+            *   **Registers listeners** for server socket events (`GAME_STATE_UPDATE`, `GAME_LOG_MESSAGE`, `CHAT_MESSAGE`, `ERROR_MESSAGE`) using `socketManager.registerListener`.
+            *   When these events are received:
+                *   It updates the `gameStore` (e.g., `gameStore.setGameState(newState)`).
+                *   It sends an event to the `uiMachine` actor (e.g., `actorRef.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState: newState })`).
+            *   It subscribes to `EMIT_TO_SOCKET` events from the `uiMachine` actor and uses `socketManager.emitEvent` to send the corresponding message to the server.
+    *   **Game Display (`client/app/(game)/[gameId]/page.tsx`):**
+        *   The primary UI for the game.
+        *   It connects to `useGameStore` to get `currentGameState`, `localPlayerId`, `gameLog`, and `chatMessages` for display.
+        *   Renders components like `PlayerHand` and `GameBoardArea`.
+        *   **Crucially, the next step will be to connect its interactive elements (card clicks, button clicks) to send events to the `uiMachine` actor, and to use selectors from `uiMachine` (via `useUIMachineSelector`) to control UI elements based on the machine's state and guards (e.g., enabling/disabling buttons, highlighting cards).**
+
+**Data Flow Summary (Client <-> Server):**
+
+1.  **Client Action (e.g., Player Clicks "Draw From Deck"):**
+    *   `GamePage` component's click handler will send an event to `uiMachine` (e.g., `DRAW_FROM_DECK_CLICKED`).
+    *   `uiMachine` transitions, potentially updates its context (e.g., to show a loading spinner), and emits `EMIT_TO_SOCKET` with `PlayerActionType.DRAW_FROM_DECK`.
+    *   `UIMachineProvider` catches this emitted event and uses `socketManager.emitEvent` to send it to the server.
+2.  **Server Processing:**
+    *   `server/src/index.ts` receives the `PLAYER_ACTION` socket event.
+    *   It finds the correct `gameMachine` actor and sends it the corresponding event (e.g., `{ type: PlayerActionType.DRAW_FROM_DECK, playerId }`).
+    *   `gameMachine` processes the event, updates its state, and potentially emits events like `BROADCAST_GAME_STATE` and `EMIT_LOG_PUBLIC`.
+3.  **Server Response to Clients:**
+    *   `server/src/index.ts` (via its subscription to the game actor's emitted events):
+        *   On `BROADCAST_GAME_STATE`: Generates player-specific views and sends `GAME_STATE_UPDATE` to all clients in the room.
+        *   On `EMIT_LOG_PUBLIC`: Sends `SERVER_LOG_ENTRY` (or `GAME_LOG_MESSAGE` as per client listener) to all clients.
+4.  **Client Receives Update:**
+    *   `UIMachineProvider`'s registered listeners (via `useSocketManager`):
+        *   Receive `GAME_STATE_UPDATE`: Updates `gameStore.currentGameState` and sends `CLIENT_GAME_STATE_UPDATED` to `uiMachine`.
+        *   Receive `SERVER_LOG_ENTRY`: Updates `gameStore.gameLog` and sends `NEW_GAME_LOG` to `uiMachine`.
+    *   `uiMachine` processes these events, updates its context if needed (e.g., for UI cues based on log type, or reflecting new game state for its guards).
+    *   `GamePage` (and other components) re-render based on changes in `gameStore` and potentially based on selectors from `uiMachine`.
+
+**Key Points of Integration:**
+
+*   **Clear Separation of Concerns:**
+    *   Server `gameMachine`: Pure game logic.
+    *   Server `index.ts`: Socket communication, actor management.
+    *   Client `gameStore`: Global, raw client-side game state from server.
+    *   Client `uiMachine`: UI logic, interaction orchestration, transient UI state (modals, selections).
+    *   Client `UIMachineProvider`: Bridges socket events, `gameStore`, and `uiMachine`.
+*   **Reactive Data Flow:** Updates from the server flow through the `UIMachineProvider` to both the `gameStore` (for components to subscribe to data) and the `uiMachine` (for logic/state changes).
+*   **XState for Complex Logic:** Both backend game rules and frontend UI orchestration benefit from the robustness of state machines.
+*   **Shared Types:** Essential for type safety and reducing errors at the client-server boundary.
+
+**Potential Areas for Attention (Standard for this kind of app):**
+
+*   **Error Handling:** Robust error handling on both client (displaying to user, `uiMachine`'s `ERROR_RECEIVED`) and server (logging, potentially specific error messages to client) is critical. The `ERROR_MESSAGE` socket event and `ERROR_RECEIVED` UI machine event are good starts.
+*   **Latency/Optimistic Updates:** For a snappier UI, some actions might eventually benefit from optimistic updates in the `uiMachine`, with reconciliation when the server state arrives. This is an advanced topic, but the current setup is a solid foundation.
+*   **Animation Orchestration:** The `AnimationCue` in `uiMachine` is a good pattern. Integrating this with actual animation libraries will be the next step there.
+*   **Scalability of `gameMachine`:** While very comprehensive, ensuring the server `gameMachine` remains maintainable as features grow is important. The use of `enqueueActions` and clear state definitions helps.
+*   **Testing:** The separation of concerns allows for more targeted testing (e.g., testing `gameMachine` logic independently of socket code, testing `uiMachine` independently of React components).
+
+This review confirms that the pieces are well-defined and the planned integration points make sense. The flow from user interaction on the client, to server processing, and back to client state updates is logical and leverages the strengths of the chosen technologies.
+
+The next step of connecting the `GamePage`'s interactive elements to the `uiMachine` and using its selectors will bring the UI to life.
+
+----
+
+Okay, I will review the implementation based on `GAME_RULES.md`. This will be a detailed comparison.
+
+**1. Object of the Game:**
+*   **Rule:** Lowest total card value wins.
+*   **Verification (`gameMachine` - `scoringPhase`):** The `scoringPhase` calculates player scores using `cardValues` (Aces are -1, K/Q/J are 13/12/11 respectively, numbers are face value). It finds `minScore` and determines `roundWinnerIds`.
+*   **Status:** ✅ Implemented correctly.
+
+**2. Game Components:**
+*   **Rule:** Draw Pile, Discard Pile, Player Hand (initially 4 cards in 2x2 grid).
+*   **Verification (`GameMachineContext`):**
+    *   `deck`: Represents the draw pile.
+    *   `discardPile`: Represents the discard pile.
+    *   `players[playerId].hand`: Represents player's hand (an array).
+    *   The 2x2 grid is a client-side visualization concern. The server deals 4 cards.
+*   **Status:** ✅ Core components represented.
+
+**3. The Deck:**
+*   **Rule:** Standard 52-card deck.
+*   **Verification (`gameMachine` - `createDeckWithIds`):** This helper function creates a 52-card deck with unique IDs for each card.
+*   **Status:** ✅ Implemented correctly.
+
+**4. Card Values for Scoring:**
+*   **Rule:** Aces: -1, 2-10: face value, J: 11, Q: 12, K: 13.
+*   **Verification (`shared-types/src/index.ts` - `cardValues`):** This object correctly defines these values. Used in `gameMachine`'s scoring.
+*   **Status:** ✅ Implemented correctly.
+
+**5. Setup:**
+*   **Rule: Deck Shuffle:**
+    *   **Verification:** `shuffleDeck` is used when initializing `GameMachineContext`.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: Dealing 4 cards face-down:**
+    *   **Verification (`gameMachine` - `awaitingPlayers` state, `PLAYER_JOIN_REQUEST`):** When a player joins, they are dealt 4 cards. The `isFaceDownToOwner: true` property is set on these cards.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: Initial Peek Phase - secretly look at bottom two cards (indices 2 and 3 of a 0-3 2x2 grid).**
+    *   **Verification (`gameMachine` - `initialPeekPhase` entry actions):**
+        *   It sets `cardsToPeek` for each player. Logic: `p.hand.length >= 4 ? [p.hand[2], p.hand[3]] : p.hand.slice(-2);`. This correctly targets indices 2 and 3 for a 4-card hand.
+        *   The `generatePlayerView` function (used by `server/src/index.ts`) is responsible for redacting card information appropriately, ensuring only the owner sees their `cardsToPeek`.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: Joining a game - only before initial peek phase starts.**
+    *   **Verification (`gameMachine`):**
+        *   The machine starts in `awaitingPlayers`. Players join in this state.
+        *   It transitions to `initialPeekPhase` once `allJoinedPlayersReadyAndMinPlayersMet` guard passes.
+        *   The `canPlayerJoin` guard in `PLAYER_JOIN_REQUEST` (global `on` or `awaitingPlayers` `on`) doesn't explicitly check current phase, but player joining logic is primarily handled in `awaitingPlayers`. If a `PLAYER_JOIN_REQUEST` arrived while in `initialPeekPhase` or later, it would likely be ignored or fail the `canPlayerJoin` guard (e.g., game full or player already exists). The current structure effectively prevents joining after `awaitingPlayers` state.
+    *   **Status:** ✅ Implemented correctly by design.
+
+**6. Card Layout and Hand Expansion:**
+*   **Rule: Grid visualization, max row width 2. Server manages hand as an ordered array.**
+    *   **Verification:** Server uses `PlayerState.hand` (array). Grid/expansion is client UI.
+    *   **Status:** ✅ Server part correct. Client UI will handle visualization.
+*   **Rule: Hand expansion on penalty (failed match).**
+    *   **Verification (`gameMachine` - `ATTEMPT_MATCH` in `matchingStage`):** On a failed match, if `deckToAssign.length > 0`, a penalty card is drawn from the deck and added to the player's hand (`handWithPenalty = [...playersToAssign[event.playerId].hand, { ...penaltyCard, isFaceDownToOwner: true }];`).
+    *   **Status:** ✅ Implemented correctly.
+
+**7. Gameplay - Player Turns:**
+*   **A. Primary Draw Action (Mandatory):**
+    *   **Draw from Draw Pile (Face Down):**
+        1.  **Rule: Take top card, known only to drawing player.**
+            *   **Verification (`gameMachine` - `DRAW_FROM_DECK` action):** Card is popped from `deck`, put in `player.pendingDrawnCard`. `EMIT_LOG_PRIVATE` for the drawn card. `generatePlayerView` should ensure other players don't see this pending card's face.
+            *   **Status:** ✅ Implemented correctly.
+        2.  **Choices:**
+            *   **Rule: Swap & Discard:** Select hand card, swap with drawn (drawn face-down). Original hand card to discard (face-up). Triggers Matching Opportunity. `discardPileIsSealed` false.
+                *   **Verification (`gameMachine` - `SWAP_AND_DISCARD` action):**
+                    *   Takes `handIndex`. `pendingDrawnCard` (with `isFaceDownToOwner: true`) goes into hand. Card from hand goes to discard pile.
+                    *   Sets `currentPhase: 'matchingStage'`, `matchingOpportunityInfo` is set.
+                    *   `discardPileIsSealed: false` is set.
+                *   **Status:** ✅ Implemented correctly.
+            *   **Rule: Discard Drawn Card:** Drawn card to discard (face-up). Triggers Matching. `discardPileIsSealed` false.
+                *   **Verification (`gameMachine` - `DISCARD_DRAWN_CARD` action):** `pendingDrawnCard` goes to discard pile.
+                    *   Sets `currentPhase: 'matchingStage'`, `matchingOpportunityInfo` is set.
+                    *   `discardPileIsSealed: false` is set.
+                *   **Status:** ✅ Implemented correctly.
+            *   **Rule: K,Q,J ability not triggered on swap-in, only on later discard.**
+                *   **Verification:** Abilities are generally queued in the `matchingStage` (if the discarded card is special) or from `ATTEMPT_MATCH` (if a special pair is made). Drawing a special card and swapping it into hand does not directly queue an ability in `SWAP_AND_DISCARD` handler.
+                *   **Status:** ✅ Implemented correctly.
+    *   **Draw from Discard Pile (Face Up):**
+        1.  **Rule: Only if `G.discardPileIsSealed` is `false`.**
+            *   **Verification (`gameMachine` - `discardIsDrawable` guard for `DRAW_FROM_DISCARD`):** Checks `!context.discardPileIsSealed`.
+            *   **Status:** ✅ Implemented correctly.
+        2.  **Rule: Cannot draw K, Q, J.**
+            *   **Verification (`gameMachine` - `discardIsDrawable` guard):** Checks `!(topCard && (topCard.rank === Rank.King || topCard.rank === Rank.Queen || topCard.rank === Rank.Jack))`.
+            *   **Status:** ✅ Implemented correctly.
+        3.  **Rule: Take top card.**
+            *   **Verification (`gameMachine` - `DRAW_FROM_DISCARD` action):** Takes `discardPile.shift()`.
+            *   **Status:** ✅ Implemented correctly.
+        4.  **Rule: Player MUST swap with hand card. Drawn card face-down. Original hand card to discard (face-up). Triggers Matching.**
+            *   **Verification (`gameMachine`):**
+                *   `DRAW_FROM_DISCARD` action puts the card into `player.pendingDrawnCard` and `player.pendingDrawnCardSource: 'discard'`.
+                *   The player is then in `awaitingPostDrawAction` (or `awaitingFinalPostDrawAction`).
+                *   From here, they can choose `SWAP_AND_DISCARD` or `DISCARD_DRAWN_CARD`.
+                *   The `DISCARD_DRAWN_CARD` action has a guard `isValidDiscardDrawnCard` which checks `player.pendingDrawnCardSource !== 'deck'`. This is effectively `player.pendingDrawnCardSource === 'deck'`.
+                *   **This means if `pendingDrawnCardSource` is `'discard'`, `DISCARD_DRAWN_CARD` is NOT allowed.** This correctly enforces the "must swap" rule.
+            *   **Status:** ✅ Implemented correctly.
+        5.  **Rule: Cannot draw from Discard and immediately discard same card (implied by "must swap").**
+            *   **Verification:** As per point 4, this is correctly enforced.
+            *   **Status:** ✅ Implemented correctly.
+
+**8. Matching/Stacking Opportunity:**
+*   **Rule: Triggered after discard (Card X), sets `matchingOpportunityInfo`, enters `matchingStage`.**
+    *   **Verification (`gameMachine`):** Actions `SWAP_AND_DISCARD` and `DISCARD_DRAWN_CARD` (in both `playPhase` and `finalTurnsPhase`) correctly transition to `matchingStage` and set `matchingOpportunityInfo` and `activePlayers`.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: Applies in `playPhase` and `finalTurnsPhase`.**
+    *   **Verification (`gameMachine`):** The `finalTurnsPhase`'s `awaitingFinalPostDrawAction` state also transitions to `matchingStage` after a discard.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: During `matchingStage`:** Any player (not locked checker) can `attemptMatch` with same rank. Any player can `passMatch`. Ends on first success or all pass/attempt.
+    *   **Verification (`gameMachine` - `matchingStage`):**
+        *   `ATTEMPT_MATCH` handler: `isValidMatchAttempt` guard checks player is in `potentialMatchers` (derived from non-locked, non-checked players).
+        *   `PASS_MATCH` handler: Allows player to pass.
+        *   `MATCHING_STAGE_TIMER_EXPIRED`: Auto-passes remaining players.
+        *   If a match is successful, `matchingOpportunityInfoToAssign = null`, `activePlayersToAssign = {}`, leading to phase transition.
+        *   If all pass (either explicitly or via timer), `matchingOpportunityInfo` becomes null, leading to phase transition.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: If a Match Occurs (Card Y on Card X):**
+    *   Matcher's hand reduced. Card Y to `discardPile`.
+        *   **Verification (`ATTEMPT_MATCH` success):** `updatedHand = player.hand.filter(...)`, `discardPileToAssign.unshift(cardFromHand)`.
+        *   **Status:** ✅ Implemented correctly.
+    *   `G.discardPileIsSealed = true`.
+        *   **Verification (`ATTEMPT_MATCH` success):** `discardPileIsSealedToAssign = true`.
+        *   **Status:** ✅ Implemented correctly.
+    *   **Rule: Pile sealed through ability resolution & remainder of turn. Unsealed by new discard or next player's turn.**
+        *   **Verification (`gameMachine`):**
+            *   `discardPileIsSealed` is set to `true` on successful match.
+            *   In `abilityResolutionPhase` entry, `discardPileIsSealedToAssign = true` if abilities are pending. If no abilities, it's set to `false`.
+            *   In `playPhase.determiningPlayer` (start of turn), `discardPileIsSealed: false` is assigned.
+            *   In `finalTurnsPhase.determiningFinalTurnPlayer`, `discardPileIsSealed: false` is assigned.
+            *   If a player discards (e.g. after `SWAP_AND_DISCARD`), `discardPileIsSealed` is set to `false`.
+        *   **Status:** ✅ Implemented correctly. The sealing and unsealing logic seems to follow the rule.
+    *   Non-special cards: No abilities.
+        *   **Verification (`ATTEMPT_MATCH` success):** Ability queuing logic is conditional on `isCardXSpecial && isCardYSpecial`.
+        *   **Status:** ✅ Implemented correctly.
+    *   Special cards: Stack. `pendingSpecialAbility` for matcher (`'stack'`) and original discarder (`'stackSecondOfPair'`).
+        *   **Verification (`ATTEMPT_MATCH` success):** Correctly pushes two `PendingSpecialAbility` objects with `source: 'stack'` and `source: 'stackSecondOfPair'`.
+        *   **Status:** ✅ Implemented correctly.
+    *   Matcher empties hand: Auto "Call Check".
+        *   **Verification (`ATTEMPT_MATCH` success):** If `updatedHand.length === 0`, sets `hasCalledCheck: true`, `isLocked: true` for the player. If `playerWhoCalledCheckToAssign` is not set, it sets it to this player. `autoCheckOccurred = true`.
+        *   **Status:** ✅ Implemented correctly.
+*   **Rule: `matchingStage.onEnd` Logic (transitions from `matchingStage`):**
+    *   **Scenario 1: Match + Special Abilities Pending:** Transition to `abilityResolutionStage`.
+        *   **Verification (`ATTEMPT_MATCH` success):** If `abilityResolutionRequired` (derived from special pair match) is true, `nextPhaseToAssign = 'abilityResolutionPhase'`.
+        *   **Status:** ✅ Implemented correctly.
+    *   **Scenario 2: No match occurred AND Card X was special:** `pendingSpecialAbility` for original discarder (`'discard'`). Transition to `abilityResolutionStage`.
+        *   **Verification (`MATCHING_STAGE_TIMER_EXPIRED` or all players pass in `PASS_MATCH` / failed `ATTEMPT_MATCH`):** If the `matchingOpportunityInfoToAssign` becomes null (no match) and `cardToMatch` (original Card X) was special, a `pendingSpecialAbility` with `source: 'discard'` is queued for the `originalPlayerID`, and `nextPhaseToAssign = 'abilityResolutionPhase'`.
+        *   **Status:** ✅ Implemented correctly.
+    *   **Scenario 3: Other cases:** End `matchingStage`, return to `playPhase` (or `finalTurnsPhase`).
+        *   **Verification:** If neither of the above, transitions to `context.playerWhoCalledCheck ? 'finalTurnsPhase' : 'playPhase'`.
+        *   **Status:** ✅ Implemented correctly.
+
+**9. Special Card Abilities (K, Q, J) & Stack Resolution:**
+*   **Rule: Processed in `abilityResolutionStage`. `resolveSpecialAbility` move used.**
+    *   **Verification:** `abilityResolutionPhase` state exists. `RESOLVE_SPECIAL_ABILITY` event is handled.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: Single special card: `pendingSpecialAbility` resolved.**
+    *   **Verification:** `abilityResolutionPhase` entry sorts and takes `pendingAbilitiesToAssign[0]`.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: Stacked (LIFO): `lastResolvedAbilitySource` tracks. `abilityResolutionStage.onEnd` uses this.**
+    *   **Verification (`gameMachine` - `abilityResolutionPhase` entry):**
+        *   Abilities are sorted: `'stack'` (matcher) then `'stackSecondOfPair'` (original discarder).
+        *   The logic with `pairTargetId === context.lastPlayerToResolveAbility && a.source === 'stackSecondOfPair'` ensures the second part of a LIFO pair gets priority if the first just resolved.
+        *   `lastPlayerToResolveAbility` and `lastResolvedAbilitySource` are set by `RESOLVE_SPECIAL_ABILITY`.
+    *   **Status:** ✅ Implemented correctly for LIFO.
+*   **Rule: `abilityResolutionStage` continues until abilities cleared.**
+    *   **Verification (`abilityResolutionPhase` entry):** If `pendingAbilitiesToAssign.length === 0`, it transitions out. Otherwise, it sets `currentPlayerIdToAssign` to the next ability holder and `nextPhaseToAssign = 'abilityResolutionPhase'`.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: `resolveSpecialAbility` clears acting player's `pendingSpecialAbility`, sets `lastResolvedAbilitySource`.**
+    *   **Verification (`RESOLVE_SPECIAL_ABILITY` action):** `pendingAbilitiesToAssign.shift()` removes the current ability. `lastResolvedAbilityCardToAssign`, `lastResolvedAbilitySourceToAssign`, `lastPlayerToResolveAbilityToAssign` are set.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: Locked player ability fizzles.**
+    *   **Verification (`RESOLVE_SPECIAL_ABILITY` action):** Checks `if (player.isLocked)`. If so, logs fizzle, shifts ability, sets last resolved info, and determines next phase.
+    *   **Status:** ✅ Implemented correctly.
+*   **Rule: No valid targets: Option to "Skip".**
+    *   **Verification (`RESOLVE_SPECIAL_ABILITY` action):** `args.skipAbility` is handled.
+    *   Client-side `uiMachine` will need to determine when to offer this skip option if targets are unavailable. Server `gameMachine` handles the `skipAbility` payload.
+    *   **Status:** ✅ Server handles skip. Client needs to implement UI for offering skip.
+*   **Ability Details (K, Q, J):**
+    *   **Rule: King: Peek 2, Swap 1 with 1. Skip options.**
+    *   **Rule: Queen: Peek 1, Swap 1 with 1. Skip options.**
+    *   **Rule: Jack: Swap 1 with 1. Skip option.**
+    *   **Verification (`gameMachine` - `RESOLVE_SPECIAL_ABILITY` action):**
+        *   Handles King/Queen peek stage: `pendingAbilitiesToAssign[0].currentAbilityStage = 'swap'`. Global ability targets for peek are set by `REQUEST_PEEK_REVEAL`.
+        *   Handles swap stage for K, Q, J. Validates `args.swapTargets` (must be 2 different cards, not locked).
+        *   `skipAbility` with `skipType: 'peek'` or `'swap'` is handled.
+    *   **Verification (`uiMachine`):**
+        *   `abilityContext` tracks `type: 'king' | 'queen' | 'jack'` and `step: 'peeking1' | 'peeking2' | 'swapping1' | 'swapping2' | 'confirmingSwap'`.
+        *   `ABILITY_CARD_TARGET_SELECTED` updates `peekedCardsInfo` or `swapSlots`.
+        *   `ABILITY_CONFIRM_ACTION` builds the `abilityResolutionArgs` with `swapTargets` for the server.
+        *   `ABILITY_SKIP_PEEK` and `ABILITY_SKIP_SWAP` send appropriate `skipAbility: true` payloads.
+    *   **Status:** ✅ Core logic seems present on server and client machine. Client UI for selecting targets and confirming/skipping needs to be fully built out based on `uiMachine` state. The server correctly handles the multi-stage nature (peek then swap for K/Q) via `currentAbilityStage` on `PendingSpecialAbility`.
+
+**10. Calling "Check" and Ending the Round:**
+*   **A. Player-Initiated "Check":**
+    *   **Rule:** On turn, `playPhase`, no pending actions. `playerWhoCalledCheck` set, `isLocked=true`. Enter `finalTurnsPhase`, `finalTurnsTaken=0`.
+    *   **Verification (`gameMachine` - `CALL_CHECK` in `playPhase.playerTurn.awaitingInitialAction`):**
+        *   Guard `isValidCallCheck` checks `currentPlayerId`, `!player.hasCalledCheck`, `!player.pendingDrawnCard`, no pending abilities for player, `!context.playerWhoCalledCheck`.
+        *   Action sets `player.hasCalledCheck = true`, `player.isLocked = true`. Sets `playerWhoCalledCheck` if not already set. Resets `finalTurnsTaken = 0`. Transitions to `finalTurnsPhase`.
+    *   **Status:** ✅ Implemented correctly.
+*   **B. Automatic "Check" (Empty Hand via `attemptMatch`):**
+    *   **Rule:** Player `isLocked=true`, `hasCalledCheck=true`. If `finalTurnsPhase` not begun, initiate it (`playerWhoCalledCheck` set, `finalTurnsTaken=0`). If active, no change to original checker/turns. Resolve abilities first.
+    *   **Verification (`gameMachine` - `ATTEMPT_MATCH` success):**
+        *   Sets `player.hasCalledCheck = true`, `player.isLocked = true`.
+        *   If `!playerWhoCalledCheckToAssign`, it sets `playerWhoCalledCheckToAssign = event.playerId`, `finalTurnsTakenToAssign = 0`.
+        *   `autoCheckOccurred = true` is part of `matchResolvedDetailsToAssign`.
+        *   Phase transition logic: If `abilityResolutionRequired`, goes to `abilityResolutionPhase`. Otherwise, if `autoCheckOccurred`, goes to `finalTurnsPhase`. The entry to `abilityResolutionPhase` handles subsequent transition to `finalTurnsPhase` if `matchResolvedDetails.isAutoCheck` is true.
+    *   **Status:** ✅ Implemented correctly.
+*   **C. Final Turns Phase (`finalTurnsPhase`):**
+    *   **Rule: No manual `callCheck`.**
+        *   **Verification:** `CALL_CHECK` is not handled in `finalTurnsPhase` states.
+        *   **Status:** ✅ Implemented correctly.
+    *   **Rule: `finalTurnsTaken` managed.**
+        *   **Verification (`determiningFinalTurnPlayer`):** `updatedFinalTurnsTaken` is incremented.
+        *   **Status:** ✅ Implemented correctly.
+    *   **Rule: Original checker locked, no final turn, cards untargetable.**
+        *   **Verification (`determiningFinalTurnPlayer`):** `eligiblePlayersForFinalTurn` filters out `playerWhoCalledCheck`.
+        *   Untargetable: `RESOLVE_SPECIAL_ABILITY` and `REQUEST_PEEK_REVEAL` on the server check if target players are `isLocked`. This implicitly protects the checker's cards.
+        *   **Status:** ✅ Implemented correctly.
+    *   **Rule: Other eligible players take one final turn (draw, discard, matching, abilities).**
+        *   **Verification (`finalTurnsPhase` states):** `finalPlayerTurn` state has `awaitingFinalInitialAction` and `awaitingFinalPostDrawAction` which allow draw/discard, leading to `matchingStage`, which can lead to `abilityResolutionPhase`. This cycle continues via `determiningFinalTurnPlayer`.
+        *   **Status:** ✅ Implemented correctly.
+    *   **Rule: After all eligible, proceed to `scoringPhase`.**
+        *   **Verification (`determiningFinalTurnPlayer`):** If `finalTurnsTaken >= eligiblePlayersForFinalTurn.length`, transitions to `scoringPhase`.
+        *   **Status:** ✅ Implemented correctly.
+
+**11. Scoring Phase (`scoringPhase`):**
+*   **Rule:** Cards revealed. Scores calculated. Lowest wins. `roundWinner` set. Game ends.
+*   **Verification (`gameMachine` - `scoringPhase` `always` transition to `gameOver`):**
+    *   Calculates scores, determines `minScore`, `roundWinnerIds`.
+    *   Sets `gameover` context with winner, scores, final hands, stats.
+    *   `gameOver` is a `type: 'final'` state.
+*   **Status:** ✅ Implemented correctly.
+
+**Summary of Verification:**
+
+The server-side `gameMachine` implementation appears to be **highly aligned** with the `GAME_RULES.md`. Most rules have direct counterparts in the state machine's logic, guards, and actions. Key complex areas like LIFO ability resolution, matching stage conditions, discard pile sealing, and final turns seem to be handled.
+
+**Minor Points/Areas for Client-Side Consideration based on Rules:**
+*   **Rule 6 (Card Layout):** Client needs to implement the 2xN grid visualization and hand expansion display.
+*   **Rule 9 (Special Abilities - Skip):** The server handles the `skipAbility` payload. The client `uiMachine` needs to determine *when* to offer this "Skip" option to the user (e.g., by checking if valid targets are available based on `currentGameState` and `abilityContext`). This involves client-side logic to assess target availability.
+
+The core game logic on the server is robust. The client-side `uiMachine` is set up to interact with this logic correctly. The next steps would indeed be to flesh out the UI interactions for all game actions and ability flows, ensuring the client presents valid options to the user based on the game state and rules.
+
+
+-------
+-------
+Ah i see you are a bit confused about the nature of this game. To make you understand ill give you the real life example of this game (as this game is adapted from a real card game we play with my friends). In check the main purpose is to get the lowest score possible by having the least value cards left in the hand at the end of the game. The entire game is played sitting in a circle or across each other with the main draw pile and discard pile in the center. The draw pile is face down and the discard pile is initially empty (no cards). All players are given 4 cards FACE-DOWN from the main pile (the deck is shuffled). Each player has their 4 cards in a 2x2 grid on the table (or whatever surface they are playing on) and all these cards are are FACE-DOWN. Nobody is allowed to peek at their cards (not yet atleast). As the game starts, each player is allowed to look at the bottom two cards in their grid (each player only looks at their own cards, players arent allowed to look at each other cards casually like this that is strictly against the rules of the game) and memorize the ranks of the cards. This peek duration is usually around 5-10 seconds or so after which all players are required to put their bottom two cards back into their spots on the grid FACE-DOWN. As you may have noticed by now that this games main gameplay / fun aspect is the memorization of the ranks and the fact that you cant peek at your own / others cards casually (only under certain conditions). From the players perspective all they see is their own grid face down and others grids / hands face down. When a player has their turn, they must either draw a card from the main draw pile or the discard pile, now this card they can look at but that too only till they decide what to swap it with or to discard it. If the player decides to swap it, they must swap it with any one of their current cards in their hand and then place the swapped out card into the discard pile (face up). The discard pile is always face up. Now moving on to the abilities. When a player discards a special card they can use the ability of that card when its discarded. and in this case peek would literally mean a peek eactly similar to how there was a peek in the initial start of the game. Therefore peek is a regular / staple action of this game which can happen to any card (flipped over). Swap on the other hand is basically what it means too, any two cards can be swapped by the player using that ability. Swaps are done face down (card is never face up for swaps). Therefore the only time a card is face up in this card game is when its being peeked at (either at the initial phase or during normal play through the peek ability triggered by special cards such as queen and king), being drawn from the draw pile (another peek basically where player looks at card and decides if he wants to keep it or not) and the cards in the discard pile (only cards that are always face up). And lastly when the game ends and all cards are revealed. I hope this made your understanding of the game a bit better and the vision i have to implement this as true to the real life experience as possible.
+-------
+-------

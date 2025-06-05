@@ -1,5 +1,5 @@
 import { setup, assign, ActorRefFrom, emit } from 'xstate';
-import { PlayerActionType } from '@shared';
+import { PlayerActionType, SocketEventName } from '@shared';
 import type { ClientCheckGameState, ConcretePlayerActionEvents, Card, PlayerId, RichGameLogMessage, ChatMessage, AbilityArgs } from '@shared';
 
 // --- Placeholder & Helper Types ---
@@ -89,7 +89,7 @@ export type UIMachineEvent =
   | { type: 'SWAP_WITH_SELECTED_HAND_CARD_CONFIRMED' }
   | { type: 'CALL_CHECK_CLICKED' }
   | { type: 'PASS_MATCH_CLICKED' }
-  | { type: 'ATTEMPT_MATCH_WITH_SELECTED_CARD_CLICKED' }
+  | { type: 'ATTEMPT_MATCH_WITH_SELECTED_CARD_CLICKED'; cardId: string }
   | { type: 'READY_FOR_INITIAL_PEEK_CLICKED' }
   | { type: 'INITIAL_PEEK_ACKNOWLEDGED_CLICKED' }
   // Actions on a pending drawn card (after DRAW_FROM_DECK/DISCARD resolves and pendingDrawnCard is set in context.currentGameState)
@@ -110,7 +110,9 @@ export type UIMachineEvent =
   | { type: 'SHOW_CONFIRM_MODAL'; modalPayload: ModalPayload; }
   | { type: 'DISMISS_MODAL' }
   | { type: 'TRIGGER_ANIMATION'; cue: AnimationCue }
-  | { type: 'ANIMATION_COMPLETED'; cueType: AnimationCue['type'] };
+  | { type: 'ANIMATION_COMPLETED'; cueType: AnimationCue['type'] }
+  // Chat
+  | { type: 'SUBMIT_CHAT_MESSAGE'; message: string; senderId: PlayerId; senderName: string; gameId: string };
 
 export const uiMachine = setup({
   types: {
@@ -241,10 +243,22 @@ export const uiMachine = setup({
       modal: ({ event }) => {
         const confirmEvent = event as Extract<UIMachineEvent, { type: 'SHOW_CONFIRM_MODAL' }>;
         return confirmEvent.modalPayload; 
-      }
+        }
     }),
     clearAbilityContext: assign({
-      abilityContext: null,
+        abilityContext: null,
+    }),
+    // Action to show a toast for the sent chat message (optimistic UI)
+    showSentChatToast: assign({
+      toasts: ({ context, event }) => {
+        const chatEvent = event as Extract<UIMachineEvent, { type: 'SUBMIT_CHAT_MESSAGE' }>;
+        return [...context.toasts, { 
+          id: Date.now().toString(), 
+          type: 'info', 
+          message: `You: ${chatEvent.message}`,
+          duration: 3000 
+        } satisfies ToastPayload];
+      }
     }),
     advanceAbilityStep: assign({
       abilityContext: ({ context }) => {
@@ -319,117 +333,124 @@ export const uiMachine = setup({
         return abilityContext; // No change for Jack or if context is not King/Queen
       }
     }),
+    submitChatMessage: assign({
+      toasts: ({ context, event }) => {
+        const chatMessageEvent = event as Extract<UIMachineEvent, { type: 'SUBMIT_CHAT_MESSAGE' }>;
+        const { message, senderId, senderName, gameId } = chatMessageEvent;
+        return [...context.toasts, { id: Date.now().toString(), type: 'info', message: `New chat from ${senderName}: ${message}`, duration: 5000 } satisfies ToastPayload];
+      }
+    }),
   },
   guards: {
-    isPlayerTurn: ({ context }) => {
-      const gs = context.currentGameState;
-      return !!gs && !!context.localPlayerId && gs.currentPlayerId === context.localPlayerId && gs.currentPhase !== 'gameOver';
-    },
+    isPlayerTurn: ({ context }) => context.localPlayerId === context.currentGameState?.currentPlayerId,
     canDrawFromDeck: ({ context }) => {
-      const gs = context.currentGameState;
-      const lpId = context.localPlayerId;
-      if (!gs || !lpId) return false;
-      const playerState = gs.players[lpId];
-      if (!playerState || playerState.isLocked || playerState.pendingDrawnCard) return false;
-
-      const isCorrectPhase =
-        (gs.currentPhase === 'playPhase' && gs.currentPlayerId === lpId) ||
-        (gs.currentPhase === 'finalTurnsPhase' && gs.currentPlayerId === lpId && gs.playerWhoCalledCheck !== lpId);
-
-      return isCorrectPhase && gs.deckSize > 0;
+      if (!context.localPlayerId || !context.currentGameState) return false;
+      const playerState = context.currentGameState.players[context.localPlayerId];
+      return context.localPlayerId === context.currentGameState.currentPlayerId && 
+             !playerState?.pendingDrawnCard && 
+             !playerState?.hasCalledCheck &&
+             context.currentGameState.currentPhase === 'playPhase';
     },
     canDrawFromDiscard: ({ context }) => {
-      const gs = context.currentGameState;
-      const lpId = context.localPlayerId;
-      if (!gs || !lpId) return false;
-      const playerState = gs.players[lpId];
-      if (!playerState || playerState.isLocked || playerState.pendingDrawnCard) return false;
-
-      const isCorrectPhase =
-        (gs.currentPhase === 'playPhase' && gs.currentPlayerId === lpId) ||
-        (gs.currentPhase === 'finalTurnsPhase' && gs.currentPlayerId === lpId && gs.playerWhoCalledCheck !== lpId);
-      
-      return (
-        isCorrectPhase &&
-        gs.discardPile.length > 0 &&
-        !gs.discardPileIsSealed &&
-        !gs.topDiscardIsSpecialOrUnusable
-      );
+      if (!context.localPlayerId || !context.currentGameState || context.currentGameState.discardPile.length === 0) return false;
+      const playerState = context.currentGameState.players[context.localPlayerId];
+      return context.localPlayerId === context.currentGameState.currentPlayerId && 
+             !playerState?.pendingDrawnCard && 
+             !playerState?.hasCalledCheck &&
+             context.currentGameState.currentPhase === 'playPhase';
     },
-    canCallCheck: ({ context }) => {
-      const gs = context.currentGameState;
-      const lpId = context.localPlayerId;
-      if (!gs || !lpId) return false;
-      const playerState = gs.players[lpId];
-      // Player cannot call check if they are locked, have a pending card, or are in the middle of an ability resolution.
-      if (!playerState || playerState.isLocked || playerState.pendingDrawnCard || context.abilityContext !== null) return false;
-
-      return (
-        gs.currentPhase === 'playPhase' &&
-        gs.currentPlayerId === lpId &&
-        gs.playerWhoCalledCheck === null
-      );
+    isCardSelected: ({ context }) => context.selectedHandCardIndex !== null,
+    isValidSwapWithPendingCard: ({ context }) => {
+      if (!context.localPlayerId || !context.currentGameState || context.selectedHandCardIndex === null) return false;
+      const playerState = context.currentGameState.players[context.localPlayerId];
+      if (!playerState || !playerState.pendingDrawnCard) return false;
+      return context.selectedHandCardIndex >= 0 && context.selectedHandCardIndex < playerState.hand.length;
+    },
+    canDiscardPendingDrawnCard: ({ context }) => {
+      if (!context.localPlayerId || !context.currentGameState) return false;
+      const playerState = context.currentGameState.players[context.localPlayerId];
+      return !!playerState && playerState.pendingDrawnCardSource === 'deck';
     },
     canAttemptMatch: ({ context }) => {
-      const gs = context.currentGameState;
-      const lpId = context.localPlayerId;
-      if (!gs || !lpId || context.selectedHandCardIndex === null) return false;
-      const playerState = gs.players[lpId];
-      if (!playerState || playerState.isLocked) return false; // playerWhoCalledCheck is implicitly locked
-
-      if (gs.currentPhase !== 'matchingStage' || !gs.matchingOpportunityInfo) return false;
-      if (!gs.matchingOpportunityInfo.potentialMatchers.includes(lpId)) return false;
-
-      const selectedClientCard = playerState.hand[context.selectedHandCardIndex];
-      // Ensure selectedClientCard is a Card, not HiddenCard, before accessing rank
-      if (!selectedClientCard || ('isHidden' in selectedClientCard && selectedClientCard.isHidden)) return false;
-      const selectedCard = selectedClientCard as Card; // Type assertion after check
-
-      return selectedCard.rank === gs.matchingOpportunityInfo.cardToMatch.rank;
+      if (!context.localPlayerId || !context.currentGameState || context.selectedHandCardIndex === null) return false;
+      const playerState = context.currentGameState.players[context.localPlayerId];
+      if (!playerState) return false;
+      return context.selectedHandCardIndex >= 0 && context.selectedHandCardIndex < playerState.hand.length;
     },
-    canPassMatch: ({ context }) => {
-      const gs = context.currentGameState;
-      const lpId = context.localPlayerId;
-      if (!gs || !lpId) return false;
-      const playerState = gs.players[lpId];
-      if (!playerState || playerState.isLocked) return false;
-
-      if (gs.currentPhase !== 'matchingStage' || !gs.matchingOpportunityInfo) return false;
-      return gs.matchingOpportunityInfo.potentialMatchers.includes(lpId);
+    canCallCheck: ({context}) => {
+      if (!context.localPlayerId || !context.currentGameState) return false;
+      const player = context.currentGameState.players[context.localPlayerId];
+      if (!player) return false;
+      return (
+        context.currentGameState.currentPlayerId === context.localPlayerId &&
+        context.currentGameState.currentPhase === 'playPhase' &&
+        !player.hasCalledCheck &&
+        !player.pendingDrawnCard
+      );
+    },
+    canPassMatch: ({context}) => {
+       if (!context.localPlayerId || !context.currentGameState) return false;
+      // This guard primarily checks if the game is in a state where passing a match is an option.
+      // Server-side logic will determine if this specific player *can* pass.
+      return context.currentGameState.currentPhase === 'matchingStage' || 
+             (!!context.currentGameState.matchingOpportunityInfo && 
+              context.currentGameState.matchingOpportunityInfo.potentialMatchers.includes(context.localPlayerId));
+    },
+    isPeekingPhase: ({context}) => context.currentGameState?.currentPhase === 'initialPeekPhase',
+    needsInitialPeek: ({context}) => {
+      if (!context.localPlayerId || !context.currentGameState) return false;
+      const player = context.currentGameState.players[context.localPlayerId];
+      return player ? !player.hasUsedInitialPeek && !player.isReadyForInitialPeek : false;
+    },
+    isAwaitingServerForPeek: ({context}) => {
+      if (!context.localPlayerId || !context.currentGameState) return false;
+      const player = context.currentGameState.players[context.localPlayerId];
+      return player ? player.isReadyForInitialPeek && !player.cardsToPeek : false;
+    },
+    hasCardsToPeek: ({context}) => {
+      if (!context.localPlayerId || !context.currentGameState) return false;
+      const player = context.currentGameState.players[context.localPlayerId];
+      return player ? !!player.cardsToPeek && player.cardsToPeek.length > 0 && !player.hasCompletedInitialPeek : false;
+    },
+    hasCompletedInitialPeek: ({context}) => {
+      if (!context.localPlayerId || !context.currentGameState) return false;
+      const player = context.currentGameState.players[context.localPlayerId];
+      return player ? player.hasCompletedInitialPeek : false;
+    },
+    // --- Ability Guards ---
+    isInAbilitySelectionPhase: ({ context }) => {
+      return context.abilityContext !== null && 
+             (context.abilityContext.type === 'king' || context.abilityContext.type === 'queen' || context.abilityContext.type === 'jack');
     },
     isInAbilityPeekingPhase: ({ context }) => {
       if (!context.abilityContext) return false;
-      const { type, step } = context.abilityContext;
-      if (type === 'king' && (step === 'peeking1' || step === 'peeking2')) return true;
-      if (type === 'queen' && step === 'peeking') return true;
-      return false;
+      return (context.abilityContext.type === 'king' && (context.abilityContext.step === 'peeking1' || context.abilityContext.step === 'peeking2')) || 
+             (context.abilityContext.type === 'queen' && context.abilityContext.step === 'peeking');
     },
     isInAbilitySwappingPhase: ({ context }) => {
       if (!context.abilityContext) return false;
-      const { type, step } = context.abilityContext;
-      if (type === 'king' && (step === 'swapping1' || step === 'swapping2')) return true;
-      if (type === 'queen' && (step === 'swapping1' || step === 'swapping2')) return true;
-      if (type === 'jack' && (step === 'swapping1' || step === 'swapping2')) return true;
-      return false;
+      return (context.abilityContext.type === 'king' && (context.abilityContext.step === 'swapping1' || context.abilityContext.step === 'swapping2')) || 
+             (context.abilityContext.type === 'queen' && (context.abilityContext.step === 'swapping1' || context.abilityContext.step === 'swapping2')) ||
+             (context.abilityContext.type === 'jack' && (context.abilityContext.step === 'swapping1' || context.abilityContext.step === 'swapping2'));
     }
   },
 }).createMachine({
-  id: 'uiMachine',
-  context: {
-    localPlayerId: null,
-    gameId: null,
-    currentGameState: null,
-    selectedHandCardIndex: null,
-    abilityContext: null,
-    activeAnimationCue: null,
-    modal: null,
-    toasts: [],
-  },
-  initial: 'initializing',
-  states: {
-    initializing: {
-      on: {
-        INITIALIZE: {
+    id: 'uiMachine',
+    context: {
+      localPlayerId: null,
+      gameId: null,
+      currentGameState: null,
+      selectedHandCardIndex: null,
+      abilityContext: null,
+      activeAnimationCue: null,
+      modal: null,
+      toasts: [],
+    },
+    initial: 'initializing',
+    states: {
+      initializing: {
+        on: {
+          INITIALIZE: {
           target: 'initialSetup',
           actions: ['initializeContext'],
         },
@@ -442,7 +463,7 @@ export const uiMachine = setup({
           on: {
             READY_FOR_INITIAL_PEEK_CLICKED: {
               target: 'awaitingServerConfirmation', 
-              actions: [
+            actions: [
                 emit(({ context }) => ({
                   type: 'EMIT_TO_SOCKET',
                   eventName: PlayerActionType.DECLARE_READY_FOR_PEEK,
@@ -490,7 +511,7 @@ export const uiMachine = setup({
           on: {
             INITIAL_PEEK_ACKNOWLEDGED_CLICKED: {
               target: 'awaitingPostPeekGameState',
-              actions: [
+            actions: [
                 emit(({ context }) => ({
                   type: 'EMIT_TO_SOCKET',
                   eventName: PlayerActionType.REQUEST_PEEK_REVEAL,
@@ -599,79 +620,67 @@ export const uiMachine = setup({
         DISMISS_MODAL: { actions: ['clearModal'] },
         TRIGGER_ANIMATION: { actions: 'setAnimationCue' },
         ANIMATION_COMPLETED: { actions: 'clearAnimationCue' },
-      },
-    },
-    awaitingServerResponse: {
-      on: {
-        CLIENT_GAME_STATE_UPDATED: [
-          {
-            guard: ({ context }) => !!context.currentGameState?.players[context.localPlayerId!]?.pendingDrawnCard,
-            target: 'playerAction.promptPendingCardDecision',
-            actions: ['setCurrentGameState']
-          },
-          {
-            guard: ({ context }) => {
-              const gs = context.currentGameState;
-              const localPlayerId = context.localPlayerId;
-              if (!gs || !localPlayerId || !gs.matchingOpportunityInfo) return false;
-              return gs.matchingOpportunityInfo.potentialMatchers.includes(localPlayerId);
-            },
-            target: 'playerAction.promptMatchDecision',
-            actions: ['setCurrentGameState']
-          },
-          {
-            guard: ({ context }) => !!context.currentGameState?.players[context.localPlayerId!]?.pendingSpecialAbility,
-            target: 'abilityActive',
-            actions: ['setCurrentGameState', 'initializeAbilityContext']
-          },
-          {
-            target: 'idle',
-            actions: ['setCurrentGameState']
-          }
-        ],
-        GAME_STATE_RECEIVED: [ /* Similar structure as CLIENT_GAME_STATE_UPDATED if used */
-          {
-            target: 'idle',
-            actions: ['setCurrentGameState']
-          }
-        ],
-        NEW_GAME_LOG: { actions: ['logGameEventToast'] },
-        NEW_CHAT_MESSAGE: { actions: ['showToastFromChatMessage'] },
-        ERROR_RECEIVED: {
-          target: 'idle', 
-          actions: ['showErrorModal']
-        },
-        RESOLVE_ABILITY_SUCCESS: {
-            target: 'idle',
-            actions: ['clearAbilityContext', 'setCurrentGameState']
+        SUBMIT_CHAT_MESSAGE: {
+          actions: [
+            emit(({ event }) => {
+              const { message, senderId, senderName, gameId } = event as Extract<UIMachineEvent, { type: 'SUBMIT_CHAT_MESSAGE' }>;
+              return {
+                type: 'EMIT_TO_SOCKET',
+                eventName: SocketEventName.SEND_CHAT_MESSAGE,
+                payload: {
+                  message,
+                  senderId,
+                  senderName,
+                  gameId,
+                }
+              };
+            }),
+            'showSentChatToast'
+          ]
         }
       },
     },
     playerAction: {
+      initial: 'promptPendingCardDecision',
       states: {
         promptPendingCardDecision: {
           on: {
             CONFIRM_SWAP_PENDING_CARD_WITH_HAND: {
               target: '#uiMachine.awaitingServerResponse',
+              guard: 'isValidSwapWithPendingCard',
               actions: [
-                emit(({ context, event }) => ({
-                  type: 'EMIT_TO_SOCKET',
-                  eventName: PlayerActionType.SWAP_AND_DISCARD,
-                  payload: { playerId: context.localPlayerId!, handIndex: event.handCardIndex } as ServerActionToPerform
-                }))
-              ],
-              guard: ({context}) => !!context.currentGameState?.players[context.localPlayerId!]?.pendingDrawnCard
+                emit((({ context, event }) => {
+                  const { handCardIndex } = event;
+                  return {
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
+                      type: PlayerActionType.SWAP_AND_DISCARD,
+                      playerId: context.localPlayerId!,
+                      handIndex: handCardIndex,
+                    } as ConcretePlayerActionEvents
+                  };
+                })),
+                'clearSelectedHandCardIndex'
+              ]
             },
             CONFIRM_DISCARD_PENDING_DRAWN_CARD: {
               target: '#uiMachine.awaitingServerResponse',
+              guard: 'canDiscardPendingDrawnCard',
               actions: [
-                emit(({ context }) => ({
+                emit((({ context }) => ({
                   type: 'EMIT_TO_SOCKET',
-                  eventName: PlayerActionType.DISCARD_DRAWN_CARD,
-                  payload: { playerId: context.localPlayerId! } as ServerActionToPerform
-                }))
-              ],
-              guard: ({context}) => context.currentGameState?.players[context.localPlayerId!]?.pendingDrawnCardSource === 'deck',
+                  eventName: SocketEventName.PLAYER_ACTION,
+                  payload: {
+                    type: PlayerActionType.DISCARD_DRAWN_CARD,
+                    playerId: context.localPlayerId!,
+                  } as ConcretePlayerActionEvents
+                }))),
+                'clearSelectedHandCardIndex'
+              ]
+            },
+            HAND_CARD_CLICKED: {
+              actions: ['setSelectedHandCardIndex']
             },
             CLIENT_GAME_STATE_UPDATED: [
               {
@@ -687,28 +696,42 @@ export const uiMachine = setup({
           on: {
             ATTEMPT_MATCH_WITH_SELECTED_CARD_CLICKED: {
               target: '#uiMachine.awaitingServerResponse',
+              guard: 'canAttemptMatch',
               actions: [
-                emit(({ context }) => ({
-                  type: 'EMIT_TO_SOCKET',
-                  eventName: PlayerActionType.ATTEMPT_MATCH,
-                  payload: { playerId: context.localPlayerId!, handIndex: context.selectedHandCardIndex! } as ServerActionToPerform
+                emit((({ context, event }) => {
+                  if (context.localPlayerId === null || context.selectedHandCardIndex === null) {
+                    console.error("Attempt Match: Missing localPlayerId or selectedHandCardIndex in context.");
+                    return { type: '_CLIENT_ERROR_NO_OP' } as any;
+                  }
+                  return {
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
+                      type: PlayerActionType.ATTEMPT_MATCH,
+                      playerId: context.localPlayerId,
+                      handIndex: context.selectedHandCardIndex
+                    } as ConcretePlayerActionEvents
+                  };
                 })),
                 'clearSelectedHandCardIndex'
-              ],
-              guard: ({context}) => context.selectedHandCardIndex !== null,
+              ]
             },
             PASS_MATCH_CLICKED: {
               target: '#uiMachine.awaitingServerResponse',
               actions: [
-                emit(({ context }) => ({
+                emit((({ context }) => ({
                   type: 'EMIT_TO_SOCKET',
-                  eventName: PlayerActionType.PASS_MATCH,
-                  payload: { playerId: context.localPlayerId! } as ServerActionToPerform
-                }))
-              ],
-              guard: 'canPassMatch'
+                  eventName: SocketEventName.PLAYER_ACTION,
+                  payload: {
+                    type: PlayerActionType.PASS_MATCH,
+                    playerId: context.localPlayerId!,
+                  } as ConcretePlayerActionEvents
+                }))),
+              ]
             },
-            HAND_CARD_CLICKED: { actions: ['setSelectedHandCardIndex'] },
+            HAND_CARD_CLICKED: {
+              actions: ['setSelectedHandCardIndex']
+            },
             CLIENT_GAME_STATE_UPDATED: [
               {
                 guard: ({ context }) => {
@@ -725,6 +748,9 @@ export const uiMachine = setup({
           }
         }
       }
+    },
+    awaitingServerResponse: {
+      // ... existing code ...
     },
     abilityActive: {
       on: {
@@ -848,9 +874,9 @@ export const uiMachine = setup({
           actions: ['setCurrentGameState', 'clearAbilityContext']
         }
       }
-    }
+    },
   },
 });
 
 export type UIMachineActor = ActorRefFrom<typeof uiMachine>;
-export type UIMachineLogic = typeof uiMachine;
+export type UIMachineLogic = typeof uiMachine; 
