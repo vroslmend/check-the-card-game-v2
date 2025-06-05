@@ -47,6 +47,6 @@ dist/
 .DS_Store
 *.log
 *.tsbuildinfo
-
+.cursor
 logs.md
 /temp
