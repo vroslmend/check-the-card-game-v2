@@ -22,9 +22,11 @@ export function ParallaxPrincipleCard({ icon, title, description }: ParallaxPrin
     offset: ["start end", "end start"] 
   })
   const y = useParallax(scrollYProgress, 200)
+  const scale = useTransform(scrollYProgress, [0, 0.5], [0.8, 1])
+  const opacity = useTransform(scrollYProgress, [0, 0.5], [0.5, 1])
 
   return (
-    <motion.div ref={ref} style={{ y }} className="relative h-full">
+    <motion.div ref={ref} style={{ y, scale, opacity }} className="relative h-full">
       <PrincipleCard
         icon={icon}
         title={title}

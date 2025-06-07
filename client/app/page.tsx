@@ -13,6 +13,9 @@ import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements"
 import { useCursorStore } from "@/store/cursorStore"
 import { PrincipleCard } from "@/components/ui/PrincipleCard"
 import { ParallaxPrincipleCard } from "@/components/ui/ParallaxPrincipleCard"
+import { CardStack } from "@/components/ui/CardStack"
+import { AnimateOnView } from "@/components/ui/AnimateOnView"
+import Magnetic from "@/components/ui/Magnetic"
 
 const textContainerVariants = {
   hover: {
@@ -110,7 +113,7 @@ export default function Home() {
   return (
     <div
       ref={containerRef}
-      className="relative flex min-h-screen flex-col overflow-hidden bg-stone-50 dark:bg-zinc-950 noselect"
+      className="relative flex min-h-screen flex-col bg-stone-50 dark:bg-zinc-950 noselect"
     >
       <OptimizedShapes mouseX={mouseX} mouseY={mouseY} scrollY={shapeY} />
 
@@ -243,7 +246,7 @@ export default function Home() {
                             }
                             hoverTimeoutRef.current = setTimeout(() => {
                               setIsCheckHovered(true);
-                            }, 200);
+                            }, 300);
                           }}
                           onMouseLeave={() => {
                             if (hoverTimeoutRef.current) {
@@ -310,59 +313,63 @@ export default function Home() {
                     className="flex flex-col gap-4 sm:flex-row"
                   >
                     <motion.div style={{ x: buttonsX, y: buttonsY }}>
-                      <motion.div
-                        whileHover={{ y: -3, scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Button
-                          size="lg"
-                          onClick={() => setShowNewGame(true)}
-                          onMouseEnter={() => setVariant("link")}
-                          onMouseLeave={() => setVariant("default")}
-                          className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
+                      <Magnetic>
+                        <motion.div
+                          whileHover={{ y: -3, scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          transition={{ duration: 0.2 }}
                         >
-                          <span className="pointer-events-none relative z-10 flex items-center gap-2">
-                            Start New Game
+                          <Button
+                            size="lg"
+                            onClick={() => setShowNewGame(true)}
+                            onMouseEnter={() => setVariant("link")}
+                            onMouseLeave={() => setVariant("default")}
+                            className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
+                          >
+                            <span className="pointer-events-none relative z-10 flex items-center gap-2">
+                              Start New Game
+                              <motion.div
+                                animate={{ x: [0, 4, 0] }}
+                                transition={{
+                                  duration: 2,
+                                  repeat: Number.POSITIVE_INFINITY,
+                                  ease: "easeInOut",
+                                }}
+                              >
+                                <ArrowRight className="h-4 w-4" />
+                              </motion.div>
+                            </span>
                             <motion.div
-                              animate={{ x: [0, 4, 0] }}
-                              transition={{
-                                duration: 2,
-                                repeat: Number.POSITIVE_INFINITY,
-                                ease: "easeInOut",
-                              }}
-                            >
-                              <ArrowRight className="h-4 w-4" />
-                            </motion.div>
-                          </span>
-                          <motion.div
-                            className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
-                            initial={{ x: "-100%" }}
-                            whileHover={{ x: "0%" }}
-                            transition={{ duration: 0.4, ease: "easeOut" }}
-                          />
-                        </Button>
-                      </motion.div>
+                              className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
+                              initial={{ x: "-100%" }}
+                              whileHover={{ x: "0%" }}
+                              transition={{ duration: 0.4, ease: "easeOut" }}
+                            />
+                          </Button>
+                        </motion.div>
+                      </Magnetic>
                     </motion.div>
 
                     <motion.div style={{ x: buttonsX, y: buttonsY }}>
-                      <motion.div
-                        whileHover={{ y: -3, scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Button
-                          variant="outline"
-                          size="lg"
-                          onClick={() => setShowJoinGame(true)}
-                          onMouseEnter={() => setVariant("link")}
-                          onMouseLeave={() => setVariant("default")}
-                          className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100 dark:hover:bg-stone-900/80"
+                      <Magnetic>
+                        <motion.div
+                          whileHover={{ y: -3, scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          transition={{ duration: 0.2 }}
                         >
-                          <Users className="mr-2 h-4 w-4" />
-                          Join Game
-                        </Button>
-                      </motion.div>
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={() => setShowJoinGame(true)}
+                            onMouseEnter={() => setVariant("link")}
+                            onMouseLeave={() => setVariant("default")}
+                            className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100 dark:hover:bg-stone-900/80"
+                          >
+                            <Users className="mr-2 h-4 w-4" />
+                            Join Game
+                          </Button>
+                        </motion.div>
+                      </Magnetic>
                     </motion.div>
                   </motion.div>
                 </motion.div>
@@ -400,33 +407,15 @@ export default function Home() {
 
         <section id="rules" className="relative py-32">
           <div className="container px-4 mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 80 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-              className="mx-auto max-w-6xl"
-            >
-              <div className="mb-20 text-center">
-                <motion.h2
-                  className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100"
-                  initial={{ opacity: 0, y: 40 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 1, delay: 0.2 }}
-                >
+            <div className="mx-auto max-w-6xl">
+              <AnimateOnView className="mb-20 text-center">
+                <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
                   Game Principles
-                </motion.h2>
-                <motion.p
-                  className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400"
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 1, delay: 0.4 }}
-                >
+                </h2>
+                <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
                   Elegant rules that create infinite strategic possibilities
-                </motion.p>
-              </div>
+                </p>
+              </AnimateOnView>
 
               <div className="grid gap-16 lg:grid-cols-3" style={{ perspective: "1000px" }}>
                 {[
@@ -457,105 +446,14 @@ export default function Home() {
                   />
                 ))}
               </div>
-            </motion.div>
-          </div>
-        </section>
-
-        <section id="features" className="relative py-32">
-          <div className="container px-4 mx-auto">
-            <motion.h2
-              initial={{ opacity: 0, y: 80 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-              className="mb-24 text-center text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100"
-            >
-              Refined Experience
-            </motion.h2>
-
-            <div className="mx-auto max-w-6xl space-y-32">
-              {[
-                {
-                  title: "Real-time Multiplayer",
-                  description:
-                    "Connect with players worldwide in seamless, lag-free matches. Our sophisticated networking ensures every move is perfectly synchronized.",
-                  features: ["Instant matchmaking", "Private rooms", "Spectator mode", "Cross-platform play"],
-                },
-                {
-                  title: "Advanced Strategy",
-                  description:
-                    "Dive deep into complex card combinations and psychological gameplay. Master the art of reading opponents and timing your moves.",
-                  features: ["Bluffing mechanics", "Power card synergies", "Chain reactions", "Meta evolution"],
-                },
-                {
-                  title: "Competitive Excellence",
-                  description:
-                    "Climb the global rankings through skill and dedication. Participate in seasonal tournaments and earn prestigious achievements.",
-                  features: ["ELO rating system", "Seasonal tournaments", "Achievement system", "Leaderboards"],
-                },
-              ].map((feature, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 80 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-100px" }}
-                  transition={{ duration: 1.2, delay: index * 0.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-                  className={`grid items-center gap-16 lg:grid-cols-2 ${
-                    index % 2 === 1 ? "lg:grid-flow-col-dense" : ""
-                  }`}
-                >
-                  <div className={`space-y-8 ${index % 2 === 1 ? "lg:col-start-2" : ""}`}>
-                    <h3 className="text-4xl font-light tracking-tight text-stone-900 dark:text-stone-100">
-                      {feature.title}
-                    </h3>
-                    <p className="text-xl font-light leading-relaxed text-stone-600 dark:text-stone-400">
-                      {feature.description}
-                    </p>
-                    <ul className="space-y-4">
-                      {feature.features.map((item, i) => (
-                        <motion.li
-                          key={i}
-                          initial={{ opacity: 0, x: -30 }}
-                          whileInView={{ opacity: 1, x: 0 }}
-                          viewport={{ once: true }}
-                          transition={{ delay: 0.5 + i * 0.1, duration: 0.8 }}
-                          className="flex items-center gap-3 font-light text-stone-700 dark:text-stone-300"
-                        >
-                          <motion.div
-                            className="h-2 w-2 rounded-full bg-stone-400 dark:bg-stone-600"
-                            whileHover={{ scale: 1.5 }}
-                            transition={{ duration: 0.2 }}
-                          />
-                          {item}
-                        </motion.li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className={`${index % 2 === 1 ? "lg:col-start-1" : ""}`}>
-                    <motion.div
-                      className="aspect-square rounded-3xl bg-gradient-to-br from-stone-200 to-stone-300 dark:from-stone-800 dark:to-stone-900"
-                      whileHover={{
-                        scale: 1.02,
-                        rotate: 1,
-                        transition: { duration: 0.4 },
-                      }}
-                    />
-                  </div>
-                </motion.div>
-              ))}
             </div>
           </div>
         </section>
 
+
         <section id="leaderboard" className="relative py-32">
           <div className="container px-4 mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 80 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-              className="mx-auto max-w-4xl text-center"
-            >
+            <AnimateOnView className="mx-auto max-w-4xl text-center">
               <h2 className="mb-8 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
                 Ready to Begin?
               </h2>
@@ -563,13 +461,7 @@ export default function Home() {
                 Join the most sophisticated card game experience ever created.
               </p>
 
-              <motion.div
-                initial={{ opacity: 0, y: 40 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 1, delay: 0.3 }}
-                className="flex flex-col gap-6 sm:flex-row sm:justify-center"
-              >
+              <div className="flex flex-col gap-6 sm:flex-row sm:justify-center">
                 <motion.div
                   whileHover={{ y: -3, scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -597,9 +489,9 @@ export default function Home() {
                     Join Friends
                   </Button>
                 </motion.div>
-              </motion.div>
-            </motion.div>
-        </div>
+              </div>
+            </AnimateOnView>
+          </div>
         </section>
       </main>
 

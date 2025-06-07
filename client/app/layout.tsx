@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "@/app/globals.css";
+import 'lenis/dist/lenis.css'
 import { UIMachineProvider } from "@/machines/uiMachineProvider";
 import { ThemeProvider } from "next-themes";
 import { Playfair_Display, Inter } from "next/font/google";
 import CustomCursor from '@/components/ui/CustomCursor';
+import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -18,7 +20,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Check!",
+  title: "Check! - The Card Game",
   description: "A card game of strategy, memory, and luck.",
 };
 
@@ -35,7 +37,9 @@ export default function RootLayout({
           defaultTheme="dark"
           enableSystem
         >
-          <UIMachineProvider>{children}</UIMachineProvider>
+          <SmoothScrollProvider>
+            <UIMachineProvider>{children}</UIMachineProvider>
+          </SmoothScrollProvider>
           <CustomCursor />
         </ThemeProvider>
       </body>
