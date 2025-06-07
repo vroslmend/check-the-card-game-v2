@@ -16,19 +16,22 @@ export interface GameStoreState extends SocketState {
   localPlayerId: string | null;
   gameLog: RichGameLogMessage[];
   chatMessages: ChatMessage[];
+  isSidePanelOpen: boolean;
   setGameState: (gameState: ClientCheckGameState) => void;
   setLocalPlayerId: (id: string | null) => void;
   addLogMessage: (logMessage: RichGameLogMessage) => void;
   addChatMessage: (chatMessage: ChatMessage) => void;
+  toggleSidePanel: () => void;
   // Add more actions as needed, e.g., for updating parts of the state
   resetGameStore: () => void;
 }
 
-const initialState: Pick<GameStoreState, 'currentGameState' | 'localPlayerId' | 'gameLog' | 'chatMessages'> = {
+const initialState: Pick<GameStoreState, 'currentGameState' | 'localPlayerId' | 'gameLog' | 'chatMessages' | 'isSidePanelOpen'> = {
   currentGameState: null,
   localPlayerId: null,
   gameLog: [],
   chatMessages: [],
+  isSidePanelOpen: true,
 };
 
 export const useGameStore = create<GameStoreState>()(
@@ -62,6 +65,7 @@ export const useGameStore = create<GameStoreState>()(
         const newChat = [...state.chatMessages, chatMessage].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         return { chatMessages: newChat };
       }),
+    toggleSidePanel: () => set((state) => ({ isSidePanelOpen: !state.isSidePanelOpen })),
     resetGameStore: () => set(initialState),
     // Implement other actions here
   }))

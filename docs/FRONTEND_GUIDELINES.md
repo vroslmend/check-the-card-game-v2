@@ -103,13 +103,51 @@ The frontend has a clear, unidirectional data flow.
 
 ## 4. Animation Philosophy
 
-Animations are key to the "flair" in our minimalist design. They must be **subtle, purposeful, and fluid.**
+Animations are key to the "flair" in our minimalist design. They must be **subtle, purposeful, and fluid.** We use **Framer Motion** as the exclusive library for all UI motion.
 
--   **Technology:** **Framer Motion** is the exclusive library for all animations.
--   **Layout Animations:** The highest priority. Card movements (deck-to-hand, hand-to-discard) **must** use `layoutId` to create a seamless visual transition, not just a fade-out/fade-in.
--   **Enter/Exit Animations:** UI elements (like the `ActionBar`) should gently fade and slide into view.
--   **Micro-interactions:** Interactive elements must have hover (`scale-105`) and press (`scale-95`) effects.
--   **Staggering:** Group animations, like dealing cards, should use `staggerChildren` for a satisfying, cascading effect.
+### 4.1. Core Principles
+
+-   **The Primacy of Layout Animation:** This is our most important animation principle. All card movements—from deck to hand, from hand to table, and critically, **from one player's hand to another**—are the lifeblood of the game's visual narrative. These transitions **must** be seamless. They will be achieved using Framer Motion's `layoutId` prop to create a fluid, uninterrupted path for the card, ensuring the player can always track the flow of the game without cognitive load. This is non-negotiable.
+
+-   **Purposeful Motion:** Animation must guide the user's eye, provide clear feedback, and explain state changes in the UI. It should never be decorative for its own sake.
+
+-   **Fluidity and Physics:** Transitions should feel smooth and natural, not jarringly fast. We prefer spring physics (`type: "spring"`) over timed durations for most movements to create a more organic, responsive feel.
+
+### 4.2. Target Implementations & Goals
+
+-   **Card Interactivity (`Tilt Card`):**
+    -   **Goal:** Make cards in hand feel like tangible, physical objects under the player's direct control.
+    -   **Implementation:** Cards in the `LocalPlayerArea` should have a subtle 3D tilt effect on hover that responds to the cursor's position on the card's surface.
+
+-   **Cursor & Interaction (`Cursor: Magnetic Target`):**
+    -   **Goal:** Make the UI feel hyper-responsive and intuitively guide the user towards interactive elements.
+    -   **Implementation:** The custom cursor should be "magnetically" pulled towards key interactive elements like buttons and valid drop zones when it is in close proximity.
+
+-   **Rich & Deliberate Feedback (`Radix Tooltip`, `Hold to Confirm`):**
+    -   **Goal:** Provide clear, non-intrusive feedback and add psychological weight to important player decisions.
+    -   **Implementation:**
+        -   Use Framer Motion-animated tooltips (via `radix-ui`) to provide contextual information on hover (e.g., card effects, player names).
+        -   Implement a "hold to confirm" interaction for critical, game-defining actions (e.g., playing a final card). The button's UI must visually indicate the hold progress.
+
+-   **Seamless Contextual Transitions (`Modal: Shared Layout`):**
+    -   **Goal:** Avoid jarring context shifts when a user requests more information.
+    -   **Implementation:** When more detail is needed (e.g., viewing an opponent's stats), the new view or modal must animate out directly from the source element (e.g., the `PlayerPod`) using a shared layout transition.
+
+-   **Engaging States (`Fill Text`, Staggering):**
+    -   **Goal:** Make static or waiting periods (like loading) feel active, polished, and on-brand.
+    -   **Implementation:**
+        -   Use creative typography animations (e.g., "fill text") for loading state messages.
+        -   Apply `staggerChildren` to group animations, such as dealing cards, to create a satisfying, cascading effect.
+
+### 4.3. Technical Strategy for Layout Animations
+
+To achieve the "Primacy of Layout Animation," we will adhere to a specific technical implementation:
+
+-   **Global Animation Context:** The entire `GamePage` component will be wrapped in a single Framer Motion `<LayoutGroup>` component. This creates a unified animation context across all areas of the game board (all player hands, the deck, the table), enabling seamless transitions between them.
+
+-   **Unique Card Identity:** Every card, regardless of its location, will be assigned a `motion` component with a `layoutId` prop. This ID must be a unique, persistent string derived from the card's identity (e.g., `card-queen-of-hearts`).
+
+-   **The "Magic Move":** When a card's data moves from one array to another (e.g., from the `deck` array to a `player.hand` array), React will unmount the card component in the old location and mount a new one in the new location. Because both components share the same `layoutId` and exist within the same `<LayoutGroup>`, Framer Motion will automatically generate a smooth "magic move" animation, making the card appear to fly from its old position to its new one.
 
 ---
 

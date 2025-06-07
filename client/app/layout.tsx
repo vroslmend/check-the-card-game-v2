@@ -1,9 +1,21 @@
 import type { Metadata } from "next";
 import "@/app/globals.css";
 import { UIMachineProvider } from "@/machines/uiMachineProvider";
-import { ThemeProvider } from "@/components/layout/ThemeProvider";
-import { GeistSans } from "geist/font/sans";
-import { GeistMono } from "geist/font/mono";
+import { ThemeProvider } from "next-themes";
+import { Playfair_Display, Inter } from "next/font/google";
+import CustomCursor from '@/components/ui/CustomCursor';
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
+  weight: ["400", "500", "600", "700"],
+})
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  weight: ["300", "400", "500", "600", "700"],
+})
 
 export const metadata: Metadata = {
   title: "Check!",
@@ -16,15 +28,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className="bg-background text-foreground">
+    <html lang="en" suppressHydrationWarning className={`${playfair.variable} ${inter.variable}`}>
+      <body className="font-serif antialiased no-cursor">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="dark"
           enableSystem
-          disableTransitionOnChange
         >
           <UIMachineProvider>{children}</UIMachineProvider>
+          <CustomCursor />
         </ThemeProvider>
       </body>
     </html>
