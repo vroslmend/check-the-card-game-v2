@@ -1,191 +1,104 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSocket } from '@/context/SocketContext';
-import { useGameStore } from '@/store/gameStore';
-import { SocketEventName, ClientCheckGameState, InitialPlayerSetupData } from 'shared-types';
-import { v4 as uuidv4 } from 'uuid'; // For generating unique player IDs
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
-// Response types for callbacks, matching server/index.ts structure
-interface CreateGameResponse {
-  success: boolean;
-  message?: string;
-  gameId?: string;
-  playerId?: string;
-  gameState?: ClientCheckGameState;
-}
-
-interface JoinGameResponse {
-  success: boolean;
-  message?: string;
-  gameId?: string; // gameId is part of the response for join as well
-  playerId?: string;
-  gameState?: ClientCheckGameState; // gameState might be sent if rejoining or player already known
-}
-
-export default function HomePage() {
-  const router = useRouter();
-  const { socket, emitEvent, isConnected } = useSocket();
-  const { setLocalPlayerId, setGameState, localPlayerId: storePlayerId, currentGameState: storeGameState } = useGameStore();
-
+const LandingPage = () => {
   const [playerName, setPlayerName] = useState('');
   const [gameIdToJoin, setGameIdToJoin] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isJoining, setIsJoining] = useState(false);
+  const router = useRouter();
 
-  // If already in a game (e.g., after a refresh on game page and then navigating back),
-  // potentially redirect to the game page.
   useEffect(() => {
-    if (storePlayerId && storeGameState && storeGameState.gameId) {
-      // router.push(`/game/${storeGameState.gameId}`);
-      // Decided against auto-redirect for now to allow explicit create/join actions.
-      // User might want to start a new game or join a different one.
-      console.log('Player is already in a game in store:', storeGameState.gameId, storePlayerId);
+    const savedPlayerName = localStorage.getItem('playerName');
+    if (savedPlayerName) {
+      setPlayerName(savedPlayerName);
     }
-  }, [storePlayerId, storeGameState, router]);
+  }, []);
 
-  const handleCreateGame = async () => {
-    if (!playerName.trim()) {
-      setError('Player name is required.');
-      return;
-    }
-    if (!isConnected || !socket) {
-      setError('Not connected to the server.');
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-
-    const newPlayerId = uuidv4();
-    const playerSetupData: InitialPlayerSetupData = { id: newPlayerId, name: playerName.trim() };
-
-    emitEvent(
-      SocketEventName.CREATE_GAME,
-      playerSetupData,
-      (response: CreateGameResponse) => {
-        setIsLoading(false);
-        if (response.success && response.gameId && response.playerId && response.gameState) {
-          setLocalPlayerId(response.playerId);
-          setGameState(response.gameState);
-          router.push(`/game/${response.gameId}`);
-        } else {
-          setError(response.message || 'Failed to create game.');
-        }
-      }
-    );
+  const handleCreateGame = () => {
+    if (!playerName.trim()) return;
+    localStorage.setItem('playerName', playerName);
+    // Note: In a real app, this would be a call to a server to create a game
+    // and get a proper ID, not a client-side generated one.
+    const newGameId = Math.random().toString(36).substr(2, 9);
+    router.push(`/game/${newGameId}`);
   };
 
-  const handleJoinGame = async () => {
-    if (!playerName.trim()) {
-      setError('Player name is required.');
-      return;
-    }
-    if (!gameIdToJoin.trim()) {
-      setError('Game ID is required to join.');
-      return;
-    }
-    if (!isConnected || !socket) {
-      setError('Not connected to the server.');
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-
-    const newPlayerId = uuidv4();
-    const playerSetupData: InitialPlayerSetupData = { id: newPlayerId, name: playerName.trim() };
-
-    emitEvent(
-      SocketEventName.JOIN_GAME,
-      gameIdToJoin.trim(),
-      playerSetupData,
-      (response: JoinGameResponse) => {
-        setIsLoading(false);
-        if (response.success && response.gameId && response.playerId) {
-          setLocalPlayerId(response.playerId);
-          if (response.gameState) { // Game state might not always be sent on join, depends on server logic
-            setGameState(response.gameState);
-          }
-          router.push(`/game/${response.gameId}`);
-        } else {
-          setError(response.message || 'Failed to join game.');
-        }
-      }
-    );
+  const handleJoinGame = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!playerName.trim() || !gameIdToJoin.trim()) return;
+    localStorage.setItem('playerName', playerName);
+    router.push(`/game/${gameIdToJoin}`);
   };
+
+  const hasPlayerName = playerName.trim() !== '';
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 font-[family-name:var(--font-geist-sans)]">
-      <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-xl">
-        <h1 className="text-3xl font-bold text-center text-indigo-400">Check! The Card Game</h1>
-        
-        <p className="text-sm text-center text-gray-400">
-          Connection Status: {isConnected ? <span className='text-green-400'>Connected</span> : <span className='text-red-400'>Disconnected</span>}
-        </p>
+    <div className="flex flex-col min-h-screen bg-background text-foreground font-sans p-4 sm:p-6">
+      <header className="flex justify-between items-center w-full max-w-7xl mx-auto">
+        <h1 className="text-2xl font-bold tracking-tighter">CHECK!</h1>
+        <Button variant="ghost" size="sm">[Info]</Button>
+      </header>
 
-        {error && (
-          <p className="text-sm text-center text-red-400 bg-red-900 p-3 rounded-md">Error: {error}</p>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="playerName" className="block text-sm font-medium text-gray-300">
-              Player Name
-            </label>
-            <input
-              type="text"
-              id="playerName"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="Enter your name"
-              className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-white"
-              disabled={isLoading}
-            />
+      <main className="flex flex-grow items-center justify-center">
+        <div className="w-full max-w-sm flex flex-col items-center text-center">
+          
+          <Input
+            type="text"
+            placeholder="Enter your name"
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+            className="w-full h-16 text-3xl text-center bg-transparent border-0 border-b-2 border-foreground/20 focus-visible:ring-offset-0 focus-visible:ring-0 focus:border-primary transition-colors duration-300"
+          />
+          
+          <div className={cn(
+            "transition-all duration-500 ease-in-out mt-8 w-full",
+            hasPlayerName ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
+          )}>
+            {!isJoining ? (
+              <div className="flex items-center justify-center space-x-6">
+                <Button variant="ghost" onClick={handleCreateGame}>
+                  [Create New Game]
+                </Button>
+                <Button variant="ghost" onClick={() => setIsJoining(true)}>
+                  [Join Game]
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleJoinGame} className="flex flex-col items-center w-full animate-in fade-in duration-500">
+                <Input
+                  type="text"
+                  placeholder="Enter Game ID"
+                  value={gameIdToJoin}
+                  onChange={(e) => setGameIdToJoin(e.target.value)}
+                  className="w-full h-16 text-3xl text-center bg-transparent border-0 border-b-2 border-foreground/20 focus-visible:ring-offset-0 focus-visible:ring-0 focus:border-primary transition-colors duration-300"
+                  autoFocus
+                />
+                <Button variant="ghost" type="submit" disabled={!gameIdToJoin.trim()} className="mt-8">
+                  [Join]
+                </Button>
+                <Button variant="link" size="sm" onClick={() => setIsJoining(false)} className="mt-4 text-muted-foreground">
+                  ...or create a new game
+                </Button>
+              </form>
+            )}
           </div>
         </div>
+      </main>
 
-        <div className="space-y-6 pt-4 border-t border-gray-700">
-          <h2 className="text-xl font-semibold text-center text-indigo-300">Create a New Game</h2>
-          <button
-            onClick={handleCreateGame}
-            disabled={isLoading || !isConnected}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Creating...' : 'Create Game'}
-          </button>
+      <footer className="flex justify-between items-center py-4 text-sm text-muted-foreground w-full max-w-7xl mx-auto">
+        <span>© {new Date().getFullYear()}</span>
+        <div className="flex space-x-4">
+          <Button variant="link" size="sm" className="text-muted-foreground">[How to Play]</Button>
+          <Button variant="link" size="sm" className="text-muted-foreground">[Source]</Button>
         </div>
-
-        <div className="space-y-6 pt-4 border-t border-gray-700">
-          <h2 className="text-xl font-semibold text-center text-indigo-300">Join an Existing Game</h2>
-          <div>
-            <label htmlFor="gameIdToJoin" className="block text-sm font-medium text-gray-300">
-              Game ID
-            </label>
-            <input
-              type="text"
-              id="gameIdToJoin"
-              value={gameIdToJoin}
-              onChange={(e) => setGameIdToJoin(e.target.value)}
-              placeholder="Enter Game ID"
-              className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-white"
-              disabled={isLoading}
-            />
-          </div>
-          <button
-            onClick={handleJoinGame}
-            disabled={isLoading || !isConnected}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Joining...' : 'Join Game'}
-          </button>
-        </div>
-
-      </div>
-      <footer className="mt-8 text-center">
-        <p className="text-xs text-gray-500">
-          Powered by Next.js, XState, Zustand, Socket.IO & Tailwind CSS
-        </p>
       </footer>
     </div>
   );
-}
+};
+
+export default LandingPage;

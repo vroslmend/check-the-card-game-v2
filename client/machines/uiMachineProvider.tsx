@@ -3,7 +3,6 @@
 import React, { useEffect, createContext, useContext } from 'react';
 import { useActorRef, useSelector } from '@xstate/react';
 import { uiMachine } from './uiMachine';
-import { useSocket } from '@/context/SocketContext';
 import { useGameStore } from '@/store/gameStore';
 import {
   SocketEventName,
@@ -19,82 +18,25 @@ const UIMachineContext = createContext<ActorRefFrom<typeof uiMachine> | null>(nu
 
 // 2. Create our custom Provider component that orchestrates everything
 export const UIMachineProvider = ({ children }: { children: React.ReactNode }) => {
-  const { registerListener, emitEvent, isConnected } = useSocket();
-  const gameStore = useGameStore();
-  
-  // Create a stable actor reference using the correct hook.
-  // This hook creates and starts the actor for the component's lifetime.
+  const { connect, emit, socket } = useGameStore();
   const actorRef = useActorRef(uiMachine);
 
-  // EFFECT #1: Listening for events FROM the server
+  // EFFECT #1: Establish socket connection
   useEffect(() => {
-    if (!registerListener) {
-      return; // Socket not ready yet
-    }
+    connect();
+  }, [connect]);
 
-    const cleanupFunctions: (() => void)[] = [];
-
-    cleanupFunctions.push(
-      registerListener(
-        SocketEventName.GAME_STATE_UPDATE,
-        (data: { gameState: ClientCheckGameState }) => {
-          gameStore.setGameState(data.gameState);
-        }
-      )
-    );
-
-    cleanupFunctions.push(
-      registerListener(
-        SocketEventName.SERVER_LOG_ENTRY,
-        (data: { logEntry: RichGameLogMessage }) => {
-          gameStore.addLogMessage(data.logEntry);
-          actorRef.send({ type: 'NEW_GAME_LOG', logMessage: data.logEntry });
-        }
-      )
-    );
-
-    cleanupFunctions.push(
-      registerListener(
-        SocketEventName.CHAT_MESSAGE,
-        (chatMessage: ChatMessage) => {
-          gameStore.addChatMessage(chatMessage);
-          actorRef.send({ type: 'NEW_CHAT_MESSAGE', chatMessage });
-        }
-      )
-    );
-
-    cleanupFunctions.push(
-      registerListener('serverError', (error: { message: string }) => {
-        actorRef.send({ type: 'ERROR_RECEIVED', error: error.message });
-      })
-    );
-
-    cleanupFunctions.push(
-      registerListener(
-        SocketEventName.RESPOND_CARD_DETAILS_FOR_ABILITY,
-        (data: RespondCardDetailsPayload) => {
-          actorRef.send({ type: 'SERVER_PROVIDED_CARD_FOR_ABILITY', ...data });
-        }
-      )
-    );
-
-    return () => {
-      cleanupFunctions.forEach((cleanup) => cleanup());
-    };
-  }, [registerListener, gameStore, actorRef]);
 
   // EFFECT #2: Sending events TO the server
   useEffect(() => {
     const subscription = actorRef.on('EMIT_TO_SOCKET', (event: any) => {
-      if (isConnected) {
-        emitEvent(event.eventName, event.payload);
-      }
+      emit(event.eventName, event.payload);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [actorRef, emitEvent, isConnected]);
+  }, [actorRef, emit]);
 
   // Provide the actorRef we created to all children
   return (

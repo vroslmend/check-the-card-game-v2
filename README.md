@@ -85,7 +85,7 @@ The new frontend is being rebuilt from scratch to leverage modern state manageme
 *   **Server-Authoritative Game State**: The backend `server/` (specifically its XState `game-machine.ts`) remains the single source of truth for all game logic and state.
 *   **Zustand for Server Data**: The `client/` will use a Zustand store to hold the `ClientCheckGameState`, game logs, and chat messages received from the server. This provides an efficient, global, and reactive way for components to access this data.
 *   **XState for UI/Animation Orchestration**: A client-side XState machine (referred to as `AnimationMachine`) will manage complex UI interaction sequences (e.g., multi-step abilities) and orchestrate animation sequences. It will *not* duplicate game logic but will react to server state changes and user inputs to manage visual flows.
-*   **Framer Motion for All Animations**: All visual animations, especially card movements (using `layoutId`), transitions, and UI effects, will be handled by Framer Motion, driven by states from the `AnimationMachine` and data from the Zustand store.
+*   **Framer Motion for All Animations**: All visual animations, especially card movements (using `layoutId`), transitions, and UI effects, will be handled by Framer Motion, driven by states from the `uiMachine` and data from the Zustand store.
 *   **shadcn/ui for Core UI Components**: Base UI elements (buttons, modals, inputs) will be built using shadcn/ui for speed, consistency, and accessibility, styled with Tailwind CSS.
 *   **Component-Driven Design**: Components will be designed to be reactive to the state provided by Zustand and the XState `AnimationMachine`, minimizing local component state for complex logic.
 

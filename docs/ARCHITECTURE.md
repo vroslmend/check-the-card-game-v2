@@ -229,4 +229,30 @@ The project is a monorepo managed with npm workspaces. Key scripts are defined i
 *   **More Sophisticated Server-Side Dev Watch Mode.**
 *   **Granular Error Reporting and User Feedback:** Enhancing how specific errors are categorized and presented to the user.
 *   **Refined Client-Side Optimism/Rollback:** For certain actions, explore client-side optimistic updates with server reconciliation for a snappier feel, though this adds complexity.
-*   **Test Coverage:** Comprehensive unit and integration tests for both client and server state machines and communication. 
+*   **Test Coverage:** Comprehensive unit and integration tests for both client and server state machines and communication.
+
+## 10. Development Guidelines & Conventions
+
+This section provides actionable rules and conventions to ensure consistency and maintainability during development.
+
+*   **Golden Rule:** When in doubt, prioritize clarity and simplicity over cleverness. Code should be easy for another developer (or your future self) to understand.
+
+*   **Component Design Philosophy:**
+    *   **Stateless by Default:** Components, especially those in `client/components/ui/`, should be stateless whenever possible. They should receive data and callbacks via props.
+    *   **Minimal State:** When state is necessary, keep it as localized as possible.
+    *   **Component Granularity:** If a component's render logic becomes too long, strongly consider breaking it down into smaller, more focused sub-components.
+
+*   **State Management Rules:**
+    *   **Zustand (`/store`):** Use for storing global data that is primarily sent *from the server* (e.g., `currentGameState`, `gameLog`, chat messages). It acts as the client-side mirror of the server's state. Components should subscribe to this store for displaying game data.
+    *   **XState (`/machines`):** Use for managing complex, multi-step *client-side UI interactions* and flows (e.g., the sequence of clicks for a card ability, multi-stage forms, complex animations). It orchestrates user input and decides when to send actions to the server.
+
+*   **Styling and CSS Conventions:**
+    *   **Utility-First:** All styling should be done using Tailwind CSS utility classes directly in the JSX of the components.
+    *   **No New CSS Files:** Avoid adding new `.css` files or adding styles to `globals.css` unless it's for a truly global style or a third-party library requirement.
+    *   **`cn` Utility:** Use the `cn` utility function from `client/lib/utils.ts` for conditionally applying classes.
+
+*   **File and Naming Conventions:**
+    *   **Components:** `PascalCase` (e.g., `PlayerHand.tsx`).
+    *   **Hooks:** `useCamelCase` (e.g., `useSocketManager.ts`).
+    *   **Types/Interfaces:** `PascalCase` (e.g., `interface GameBoardProps`).
+    *   **Directory Structure:** Adhere to the established structure (`/components`, `/hooks`, `/store`, etc.). New components or utilities should be placed in the appropriate directory. 
