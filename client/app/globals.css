@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --background: 60 9% 98%;
+  --background: 0 0% 100%;
   --foreground: 20 14% 8%;
   --card: 0 0% 100%;
   --card-foreground: 20 14% 8%;
@@ -30,6 +30,9 @@
   --cursor-bg-link: hsl(20 14% 8% / 0.2);
   --cursor-bg-pressed: hsl(20 14% 8% / 0.3);
   --cursor-bg-text: hsl(20 14% 8% / 1);
+
+  --feature-item-bg-rgb: 245, 245, 244;
+  --feature-item-text-color-hsl: 60 9% 98%;
 }
 
 .dark {
@@ -60,6 +63,9 @@
     --cursor-bg-link: hsl(60 9% 98% / 0.2);
     --cursor-bg-pressed: hsl(60 9% 98% / 0.3);
     --cursor-bg-text: hsl(60 9% 98% / 1);
+
+    --feature-item-bg-rgb: 39, 39, 42;
+    --feature-item-text-color-hsl: 60 9% 98%;
   }
 }
 

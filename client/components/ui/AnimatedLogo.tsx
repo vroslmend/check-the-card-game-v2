@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useCursorStore } from "@/store/cursorStore";
 import { cn } from "@/lib/utils";
 
 const cardVariants = {
@@ -28,16 +27,13 @@ const textVariants = {
 }
 
 export function AnimatedLogo({ className }: { className?: string }) {
-  const { setVariant } = useCursorStore();
-
   return (
     <motion.div
       className={cn("flex items-center gap-1 text-2xl font-bold tracking-tighter cursor-pointer", className)}
       initial="rest"
       whileHover="hover"
       animate="rest"
-      onMouseEnter={() => setVariant("link")}
-      onMouseLeave={() => setVariant("default")}
+      data-cursor-link
     >
       <motion.span variants={textVariants}>C</motion.span>
       <motion.span variants={textVariants}>H</motion.span>

@@ -1,54 +1,49 @@
 "use client"
 
-import { AnimatePresence, motion } from "framer-motion"
+import { motion, useTransform, MotionValue } from "framer-motion"
 
-const cardVariants = {
-  initial: (i: number) => ({
-    y: i * 8,
-    scale: 1 - i * 0.05,
-    zIndex: 3 - i,
-    opacity: 0,
-  }),
-  animate: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-  exit: {
-    opacity: 0,
-    scale: 0.9,
-    y: -20,
-    transition: { duration: 0.2 },
-  },
-  hover: {
-    y: -10,
-    scale: 1.05,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
+const cards = [0, 1, 2];
+
+export function CardStack({ continuousActiveCard }: { continuousActiveCard: MotionValue<number> }) {
+  return (
+    <motion.div
+      style={{ perspective: "1000px" }}
+      className="relative h-60 w-80"
+    >
+      {cards.map(cardIndex => (
+        <Card
+          key={cardIndex}
+          cardIndex={cardIndex}
+          continuousActiveCard={continuousActiveCard}
+        />
+      ))}
+    </motion.div>
+  )
 }
 
-export function CardStack({ activeCard }: { activeCard: number }) {
-  const cards = [0, 1, 2] // Represents the three cards
+function Card({ cardIndex, continuousActiveCard }: { cardIndex: number; continuousActiveCard: MotionValue<number> }) {
+  const diff = useTransform(continuousActiveCard, (latest) => cardIndex - latest);
+
+  const y = useTransform(diff, [-1, 0, 1, 2], [-50, 0, 12, 24]);
+  const scale = useTransform(diff, [-1, 0, 1], [0.85, 1, 0.9]);
+  const opacity = useTransform(diff, [-1, -0.2, 0.5, 1.2], [0, 1, 1, 0]);
+  const rotateX = useTransform(diff, [-1, 0], [45, 0]);
+  const zIndex = useTransform(diff, (v) => cards.length - Math.abs(Math.round(v)));
 
   return (
-    <div style={{ perspective: "1000px" }} className="relative h-48 w-72">
-      <AnimatePresence>
-        {cards
-          .filter(i => i === activeCard)
-          .map(i => (
-            <motion.div
-              key={i}
-              variants={cardVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              whileHover="hover"
-              custom={i}
-              className="absolute h-full w-full rounded-2xl bg-gradient-to-br from-stone-200 to-stone-300 dark:from-stone-800 dark:to-stone-900 shadow-lg"
-            />
-          ))}
-      </AnimatePresence>
-    </div>
+    <motion.div
+      style={{
+        y,
+        scale,
+        opacity,
+        rotateX,
+        zIndex,
+        transformOrigin: "bottom center",
+        transformStyle: "preserve-3d",
+      }}
+      className="absolute h-full w-full rounded-2xl bg-gradient-to-br from-stone-200 to-stone-300 p-4 dark:from-stone-800 dark:to-stone-900 shadow-xl"
+    >
+      <div className="h-full w-full rounded-lg border-2 border-stone-300/50 dark:border-stone-700/50" />
+    </motion.div>
   )
-} 
+}

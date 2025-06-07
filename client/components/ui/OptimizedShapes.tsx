@@ -58,7 +58,7 @@ export function OptimizedShapes({ mouseX, mouseY, scrollY }: OptimizedShapesProp
   )
 
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden will-change-transform">
+    <div className="fixed inset-0 z-0 overflow-hidden will-change-transform pointer-events-none">
       {shapes.map((shape) => (
         <motion.div
           key={shape.id}

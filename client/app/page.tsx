@@ -1,21 +1,23 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue, AnimatePresence } from "framer-motion"
+import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue, AnimatePresence, useMotionValueEvent, MotionValue, useMotionTemplate } from "framer-motion"
+import { useTheme } from "next-themes"
 import { ThemeToggle } from "@/components/ui/ThemeToggle"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ChevronDown, Spade, Heart, Diamond, Users, ArrowRight } from "lucide-react"
+import { FaGithub, FaSpotify, FaDiscord } from "react-icons/fa"
 import { NewGameModal } from "@/components/modals/NewGameModal"
 import { JoinGameModal } from "@/components/modals/JoinGameModal"
 import { OptimizedShapes } from "@/components/ui/OptimizedShapes"
 import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements"
-import { useCursorStore } from "@/store/cursorStore"
 import { PrincipleCard } from "@/components/ui/PrincipleCard"
 import { ParallaxPrincipleCard } from "@/components/ui/ParallaxPrincipleCard"
 import { CardStack } from "@/components/ui/CardStack"
 import { AnimateOnView } from "@/components/ui/AnimateOnView"
 import Magnetic from "@/components/ui/Magnetic"
+import { Signature } from "@/components/ui/Signature"
 
 const textContainerVariants = {
   hover: {
@@ -40,16 +42,104 @@ const letterVariants = {
   },
 };
 
+function FeatureItem({
+  index,
+  feature,
+  continuousActiveCard,
+}: {
+  index: number
+  feature: { title: string; description: string }
+  continuousActiveCard: MotionValue<number>
+}) {
+  const diff = useTransform(continuousActiveCard, latest => index - latest)
+
+  const opacity = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.5, 1, 1, 1, 0.5])
+  const scale = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.9, 1, 1, 1, 0.9])
+  
+  const bgOpacity = useTransform(diff, [-0.5, 0, 0.5], [0, 1, 0])
+
+  const backgroundColor = useTransform(bgOpacity, v => `rgba(var(--feature-item-bg-rgb), ${v})`)
+
+  const textColor = useTransform(
+    bgOpacity,
+    [0, 1],
+    [`hsl(var(--foreground))`, `hsl(var(--feature-item-text-color-hsl))`]
+  )
+  const mutedTextColor = useTransform(
+    bgOpacity,
+    [0, 1],
+    [`hsl(var(--muted-foreground))`, `hsl(var(--feature-item-text-color-hsl) / 0.7)`]
+  )
+
+  const blurValue = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [4, 0, 0, 0, 4])
+  const filter = useMotionTemplate`blur(${blurValue}px)`
+
+  const shadowOpacity = useTransform(bgOpacity, v => 0.1 * v)
+  const boxShadow = useTransform(
+    shadowOpacity,
+    v => `0 10px 15px -3px rgb(0 0 0 / ${v}), 0 4px 6px -4px rgb(0 0 0 / ${v})`,
+  )
+
+  return (
+    <motion.div
+      className="p-8 rounded-3xl"
+      style={{
+        opacity,
+        scale,
+        backgroundColor,
+        boxShadow,
+        filter,
+      }}
+    >
+      <motion.h3 style={{ color: textColor }} className="text-2xl font-normal text-stone-900 dark:text-stone-100 mb-3">{feature.title}</motion.h3>
+      <motion.p style={{ color: mutedTextColor }} className="text-stone-600 dark:text-stone-400 font-light leading-relaxed">{feature.description}</motion.p>
+    </motion.div>
+  )
+}
+
 export default function Home() {
   const [showNewGame, setShowNewGame] = useState(false)
   const [showJoinGame, setShowJoinGame] = useState(false)
   const [isCheckHovered, setIsCheckHovered] = useState(false)
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isAtTop, setIsAtTop] = useState(true)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [isSignatureHovered, setIsSignatureHovered] = useState(false)
+  const [isPrecisionHovered, setIsPrecisionHovered] = useState(false)
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLDivElement>(null)
+  const featuresRef = useRef<HTMLDivElement>(null)
   const isHeroInView = useInView(heroRef, { amount: 0.3 })
-  const { setVariant } = useCursorStore()
+  const { theme } = useTheme()
+  const isDark = theme === "dark"
+
+  const features = [
+    {
+      title: "Seamless UI",
+      description: "A clean, intuitive interface that lets you focus on your strategy. No clutter, just pure gameplay.",
+    },
+    {
+      title: "Fluid Animations",
+      description: "Every action, from drawing a card to calling 'Check', is accompanied by smooth, satisfying animations.",
+    },
+    {
+      title: "Haptic Feedback",
+      description: "Feel the game with subtle vibrations and feedback that make the digital experience feel tangible.",
+    },
+  ];
+
+  const { scrollYProgress: featuresScrollYProgress } = useScroll({
+    target: featuresRef,
+    offset: ["start start", "end end"],
+  });
+
+  const continuousActiveCard = useTransform(featuresScrollYProgress, [0, 1], [0, features.length - 1]);
+  const smoothContinuousActiveCard = useSpring(continuousActiveCard, {
+    stiffness: 100,
+    damping: 20,
+    mass: 0.5,
+  })
 
   const checkText = (isCheckHovered ? "Check!" : "Check").split("");
 
@@ -67,11 +157,21 @@ export default function Home() {
   const buttonsX = useSpring(useTransform(mouseX, [-1, 1], [-18, 18]), springConfig)
   const buttonsY = useSpring(useTransform(mouseY, [-1, 1], [-18, 18]), springConfig)
 
-  const { scrollYProgress } = useScroll()
+  const { scrollY, scrollYProgress } = useScroll()
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 100,
     damping: 30,
     restDelta: 0.001,
+  })
+
+  useMotionValueEvent(scrollY, "change", latest => {
+    const atTop = latest < 50
+    if (atTop !== isAtTop) {
+      setIsAtTop(atTop)
+    }
+    if (!atTop && isInitialLoad) {
+      setIsInitialLoad(false)
+    }
   })
 
   const heroY = useTransform(smoothProgress, [0, 1], ["0%", "-30%"])
@@ -163,8 +263,7 @@ export default function Home() {
                 <Link
                   href={`#${item.toLowerCase()}`}
                   className="relative text-sm font-light tracking-wide text-stone-600 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-                  onMouseEnter={() => setVariant("link")}
-                  onMouseLeave={() => setVariant("default")}
+                  data-cursor-icon
                 >
                   {item}
                   <motion.div
@@ -256,6 +355,7 @@ export default function Home() {
                           }}
                           className="flex"
                           aria-label="Check"
+                          data-cursor-icon
                         >
                           <AnimatePresence initial={false}>
                             {checkText.map((char, index) => {
@@ -322,8 +422,7 @@ export default function Home() {
                           <Button
                             size="lg"
                             onClick={() => setShowNewGame(true)}
-                            onMouseEnter={() => setVariant("link")}
-                            onMouseLeave={() => setVariant("default")}
+                            data-cursor-link
                             className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
                           >
                             <span className="pointer-events-none relative z-10 flex items-center gap-2">
@@ -361,8 +460,7 @@ export default function Home() {
                             variant="outline"
                             size="lg"
                             onClick={() => setShowJoinGame(true)}
-                            onMouseEnter={() => setVariant("link")}
-                            onMouseLeave={() => setVariant("default")}
+                            data-cursor-link
                             className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100 dark:hover:bg-stone-900/80"
                           >
                             <Users className="mr-2 h-4 w-4" />
@@ -382,8 +480,10 @@ export default function Home() {
 
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 3, duration: 1.5 }}
+              animate={{ opacity: isAtTop ? 1 : 0 }}
+              transition={
+                isInitialLoad ? { delay: 3, duration: 1.5 } : { duration: 0.5, ease: "easeOut" }
+              }
               className="absolute bottom-12 left-1/2 -translate-x-1/2"
             >
               <motion.div
@@ -450,6 +550,39 @@ export default function Home() {
           </div>
         </section>
 
+        <section id="features" className="relative py-32">
+          <div className="container px-4 mx-auto">
+            <AnimateOnView className="mb-20 text-center">
+              <h2 className="text-4xl font-light tracking-tight text-stone-900 dark:text-stone-100 sm:text-5xl">
+                A more <span className="text-gradient">refined</span> experience
+              </h2>
+            </AnimateOnView>
+            <AnimateOnView delay={0.2}>
+              <p className="mt-6 font-light leading-8 text-stone-600 dark:text-stone-400">
+                Check! was designed with a focus on simplicity and elegance. Every detail has been crafted to provide a seamless and enjoyable gameplay experience.
+              </p>
+            </AnimateOnView>
+          </div>
+          <div className="mt-16 grid grid-cols-1 gap-8 lg:mt-24 lg:grid-cols-3">
+            <div className="col-span-1 lg:col-span-1">
+              <div className="sticky top-32 flex flex-col gap-4">
+                {features.map((feature, index) => (
+                  <FeatureItem
+                    key={index}
+                    index={index}
+                    feature={feature}
+                    continuousActiveCard={smoothContinuousActiveCard}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="col-span-1 lg:col-span-2">
+              <div className="sticky top-32">
+                <CardStack continuousActiveCard={smoothContinuousActiveCard} />
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section id="leaderboard" className="relative py-32">
           <div className="container px-4 mx-auto">
@@ -471,6 +604,7 @@ export default function Home() {
                     size="lg"
                     onClick={() => setShowNewGame(true)}
                     className="rounded-full bg-stone-900 px-12 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
+                    data-cursor-link
                   >
                     Start Playing
                   </Button>
@@ -485,6 +619,7 @@ export default function Home() {
                     size="lg"
                     onClick={() => setShowJoinGame(true)}
                     className="rounded-full border-2 border-stone-200 bg-white/60 px-12 py-4 text-lg font-light backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:hover:bg-stone-900/80"
+                    data-cursor-link
                   >
                     Join Friends
                   </Button>
@@ -499,27 +634,127 @@ export default function Home() {
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
-        transition={{ duration: 1.2 }}
-        className="border-t border-stone-200/60 py-16 backdrop-blur-sm dark:border-stone-800/60"
+        transition={{ duration: 1, ease: "easeOut" }}
+        className="border-t border-stone-200/60 dark:border-stone-800/60"
       >
-        <div className="container mx-auto flex flex-col items-center justify-between gap-8 px-4 md:flex-row">
-          <div className="flex items-center gap-4">
-            <Spade className="h-6 w-6 text-stone-700 dark:text-stone-300" />
-            <span className="text-xl font-light text-stone-900 dark:text-stone-100">Check</span>
-        </div>
-          <div className="text-sm font-light text-stone-500 dark:text-stone-500">
-            © {new Date().getFullYear()} Check Card Game. Crafted with precision.
+        <div className="container mx-auto flex items-center justify-between px-4 py-8">
+          <div className="flex items-center gap-3">
+            <Spade className="h-5 w-5 text-stone-700 dark:text-stone-300" />
+            <span className="text-lg font-light text-stone-900 dark:text-stone-100">Check</span>
           </div>
-          <div className="flex gap-8">
-            {["Privacy", "Terms", "Support"].map((item) => (
-              <Link
-                key={item}
-                href="#"
-                className="text-sm font-light text-stone-500 transition-colors duration-300 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300"
+          <div className="flex items-center gap-2 text-sm font-light text-stone-500 dark:text-stone-500">
+            <div className="flex items-center">
+              <span>© {new Date().getFullYear()} Check Card Game.&nbsp;</span>
+              <div
+                className="flex items-center"
+                onMouseEnter={() => setIsPrecisionHovered(true)}
+                onMouseLeave={() => setIsPrecisionHovered(false)}
+                data-cursor-icon
               >
-                {item}
-              </Link>
-            ))}
+                <span>Crafted with&nbsp;</span>
+                <div className="relative h-6 w-24">
+                  <AnimatePresence>
+                    {isPrecisionHovered ? (
+                      <motion.span
+                        key="passion"
+                        className="absolute inset-0 flex items-center justify-start"
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                      >
+                        brainrot.
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        key="precision"
+                        className="absolute inset-0 flex items-center justify-start"
+                        initial={{ opacity: 1, y: 0 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                      >
+                        precision.
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+            <span>|</span>
+            <div
+              className="flex items-center"
+              onMouseEnter={() => setIsSignatureHovered(true)}
+              onMouseLeave={() => setIsSignatureHovered(false)}
+              data-cursor-icon
+            >
+              <span>Made by&nbsp;</span>
+              <div className="relative h-6 w-24">
+                <AnimatePresence>
+                  {isSignatureHovered ? (
+                    <motion.div
+                      key="signature"
+                      className="absolute inset-0 flex items-center justify-center"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
+                    >
+                      <Signature />
+                    </motion.div>
+                  ) : (
+                    <motion.span
+                      key="text"
+                      className="absolute inset-0 flex items-center justify-start font-medium"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      Ammar
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <motion.a
+              href="https://github.com/your-username"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+              whileHover={{ y: -3, scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              data-cursor-icon
+            >
+              <span className="sr-only">GitHub</span>
+              <FaGithub className="h-5 w-5" />
+            </motion.a>
+            <motion.a
+              href="https://open.spotify.com/user/your-username"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+              whileHover={{ y: -3, scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              data-cursor-icon
+            >
+              <span className="sr-only">Spotify</span>
+              <FaSpotify className="h-5 w-5" />
+            </motion.a>
+            <motion.a
+              href="https://discord.gg/your-invite"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+              whileHover={{ y: -3, scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              data-cursor-icon
+            >
+              <span className="sr-only">Discord</span>
+              <FaDiscord className="h-5 w-5" />
+            </motion.a>
           </div>
         </div>
       </motion.footer>

@@ -23,7 +23,12 @@ export function ThemeToggle() {
   }
 
   return (
-    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.2 }}>
+    <motion.div 
+      whileHover={{ scale: 1.05 }} 
+      whileTap={{ scale: 0.95 }} 
+      transition={{ duration: 0.2 }}
+      data-cursor-link
+    >
       <Button
         variant="ghost"
         size="icon"

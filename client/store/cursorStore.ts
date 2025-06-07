@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type CursorVariant = 'default' | 'link' | 'text' | 'pressed' | 'button';
+type CursorVariant = 'default' | 'link' | 'text' | 'pressed' | 'button' | 'icon' | 'area';
 
 interface CursorState {
   variant: CursorVariant;

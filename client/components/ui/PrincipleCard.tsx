@@ -2,7 +2,6 @@
 
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion"
 import { ElementType, useRef } from "react"
-import { useCursorStore } from "@/store/cursorStore"
 
 interface PrincipleCardProps {
   icon: ElementType
@@ -12,7 +11,6 @@ interface PrincipleCardProps {
 
 export function PrincipleCard({ icon: Icon, title, description }: PrincipleCardProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const { setVariant } = useCursorStore()
 
   const x = useMotionValue(0)
   const y = useMotionValue(0)
@@ -44,8 +42,6 @@ export function PrincipleCard({ icon: Icon, title, description }: PrincipleCardP
       ref={ref}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      onMouseEnter={() => setVariant("link")}
-      onMouseOut={() => setVariant("default")}
       style={{
         rotateX,
         rotateY,
@@ -65,9 +61,9 @@ export function PrincipleCard({ icon: Icon, title, description }: PrincipleCardP
           style={{
             transform: "translateZ(50px)",
           }}
-          className="mb-8 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-stone-100 dark:bg-stone-800"
+          className="mb-8 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-stone-100 dark:bg-stone-800 transition-colors duration-500 group-hover:bg-stone-800 dark:group-hover:bg-stone-100"
         >
-          <Icon className="h-10 w-10 text-stone-700 dark:text-stone-300" />
+          <Icon className="h-10 w-10 text-stone-700 dark:text-stone-300 transition-colors duration-500 group-hover:text-stone-300 dark:group-hover:text-stone-700" />
         </motion.div>
         <motion.h3
           style={{

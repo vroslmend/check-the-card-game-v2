@@ -3,7 +3,6 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
-import { useCursorStore } from "@/store/cursorStore"
 
 import { cn } from "@/lib/utils"
 
@@ -49,22 +48,12 @@ function Button({
     asChild?: boolean
   }) {
   const Comp = asChild ? Slot : "button"
-  const { setVariant } = useCursorStore();
-
-  const handleMouseEnter = () => {
-    setVariant('button');
-  };
-
-  const handleMouseLeave = () => {
-    setVariant('default');
-  };
 
   return (
     <Comp
+      data-cursor-link
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
       {...props}
     />
   )
