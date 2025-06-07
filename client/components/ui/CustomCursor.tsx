@@ -1,51 +1,67 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, useSpring, useMotionValue, Variants } from 'framer-motion';
 import { useCursorStore } from '@/store/cursorStore';
-
-const cursorVariants: Variants = {
-  default: {
-    height: 32,
-    width: 32,
-    backgroundColor: 'hsla(var(--foreground), 0.1)',
-    borderColor: 'hsl(var(--foreground))',
-    borderWidth: '1px',
-    scale: 1,
-  },
-  link: {
-    height: 48,
-    width: 48,
-    backgroundColor: 'hsla(var(--foreground), 0.2)',
-    borderColor: 'hsl(var(--foreground))',
-    borderWidth: '1px',
-    scale: 1,
-  },
-  text: {
-    height: 40,
-    width: 2,
-    borderRadius: '1px',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderColor: 'white',
-    borderWidth: '1px',
-    mixBlendMode: 'difference',
-  },
-  pressed: {
-    scale: 0.9,
-    backgroundColor: 'hsla(var(--foreground), 0.3)',
-  },
-  button: {
-    height: 80,
-    width: 80,
-    backgroundColor: 'hsla(var(--foreground), 0.2)',
-    borderColor: 'hsl(var(--foreground))',
-    borderWidth: '1px',
-  }
-};
+import { useTheme } from 'next-themes';
 
 const CustomCursor = () => {
   const { variant, setVariant } = useCursorStore();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
   const previousVariant = useRef('default');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Dynamically create variants based on the current theme
+  const getCursorVariants = (theme: string | undefined): Variants => {
+    const isDark = theme === 'dark';
+    const fg = isDark ? 'hsl(60 9% 98%)' : 'hsl(20 14% 8%)';
+    const fgText = isDark ? 'hsl(60 9% 98%)' : 'hsl(20 14% 8%)';
+
+    return {
+      default: {
+        height: 32,
+        width: 32,
+        backgroundColor: `${fg.slice(0, -1)} / 0.1)`,
+        borderColor: fg,
+        borderWidth: '1px',
+        scale: 1,
+      },
+      link: {
+        height: 48,
+        width: 48,
+        backgroundColor: `${fg.slice(0, -1)} / 0.2)`,
+        borderColor: fg,
+        borderWidth: '1px',
+        scale: 1,
+      },
+      text: {
+        height: 40,
+        width: 2,
+        borderRadius: '1px',
+        backgroundColor: fgText,
+        borderColor: fgText,
+        borderWidth: '1px',
+        mixBlendMode: 'difference',
+      },
+      pressed: {
+        scale: 0.9,
+        backgroundColor: `${fg.slice(0, -1)} / 0.3)`,
+      },
+      button: {
+        height: 80,
+        width: 80,
+        backgroundColor: `${fg.slice(0, -1)} / 0.2)`,
+        borderColor: fg,
+        borderWidth: '1px',
+      }
+    };
+  };
+
+  const cursorVariants = getCursorVariants(resolvedTheme);
 
   const mouseX = useMotionValue(-100);
   const mouseY = useMotionValue(-100);
@@ -99,9 +115,13 @@ const CustomCursor = () => {
       unsubscribe();
     };
   }, [mouseX, mouseY, setVariant, variant]);
+  
+  if (!mounted) {
+    return null;
+  }
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-50">
+    <div key={resolvedTheme} className="fixed inset-0 pointer-events-none z-50">
       <motion.div
         variants={cursorVariants}
         animate={variant}

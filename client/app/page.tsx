@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue } from "framer-motion"
+import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue, AnimatePresence } from "framer-motion"
 import { ThemeToggle } from "@/components/ui/ThemeToggle"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -12,13 +12,41 @@ import { OptimizedShapes } from "@/components/ui/OptimizedShapes"
 import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements"
 import { useCursorStore } from "@/store/cursorStore"
 
+const textContainerVariants = {
+  hover: {
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0,
+    },
+  },
+};
+
+const letterVariants = {
+  initial: {
+    y: 0,
+  },
+  hover: {
+    y: -10,
+    transition: {
+      type: "spring",
+      stiffness: 400,
+      damping: 10,
+    },
+  },
+};
+
 export default function Home() {
   const [showNewGame, setShowNewGame] = useState(false)
   const [showJoinGame, setShowJoinGame] = useState(false)
+  const [isCheckHovered, setIsCheckHovered] = useState(false)
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLDivElement>(null)
   const isHeroInView = useInView(heroRef, { amount: 0.3 })
   const { setVariant } = useCursorStore()
+
+  const checkText = (isCheckHovered ? "Check!" : "Check").split("");
 
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)
@@ -190,7 +218,7 @@ export default function Home() {
                         transition={{ duration: 1, delay: 1.2 }}
                         style={{ x: textX1, y: textY1 }}
                       >
-                        Master
+                        The
                       </motion.span>
                       <motion.span
                         className="relative ml-8 inline-block font-normal italic"
@@ -199,12 +227,60 @@ export default function Home() {
                         transition={{ duration: 1.2, delay: 1.5, ease: [0.6, 0.01, 0.05, 0.95] }}
                         style={{ x: textX2, y: textY2 }}
                       >
-                        Check
+                        <motion.span
+                          variants={textContainerVariants}
+                          initial="initial"
+                          whileHover="hover"
+                          onMouseEnter={() => {
+                            if (hoverTimeoutRef.current) {
+                              clearTimeout(hoverTimeoutRef.current);
+                            }
+                            hoverTimeoutRef.current = setTimeout(() => {
+                              setIsCheckHovered(true);
+                            }, 200);
+                          }}
+                          onMouseLeave={() => {
+                            if (hoverTimeoutRef.current) {
+                              clearTimeout(hoverTimeoutRef.current);
+                            }
+                            setIsCheckHovered(false);
+                          }}
+                          className="flex"
+                          aria-label="Check"
+                        >
+                          <AnimatePresence>
+                            {checkText.map((char, index) => {
+                              if (char === "!") {
+                                return (
+                                  <motion.span
+                                    key={index}
+                                    className="inline-block"
+                                    initial={{ opacity: 0, width: 0, x: -10 }}
+                                    animate={{ opacity: 1, width: "auto", x: 0 }}
+                                    exit={{ opacity: 0, width: 0, x: 10 }}
+                                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                                  >
+                                    {char}
+                                  </motion.span>
+                                );
+                              }
+                              return (
+                                <motion.span
+                                  key={index}
+                                  variants={letterVariants}
+                                  className="inline-block"
+                                >
+                                  {char}
+                                </motion.span>
+                              );
+                            })}
+                          </AnimatePresence>
+                        </motion.span>
                         <motion.div
-                          initial={{ scaleX: 0, originX: 0 }}
+                          initial={{ scaleX: 0, originX: 0.5 }}
                           animate={{ scaleX: 1 }}
                           transition={{ duration: 1.5, delay: 2.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-                          className="absolute -bottom-2 left-0 h-1 w-full bg-gradient-to-r from-stone-900 to-stone-600 dark:from-stone-100 dark:to-stone-400"
+                          className="absolute -bottom-3 left-[52%] h-1 w-[96%] -translate-x-1/2 bg-gradient-to-r from-stone-900 to-stone-600 dark:from-stone-100 dark:to-stone-400"
                         />
                       </motion.span>
                     </h1>
@@ -283,7 +359,7 @@ export default function Home() {
               </motion.div>
 
               <div className="relative hidden h-full items-center justify-center lg:flex">
-                <SmoothFloatingElements mouseX={mouseX} mouseY={mouseY} isVisible={isHeroInView} />
+                <SmoothFloatingElements mouseX={mouseX} mouseY={mouseY} isVisible={isHeroInView} isCheckHovered={isCheckHovered} />
               </div>
             </div>
 

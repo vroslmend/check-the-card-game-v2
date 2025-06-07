@@ -1,33 +1,20 @@
 "use client"
 
-import { motion, useTransform, useSpring, type MotionValue } from "framer-motion"
+import { motion, useTransform, useSpring, type MotionValue, AnimatePresence } from "framer-motion"
 import { Spade, Heart, Diamond, Club } from "lucide-react"
 import { useMemo, useState, useEffect } from "react"
+import { FloatingSuitIcon } from "./FloatingSuitIcon"
 
 interface SmoothFloatingElementsProps {
   mouseX: MotionValue<number>
   mouseY: MotionValue<number>
   isVisible: boolean
+  isCheckHovered: boolean
 }
 
-type Particle = {
-  id: number
-  style: {
-    left: string
-    top: string
-  }
-  animation: {
-    y: number[]
-    opacity: number[]
-    scale: number[]
-  }
-  duration: number
-  delay: number
-}
-
-export function SmoothFloatingElements({ mouseX, mouseY, isVisible }: SmoothFloatingElementsProps) {
+export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHovered }: SmoothFloatingElementsProps) {
   const suits = [Spade, Heart, Diamond, Club]
-  const [particles, setParticles] = useState<Particle[]>([])
+  const [particles, setParticles] = useState<any[]>([])
 
   useEffect(() => {
     setParticles(
@@ -55,7 +42,7 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible }: SmoothFloa
   // Central shape transforms
   const centralRotateX = useTransform(smoothMouseY, [-1, 1], [-8, 8])
   const centralRotateY = useTransform(smoothMouseX, [-1, 1], [-8, 8])
-
+  
   // Parallax for suits and particles
   const suitX = useTransform(smoothMouseX, [-1, 1], [-15, 15])
   const suitY = useTransform(smoothMouseY, [-1, 1], [-15, 15])
@@ -93,25 +80,156 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible }: SmoothFloa
       transition={{ duration: 1.5, ease: [0.6, 0.01, 0.05, 0.95] }}
       className="relative h-full w-full will-change-transform"
     >
-      {/* Central elegant shape */}
+      {/* Central Interactive Blob/Card */}
       <motion.div
-        className="absolute left-1/2 top-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-[40%] bg-gradient-to-br from-stone-200/50 to-stone-300/50 backdrop-blur-sm dark:from-stone-800/50 dark:to-stone-900/50"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={{
           rotateX: centralRotateX,
           rotateY: centralRotateY,
           willChange: "transform",
         }}
-        animate={{
-          scale: [1, 1.03, 1],
-        }}
-        transition={{
-          scale: {
-            duration: 6,
-            repeat: Number.POSITIVE_INFINITY,
-            ease: "easeInOut",
-          },
-        }}
-      />
+      >
+        <AnimatePresence mode="wait">
+          {!isCheckHovered ? (
+            // Blob State
+            <motion.div
+              key="blob"
+              className="h-96 w-96 rounded-[40%] bg-gradient-to-br from-stone-200/50 to-stone-300/50 backdrop-blur-sm dark:from-stone-800/50 dark:to-stone-900/50"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{
+                opacity: 1,
+                scale: [1, 1.03, 1],
+              }}
+              exit={{
+                opacity: 0,
+                scale: 0.8,
+                rotateY: -90,
+                transition: { duration: 0.4, ease: "easeInOut" },
+              }}
+              transition={{
+                opacity: { duration: 0.4, ease: "easeOut" },
+                scale: {
+                  duration: 6,
+                  repeat: Number.POSITIVE_INFINITY,
+                  ease: "easeInOut",
+                },
+              }}
+            />
+          ) : (
+            // Card State
+            <motion.div
+              key="card"
+              className="relative"
+              initial={{
+                opacity: 0,
+                scale: 0.8,
+                rotateY: 180,
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                rotateY: 0,
+                rotateZ: [0, 1.5, -1.5, 1.5, -1.5, 0],
+                y: [0, -6, 0],
+              }}
+              exit={{
+                opacity: 0,
+                scale: 0.8,
+                rotateY: 180,
+                transition: { duration: 0.4, ease: "easeInOut" },
+              }}
+              transition={{
+                opacity: { duration: 0.5, ease: "easeInOut" },
+                scale: { duration: 0.5, ease: "easeInOut" },
+                rotateY: { duration: 0.5, ease: "easeInOut" },
+                rotateZ: {
+                  duration: 15,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  delay: 0.7,
+                },
+                y: {
+                  duration: 10,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  delay: 0.7,
+                },
+              }}
+              style={{ perspective: "1000px" }}
+            >
+              {/* Card Back (initially visible) */}
+              <motion.div
+                className="absolute inset-0 h-80 w-56 rounded-lg border-2 border-stone-200 bg-gradient-to-br from-stone-100 to-stone-200/60 shadow-xl dark:border-stone-800 dark:from-stone-800 dark:to-stone-900/60"
+                style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+              >
+                {/* Card Back Pattern */}
+                <div className="absolute inset-4 rounded border border-stone-300/30 dark:border-stone-700/30">
+                  <div className="flex h-full items-center justify-center">
+                    <div className="font-serif text-lg font-light italic text-stone-600/50 dark:text-stone-400/50">
+                      Check
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Card Front (Ace of Spades) */}
+              <motion.div
+                className="h-80 w-56 rounded-lg border-2 border-stone-200 bg-stone-50 shadow-xl dark:border-stone-800 dark:bg-stone-900"
+                style={{ backfaceVisibility: "hidden" }}
+              >
+                {/* Ace of Spades Content */}
+                <div className="relative flex h-full flex-col justify-between p-4">
+                  {/* Top Left */}
+                  <motion.div
+                    className="font-serif text-xl font-light text-stone-900 dark:text-stone-100"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 1, duration: 0.3 }}
+                  >
+                    <div>A</div>
+                    <div className="text-lg leading-none">♠</div>
+                  </motion.div>
+
+                  {/* Center Large Spade */}
+                  <motion.div
+                    className="absolute inset-0 flex items-center justify-center text-8xl font-light text-stone-900 dark:text-stone-100"
+                    initial={{ opacity: 0, scale: 0.5, rotate: -180 }}
+                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    transition={{
+                      delay: 1.2,
+                      duration: 0.6,
+                      type: "spring",
+                      stiffness: 200,
+                      damping: 15,
+                    }}
+                  >
+                    ♠
+                  </motion.div>
+
+                  {/* Bottom Right (Rotated) */}
+                  <motion.div
+                    className="self-end rotate-180 font-serif text-xl font-light text-stone-900 dark:text-stone-100"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 1, duration: 0.3 }}
+                  >
+                    <div>A</div>
+                    <div className="text-lg leading-none">♠</div>
+                  </motion.div>
+                </div>
+
+                {/* Card Glow Effect */}
+                <motion.div
+                  className="absolute -inset-2 rounded-lg bg-gradient-to-r from-stone-900/10 via-stone-900/20 to-stone-900/10 blur-xl dark:from-stone-100/10 dark:via-stone-100/20 dark:to-stone-100/10"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 1.5, duration: 0.5 }}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       {/* Floating card suits */}
       {suitConfigs.map(({ Icon, id, style, animation, duration, delay }) => (
@@ -123,39 +241,32 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible }: SmoothFloa
           animate={{ opacity: 0.8, scale: 1 }}
           transition={{ delay, duration: 1 }}
         >
+          <FloatingSuitIcon
+            Icon={Icon}
+            animation={animation}
+            duration={duration}
+            isCheckHovered={isCheckHovered}
+          />
+        </motion.div>
+      ))}
+
+      {/* Optimized particles */}
+      <motion.div style={{ x: particleX, y: particleY }}>
+        {particles.map(({ id, style, animation, duration, delay }) => (
           <motion.div
+            key={id}
+            className="absolute h-1.5 w-1.5 rounded-full bg-stone-400/30 dark:bg-stone-600/30"
+            style={style}
             animate={animation}
             transition={{
               duration,
               repeat: Number.POSITIVE_INFINITY,
               ease: "easeInOut",
+              delay,
             }}
-            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/30 backdrop-blur-sm transition-colors duration-300 hover:bg-white/50 dark:bg-stone-900/30 dark:hover:bg-stone-900/50"
-            whileHover={{
-              scale: 1.1,
-              transition: { duration: 0.2 },
-            }}
-          >
-            <Icon className="h-8 w-8 text-stone-700 dark:text-stone-300" />
-          </motion.div>
-        </motion.div>
-      ))}
-
-      {/* Optimized particles */}
-      {particles.map(({ id, style, animation, duration, delay }) => (
-        <motion.div
-          key={id}
-          className="absolute h-1.5 w-1.5 rounded-full bg-stone-400/30 dark:bg-stone-600/30"
-          style={{ ...style, x: particleX, y: particleY }}
-          animate={animation}
-          transition={{
-            duration,
-            repeat: Number.POSITIVE_INFINITY,
-            ease: "easeInOut",
-            delay,
-          }}
-        />
-      ))}
+          />
+        ))}
+      </motion.div>
 
       {/* Subtle glow effect */}
       <motion.div
@@ -172,4 +283,4 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible }: SmoothFloa
       />
     </motion.div>
   )
-} 
+}
