@@ -89,7 +89,7 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
           willChange: "transform",
         }}
       >
-        <AnimatePresence mode="wait">
+        <AnimatePresence initial={false} mode="wait">
           {!isCheckHovered ? (
             // Blob State
             <motion.div
@@ -184,7 +184,7 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
                     className="font-serif text-xl font-light text-stone-900 dark:text-stone-100"
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 1, duration: 0.3 }}
+                    transition={{ delay: 0.3, duration: 0.3 }}
                   >
                     <div>A</div>
                     <div className="text-lg leading-none">♠</div>
@@ -196,7 +196,7 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
                     initial={{ opacity: 0, scale: 0.5, rotate: -180 }}
                     animate={{ opacity: 1, scale: 1, rotate: 0 }}
                     transition={{
-                      delay: 1.2,
+                      delay: 0.4,
                       duration: 0.6,
                       type: "spring",
                       stiffness: 200,
@@ -211,7 +211,7 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
                     className="self-end rotate-180 font-serif text-xl font-light text-stone-900 dark:text-stone-100"
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 1, duration: 0.3 }}
+                    transition={{ delay: 0.3, duration: 0.3 }}
                   >
                     <div>A</div>
                     <div className="text-lg leading-none">♠</div>
@@ -223,7 +223,7 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
                   className="absolute -inset-2 rounded-lg bg-gradient-to-r from-stone-900/10 via-stone-900/20 to-stone-900/10 blur-xl dark:from-stone-100/10 dark:via-stone-100/20 dark:to-stone-100/10"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 1.5, duration: 0.5 }}
+                  transition={{ delay: 0.5, duration: 0.5 }}
                 />
               </motion.div>
             </motion.div>

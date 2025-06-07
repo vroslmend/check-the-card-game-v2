@@ -34,7 +34,7 @@ export function FloatingSuitIcon({ Icon, animation, duration, isCheckHovered }: 
         y: { duration, repeat: Infinity, ease: "easeInOut" },
         rotate: { duration, repeat: Infinity, ease: "easeInOut" },
         scale: { duration, repeat: Infinity, ease: "easeInOut" },
-        boxShadow: { duration: 0.5, ease: "easeOut", delay: isCheckHovered ? 2 : 0 },
+        boxShadow: { duration: 0.5, ease: "easeOut", delay: isCheckHovered ? 0.8 : 0 },
       }}
       className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/30 backdrop-blur-sm transition-colors duration-300 hover:bg-white/50 dark:bg-stone-900/30 dark:hover:bg-stone-900/50"
       whileHover={{

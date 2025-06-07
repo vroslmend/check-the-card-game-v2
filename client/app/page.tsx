@@ -11,6 +11,8 @@ import { JoinGameModal } from "@/components/modals/JoinGameModal"
 import { OptimizedShapes } from "@/components/ui/OptimizedShapes"
 import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements"
 import { useCursorStore } from "@/store/cursorStore"
+import { PrincipleCard } from "@/components/ui/PrincipleCard"
+import { ParallaxPrincipleCard } from "@/components/ui/ParallaxPrincipleCard"
 
 const textContainerVariants = {
   hover: {
@@ -100,6 +102,10 @@ export default function Home() {
       window.removeEventListener("mousemove", throttledMouseMove)
     }
   }, [handleMouseMove])
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   return (
     <div
@@ -248,7 +254,7 @@ export default function Home() {
                           className="flex"
                           aria-label="Check"
                         >
-                          <AnimatePresence>
+                          <AnimatePresence initial={false}>
                             {checkText.map((char, index) => {
                               if (char === "!") {
                                 return (
@@ -312,9 +318,11 @@ export default function Home() {
                         <Button
                           size="lg"
                           onClick={() => setShowNewGame(true)}
+                          onMouseEnter={() => setVariant("link")}
+                          onMouseLeave={() => setVariant("default")}
                           className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
                         >
-                          <span className="relative z-10 flex items-center gap-2">
+                          <span className="pointer-events-none relative z-10 flex items-center gap-2">
                             Start New Game
                             <motion.div
                               animate={{ x: [0, 4, 0] }}
@@ -347,6 +355,8 @@ export default function Home() {
                           variant="outline"
                           size="lg"
                           onClick={() => setShowJoinGame(true)}
+                          onMouseEnter={() => setVariant("link")}
+                          onMouseLeave={() => setVariant("default")}
                           className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100 dark:hover:bg-stone-900/80"
                         >
                           <Users className="mr-2 h-4 w-4" />
@@ -418,7 +428,7 @@ export default function Home() {
                 </motion.p>
               </div>
 
-              <div className="grid gap-16 lg:grid-cols-3">
+              <div className="grid gap-16 lg:grid-cols-3" style={{ perspective: "1000px" }}>
                 {[
                   {
                     icon: Spade,
@@ -439,41 +449,12 @@ export default function Home() {
                       "First to successfully check with the highest hand claims the round. Best of five determines the champion.",
                   },
                 ].map((rule, index) => (
-                  <motion.div
+                  <ParallaxPrincipleCard
                     key={index}
-                    initial={{ opacity: 0, y: 60 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1, delay: index * 0.2 }}
-                    whileHover={{
-                      y: -12,
-                      transition: { duration: 0.4, ease: "easeOut" },
-                    }}
-                    className="group relative"
-                  >
-                    <div className="relative overflow-hidden rounded-3xl bg-white/60 p-10 backdrop-blur-sm transition-all duration-500 group-hover:bg-white/80 dark:bg-stone-900/60 dark:group-hover:bg-stone-900/80">
-                      <motion.div
-                        whileHover={{
-                          rotate: 8,
-                          scale: 1.1,
-                          transition: { duration: 0.3 },
-                        }}
-                        className="mb-8 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-stone-100 dark:bg-stone-800"
-                      >
-                        <rule.icon className="h-10 w-10 text-stone-700 dark:text-stone-300" />
-                      </motion.div>
-                      <h3 className="mb-4 text-2xl font-light text-stone-900 dark:text-stone-100">{rule.title}</h3>
-                      <p className="font-light leading-relaxed text-stone-600 dark:text-stone-400">
-                        {rule.description}
-                      </p>
-
-                      <motion.div
-                        className="absolute inset-0 rounded-3xl bg-gradient-to-br from-stone-200/20 to-stone-300/20 opacity-0 dark:from-stone-700/20 dark:to-stone-800/20"
-                        whileHover={{ opacity: 1 }}
-                        transition={{ duration: 0.3 }}
-                      />
-                    </div>
-                  </motion.div>
+                    icon={rule.icon}
+                    title={rule.title}
+                    description={rule.description}
+                  />
                 ))}
               </div>
             </motion.div>
