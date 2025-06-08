@@ -1,27 +1,34 @@
 "use client"
 
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion"
+import { motion, useMotionValue, useSpring, useTransform, MotionValue } from "framer-motion"
 import { ElementType, useRef } from "react"
 
 interface PrincipleCardProps {
   icon: ElementType
   title: string
   description: string
+  scrollYProgress: MotionValue<number>
 }
 
-export function PrincipleCard({ icon: Icon, title, description }: PrincipleCardProps) {
+export function PrincipleCard({ icon: Icon, title, description, scrollYProgress }: PrincipleCardProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   const x = useMotionValue(0)
   const y = useMotionValue(0)
 
-  const xSpring = useSpring(x, { stiffness: 300, damping: 30 })
-  const ySpring = useSpring(y, { stiffness: 300, damping: 30 })
+  const xSpring = useSpring(x, { stiffness: 150, damping: 20 })
+  const ySpring = useSpring(y, { stiffness: 150, damping: 20 })
 
   const rotateX = useTransform(ySpring, [-0.5, 0.5], ["12deg", "-12deg"])
   const rotateY = useTransform(xSpring, [-0.5, 0.5], ["-12deg", "12deg"])
-  const scale = useTransform(xSpring, [-0.5, 0.5], [1.05, 0.95])
-  const translateZ = useTransform(ySpring, [-0.5, 0.5], [20, -10])
+
+  const parallaxY = useTransform(scrollYProgress, [0, 1], ["-15%", "15%"])
+  const springParallaxY = useSpring(parallaxY, {
+    stiffness: 100,
+    damping: 15,
+    mass: 1.2,
+    restDelta: 0.001,
+  })
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if (!ref.current) return
@@ -42,20 +49,21 @@ export function PrincipleCard({ icon: Icon, title, description }: PrincipleCardP
       ref={ref}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      whileHover={{ scale: 1.05 }}
       style={{
         rotateX,
         rotateY,
-        scale,
+        y: springParallaxY,
         transformStyle: "preserve-3d",
       }}
-      className="group relative h-full"
+      className="group relative"
     >
       <div
         style={{
           transform: "translateZ(80px)",
           transformStyle: "preserve-3d",
         }}
-        className="relative flex h-full flex-col overflow-hidden rounded-3xl bg-white/60 p-10 backdrop-blur-sm transition-colors duration-500 group-hover:bg-white/80 dark:bg-stone-900/60 dark:group-hover:bg-stone-900/80"
+        className="relative flex flex-col overflow-hidden rounded-3xl bg-white/60 p-10 backdrop-blur-sm transition-colors duration-500 group-hover:bg-white/80 dark:bg-stone-900/60 dark:group-hover:bg-stone-900/80"
       >
         <motion.div
           style={{

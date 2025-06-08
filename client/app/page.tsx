@@ -13,11 +13,11 @@ import { JoinGameModal } from "@/components/modals/JoinGameModal"
 import { OptimizedShapes } from "@/components/ui/OptimizedShapes"
 import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements"
 import { PrincipleCard } from "@/components/ui/PrincipleCard"
-import { ParallaxPrincipleCard } from "@/components/ui/ParallaxPrincipleCard"
 import { CardStack } from "@/components/ui/CardStack"
 import { AnimateOnView } from "@/components/ui/AnimateOnView"
 import Magnetic from "@/components/ui/Magnetic"
 import { Signature } from "@/components/ui/Signature"
+import { Scrollytelling } from "@/components/ui/Scrollytelling"
 
 const textContainerVariants = {
   hover: {
@@ -99,7 +99,6 @@ export default function Home() {
 
   const containerRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLDivElement>(null)
-  const featuresRef = useRef<HTMLDivElement>(null)
   const endOfPageRef = useRef<HTMLDivElement>(null)
   const isHeroInView = useInView(heroRef, { amount: 0.3 })
   const { theme } = useTheme()
@@ -120,18 +119,6 @@ export default function Home() {
       description: "Feel the game with subtle vibrations and feedback that make the digital experience feel tangible.",
     },
   ];
-
-  const { scrollYProgress: featuresScrollYProgress } = useScroll({
-    target: featuresRef,
-    offset: ["start start", "end end"],
-  });
-
-  const continuousActiveCard = useTransform(featuresScrollYProgress, [0, 1], [0, features.length - 1]);
-  const smoothContinuousActiveCard = useSpring(continuousActiveCard, {
-    stiffness: 100,
-    damping: 20,
-    mass: 0.5,
-  })
 
   const { scrollYProgress: footerScrollYProgress } = useScroll({
     target: endOfPageRef,
@@ -496,7 +483,7 @@ export default function Home() {
                 }}
                 className="flex cursor-pointer flex-col items-center gap-2 text-stone-500 transition-colors duration-300 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300"
                 onClick={() => {
-                  document.getElementById("rules")?.scrollIntoView({ behavior: "smooth" })
+                  document.getElementById("scrollytelling-track")?.scrollIntoView({ behavior: "smooth" })
                 }}
               >
                 <span className="text-sm font-light tracking-wide">Discover more</span>
@@ -506,86 +493,9 @@ export default function Home() {
           </motion.div>
         </section>
 
-        <section id="rules" className="relative py-32">
-          <div className="container px-4 mx-auto">
-            <div className="mx-auto max-w-6xl">
-              <AnimateOnView className="mb-20 text-center">
-                <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
-                  Game Principles
-                </h2>
-                <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
-                  Elegant rules that create infinite strategic possibilities
-                </p>
-              </AnimateOnView>
+        <Scrollytelling />
 
-              <div className="grid gap-16 lg:grid-cols-3" style={{ perspective: "1000px" }}>
-                {[
-                  {
-                    icon: Spade,
-                    title: "Strategic Depth",
-                    description:
-                      "Each suit carries unique powers and strategic implications. Master their interplay to dominate the table.",
-                  },
-                  {
-                    icon: Heart,
-                    title: "The Check",
-                    description:
-                      "Call 'Check' when confidence meets opportunity. But beware—miscalculation carries consequences.",
-                  },
-                  {
-                    icon: Diamond,
-                    title: "Victory Path",
-                    description:
-                      "First to successfully check with the highest hand claims the round. Best of five determines the champion.",
-                  },
-                ].map((rule, index) => (
-                  <ParallaxPrincipleCard
-                    key={index}
-                    icon={rule.icon}
-                    title={rule.title}
-                    description={rule.description}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="features" className="relative py-32">
-          <div className="container px-4 mx-auto">
-            <AnimateOnView className="mb-20 text-center">
-              <h2 className="text-4xl font-light tracking-tight text-stone-900 dark:text-stone-100 sm:text-5xl">
-                A more <span className="text-gradient">refined</span> experience
-              </h2>
-            </AnimateOnView>
-            <AnimateOnView delay={0.2}>
-              <p className="mt-6 font-light leading-8 text-stone-600 dark:text-stone-400">
-                Check! was designed with a focus on simplicity and elegance. Every detail has been crafted to provide a seamless and enjoyable gameplay experience.
-              </p>
-            </AnimateOnView>
-          </div>
-          <div className="mt-16 grid grid-cols-1 gap-8 lg:mt-24 lg:grid-cols-3">
-            <div className="col-span-1 lg:col-span-1">
-              <div className="sticky top-32 flex flex-col gap-4">
-                {features.map((feature, index) => (
-                  <FeatureItem
-                    key={index}
-                    index={index}
-                    feature={feature}
-                    continuousActiveCard={smoothContinuousActiveCard}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="col-span-1 lg:col-span-2">
-              <div className="sticky top-32">
-                <CardStack continuousActiveCard={smoothContinuousActiveCard} />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="leaderboard" ref={endOfPageRef} className="relative py-32">
+        <section id="leaderboard" ref={endOfPageRef} className="relative py-40">
           <div className="container px-4 mx-auto">
             <AnimateOnView className="mx-auto max-w-4xl text-center">
               <h2 className="mb-8 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
