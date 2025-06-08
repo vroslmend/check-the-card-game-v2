@@ -89,7 +89,7 @@ export function AnimatedBlob() {
 
   return (
     <motion.svg
-      viewBox="0 0 200 200"
+      viewBox="-50 -50 300 300"
       style={blobStyles}
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{
@@ -105,8 +105,11 @@ export function AnimatedBlob() {
           <stop id="gradientStop1" offset="0%" stopColor="var(--startColor)" />
           <stop id="gradientStop2" offset="100%" stopColor="var(--stopColor)" />
         </linearGradient>
+        <filter id="blob-blur" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
+        </filter>
       </defs>
-      <path ref={pathRef} fill="url(#blob-gradient)"></path>
+      <path ref={pathRef} fill="url(#blob-gradient)" filter="url(#blob-blur)"></path>
     </motion.svg>
   )
 } 

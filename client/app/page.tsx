@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue, AnimatePresence, useMotionValueEvent, MotionValue, useMotionTemplate } from "framer-motion"
+import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue, AnimatePresence, useMotionValueEvent, MotionValue, useMotionTemplate, useReducedMotion } from "framer-motion"
 import { useTheme } from "next-themes"
 import { ThemeToggle } from "@/components/ui/ThemeToggle"
 import { Button } from "@/components/ui/button"
@@ -71,15 +71,6 @@ function FeatureItem({
     [`hsl(var(--muted-foreground))`, `hsl(var(--feature-item-text-color-hsl) / 0.7)`]
   )
 
-  const blurValue = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [4, 0, 0, 0, 4])
-  const filter = useMotionTemplate`blur(${blurValue}px)`
-
-  const shadowOpacity = useTransform(bgOpacity, v => 0.1 * v)
-  const boxShadow = useTransform(
-    shadowOpacity,
-    v => `0 10px 15px -3px rgb(0 0 0 / ${v}), 0 4px 6px -4px rgb(0 0 0 / ${v})`,
-  )
-
   return (
     <motion.div
       className="p-8 rounded-3xl"
@@ -87,8 +78,6 @@ function FeatureItem({
         opacity,
         scale,
         backgroundColor,
-        boxShadow,
-        filter,
       }}
     >
       <motion.h3 style={{ color: textColor }} className="text-2xl font-normal text-stone-900 dark:text-stone-100 mb-3">{feature.title}</motion.h3>
@@ -113,6 +102,7 @@ export default function Home() {
   const isHeroInView = useInView(heroRef, { amount: 0.3 })
   const { theme } = useTheme()
   const isDark = theme === "dark"
+  const shouldReduceMotion = useReducedMotion()
 
   const features = [
     {
@@ -148,14 +138,10 @@ export default function Home() {
 
   const springConfig = { damping: 40, stiffness: 200, mass: 0.7 }
 
-  const textX1 = useSpring(useTransform(mouseX, [-1, 1], [-15, 15]), springConfig)
-  const textY1 = useSpring(useTransform(mouseY, [-1, 1], [-15, 15]), springConfig)
-  const textX2 = useSpring(useTransform(mouseX, [-1, 1], [-25, 25]), springConfig)
-  const textY2 = useSpring(useTransform(mouseY, [-1, 1], [-25, 25]), springConfig)
-  const pX = useSpring(useTransform(mouseX, [-1, 1], [-10, 10]), springConfig)
-  const pY = useSpring(useTransform(mouseY, [-1, 1], [-10, 10]), springConfig)
-  const buttonsX = useSpring(useTransform(mouseX, [-1, 1], [-18, 18]), springConfig)
-  const buttonsY = useSpring(useTransform(mouseY, [-1, 1], [-18, 18]), springConfig)
+  const textX1 = useSpring(useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15]), springConfig)
+  const textY1 = useSpring(useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15]), springConfig)
+  const textX2 = useSpring(useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-25, 25]), springConfig)
+  const textY2 = useSpring(useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-25, 25]), springConfig)
 
   const { scrollY, scrollYProgress } = useScroll()
   const smoothProgress = useSpring(scrollYProgress, {
@@ -174,8 +160,8 @@ export default function Home() {
     }
   })
 
-  const heroY = useTransform(smoothProgress, [0, 1], ["0%", "-30%"])
-  const shapeY = useTransform(smoothProgress, [0, 1], ["0%", "20%"])
+  const heroY = useTransform(smoothProgress, [0, 1], shouldReduceMotion ? ["0%", "0%"] : ["0%", "-30%"])
+  const shapeY = useTransform(smoothProgress, [0, 1], shouldReduceMotion ? ["0%", "0%"] : ["0%", "20%"])
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
@@ -215,7 +201,7 @@ export default function Home() {
       ref={containerRef}
       className="relative flex min-h-screen flex-col bg-stone-50 dark:bg-zinc-950 noselect"
     >
-      <OptimizedShapes mouseX={mouseX} mouseY={mouseY} scrollY={shapeY} />
+      <OptimizedShapes mouseX={mouseX} mouseY={mouseY} scrollY={shapeY} shouldReduceMotion={shouldReduceMotion ?? false} />
 
       <motion.header
         initial={{ y: -100, opacity: 0 }}
@@ -231,10 +217,10 @@ export default function Home() {
             className="flex items-center gap-4"
           >
             <motion.div
-              animate={{
+              animate={!shouldReduceMotion ? {
                 rotate: [0, 3, -3, 0],
                 scale: [1, 1.02, 1],
-              }}
+              } : {}}
               transition={{
                 duration: 6,
                 repeat: Number.POSITIVE_INFINITY,
@@ -324,7 +310,7 @@ export default function Home() {
                         initial={{ opacity: 0, y: 40 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 1, delay: 1.2 }}
-                        style={{ x: textX1, y: textY1 }}
+                        style={{ x: textX1, y: textY1, willChange: "transform" }}
                       >
                         The
                       </motion.span>
@@ -333,7 +319,7 @@ export default function Home() {
                         initial={{ opacity: 0, x: -60 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 1.2, delay: 1.5, ease: [0.6, 0.01, 0.05, 0.95] }}
-                        style={{ x: textX2, y: textY2 }}
+                        style={{ x: textX2, y: textY2, willChange: "transform" }}
                       >
                         <motion.span
                           variants={textContainerVariants}
@@ -399,7 +385,6 @@ export default function Home() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 1, delay: 1.8 }}
                       className="max-w-lg text-xl font-light leading-relaxed text-stone-600 dark:text-stone-400"
-                      style={{ x: pX, y: pY }}
                     >
                       A sophisticated card game where strategy meets elegance. Every decision shapes your destiny in
                       this refined multiplayer experience.
@@ -412,69 +397,65 @@ export default function Home() {
                     transition={{ duration: 1, delay: 2.1 }}
                     className="flex flex-col gap-4 sm:flex-row"
                   >
-                    <motion.div style={{ x: buttonsX, y: buttonsY }}>
-                      <Magnetic>
-                        <motion.div
-                          whileHover={{ y: -3, scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          transition={{ duration: 0.2 }}
+                    <Magnetic>
+                      <motion.div
+                        whileHover={{ y: -3, scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Button
+                          size="lg"
+                          onClick={() => setShowNewGame(true)}
+                          data-cursor-link
+                          className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
                         >
-                          <Button
-                            size="lg"
-                            onClick={() => setShowNewGame(true)}
-                            data-cursor-link
-                            className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
-                          >
-                            <span className="pointer-events-none relative z-10 flex items-center gap-2">
-                              Start New Game
-                              <motion.div
-                                animate={{ x: [0, 4, 0] }}
-                                transition={{
-                                  duration: 2,
-                                  repeat: Number.POSITIVE_INFINITY,
-                                  ease: "easeInOut",
-                                }}
-                              >
-                                <ArrowRight className="h-4 w-4" />
-                              </motion.div>
-                            </span>
+                          <span className="pointer-events-none relative z-10 flex items-center gap-2">
+                            Start New Game
                             <motion.div
-                              className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
-                              initial={{ x: "-100%" }}
-                              whileHover={{ x: "0%" }}
-                              transition={{ duration: 0.4, ease: "easeOut" }}
-                            />
-                          </Button>
-                        </motion.div>
-                      </Magnetic>
-                    </motion.div>
+                              animate={!shouldReduceMotion ? { x: [0, 4, 0] } : {}}
+                              transition={{
+                                duration: 2,
+                                repeat: Number.POSITIVE_INFINITY,
+                                ease: "easeInOut",
+                              }}
+                            >
+                              <ArrowRight className="h-4 w-4" />
+                            </motion.div>
+                          </span>
+                          <motion.div
+                            className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
+                            initial={{ x: "-100%" }}
+                            whileHover={{ x: "0%" }}
+                            transition={{ duration: 0.4, ease: "easeOut" }}
+                          />
+                        </Button>
+                      </motion.div>
+                    </Magnetic>
 
-                    <motion.div style={{ x: buttonsX, y: buttonsY }}>
-                      <Magnetic>
-                        <motion.div
-                          whileHover={{ y: -3, scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          transition={{ duration: 0.2 }}
+                    <Magnetic>
+                      <motion.div
+                        whileHover={{ y: -3, scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          onClick={() => setShowJoinGame(true)}
+                          data-cursor-link
+                          className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100 dark:hover:bg-stone-900/80"
                         >
-                          <Button
-                            variant="outline"
-                            size="lg"
-                            onClick={() => setShowJoinGame(true)}
-                            data-cursor-link
-                            className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100 dark:hover:bg-stone-900/80"
-                          >
-                            <Users className="mr-2 h-4 w-4" />
-                            Join Game
-                          </Button>
-                        </motion.div>
-                      </Magnetic>
-                    </motion.div>
+                          <Users className="mr-2 h-4 w-4" />
+                          Join Game
+                        </Button>
+                      </motion.div>
+                    </Magnetic>
                   </motion.div>
                 </motion.div>
               </motion.div>
 
               <div className="relative hidden h-full items-center justify-center lg:flex">
-                <SmoothFloatingElements mouseX={mouseX} mouseY={mouseY} isVisible={isHeroInView} isCheckHovered={isCheckHovered} />
+                <SmoothFloatingElements mouseX={mouseX} mouseY={mouseY} isVisible={isHeroInView} isCheckHovered={isCheckHovered} shouldReduceMotion={shouldReduceMotion ?? false} />
               </div>
             </div>
 
@@ -487,7 +468,7 @@ export default function Home() {
               className="absolute bottom-12 left-1/2 -translate-x-1/2"
             >
               <motion.div
-                animate={{ y: [0, 8, 0] }}
+                animate={!shouldReduceMotion ? { y: [0, 8, 0] } : {}}
                 transition={{
                   repeat: Number.POSITIVE_INFINITY,
                   duration: 3,
