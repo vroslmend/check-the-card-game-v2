@@ -111,14 +111,17 @@ export function Scrollytelling() {
   // Principles Cards
   const principlesCardsOpacity = useTransform(scrollProgress, [0.2, 0.25, 0.45, 0.5], [0, 1, 1, 0]);
   const principlesCardsY = useTransform(scrollProgress, [0.2, 0.25, 0.45, 0.5], ["20%", "0%", "0%", "-20%"]);
+  const principlesCardsPointerEvents = useTransform(principlesCardsOpacity, (v) => (v > 0 ? "auto" : "none"));
 
   // Features Title
   const featuresTitleOpacity = useTransform(scrollProgress, [0.5, 0.55, 0.7, 0.75], [0, 1, 1, 0]);
   const featuresTitleY = useTransform(scrollProgress, [0.5, 0.55, 0.7, 0.75], ["20%", "0%", "0%", "-20%"]);
+  const featuresTitlePointerEvents = useTransform(featuresTitleOpacity, (v) => (v > 0 ? "auto" : "none"));
 
   // Features Content
   const featuresContentOpacity = useTransform(scrollProgress, [0.7, 0.75, 0.95, 1.0], [0, 1, 1, 0]);
   const featuresContentY = useTransform(scrollProgress, [0.7, 0.75, 0.95, 1.0], ["20%", "0%", "0%", "-20%"]);
+  const featuresContentPointerEvents = useTransform(featuresContentOpacity, (v) => (v > 0 ? "auto" : "none"));
 
   return (
     <section ref={scrollyRef} className="relative h-[500vh]">
@@ -126,7 +129,12 @@ export function Scrollytelling() {
       <div id="scrollytelling-track" className="sticky top-0 flex h-screen items-center justify-center overflow-hidden">
         {/* Principles Section */}
         <motion.div
-          style={{ opacity: principlesTitleOpacity, y: principlesTitleY }}
+          style={{
+            opacity: principlesTitleOpacity,
+            y: principlesTitleY,
+            pointerEvents: useTransform(principlesTitleOpacity, v => (v > 0 ? "auto" : "none")),
+            zIndex: useTransform(principlesTitleOpacity, v => (v > 0 ? 10 : 0)),
+          }}
           className="absolute inset-x-0"
         >
           <div className="container mx-auto px-4 text-center">
@@ -140,11 +148,16 @@ export function Scrollytelling() {
         </motion.div>
 
         <motion.div
-          style={{ opacity: principlesCardsOpacity, y: principlesCardsY }}
+          style={{
+            opacity: principlesCardsOpacity,
+            y: principlesCardsY,
+            pointerEvents: principlesCardsPointerEvents,
+            zIndex: useTransform(principlesCardsOpacity, v => (v > 0 ? 10 : 0)),
+          }}
           className="absolute inset-x-0"
         >
           <div className="container mx-auto px-4">
-            <div className="grid gap-16 lg:grid-cols-3" style={{ perspective: "1000px" }}>
+            <div className="grid justify-items-center gap-8 lg:grid-cols-3" style={{ perspective: "1000px" }}>
               {rules.map((rule, index) => (
                 <PrincipleCard
                   key={index}
@@ -159,9 +172,14 @@ export function Scrollytelling() {
         </motion.div>
 
         {/* Features Section */}
-        <motion.div 
-            style={{ opacity: featuresTitleOpacity, y: featuresTitleY }}
-            className="absolute inset-x-0"
+        <motion.div
+          style={{
+            opacity: featuresTitleOpacity,
+            y: featuresTitleY,
+            pointerEvents: featuresTitlePointerEvents,
+            zIndex: useTransform(featuresTitleOpacity, v => (v > 0 ? 10 : 0)),
+          }}
+          className="absolute inset-x-0"
         >
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-4xl font-light tracking-tight text-stone-900 dark:text-stone-100 sm:text-5xl">
@@ -171,7 +189,12 @@ export function Scrollytelling() {
         </motion.div>
 
         <motion.div
-          style={{ opacity: featuresContentOpacity, y: featuresContentY }}
+          style={{
+            opacity: featuresContentOpacity,
+            y: featuresContentY,
+            pointerEvents: featuresContentPointerEvents,
+            zIndex: useTransform(featuresContentOpacity, v => (v > 0 ? 10 : 0)),
+          }}
           className="absolute h-full w-full"
         >
           <div className="container mx-auto grid h-full w-full grid-cols-1 gap-8 lg:grid-cols-2">

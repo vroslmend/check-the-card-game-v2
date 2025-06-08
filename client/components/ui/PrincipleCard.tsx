@@ -2,6 +2,7 @@
 
 import { motion, useMotionValue, useSpring, useTransform, MotionValue } from "framer-motion"
 import { ElementType, useRef } from "react"
+import Magnetic from "@/components/ui/Magnetic"
 
 interface PrincipleCardProps {
   icon: ElementType
@@ -46,50 +47,55 @@ export function PrincipleCard({ icon: Icon, title, description, scrollYProgress 
 
   return (
     <motion.div
-      ref={ref}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      whileHover={{ scale: 1.05 }}
-      style={{
-        rotateX,
-        rotateY,
-        y: springParallaxY,
-        transformStyle: "preserve-3d",
-      }}
-      className="group relative"
+      style={{ y: springParallaxY }}
+      className="relative"
     >
-      <div
-        style={{
-          transform: "translateZ(80px)",
-          transformStyle: "preserve-3d",
-        }}
-        className="relative flex flex-col overflow-hidden rounded-3xl bg-white/60 p-10 backdrop-blur-sm transition-colors duration-500 group-hover:bg-white/80 dark:bg-stone-900/60 dark:group-hover:bg-stone-900/80"
-      >
+      <Magnetic>
         <motion.div
+          ref={ref}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          whileHover={{ scale: 1.05, boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)" }}
           style={{
-            transform: "translateZ(50px)",
+            rotateX,
+            rotateY,
+            transformStyle: "preserve-3d",
           }}
-          className="mb-8 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-stone-100 dark:bg-stone-800 transition-colors duration-500 group-hover:bg-stone-800 dark:group-hover:bg-stone-100"
+          className="group relative w-[280px]"
         >
-          <Icon className="h-10 w-10 text-stone-700 dark:text-stone-300 transition-colors duration-500 group-hover:text-stone-300 dark:group-hover:text-stone-700" />
+          <div
+            style={{
+              transform: "translateZ(80px)",
+              transformStyle: "preserve-3d",
+            }}
+            className="relative h-[300px] overflow-hidden rounded-2xl border border-stone-200/50 bg-white p-6 shadow-lg transition-colors duration-500 group-hover:bg-stone-50 dark:border-stone-800/50 dark:bg-stone-950 dark:group-hover:bg-stone-900"
+          >
+            <motion.div
+              style={{ transform: "translateZ(50px)" }}
+              className="absolute top-6 left-6"
+            >
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-stone-100 transition-colors duration-500 group-hover:bg-stone-900 dark:bg-stone-900 dark:group-hover:bg-stone-100">
+                <Icon className="h-6 w-6 text-stone-700 transition-colors duration-500 group-hover:text-stone-100 dark:text-stone-300 dark:group-hover:text-stone-700" />
+              </div>
+            </motion.div>
+
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <motion.h3
+                style={{ transform: "translateZ(40px)" }}
+                className="mb-2 font-serif text-2xl text-stone-900 dark:text-stone-100"
+              >
+                {title}
+              </motion.h3>
+              <motion.p
+                style={{ transform: "translateZ(30px)" }}
+                className="font-light leading-snug text-stone-600 dark:text-stone-400"
+              >
+                {description}
+              </motion.p>
+            </div>
+          </div>
         </motion.div>
-        <motion.h3
-          style={{
-            transform: "translateZ(40px)",
-          }}
-          className="mb-4 text-2xl font-light text-stone-900 dark:text-stone-100"
-        >
-          {title}
-        </motion.h3>
-        <motion.p
-          style={{
-            transform: "translateZ(30px)",
-          }}
-          className="font-light leading-relaxed text-stone-600 dark:text-stone-400"
-        >
-          {description}
-        </motion.p>
-      </div>
+      </Magnetic>
     </motion.div>
   )
 } 
