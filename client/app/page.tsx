@@ -122,17 +122,17 @@ export default function Home() {
 
   const { scrollYProgress: footerScrollYProgress } = useScroll({
     target: endOfPageRef,
-    offset: ["start center", "end end"],
+    offset: ["start end", "end end"],
   })
 
   const smoothFooterScrollYProgress = useSpring(footerScrollYProgress, {
-    stiffness: 100,
-    damping: 30,
+    stiffness: 50,
+    damping: 25,
   })
 
-  const footerY = useTransform(smoothFooterScrollYProgress, [0, 1], ["100%", "0%"])
+  const footerY = useTransform(smoothFooterScrollYProgress, [0, 0.6], ["100%", "0%"])
 
-  const signatureTriggerProgress = useTransform(smoothFooterScrollYProgress, [0.8, 1], [0, 1])
+  const signatureTriggerProgress = useTransform(smoothFooterScrollYProgress, [0.5, 0.9], [0, 1])
 
   useMotionValueEvent(signatureTriggerProgress, "change", (latest: number) => {
     setIsSignatureVisible(latest > 0)
@@ -200,6 +200,9 @@ export default function Home() {
   }, [handleMouseMove])
 
   useEffect(() => {
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
+    }
     window.scrollTo(0, 0);
   }, []);
 
@@ -483,7 +486,7 @@ export default function Home() {
                 }}
                 className="flex cursor-pointer flex-col items-center gap-2 text-stone-500 transition-colors duration-300 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300"
                 onClick={() => {
-                  document.getElementById("scrollytelling-track")?.scrollIntoView({ behavior: "smooth" })
+                  document.getElementById("game-principles-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }}
               >
                 <span className="text-sm font-light tracking-wide">Discover more</span>
@@ -539,7 +542,7 @@ export default function Home() {
             </AnimateOnView>
           </div>
         </section>
-        <div ref={endOfPageRef} />
+        <div ref={endOfPageRef} className="h-20" />
       </main>
 
       <motion.footer

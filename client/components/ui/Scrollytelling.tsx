@@ -121,8 +121,9 @@ export function Scrollytelling() {
   const featuresContentY = useTransform(scrollProgress, [0.7, 0.75, 0.95, 1.0], ["20%", "0%", "0%", "-20%"]);
 
   return (
-    <section id="scrollytelling-track" ref={scrollyRef} className="relative h-[500vh]">
-      <div className="sticky top-0 flex h-screen items-center justify-center overflow-hidden">
+    <section ref={scrollyRef} className="relative h-[500vh]">
+      <div id="game-principles-anchor" className="absolute" style={{ top: "20vh" }} />
+      <div id="scrollytelling-track" className="sticky top-0 flex h-screen items-center justify-center overflow-hidden">
         {/* Principles Section */}
         <motion.div
           style={{ opacity: principlesTitleOpacity, y: principlesTitleY }}
