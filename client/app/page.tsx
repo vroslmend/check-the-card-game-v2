@@ -105,6 +105,8 @@ export default function Home() {
   const isDark = theme === "dark"
   const shouldReduceMotion = useReducedMotion()
 
+  const isModalOpen = showNewGame || showJoinGame
+  
   const features = [
     {
       title: "Seamless UI",
@@ -186,6 +188,12 @@ export default function Home() {
     const throttleDelay = 16 // ~60fps
 
     const throttledMouseMove = (e: MouseEvent) => {
+      if (isModalOpen) {
+        mouseX.set(0)
+        mouseY.set(0)
+        return
+      }
+
       const now = Date.now()
       if (now - lastTime >= throttleDelay) {
         handleMouseMove(e)
@@ -197,7 +205,7 @@ export default function Home() {
     return () => {
       window.removeEventListener("mousemove", throttledMouseMove)
     }
-  }, [handleMouseMove])
+  }, [handleMouseMove, isModalOpen, mouseX, mouseY])
 
   useEffect(() => {
     if ('scrollRestoration' in history) {
@@ -659,10 +667,8 @@ export default function Home() {
         </div>
       </motion.footer>
 
-      <AnimatePresence>
-        {showNewGame && <NewGameModal isOpen={showNewGame} onClose={() => setShowNewGame(false)} />}
-        {showJoinGame && <JoinGameModal isOpen={showJoinGame} onClose={() => setShowJoinGame(false)} />}
-      </AnimatePresence>
+      <NewGameModal isOpen={showNewGame} onClose={() => setShowNewGame(false)} />
+      <JoinGameModal isOpen={showJoinGame} onClose={() => setShowJoinGame(false)} />
     </div>
   )
 }

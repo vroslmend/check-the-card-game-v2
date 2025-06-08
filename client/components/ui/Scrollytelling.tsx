@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react"
 import { motion, useScroll, useTransform, useSpring, MotionValue } from "framer-motion"
-import { Spade, Heart, Diamond } from "lucide-react"
+import { Spade, Heart, Diamond, Droplets, Wind, Zap } from "lucide-react"
 import { PrincipleCard } from "@/components/ui/PrincipleCard"
 import { CardStack } from "@/components/ui/CardStack"
 import { AnimateOnView } from "@/components/ui/AnimateOnView"
@@ -63,14 +63,17 @@ export function Scrollytelling() {
 
   const features = [
     {
+      icon: Droplets,
       title: "Seamless UI",
       description: "A clean, intuitive interface that lets you focus on your strategy. No clutter, just pure gameplay.",
     },
     {
+      icon: Wind,
       title: "Fluid Animations",
       description: "Every action, from drawing a card to calling 'Check', is accompanied by smooth, satisfying animations.",
     },
     {
+      icon: Zap,
       title: "Haptic Feedback",
       description: "Feel the game with subtle vibrations and feedback that make the digital experience feel tangible.",
     },
@@ -97,7 +100,7 @@ export function Scrollytelling() {
     },
   ];
 
-  const continuousActiveCard = useTransform(scrollProgress, [0.5, 1], [0, features.length - 1]);
+  const continuousActiveCard = useTransform(scrollProgress, [0.75, 0.95], [0, features.length - 1]);
   const smoothContinuousActiveCard = useSpring(continuousActiveCard, {
     stiffness: 100,
     damping: 20,
@@ -114,17 +117,18 @@ export function Scrollytelling() {
   const principlesCardsPointerEvents = useTransform(principlesCardsOpacity, (v) => (v > 0 ? "auto" : "none"));
 
   // Features Title
-  const featuresTitleOpacity = useTransform(scrollProgress, [0.5, 0.55, 0.7, 0.75], [0, 1, 1, 0]);
-  const featuresTitleY = useTransform(scrollProgress, [0.5, 0.55, 0.7, 0.75], ["20%", "0%", "0%", "-20%"]);
+  const featuresTitleOpacity = useTransform(scrollProgress, [0.45, 0.5, 0.7, 0.75], [0, 1, 1, 0]);
+  const featuresTitleY = useTransform(scrollProgress, [0.45, 0.5, 0.7, 0.75], ["20%", "0%", "0%", "-20%"]);
   const featuresTitlePointerEvents = useTransform(featuresTitleOpacity, (v) => (v > 0 ? "auto" : "none"));
 
   // Features Content
   const featuresContentOpacity = useTransform(scrollProgress, [0.7, 0.75, 0.95, 1.0], [0, 1, 1, 0]);
   const featuresContentY = useTransform(scrollProgress, [0.7, 0.75, 0.95, 1.0], ["20%", "0%", "0%", "-20%"]);
   const featuresContentPointerEvents = useTransform(featuresContentOpacity, (v) => (v > 0 ? "auto" : "none"));
+  const cardEntryProgress = useTransform(scrollProgress, [0.7, 0.85], [0, 1]);
 
   return (
-    <section ref={scrollyRef} className="relative h-[500vh]">
+    <section ref={scrollyRef} className="relative h-[700vh]">
       <div id="game-principles-anchor" className="absolute" style={{ top: "20vh" }} />
       <div id="scrollytelling-track" className="sticky top-0 flex h-screen items-center justify-center overflow-hidden">
         {/* Principles Section */}
@@ -210,7 +214,11 @@ export function Scrollytelling() {
             </div>
             <div className="flex h-full items-center justify-center">
               <div className="w-full">
-                <CardStack continuousActiveCard={smoothContinuousActiveCard} />
+                <CardStack
+                  features={features}
+                  continuousActiveCard={smoothContinuousActiveCard}
+                  cardEntryProgress={cardEntryProgress}
+                />
               </div>
             </div>
           </div>

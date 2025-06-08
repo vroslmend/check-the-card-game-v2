@@ -39,28 +39,28 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title, 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/20 backdrop-blur-xl"
         >
           <motion.div
             ref={modalRef}
             initial={{ scale: 0.95, y: 20, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.95, y: 20, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-            className="relative w-full max-w-sm rounded-2xl border border-stone-200/10 bg-white p-8 shadow-2xl dark:bg-zinc-900"
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="relative w-full max-w-sm rounded-3xl border border-stone-200/20 bg-white/80 p-8 shadow-2xl backdrop-blur-2xl dark:border-stone-800/20 dark:bg-stone-900/80"
           >
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 transition-colors"
+              className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full bg-stone-900/5 text-stone-500 transition-colors hover:bg-stone-900/10 hover:text-stone-800 dark:bg-stone-100/5 dark:text-stone-400 dark:hover:bg-stone-100/10 dark:hover:text-stone-100"
               aria-label="Close modal"
             >
               <X size={20} />
             </button>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-6">
               {(title || description) && (
-                <div className="flex flex-col gap-1.5">
-                  {title && <h2 className="text-xl font-bold">{title}</h2>}
-                  {description && <p className="text-sm text-stone-500 dark:text-stone-400">{description}</p>}
+                <div className="flex flex-col gap-2 text-center">
+                  {title && <h2 className="text-2xl font-light tracking-tight text-stone-900 dark:text-stone-100">{title}</h2>}
+                  {description && <p className="text-md font-light leading-relaxed text-stone-600 dark:text-stone-400">{description}</p>}
                 </div>
               )}
               {children}

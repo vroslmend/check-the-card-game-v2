@@ -140,6 +140,12 @@ const CustomCursor = () => {
         if (currentVariant !== 'link' && currentVariant !== 'pressed') setVariant('link');
         return;
       }
+
+      const textInput = target.closest('[data-cursor-text]');
+      if (textInput) {
+        if (currentVariant !== 'text' && currentVariant !== 'pressed') setVariant('text');
+        return;
+      }
   
       if (target.matches('a, button, [role="button"], [data-clickable]')) {
         if (currentVariant !== 'link' && currentVariant !== 'pressed') setVariant('link');
