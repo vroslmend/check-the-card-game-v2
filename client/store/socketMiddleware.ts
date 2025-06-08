@@ -1,6 +1,7 @@
 import { StateCreator } from 'zustand';
 import io, { Socket } from 'socket.io-client';
 import { GameStoreState } from './gameStore';
+import { SocketEventName, ClientCheckGameState, RichGameLogMessage, ChatMessage } from 'shared-types';
 
 export interface SocketState {
   socket: Socket | null;
@@ -13,7 +14,8 @@ export const socketMiddleware = (
   config: StateCreator<GameStoreState & SocketState>
 ): StateCreator<GameStoreState & SocketState> => (set, get, api) => {
   const connect = () => {
-    const socket = io('http://localhost:3001'); // Your server URL
+    const serverUrl = process.env.NEXT_WEBSOCKET_URL;
+    const socket = io(serverUrl); // Your server URL
 
     socket.on('connect', () => {
       console.log('Socket connected!');
@@ -26,15 +28,15 @@ export const socketMiddleware = (
     });
 
     // Add generic listeners that update the store
-    socket.on('gameStateUpdate', (newGameState) => {
+    socket.on(SocketEventName.GAME_STATE_UPDATE, (newGameState: ClientCheckGameState) => {
         get().setGameState(newGameState);
     });
 
-    socket.on('logMessage', (logMessage) => {
+    socket.on(SocketEventName.SERVER_LOG_ENTRY, (logMessage: RichGameLogMessage) => {
         get().addLogMessage(logMessage);
     });
 
-    socket.on('chatMessage', (chatMessage) => {
+    socket.on(SocketEventName.CHAT_MESSAGE, (chatMessage: ChatMessage) => {
         get().addChatMessage(chatMessage);
     });
     

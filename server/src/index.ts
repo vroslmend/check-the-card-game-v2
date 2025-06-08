@@ -1,6 +1,11 @@
 import http from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { createActor, ActorRefFrom } from 'xstate';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
+
 import { gameMachine } from './game-machine.js';
 import {
     generatePlayerView

@@ -22,10 +22,11 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "dotenv": "^16.5.0",
     "immer": "^10.1.1",
     "module-alias": "^2.2.3",
+    "shared-types": "*",
     "socket.io": "^4.8.1",
-    "xstate": "^5.19.4",
-    "shared-types": "*"
+    "xstate": "^5.19.4"
   }
 }

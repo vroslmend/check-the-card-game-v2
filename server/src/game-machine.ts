@@ -29,10 +29,10 @@ import {
 import { createDeckWithIds, shuffleDeck } from './lib/deck-utils.js';
 import 'xstate/guards';
 // Durations (configurable in game-manager, hardcoded here for now)
-const PEEK_TOTAL_DURATION_MS = 10000; // 10 seconds
-const TURN_DURATION_MS = 60000;      // 60 seconds
-const MATCHING_STAGE_DURATION_MS = 20000; // 20 seconds
-const DISCONNECT_GRACE_PERIOD_MS = 30000; // 30 seconds
+const PEEK_TOTAL_DURATION_MS = parseInt(process.env.PEEK_DURATION_MS || '10000', 10);
+const TURN_DURATION_MS = parseInt(process.env.TURN_DURATION_MS || '60000', 10);
+const MATCHING_STAGE_DURATION_MS = parseInt(process.env.MATCHING_STAGE_DURATION_MS || '20000', 10);
+const DISCONNECT_GRACE_PERIOD_MS = parseInt(process.env.DISCONNECT_GRACE_PERIOD_MS || '30000', 10);
 
 // Helper to get player name, avoiding null/undefined issues for logging
 // TODO: Move to a shared utility or ensure context always has player names resolved
