@@ -92,13 +92,15 @@ export default function Home() {
   const [isCheckHovered, setIsCheckHovered] = useState(false)
   const [isAtTop, setIsAtTop] = useState(true)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
-  const [isSignatureHovered, setIsSignatureHovered] = useState(false)
+  const [isSignatureVisible, setIsSignatureVisible] = useState(false)
   const [isPrecisionHovered, setIsPrecisionHovered] = useState(false)
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLDivElement>(null)
   const featuresRef = useRef<HTMLDivElement>(null)
+  const endOfPageRef = useRef<HTMLDivElement>(null)
   const isHeroInView = useInView(heroRef, { amount: 0.3 })
   const { theme } = useTheme()
   const isDark = theme === "dark"
@@ -131,7 +133,25 @@ export default function Home() {
     mass: 0.5,
   })
 
-  const checkText = (isCheckHovered ? "Check!" : "Check").split("");
+  const { scrollYProgress: footerScrollYProgress } = useScroll({
+    target: endOfPageRef,
+    offset: ["start center", "end end"],
+  })
+
+  const smoothFooterScrollYProgress = useSpring(footerScrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+  })
+
+  const footerY = useTransform(smoothFooterScrollYProgress, [0, 1], ["100%", "0%"])
+
+  const signatureTriggerProgress = useTransform(smoothFooterScrollYProgress, [0.8, 1], [0, 1])
+
+  useMotionValueEvent(signatureTriggerProgress, "change", (latest: number) => {
+    setIsSignatureVisible(latest > 0)
+  })
+
+  const checkText = (isCheckHovered ? "Check!" : "Check").split("")
 
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)
@@ -565,7 +585,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="leaderboard" className="relative py-32">
+        <section id="leaderboard" ref={endOfPageRef} className="relative py-32">
           <div className="container px-4 mx-auto">
             <AnimateOnView className="mx-auto max-w-4xl text-center">
               <h2 className="mb-8 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
@@ -612,96 +632,81 @@ export default function Home() {
       </main>
 
       <motion.footer
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 1, ease: "easeOut" }}
-        className="border-t border-stone-200/60 dark:border-stone-800/60"
+        style={{ y: footerY }}
+        className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/60 bg-white/80 backdrop-blur-sm dark:border-stone-800/60 dark:bg-zinc-950/80"
       >
-        <div className="container mx-auto flex items-center justify-between px-4 py-8">
-          <div className="flex items-center gap-3">
+        <div className="container mx-auto grid grid-cols-1 items-center gap-4 px-4 py-4 text-center sm:grid-cols-3 sm:text-left">
+          <div className="flex items-center gap-3 justify-self-center sm:justify-self-start">
             <Spade className="h-5 w-5 text-stone-700 dark:text-stone-300" />
             <span className="text-lg font-light text-stone-900 dark:text-stone-100">Check</span>
           </div>
-          <div className="flex items-center gap-2 text-sm font-light text-stone-500 dark:text-stone-500">
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm font-light text-stone-500 dark:text-stone-500 sm:gap-x-2">
             <div className="flex items-center">
-              <span>© {new Date().getFullYear()} Check Card Game.&nbsp;</span>
-              <div
-                className="flex items-center"
-                onMouseEnter={() => setIsPrecisionHovered(true)}
-                onMouseLeave={() => setIsPrecisionHovered(false)}
-                data-cursor-icon
-              >
-                <span>Crafted with&nbsp;</span>
-                <div className="relative h-6 w-24">
-                  <AnimatePresence>
-                    {isPrecisionHovered ? (
-                      <motion.span
-                        key="passion"
-                        className="absolute inset-0 flex items-center justify-start"
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -5 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                      >
-                        brainrot.
-                      </motion.span>
-                    ) : (
-                      <motion.span
-                        key="precision"
-                        className="absolute inset-0 flex items-center justify-start"
-                        initial={{ opacity: 1, y: 0 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 5 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                      >
-                        precision.
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
+              <span>© {new Date().getFullYear()} Check Card Game.</span>
             </div>
-            <span>|</span>
+            <div className="hidden sm:block">|</div>
             <div
               className="flex items-center"
-              onMouseEnter={() => setIsSignatureHovered(true)}
-              onMouseLeave={() => setIsSignatureHovered(false)}
+              onMouseEnter={() => {
+                if (precisionHoverTimeoutRef.current) {
+                  clearTimeout(precisionHoverTimeoutRef.current);
+                }
+                setIsPrecisionHovered(true);
+              }}
+              onMouseLeave={() => {
+                precisionHoverTimeoutRef.current = setTimeout(() => {
+                  setIsPrecisionHovered(false);
+                }, 500);
+              }}
               data-cursor-icon
             >
-              <span>Made by&nbsp;</span>
-              <div className="relative h-6 w-24">
+              <span>Crafted with&nbsp;</span>
+              <div className="relative h-6 min-w-[5rem]">
                 <AnimatePresence>
-                  {isSignatureHovered ? (
-                    <motion.div
-                      key="signature"
-                      className="absolute inset-0 flex items-center justify-center"
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
+                  {isPrecisionHovered ? (
+                    <motion.span
+                      key="passion"
+                      className="absolute inset-0 flex items-center justify-start"
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -5 }}
                       transition={{ duration: 0.3, ease: "easeInOut" }}
                     >
-                      <Signature />
-                    </motion.div>
+                      brainrot.
+                    </motion.span>
                   ) : (
                     <motion.span
-                      key="text"
-                      className="absolute inset-0 flex items-center justify-start font-medium"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
+                      key="precision"
+                      className="absolute inset-0 flex items-center justify-start"
+                      initial={{ opacity: 1, y: 0 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 5 }}
+                      transition={{ duration: 0.3, ease: "easeInOut" }}
                     >
-                      Ammar
+                      precision.
                     </motion.span>
                   )}
                 </AnimatePresence>
               </div>
             </div>
+            <div
+              className="flex items-center"
+              data-cursor-icon
+            >
+              <span>Made by&nbsp;</span>
+              <div className="relative h-6 min-w-[5rem] ml-2">
+                <motion.div
+                  key="signature"
+                  className="absolute inset-0 flex items-center justify-center"
+                >
+                  <Signature isInView={isSignatureVisible} />
+                </motion.div>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center justify-center gap-6 sm:justify-self-end">
             <motion.a
-              href="https://github.com/your-username"
+              href="https://github.com/vroslmend"
               target="_blank"
               rel="noopener noreferrer"
               className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
@@ -713,7 +718,7 @@ export default function Home() {
               <FaGithub className="h-5 w-5" />
             </motion.a>
             <motion.a
-              href="https://open.spotify.com/user/your-username"
+              href="https://open.spotify.com/user/6tf81fs0qm2akdo4yt1wp1akw"
               target="_blank"
               rel="noopener noreferrer"
               className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
@@ -725,7 +730,7 @@ export default function Home() {
               <FaSpotify className="h-5 w-5" />
             </motion.a>
             <motion.a
-              href="https://discord.gg/your-invite"
+              href="https://discord.com"
               target="_blank"
               rel="noopener noreferrer"
               className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
@@ -740,8 +745,10 @@ export default function Home() {
         </div>
       </motion.footer>
 
-      {showNewGame && <NewGameModal onClose={() => setShowNewGame(false)} />}
-      {showJoinGame && <JoinGameModal onClose={() => setShowJoinGame(false)} />}
+      <AnimatePresence>
+        {showNewGame && <NewGameModal key="new-game" onClose={() => setShowNewGame(false)} />}
+        {showJoinGame && <JoinGameModal key="join-game" onClose={() => setShowJoinGame(false)} />}
+      </AnimatePresence>
     </div>
   )
 }

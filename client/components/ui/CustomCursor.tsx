@@ -10,7 +10,9 @@ const CustomCursor = () => {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isPointerInViewport, setIsPointerInViewport] = useState(false);
+  const [isIdle, setIsIdle] = useState(false);
   const previousVariant = useRef('default');
+  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -24,9 +26,9 @@ const CustomCursor = () => {
     return {
       hidden: {
         opacity: 0,
-        scale: 0,
+        scale: 0.8,
         transition: {
-          duration: 0.2,
+          duration: 0.3,
           ease: 'easeOut',
         },
       },
@@ -101,53 +103,52 @@ const CustomCursor = () => {
   const springX = useSpring(mouseX, springConfig);
   const springY = useSpring(mouseY, springConfig);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    mouseX.set(e.clientX);
-    mouseY.set(e.clientY);
-
-    const target = e.target as HTMLElement;
-    
-    const area = target.closest('[data-cursor-area]');
-    if (area) {
-      if (variant !== 'area' && variant !== 'pressed') {
-        setVariant('area');
-      }
-      return;
-    }
-    
-    const iconLink = target.closest('[data-cursor-icon]');
-    if (iconLink) {
-      if (variant !== 'icon' && variant !== 'pressed') {
-        setVariant('icon');
-      }
-      return;
-    }
-    
-    const clickableLink = target.closest('[data-cursor-link]');
-    if (clickableLink) {
-      if (variant !== 'link' && variant !== 'pressed') {
-        setVariant('link');
-      }
-      return;
-    }
-
-    if (target.matches('a, button, [role="button"], [data-clickable]')) {
-      if (variant !== 'link' && variant !== 'pressed') {
-        setVariant('link');
-      }
-    } else {
-      if (variant !== 'default' && variant !== 'pressed') {
-        setVariant('default');
-      }
-    }
-  }, [variant, setVariant, mouseX, mouseY]);
-
   useEffect(() => {
-    const handleMouseEnter = () => setIsPointerInViewport(true);
+    const resetIdleTimeout = () => {
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+      }
+      setIsIdle(false);
+      idleTimeoutRef.current = setTimeout(() => setIsIdle(true), 2000);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isPointerInViewport) {
+        setIsPointerInViewport(true);
+      }
+      mouseX.set(e.clientX);
+      mouseY.set(e.clientY);
+      resetIdleTimeout();
+
+      const target = e.target as HTMLElement;
+      const currentVariant = useCursorStore.getState().variant;
+      
+      const area = target.closest('[data-cursor-area]');
+      if (area) {
+        if (currentVariant !== 'area' && currentVariant !== 'pressed') setVariant('area');
+        return;
+      }
+      
+      const iconLink = target.closest('[data-cursor-icon]');
+      if (iconLink) {
+        if (currentVariant !== 'icon' && currentVariant !== 'pressed') setVariant('icon');
+        return;
+      }
+      
+      const clickableLink = target.closest('[data-cursor-link]');
+      if (clickableLink) {
+        if (currentVariant !== 'link' && currentVariant !== 'pressed') setVariant('link');
+        return;
+      }
+  
+      if (target.matches('a, button, [role="button"], [data-clickable]')) {
+        if (currentVariant !== 'link' && currentVariant !== 'pressed') setVariant('link');
+      } else {
+        if (currentVariant !== 'default' && currentVariant !== 'pressed') setVariant('default');
+      }
+    };
+
     const handleMouseLeave = () => setIsPointerInViewport(false);
-    
-    document.documentElement.addEventListener('mouseenter', handleMouseEnter);
-    document.documentElement.addEventListener('mouseleave', handleMouseLeave);
     
     const handleMouseDown = () => {
       previousVariant.current = useCursorStore.getState().variant;
@@ -166,19 +167,23 @@ const CustomCursor = () => {
       }
     );
 
+    document.documentElement.addEventListener('mouseleave', handleMouseLeave);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
+    
+    // Set initial state
+    resetIdleTimeout();
 
     return () => {
-      document.documentElement.removeEventListener('mouseenter', handleMouseEnter);
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
       document.documentElement.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
       unsubscribe();
     };
-  }, [handleMouseMove, setVariant]);
+  }, [setVariant, isPointerInViewport]); 
   
   if (!mounted) {
     return null;
@@ -188,7 +193,7 @@ const CustomCursor = () => {
     <div key={resolvedTheme} className="fixed inset-0 pointer-events-none z-50">
       <motion.div
         variants={cursorVariants}
-        animate={isPointerInViewport ? variant : 'hidden'}
+        animate={isPointerInViewport && !isIdle ? variant : 'hidden'}
         style={{
           translateX: springX,
           translateY: springY,
