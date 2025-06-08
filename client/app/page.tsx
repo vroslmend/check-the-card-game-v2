@@ -495,7 +495,7 @@ export default function Home() {
 
         <Scrollytelling />
 
-        <section id="leaderboard" ref={endOfPageRef} className="relative py-40">
+        <section id="leaderboard" className="relative py-40">
           <div className="container px-4 mx-auto">
             <AnimateOnView className="mx-auto max-w-4xl text-center">
               <h2 className="mb-8 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
@@ -539,6 +539,7 @@ export default function Home() {
             </AnimateOnView>
           </div>
         </section>
+        <div ref={endOfPageRef} />
       </main>
 
       <motion.footer
@@ -656,8 +657,8 @@ export default function Home() {
       </motion.footer>
 
       <AnimatePresence>
-        {showNewGame && <NewGameModal key="new-game" onClose={() => setShowNewGame(false)} />}
-        {showJoinGame && <JoinGameModal key="join-game" onClose={() => setShowJoinGame(false)} />}
+        {showNewGame && <NewGameModal isOpen={showNewGame} onClose={() => setShowNewGame(false)} />}
+        {showJoinGame && <JoinGameModal isOpen={showJoinGame} onClose={() => setShowJoinGame(false)} />}
       </AnimatePresence>
     </div>
   )

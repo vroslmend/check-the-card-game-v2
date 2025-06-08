@@ -1,94 +1,86 @@
-"use client"
+'use client';
 
-import { motion } from "framer-motion"
-import { Deck } from "./Deck"
-import { DiscardPile } from "./DiscardPile"
-import { AlertCircle } from "lucide-react"
-import { ClientCard } from "shared-types"
+import React from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { motion } from 'framer-motion';
+import { GamePhase, PlayerActionType, SocketEventName } from 'shared-types';
+import { useGameStore } from '@/store/gameStore';
+import { DeckCard } from '@/components/cards/DeckCard';
 
-interface TableAreaProps {
-  deckSize: number;
-  discardPile: ClientCard[];
-  currentPlayerName: string;
-  gamePhase: string; // This will be derived from the UI machine state
-  discardPileIsSealed: boolean;
-  canDrawFromDeck: boolean;
-  canDrawFromDiscard: boolean;
-  onDeckClick: () => void;
-  onDiscardClick: () => void;
-  matchingOpportunityInfo: any; // This will be derived from the UI machine state
-}
+export const TableArea = () => {
+  const deckSize = useGameStore((state) => state.currentGameState?.deckSize ?? 0);
+  const discardPile = useGameStore((state) => state.currentGameState?.discardPile ?? []);
+  const gamePhase = useGameStore((state) => state.currentGameState?.currentPhase);
+  const currentPlayerId = useGameStore((state) => state.currentGameState?.currentPlayerId);
+  const gameId = useGameStore((state) => state.gameId);
+  const localPlayerId = useGameStore((state) => state.localPlayerId);
+  const emit = useGameStore((state) => state.emit);
 
-export function TableArea({
-  deckSize,
-  discardPile,
-  currentPlayerName,
-  gamePhase,
-  discardPileIsSealed,
-  canDrawFromDeck,
-  canDrawFromDiscard,
-  onDeckClick,
-  onDiscardClick,
-  matchingOpportunityInfo,
-}: TableAreaProps) {
+  const isCurrentPlayer = currentPlayerId === localPlayerId;
+  const topDiscardCard = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
+
+  const canDrawFromDeck = isCurrentPlayer && gamePhase === 'playPhase';
+  const canDrawFromDiscard = isCurrentPlayer && gamePhase === 'playPhase' && !!topDiscardCard;
+
+  const handleDeckClick = () => {
+    if (canDrawFromDeck && gameId && localPlayerId) {
+      emit(SocketEventName.PLAYER_ACTION, {
+        gameId,
+        playerId: localPlayerId,
+        type: PlayerActionType.DRAW_FROM_DECK,
+      });
+    }
+  };
+
+  const handleDiscardClick = () => {
+    if (canDrawFromDiscard && gameId && localPlayerId) {
+      emit(SocketEventName.PLAYER_ACTION, {
+        gameId,
+        playerId: localPlayerId,
+        type: PlayerActionType.DRAW_FROM_DISCARD,
+      });
+    }
+  };
+
+  const currentPlayerName = useGameStore((state) => {
+    if (!state.currentGameState || !state.currentGameState.currentPlayerId) return 'Unknown Player';
+    return state.currentGameState.players[state.currentGameState.currentPlayerId]?.name ?? '...';
+  });
+
   return (
-    <div className="flex items-center justify-center gap-12">
-      {/* Deck */}
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-      >
-        <Deck count={deckSize} canDraw={canDrawFromDeck} onClick={onDeckClick} />
-      </motion.div>
-
-      {/* Center Game Info */}
-      <motion.div
-        className="space-y-3 text-center"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
-      >
-        <div className="rounded-lg border border-stone-200/50 bg-stone-100/30 px-6 py-4 dark:border-stone-800/50 dark:bg-stone-900/30">
-          <p className="text-sm font-serif font-light text-stone-600 dark:text-stone-400">Table Center</p>
-          <p className="mt-1 text-xs font-light text-stone-600 dark:text-stone-400">Current: {currentPlayerName}</p>
-          <p className="mt-1 text-xs font-light text-stone-900 dark:text-stone-100">Phase: {gamePhase}</p>
+    <Card className="h-full bg-card/50">
+      <CardContent className="relative flex h-full items-center justify-center gap-8 p-4">
+        {/* Deck */}
+        <div
+          onClick={handleDeckClick}
+          className={`transition-transform duration-200 ${canDrawFromDeck ? 'cursor-pointer hover:scale-105' : 'cursor-not-allowed'}`}
+        >
+          <DeckCard count={deckSize} />
         </div>
 
-        {/* Matching Opportunity Indicator */}
-        {matchingOpportunityInfo && (
-          <motion.div
-            className="rounded-lg border border-stone-900/50 bg-stone-900/10 px-4 py-2 dark:border-stone-100/50 dark:bg-stone-100/10"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: "spring", stiffness: 200 }}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <motion.div
-                animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY }}
-              >
-                <AlertCircle className="h-4 w-4 text-stone-900 dark:text-stone-100" />
-              </motion.div>
-              <p className="text-xs font-light text-stone-900 dark:text-stone-100">Matching Available</p>
-            </div>
-          </motion.div>
-        )}
-      </motion.div>
+        {/* Discard Pile */}
+        <div
+          onClick={handleDiscardClick}
+          className={`transition-transform duration-200 ${canDrawFromDiscard ? 'cursor-pointer hover:scale-105' : 'cursor-not-allowed'}`}
+        >
+          <DeckCard card={topDiscardCard} />
+        </div>
 
-      {/* Discard Pile */}
-      <motion.div
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.4, delay: 0.3 }}
-      >
-        <DiscardPile 
-          cards={discardPile} 
-          isSealed={discardPileIsSealed} 
-          canDraw={canDrawFromDiscard}
-          onClick={onDiscardClick} 
-        />
-      </motion.div>
-    </div>
-  )
-} 
+        {/* Game Phase / Status Indicator */}
+        <motion.div
+          layoutId="activePlayerIndicator"
+          className="absolute bottom-4 left-1/2 -translate-x-1/2"
+        >
+          <Card className="px-4 py-2 text-sm text-center shadow-lg">
+            <p>
+              It's <span className="font-bold">{currentPlayerName}'s</span> turn
+            </p>
+            <p className="text-xs text-muted-foreground capitalize">
+              {gamePhase?.replace(/([A-Z])/g, ' $1').trim() ?? 'Loading...'}
+            </p>
+          </Card>
+        </motion.div>
+      </CardContent>
+    </Card>
+  );
+};

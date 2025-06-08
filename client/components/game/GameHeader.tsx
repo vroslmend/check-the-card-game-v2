@@ -1,66 +1,40 @@
 "use client"
 
+import React from 'react';
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, MessageSquare, Settings, Users } from "lucide-react"
+import { ArrowLeft, MessageSquare, Settings, Users, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import Link from "next/link"
-import ThemeToggle from "./ThemeToggle"
+import { AnimatePresence } from 'framer-motion';
+import { useGameStore } from '@/store/gameStore';
 
-interface GameHeaderProps {
-  gameId: string
-  onToggleSidePanel: () => void
-  sidePanelOpen: boolean
-}
+export const GameHeader = () => {
+  const gameId = useGameStore((state) => state.gameId);
+  const isSidePanelOpen = useGameStore((state) => state.isSidePanelOpen);
+  const toggleSidePanel = useGameStore((state) => state.toggleSidePanel);
 
-export function GameHeader({ gameId, onToggleSidePanel, sidePanelOpen }: GameHeaderProps) {
   return (
-    <motion.header
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="flex h-24 items-center justify-between border-b border-stone-200/50 bg-stone-50/80 px-6 backdrop-blur-sm dark:border-stone-800/50 dark:bg-zinc-950/80"
-    >
-      <div className="flex items-center gap-6">
-        <Link href="/">
-          <Button variant="ghost" size="sm" className="gap-2 font-sans text-sm font-light">
-            <ArrowLeft className="h-4 w-4" />
-            Exit Game
-          </Button>
-        </Link>
-
-        <div className="flex items-center gap-3">
-          <span className="text-2xl font-serif font-light tracking-tight">Check</span>
-          <span className="text-xs text-stone-600 dark:text-stone-400">{gameId.slice(0, 8)}...</span>
-        </div>
+    <header className="flex h-16 shrink-0 items-center justify-between border-b bg-card px-4 md:px-6">
+      <div className="flex items-center gap-4">
+        <h1 className="text-xl font-semibold tracking-tight">Check The Card</h1>
+        <div className="h-6 w-px bg-border" />
+        <span className="font-mono text-sm text-muted-foreground">{gameId ?? '...'}</span>
       </div>
-
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleSidePanel}
-          className={`text-sm font-light transition-colors ${
-            sidePanelOpen
-              ? "bg-stone-100 text-stone-900 dark:bg-stone-800 dark:text-stone-100"
-              : "text-stone-600 dark:text-stone-400"
-          }`}
-        >
-          <MessageSquare className="mr-2 h-4 w-4" />
-          Activity
-        </Button>
-
-        <Button variant="ghost" size="sm" className="text-sm font-light text-stone-600 dark:text-stone-400">
-          <Users className="mr-2 h-4 w-4" />
-          Players
-        </Button>
-
-        <Button variant="ghost" size="sm" className="text-sm font-light text-stone-600 dark:text-stone-400">
-          <Settings className="mr-2 h-4 w-4" />
-          Settings
-        </Button>
-
-        <ThemeToggle />
-      </div>
-    </motion.header>
+      <Button variant="outline" size="icon" onClick={toggleSidePanel} className="h-10 w-10">
+        <AnimatePresence initial={false} mode="wait">
+          <motion.div
+            key={isSidePanelOpen ? 'open' : 'closed'}
+            initial={{ opacity: 0, rotate: -90 }}
+            animate={{ opacity: 1, rotate: 0 }}
+            exit={{ opacity: 0, rotate: 90 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center justify-center"
+          >
+            {isSidePanelOpen ? <PanelLeftClose className="h-5 w-5"/> : <PanelLeftOpen className="h-5 w-5"/>}
+          </motion.div>
+        </AnimatePresence>
+        <span className="sr-only">Toggle side panel</span>
+      </Button>
+    </header>
   )
 } 

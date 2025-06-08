@@ -123,6 +123,7 @@ export interface GameOverData {
 }
 
 export interface CheckGameState {
+  gameId: string;
   deck: Card[];
   players: { [playerID: string]: PlayerState };
   discardPile: Card[];
