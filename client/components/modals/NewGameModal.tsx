@@ -1,16 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useGameStore } from "@/store/gameStore"
-import { Button } from "../ui/button"
-import { Input } from "../ui/input"
-import { Label } from "../ui/label"
-import { useRouter } from "next/navigation"
-import { SocketEventName, type InitialPlayerSetupData } from "shared-types"
-import { toast } from "sonner"
-import { Modal } from "../ui/Modal"
+import { useRouter } from 'next/navigation'
+import { useState, useEffect, useRef } from "react"
+import { useLocalStorage } from "usehooks-ts"
+import { nanoid } from "nanoid"
 import { motion } from "framer-motion"
-import Magnetic from "../ui/Magnetic"
+import { socket } from '@/lib/socket'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Modal } from "@/components/ui/Modal"
+import { toast } from "sonner"
+import { Loader } from "lucide-react"
+import { type CreateGameResponse, type InitialPlayerSetupData } from 'shared-types'
 
 interface NewGameModalProps {
   isOpen: boolean
@@ -18,77 +20,104 @@ interface NewGameModalProps {
 }
 
 export function NewGameModal({ isOpen, onClose }: NewGameModalProps) {
-  const [username, setUsername] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const createGame = useGameStore((state) => state.createGame)
   const router = useRouter()
+  const [playerName, setPlayerName] = useLocalStorage("playerName", "", {
+    serializer: (value) => value,
+    deserializer: (value) => value,
+  })
+  const [localPlayerId, setLocalPlayerId] = useLocalStorage<string | null>('localPlayerId', null, {
+    serializer: (value) => value ?? '',
+    deserializer: (value) => value,
+  });
+  const [isLoading, setIsLoading] = useState(false)
+  const isLoadingRef = useRef(isLoading);
+  isLoadingRef.current = isLoading;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!username.trim()) {
-      toast.error("Username Required", {
-        description: "Please enter a name to create a game.",
-      })
+  // Ensure a player ID exists on component mount if one isn't already there.
+  useEffect(() => {
+    if (!localPlayerId) {
+      setLocalPlayerId(nanoid());
+    }
+  }, [localPlayerId, setLocalPlayerId]);
+
+  // Manually connect the shared socket when the modal is open
+  useEffect(() => {
+    if (isOpen) {
+      socket.connect();
+    }
+    return () => {
+        // Disconnect when modal closes or we navigate away, but only if we are not in the process of creating a game.
+        if (!isLoadingRef.current) {
+            socket.disconnect();
+        }
+    }
+  }, [isOpen]);
+
+
+  const handleCreateGame = async () => {
+    if (!playerName.trim()) {
+      toast.error("Please enter your name.")
       return
     }
+    if (!localPlayerId) {
+      toast.error("Player ID could not be generated. Please try again.")
+      return
+    }
+
     setIsLoading(true)
 
-    try {
-      const newGameId = await createGame(username)
-      if (newGameId) {
-        router.push(`/game/${newGameId}`)
-        onClose()
-      } else {
-        toast.error("Failed to Create Game", {
-          description: "An unknown error occurred.",
-        })
-      }
-    } catch (error) {
-      toast.error("Failed to Create Game", {
-        description: error instanceof Error ? error.message : "An unexpected error occurred.",
-      })
-    } finally {
-      setIsLoading(false)
-    }
+    const playerSetupData: InitialPlayerSetupData = {
+      id: localPlayerId,
+      name: playerName.trim(),
+    };
+
+    socket.emit('CREATE_GAME', playerSetupData, (response: CreateGameResponse) => {
+        if (response.success && response.gameId) {
+            toast.success(`Game ${response.gameId} created! Joining now...`);
+            router.push(`/game/${response.gameId}`);
+        } else {
+            toast.error(response.message || 'Failed to create game. Please try again.');
+            setIsLoading(false);
+        }
+    });
   }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Create New Game"
-      description="Enter your name to get started."
-    >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="username-new" className="font-light text-stone-600 dark:text-stone-400 pl-2">Username</Label>
+    <Modal isOpen={isOpen} onClose={onClose} title="Start a New Game">
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="player-name">Your Name</Label>
           <Input
-            id="username-new"
-            placeholder="Your display name"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="rounded-full border-stone-200/50 bg-white/50 px-5 py-6 text-lg backdrop-blur-sm dark:border-stone-800/50 dark:bg-stone-900/50"
-            autoFocus
-            data-cursor-text
+            id="player-name"
+            placeholder="e.g., John Doe"
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+            className="text-base"
           />
         </div>
-        <Magnetic>
-          <motion.div
-            whileHover={{ y: -3, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            transition={{ duration: 0.2 }}
+        <motion.div
+          className="flex justify-end pt-4"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.3 }}
+        >
+          <Button
+            size="lg"
+            onClick={handleCreateGame}
+            disabled={isLoading || !playerName.trim()}
+            className="w-full sm:w-auto"
           >
-            <Button
-              type="submit"
-              disabled={isLoading}
-              size="lg"
-              className="w-full rounded-full bg-stone-900 px-8 py-7 text-lg font-light text-white shadow-lg transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
-            >
-              {isLoading ? "Creating..." : "Create Game & Enter Lobby"}
-            </Button>
-          </motion.div>
-        </Magnetic>
-      </form>
+            {isLoading ? (
+              <>
+                <Loader className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Create Game"
+            )}
+          </Button>
+        </motion.div>
+      </div>
     </Modal>
   )
 }

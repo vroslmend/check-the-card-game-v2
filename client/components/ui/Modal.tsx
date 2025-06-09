@@ -3,25 +3,50 @@
 import React, { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
-import { useOutsideClick } from '@/hooks/use-outside-click'
 
 interface ModalProps {
   isOpen: boolean
-  onClose: () => void
+  onClose?: () => void
   children: React.ReactNode
   title?: string
   description?: string
+  className?: string
+  showCloseButton?: boolean
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title, description }) => {
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  description,
+  className,
+  showCloseButton = true,
+  children,
+}: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
 
-  useOutsideClick(modalRef, onClose)
+  // Only use outside click if onClose is provided
+  useEffect(() => {
+    if (!onClose || !modalRef.current) return;
+    
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [onClose]);
 
   useEffect(() => {
+    if (!onClose) return;
+    
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose()
+        onClose();
       }
     }
     document.addEventListener('keydown', handleEsc)
@@ -49,13 +74,15 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title, 
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             className="relative w-full max-w-sm rounded-3xl border border-stone-200/20 bg-white/80 p-8 shadow-2xl backdrop-blur-2xl dark:border-stone-800/20 dark:bg-stone-900/80"
           >
-            <button
-              onClick={onClose}
-              className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full bg-stone-900/5 text-stone-500 transition-colors hover:bg-stone-900/10 hover:text-stone-800 dark:bg-stone-100/5 dark:text-stone-400 dark:hover:bg-stone-100/10 dark:hover:text-stone-100"
-              aria-label="Close modal"
-            >
-              <X size={20} />
-            </button>
+            {showCloseButton && onClose && (
+              <button
+                onClick={onClose}
+                className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full bg-stone-900/5 text-stone-500 transition-colors hover:bg-stone-900/10 hover:text-stone-800 dark:bg-stone-100/5 dark:text-stone-400 dark:hover:bg-stone-100/10 dark:hover:text-stone-100"
+                aria-label="Close modal"
+              >
+                <X size={20} />
+              </button>
+            )}
             <div className="flex flex-col gap-6">
               {(title || description) && (
                 <div className="flex flex-col gap-2 text-center">

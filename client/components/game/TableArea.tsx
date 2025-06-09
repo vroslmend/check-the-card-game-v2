@@ -3,49 +3,34 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { GamePhase, PlayerActionType, SocketEventName } from 'shared-types';
-import { useGameStore } from '@/store/gameStore';
+import { useUI } from '@/components/providers/uiMachineProvider';
 import { DeckCard } from '@/components/cards/DeckCard';
 
 export const TableArea = () => {
-  const deckSize = useGameStore((state) => state.currentGameState?.deckSize ?? 0);
-  const discardPile = useGameStore((state) => state.currentGameState?.discardPile ?? []);
-  const gamePhase = useGameStore((state) => state.currentGameState?.currentPhase);
-  const currentPlayerId = useGameStore((state) => state.currentGameState?.currentPlayerId);
-  const gameId = useGameStore((state) => state.gameId);
-  const localPlayerId = useGameStore((state) => state.localPlayerId);
-  const emit = useGameStore((state) => state.emit);
+  const [state, send] = useUI();
+
+  const { currentGameState, localPlayerId } = state.context;
+  const { deckSize = 0, discardPile = [], currentPhase, currentPlayerId, players } = currentGameState ?? {};
 
   const isCurrentPlayer = currentPlayerId === localPlayerId;
   const topDiscardCard = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
 
-  const canDrawFromDeck = isCurrentPlayer && gamePhase === 'playPhase';
-  const canDrawFromDiscard = isCurrentPlayer && gamePhase === 'playPhase' && !!topDiscardCard;
+  const canDrawFromDeck = isCurrentPlayer && currentPhase === 'playPhase';
+  const canDrawFromDiscard = isCurrentPlayer && currentPhase === 'playPhase' && !!topDiscardCard;
 
   const handleDeckClick = () => {
-    if (canDrawFromDeck && gameId && localPlayerId) {
-      emit(SocketEventName.PLAYER_ACTION, {
-        gameId,
-        playerId: localPlayerId,
-        type: PlayerActionType.DRAW_FROM_DECK,
-      });
+    if (canDrawFromDeck) {
+      send({ type: 'DRAW_FROM_DECK_CLICKED' });
     }
   };
 
   const handleDiscardClick = () => {
-    if (canDrawFromDiscard && gameId && localPlayerId) {
-      emit(SocketEventName.PLAYER_ACTION, {
-        gameId,
-        playerId: localPlayerId,
-        type: PlayerActionType.DRAW_FROM_DISCARD,
-      });
+    if (canDrawFromDiscard) {
+      send({ type: 'DRAW_FROM_DISCARD_CLICKED' });
     }
   };
 
-  const currentPlayerName = useGameStore((state) => {
-    if (!state.currentGameState || !state.currentGameState.currentPlayerId) return 'Unknown Player';
-    return state.currentGameState.players[state.currentGameState.currentPlayerId]?.name ?? '...';
-  });
+  const currentPlayerName = players && currentPlayerId ? players[currentPlayerId]?.name : '...';
 
   return (
     <Card className="h-full bg-card/50">
@@ -76,7 +61,7 @@ export const TableArea = () => {
               It's <span className="font-bold">{currentPlayerName}'s</span> turn
             </p>
             <p className="text-xs text-muted-foreground capitalize">
-              {gamePhase?.replace(/([A-Z])/g, ' $1').trim() ?? 'Loading...'}
+              {currentPhase?.replace(/([A-Z])/g, ' $1').trim() ?? 'Loading...'}
             </p>
           </Card>
         </motion.div>

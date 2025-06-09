@@ -3,7 +3,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { ClientCard, Card as CardType } from 'shared-types';
-import { PlayingCard } from './PlayingCard';
+import { PlayingCard } from './BasicCardRenderer';
 
 // Type guard to check if a card is a face-up card
 function isFaceUpCard(card: ClientCard | null | undefined): card is CardType {

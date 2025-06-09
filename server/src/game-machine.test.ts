@@ -158,13 +158,13 @@ describe('gameMachine', () => {
         if (snapshot.value === 'initialPeekPhase') {
           try {
             clearTimeout(timeoutId);
-            // ASSERT: Game state is now in the peek phase
-            expect(snapshot.context.currentPhase).toBe('initialPeekPhase');
-            expect(snapshot.context.players['player-1'].cardsToPeek).toHaveLength(2);
-            expect(snapshot.context.players['player-2'].cardsToPeek).toHaveLength(2);
-            
-            subscription.unsubscribe();
-            resolve();
+          // ASSERT: Game state is now in the peek phase
+          expect(snapshot.context.currentPhase).toBe('initialPeekPhase');
+          expect(snapshot.context.players['player-1'].cardsToPeek).toHaveLength(2);
+          expect(snapshot.context.players['player-2'].cardsToPeek).toHaveLength(2);
+          
+          subscription.unsubscribe();
+          resolve();
           } catch (error) {
             clearTimeout(timeoutId);
             subscription.unsubscribe();

@@ -1,67 +1,60 @@
 'use client';
 
-import React from 'react';
-import { LayoutGroup, motion } from 'framer-motion';
-import { GameHeader } from '@/components/game/GameHeader';
-import { OpponentArea } from '@/components/game/OpponentArea';
-import { TableArea } from '@/components/game/TableArea';
-import { LocalPlayerArea } from '@/components/game/LocalPlayerArea';
-import SidePanel from '@/components/layout/SidePanel';
+import React, { useEffect } from 'react';
+
+import { useUI } from '@/components/providers/uiMachineProvider';
+import { GameBoard } from '@/components/game/GameBoard';
 import { GameLobby } from '@/components/game/GameLobby';
-import { useGameStore } from '@/store/gameStore';
-import { ClientCard, GamePhase } from 'shared-types';
+import LoadingOrError from '@/components/layout/LoadingOrError';
+import { Toaster } from '@/components/ui/sonner';
+import InitialPeek from '@/components/game/InitialPeek';
 
-const GamePage = () => {
-  const gameState = useGameStore((state) => state.currentGameState);
-  const gamePhase: GamePhase | undefined = gameState?.currentPhase;
-  const isLoading = useGameStore((state) => !state.currentGameState || !state.localPlayerId);
-  const gameId = useGameStore((state) => state.gameId);
+import type { GamePhase } from 'shared-types';
 
-  const handleCardClick = (card: ClientCard, index: number) => {
-    console.log(`Card clicked: ${card.id} at index ${index}`);
+export default function GamePage() {
+  const [state, send] = useUI();
+
+  const isDisconnected = state.matches({ socket: 'disconnected' });
+
+  // Use the machine's state to determine what to render.
+  // This is much cleaner and less prone to duplication.
+  const content = () => {
+    if (state.matches({ game: 'uninitialized' }) || state.matches({ game: 'loading' })) {
+      return <LoadingOrError message="Initializing game..." />;
+    }
+    if (state.matches({ game: 'lobby' })) {
+      return <GameLobby />;
+    }
+    if (state.matches({ game: 'initialPeek' })) {
+      return <InitialPeek />;
+    }
+    if (
+      state.matches({ game: 'playing' }) ||
+      state.matches({ game: 'matching' }) ||
+      state.matches({ game: 'abilityResolution' }) ||
+      state.matches({ game: 'gameOver' })
+    ) {
+      return <GameBoard />;
+    }
+    // Fallback loading state
+    return <LoadingOrError message="Entering a new game phase..." />;
   };
 
-  if (isLoading || !gameState) {
+  if (isDisconnected) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-4">
-        <h1 className="text-3xl font-bold">[Loading Game...]</h1>
-        <p className="font-mono text-sm text-muted-foreground mt-2">Game ID: {gameId}</p>
-      </div>
+      <LoadingOrError
+        isError={true}
+        message="You have been disconnected from the server. Please refresh to reconnect."
+      />
     );
   }
 
-  // The lobby is shown when the server is in the 'awaitingPlayers' or 'initialPeekPhase' phase.
-  if (gamePhase && (gamePhase === 'awaitingPlayers' || gamePhase === 'initialPeekPhase')) {
-    return <GameLobby />;
-  }
-  
   return (
-    <LayoutGroup>
-      <div className="flex h-screen flex-col bg-background text-foreground">
-        <GameHeader />
-        <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 flex flex-col p-6 space-y-4">
-            {/* Opponent Area */}
-            <motion.div className="flex-[2]" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-              <OpponentArea />
-            </motion.div>
-
-            {/* Table Area */}
-            <motion.div className="flex-[3]" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, delay: 0.1 }}>
-              <TableArea />
-            </motion.div>
-
-            {/* Local Player Area */}
-            <motion.div className="flex-[4]" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
-              <LocalPlayerArea onCardClick={handleCardClick} />
-            </motion.div>
+    <>
+      <main className="relative flex min-h-screen flex-col items-center justify-center p-4 overflow-hidden">
+        {content()}
       </main>
-
-          <SidePanel />
-        </div>
-    </div>
-    </LayoutGroup>
+      <Toaster richColors />
+    </>
   );
-};
-
-export default GamePage; 
+}

@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import "@/app/globals.css";
 import 'lenis/dist/lenis.css'
-import { UIMachineProvider } from "@/machines/uiMachineProvider";
 import { ThemeProvider } from "next-themes";
 import { Playfair_Display, Inter } from "next/font/google";
 import CustomCursor from '@/components/ui/CustomCursor';
 import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
-import { SocketProvider } from "@/components/providers/SocketProvider";
 import { Toaster } from "@/components/ui/sonner"
 
 const playfair = Playfair_Display({
@@ -40,9 +38,7 @@ export default function RootLayout({
           enableSystem
         >
           <SmoothScrollProvider>
-            <SocketProvider>
-              <UIMachineProvider>{children}</UIMachineProvider>
-            </SocketProvider>
+            {children}
           </SmoothScrollProvider>
           <CustomCursor />
           <Toaster />

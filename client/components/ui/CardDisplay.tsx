@@ -6,15 +6,16 @@ import { useState } from "react"
 import type { Card } from "@/../shared-types"
 
 interface CardProps {
-  card: Card;
-  isSelected?: boolean
-  onClick?: () => void
-  canInteract?: boolean
-  layoutId?: string
-  size?: "sm" | "md" | "lg"
+  card?: Card;
+  isSelected?: boolean;
+  onClick?: () => void;
+  canInteract?: boolean;
+  layoutId?: string;
+  size?: "sm" | "md" | "lg";
+  isFaceDown?: boolean;
 }
 
-export function CardDisplay({ card, isSelected = false, onClick, canInteract = true, layoutId, size = "md" }: CardProps) {
+export function CardDisplay({ card, isSelected = false, onClick, canInteract = true, layoutId, size = "md", isFaceDown = false }: CardProps) {
   const [isHovered, setIsHovered] = useState(false)
 
   const sizeClasses = {
@@ -35,6 +36,26 @@ export function CardDisplay({ card, isSelected = false, onClick, canInteract = t
     diamonds: "text-red-600 dark:text-red-500",
     clubs: "text-stone-900 dark:text-stone-100",
     spades: "text-stone-900 dark:text-stone-100",
+  }
+
+  if (isFaceDown || !card) {
+    return (
+       <motion.div
+        layoutId={layoutId}
+        className={cn(
+          "relative rounded-lg border-2 bg-stone-200 dark:bg-stone-800 border-stone-300 dark:border-stone-700",
+          sizeClasses[size],
+          "flex items-center justify-center p-2"
+        )}
+         style={{
+          transformStyle: "preserve-3d",
+          perspective: "1000px",
+        }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-stone-400/20 to-transparent dark:from-stone-600/20" />
+        <div className="text-stone-500 dark:text-stone-400 font-bold text-lg">?</div>
+      </motion.div>
+    )
   }
 
   return (

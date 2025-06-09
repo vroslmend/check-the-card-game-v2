@@ -1,4 +1,4 @@
-import { setup, assign, sendParent, sendTo, ActorRefFrom, raise, enqueueActions, fromPromise, emit, and } from 'xstate';
+import { setup, assign, sendParent, sendTo, ActorRefFrom, raise, enqueueActions, fromPromise, emit, and, assertEvent } from 'xstate';
 import {
   CheckGameState,
   PlayerState,
@@ -45,7 +45,186 @@ export const gameMachine = setup({
     emitted: {} as GameMachineEmittedEvents,
     input: {} as GameMachineInput,
   },
-  actions: {},
+  actions: {
+    handlePlayerJoin: enqueueActions(({ context, event, enqueue }) => {
+      assertEvent(event, 'PLAYER_JOIN_REQUEST');
+      const { playerSetupData } = event;
+      const { id: playerId, name, socketId } = playerSetupData;
+
+      const newDeck = [...context.deck];
+      // Each player gets 4 cards initially
+      const newPlayerHand = newDeck.splice(0, 4);
+
+      const newPlayer: PlayerState = {
+        name: name || `P-${playerId.slice(-4)}`,
+        socketId: socketId!,
+        hand: newPlayerHand.map(card => ({...card, isFaceDownToOwner: true})),
+        isReadyForInitialPeek: false,
+        hasAcknowledgedPeek: false,
+        hasCalledCheck: false,
+        score: 0,
+        isConnected: true,
+        pendingDrawnCard: null,
+        cardsToPeek: null,
+        forfeited: false,
+        hasCompletedInitialPeek: false,
+        hasUsedInitialPeek: false,
+        isLocked: false,
+        numMatches: 0,
+        numPenalties: 0,
+        peekAcknowledgeDeadline: null,
+        pendingDrawnCardSource: null,
+        pendingSpecialAbility: null,
+      };
+
+      const isFirstPlayer = Object.keys(context.players).length === 0;
+
+      enqueue.assign({
+        deck: newDeck,
+        players: {
+          ...context.players,
+          [playerId]: newPlayer,
+        },
+        turnOrder: [...context.turnOrder, playerId],
+        gameMasterId: isFirstPlayer ? playerId : context.gameMasterId,
+      });
+
+      const nextContext = {
+        ...context,
+        players: { ...context.players, [playerId]: newPlayer },
+      };
+      const playerNameForLog = getPlayerNameForLog(playerId, nextContext);
+
+      enqueue.emit({
+        type: 'EMIT_LOG_PUBLIC',
+        gameId: context.gameId,
+        publicLogData: {
+          message: `${playerNameForLog} joined the game.`,
+          type: 'system',
+          actorId: playerId,
+        },
+      });
+
+      enqueue.emit({ type: 'BROADCAST_GAME_STATE', gameId: context.gameId });
+
+      console.log(`[GameMachine] Player ${playerNameForLog} (${playerId}) joined game ${context.gameId}`);
+    }),
+    handlePlayerDisconnect: enqueueActions(({ context, event, enqueue }) => {
+      assertEvent(event, 'PLAYER_DISCONNECTED');
+      const { playerId } = event;
+
+      if (!context.players[playerId]?.isConnected) {
+        return;
+      }
+
+      const playerName = getPlayerNameForLog(playerId, context);
+      console.log(`[GameMachine] Player ${playerName} disconnected.`);
+
+      enqueue.assign({
+        players: ({ context: currentContext }) => {
+          const player = currentContext.players[playerId];
+          return {
+            ...currentContext.players,
+            [playerId]: { ...player!, isConnected: false },
+          };
+        },
+      });
+
+      enqueue.emit({
+        type: 'EMIT_LOG_PUBLIC',
+        gameId: context.gameId,
+        publicLogData: {
+          message: `${playerName} disconnected.`,
+          type: 'system',
+          actorId: playerId,
+        },
+      });
+
+      enqueue.spawnChild('disconnectGraceTimerActor', {
+        id: `graceTimer_${playerId}`,
+        input: {
+          playerId: playerId,
+          duration: DISCONNECT_GRACE_PERIOD_MS,
+        },
+      });
+    }),
+    handlePlayerReconnect: enqueueActions(({ context, event, enqueue }) => {
+      assertEvent(event, 'PLAYER_RECONNECTED');
+      const { playerId, newSocketId } = event;
+
+      if (!context.players[playerId]) {
+        console.warn(`[GameMachine] Player ${playerId} reconnected but not found in state.`);
+        return;
+      }
+
+      const playerName = getPlayerNameForLog(playerId, context);
+      console.log(`[GameMachine] Player ${playerName} reconnected.`);
+
+      enqueue.assign({
+        players: ({ context: currentContext }) => {
+          const player = currentContext.players[playerId];
+          return {
+            ...currentContext.players,
+            [playerId]: { ...player!, isConnected: true, socketId: newSocketId },
+          };
+        },
+      });
+
+      enqueue.stopChild(`graceTimer_${playerId}`);
+
+      enqueue.emit({
+        type: 'EMIT_LOG_PUBLIC',
+        gameId: context.gameId,
+        publicLogData: {
+          message: `${playerName} reconnected.`,
+          type: 'system',
+          actorId: playerId,
+        },
+      });
+    }),
+    handleGraceTimerExpired: enqueueActions(({ context, event, enqueue }) => {
+      assertEvent(event, 'DISCONNECT_GRACE_TIMER_EXPIRED');
+      const { timedOutGracePlayerId: playerId } = event;
+      const player = context.players[playerId];
+
+      if (!player || player.isConnected) {
+        if (player?.isConnected) {
+          console.log(`[GameMachine] Grace timer expired for ${getPlayerNameForLog(playerId, context)}, but player already reconnected.`);
+        }
+        return;
+      }
+
+      const playerName = getPlayerNameForLog(playerId, context);
+      console.log(`[GameMachine] Grace period expired for ${playerName}. Player forfeited.`);
+
+      enqueue.assign({
+        turnOrder: context.turnOrder.filter((pId) => pId !== playerId),
+        players: {
+          ...context.players,
+          [playerId]: {
+            ...player,
+            forfeited: true,
+            isConnected: false,
+            pendingDrawnCard: null,
+            pendingDrawnCardSource: null,
+          },
+        },
+      });
+
+      enqueue.emit({
+        type: 'EMIT_LOG_PUBLIC',
+        gameId: context.gameId,
+        publicLogData: {
+          message: `${playerName}'s disconnection grace period expired. Player has forfeited.`,
+          type: 'system',
+          actorId: playerId,
+        },
+      });
+
+      enqueue.emit({ type: 'BROADCAST_GAME_STATE', gameId: context.gameId });
+      enqueue.raise({ type: '_HANDLE_FORFEITURE_CONSEQUENCES', forfeitedPlayerId: playerId });
+    }),
+  },
   guards: {
     canPlayerJoin: ({ context, event }: { context: GameMachineContext, event: GameMachineEvent }) => {
       if (event.type !== 'PLAYER_JOIN_REQUEST') return false;
@@ -117,7 +296,7 @@ export const gameMachine = setup({
       const player = context.players[event.playerId];
       if (!player || player.hasCalledCheck || player.pendingDrawnCard) return false;
       if (context.pendingAbilities && context.pendingAbilities.some(ab => ab.playerId === event.playerId)) return false;
-      return !context.playerWhoCalledCheck; 
+      return !context.playerWhoCalledCheck;
     },
     isValidMatchAttempt: ({ context, event }: { context: GameMachineContext, event: GameMachineEvent }) => {
       if (event.type !== PlayerActionType.ATTEMPT_MATCH) return false;
@@ -134,7 +313,7 @@ export const gameMachine = setup({
   actors: {
     turnTimerActor: fromPromise(async ({ input }: { input: { playerId: string, duration: number } }) => {
       await new Promise(resolve => setTimeout(resolve, input.duration));
-      return { timedOutPlayerId: input.playerId }; 
+      return { timedOutPlayerId: input.playerId };
     }),
     matchingStageTimerActor: fromPromise(async ({ input }: { input: { duration: number } }) => {
       await new Promise(resolve => setTimeout(resolve, input.duration));
@@ -174,7 +353,7 @@ export const gameMachine = setup({
       totalTurnsInRound: 0,
     lastRegularSwapInfo: null,
     playerTimers: {},
-    currentTurnSegment: null, 
+    currentTurnSegment: null,
     logHistory: [],
       disconnectGraceTimerExpiresAt: undefined,
       matchingStageTimerExpiresAt: undefined,
@@ -182,142 +361,13 @@ export const gameMachine = setup({
     initial: 'awaitingPlayers',
     on: {
       PLAYER_DISCONNECTED: {
-        actions: [
-          enqueueActions(({ context, event, enqueue, check }: { context: GameMachineContext, event: GameMachineEvent, enqueue: any, check: any }) => {
-            const { playerId } = event as Extract<GameMachineEvent, { type: 'PLAYER_DISCONNECTED' }>;
-            const playerPreAssign = context.players[playerId];
-
-            enqueue.assign(({ context: currentContext, event: assignEvent }: { context: GameMachineContext, event: Extract<GameMachineEvent, { type: 'PLAYER_DISCONNECTED'}> }) => {
-              const player = currentContext.players[assignEvent.playerId]; 
-              if (!player || !player.isConnected) {
-                return {}; 
-              }
-              console.log(`[GameMachine] Player ${getPlayerNameForLog(assignEvent.playerId, currentContext)} disconnected (processing assign).`);
-              return {
-                players: { 
-                  ...currentContext.players, 
-                  [assignEvent.playerId]: { ...player, isConnected: false } 
-                },
-              };
-            });
-
-            const playerName = getPlayerNameForLog(playerId, context);
-            enqueue.emit({
-              type: 'EMIT_LOG_PUBLIC',
-              gameId: context.gameId,
-              publicLogData: {
-                message: `${playerName} disconnected.`,
-                type: 'system' as RichGameLogMessage['type'],
-                actorId: playerId
-              }
-            });
-
-            if (playerPreAssign && playerPreAssign.isConnected && check(({ context: currentContext, event: checkEvent }: { context: GameMachineContext, event: Extract<GameMachineEvent, { type: 'PLAYER_DISCONNECTED'}> }) => {
-                const playerPostAssign = currentContext.players[checkEvent.playerId];
-                return playerPostAssign ? !playerPostAssign.isConnected : false;
-            })) {
-              enqueue.spawnChild('disconnectGraceTimerActor', {
-                id: `graceTimer_${playerId}`,
-                input: { 
-                  playerId: playerId,
-                  duration: DISCONNECT_GRACE_PERIOD_MS 
-                }
-              });
-            }
-          })
-        ]
+        actions: 'handlePlayerDisconnect',
       },
       PLAYER_RECONNECTED: {
-        actions: [
-          enqueueActions(({ context, event, enqueue }: { context: GameMachineContext, event: GameMachineEvent, enqueue: any }) => {
-            const { playerId, newSocketId } = event as Extract<GameMachineEvent, { type: 'PLAYER_RECONNECTED' }>;
-            const player = context.players[playerId];
-
-            if (!player) {
-              console.warn(`[GameMachine] Player ${playerId} reconnected but not found in state.`);
-              return;
-            }
-
-            enqueue.assign(({ context: currentContext, event: assignEvent }: { context: GameMachineContext, event: Extract<GameMachineEvent, { type: 'PLAYER_RECONNECTED'}> }) => {
-              const p = currentContext.players[assignEvent.playerId];
-              if (!p) return {}; 
-
-              console.log(`[GameMachine] Player ${getPlayerNameForLog(assignEvent.playerId, currentContext)} reconnected.`);
-              return {
-                players: {
-                  ...currentContext.players,
-                  [assignEvent.playerId]: { ...p, isConnected: true, socketId: assignEvent.newSocketId }
-                },
-              };
-            });
-
-            enqueue.stopChild(`graceTimer_${playerId}`);
-            
-            const playerName = getPlayerNameForLog(playerId, context);
-            enqueue.emit({
-              type: 'EMIT_LOG_PUBLIC',
-              gameId: context.gameId,
-              publicLogData: {
-                message: `${playerName} reconnected.`,
-                type: 'system' as RichGameLogMessage['type'],
-                actorId: playerId
-              }
-            });
-          })
-        ]
+        actions: 'handlePlayerReconnect',
       },
       DISCONNECT_GRACE_TIMER_EXPIRED: {
-        actions: [
-          assign(
-            ({ context, event }: { 
-              context: GameMachineContext; 
-              event: Extract<GameMachineEvent, { type: 'DISCONNECT_GRACE_TIMER_EXPIRED'}>
-            }) => {
-              const playerId = event.timedOutGracePlayerId;
-              const player = context.players[playerId];
-
-              if (!player || player.isConnected) {
-                if (player && player.isConnected) {
-                  console.log(`[GameMachine] Grace timer expired for ${getPlayerNameForLog(playerId, context)}, but player already reconnected.`);
-                }
-                return {};
-              }
-              
-              console.log(`[GameMachine] Grace period expired for ${getPlayerNameForLog(playerId, context)}. Player forfeited.`);
-              return {
-                players: {
-                  ...context.players,
-                  [playerId]: { 
-                    ...player, 
-                    forfeited: true, 
-                    isConnected: false, 
-                    pendingDrawnCard: null,
-                    pendingDrawnCardSource: null
-                  }
-                },
-              };
-            }
-          ),
-          enqueueActions(({ context, event, enqueue }: { context: GameMachineContext, event: GameMachineEvent, enqueue: any }) => {
-            const playerId = (event as Extract<GameMachineEvent, { type: 'DISCONNECT_GRACE_TIMER_EXPIRED' }>).timedOutGracePlayerId;
-            const playerStateAfterAssign = context.players[playerId];
-
-            if (playerStateAfterAssign && playerStateAfterAssign.forfeited === true && playerStateAfterAssign.isConnected === false) {
-              const playerName = getPlayerNameForLog(playerId, context);
-              enqueue.emit({
-                type: 'EMIT_LOG_PUBLIC',
-                gameId: context.gameId,
-                publicLogData: {
-                  message: `${playerName}'s disconnection grace period expired. Player has forfeited.`,
-                  type: 'system',
-                  actorId: playerId
-                }
-              });
-              enqueue.emit({ type: 'BROADCAST_GAME_STATE', gameId: context.gameId });
-              enqueue.raise({ type: '_HANDLE_FORFEITURE_CONSEQUENCES', forfeitedPlayerId: playerId });
-            }
-          })
-        ]
+        actions: 'handleGraceTimerExpired',
       },
       [PlayerActionType.REQUEST_PEEK_REVEAL]: {
         actions: enqueueActions(({
@@ -330,7 +380,7 @@ export const gameMachine = setup({
           const pendingAbility = context.pendingAbilities.find(pa => pa.playerId === event.playerId && (pa.card.rank === Rank.King || pa.card.rank === Rank.Queen) && pa.currentAbilityStage === 'peek');
           if (!pendingAbility) {
             console.warn('[GameMachine] REQUEST_PEEK_REVEAL received but no matching pending peek ability found for player.');
-            return; 
+            return;
           }
 
           for (const target of event.peekTargets) {
@@ -357,15 +407,15 @@ export const gameMachine = setup({
           }
           const peekDetails = summaryParts.join(' and ');
           const logMessage = `${requestingPlayerName} used ${abilityCardRank} to peek at ${peekDetails}.`;
-          
+
           logEventsToEmit.push({
             message: logMessage, type: 'player_action',
-            actorId: event.playerId, 
+            actorId: event.playerId,
             cardContext: `${abilityCardRank} peek`
           });
-          
+
           console.log(`[GameMachine] Player ${requestingPlayerName} revealed peek targets:`, event.peekTargets);
-          
+
           enqueue.assign({
             globalAbilityTargets: event.peekTargets.map((t: { playerID: string; cardIndex: number }) => ({ ...t, type: 'peek' as 'peek' | 'swap' })),
           });
@@ -388,9 +438,9 @@ export const gameMachine = setup({
           enqueue: any;
         }) => {
           console.log(`[GameMachine] Event: RESOLVE_SPECIAL_ABILITY, Player: ${event.playerId}, Args:`, event.abilityResolutionArgs);
-          
+
           const logEventsToEmit: Array<Omit<RichGameLogMessage, 'timestamp' | 'logId' | 'isPublic' | 'recipientPlayerId'> & { actorId?: string, cardContext?: string, targetName?: string }> = [];
-          
+
           let playersToAssign = { ...context.players };
           let pendingAbilitiesToAssign = [...context.pendingAbilities];
           let globalAbilityTargetsToAssign = context.globalAbilityTargets;
@@ -412,8 +462,8 @@ export const gameMachine = setup({
             } else {
               resolvedNextPhase = 'playPhase';
             }
-            enqueue.assign({ 
-                currentPhase: resolvedNextPhase, 
+            enqueue.assign({
+                currentPhase: resolvedNextPhase,
                 playerWhoCalledCheck: resolvedPlayerWhoCalledCheck,
                 matchResolvedDetails: null,
                 globalAbilityTargets: null,
@@ -430,13 +480,13 @@ export const gameMachine = setup({
           const player = playersToAssign[event.playerId];
           if (!player) {
             console.error('[GameMachine-ResolveAbility] Player not found in context!');
-            pendingAbilitiesToAssign.shift(); 
+            pendingAbilitiesToAssign.shift();
             let resolvedNextPhase: GamePhase;
             let resolvedPlayerWhoCalledCheck = context.playerWhoCalledCheck;
             let resolvedMatchDetails = context.matchResolvedDetails;
-            if (pendingAbilitiesToAssign.length > 0) { resolvedNextPhase = 'abilityResolutionPhase'; } 
+            if (pendingAbilitiesToAssign.length > 0) { resolvedNextPhase = 'abilityResolutionPhase'; }
             else if (resolvedMatchDetails?.isAutoCheck) { resolvedNextPhase = 'finalTurnsPhase'; if (!resolvedPlayerWhoCalledCheck) { resolvedPlayerWhoCalledCheck = resolvedMatchDetails.byPlayerId; } resolvedMatchDetails = null;}
-            else if (resolvedPlayerWhoCalledCheck) { resolvedNextPhase = 'finalTurnsPhase'; resolvedMatchDetails = null; } 
+            else if (resolvedPlayerWhoCalledCheck) { resolvedNextPhase = 'finalTurnsPhase'; resolvedMatchDetails = null; }
             else { resolvedNextPhase = 'playPhase'; resolvedMatchDetails = null; }
             enqueue.assign({ pendingAbilities: pendingAbilitiesToAssign, currentPhase: resolvedNextPhase, playerWhoCalledCheck: resolvedPlayerWhoCalledCheck, matchResolvedDetails: resolvedMatchDetails, globalAbilityTargets: null });
             return;
@@ -445,27 +495,27 @@ export const gameMachine = setup({
           if (player.isLocked) {
             const fizzleMsg = `${getPlayerNameForLog(event.playerId, context)}'s ${pendingAbility.card.rank} ability fizzled (player locked).`;
             logEventsToEmit.push({ message: fizzleMsg, type: 'game_event', actorId: event.playerId });
-            
+
             lastResolvedAbilityCardToAssign = pendingAbility.card;
             lastResolvedAbilitySourceToAssign = pendingAbility.source;
             lastPlayerToResolveAbilityToAssign = pendingAbility.playerId;
-            pendingAbilitiesToAssign.shift(); 
+            pendingAbilitiesToAssign.shift();
             globalAbilityTargetsToAssign = null;
-            
+
             let resolvedNextPhase: GamePhase;
             let resolvedPlayerWhoCalledCheck = context.playerWhoCalledCheck;
             let resolvedMatchDetails = context.matchResolvedDetails;
-            if (pendingAbilitiesToAssign.length > 0) { resolvedNextPhase = 'abilityResolutionPhase'; } 
+            if (pendingAbilitiesToAssign.length > 0) { resolvedNextPhase = 'abilityResolutionPhase'; }
             else if (resolvedMatchDetails?.isAutoCheck) { resolvedNextPhase = 'finalTurnsPhase'; if (!resolvedPlayerWhoCalledCheck) { resolvedPlayerWhoCalledCheck = resolvedMatchDetails.byPlayerId; } resolvedMatchDetails = null;}
-            else if (resolvedPlayerWhoCalledCheck) { resolvedNextPhase = 'finalTurnsPhase'; resolvedMatchDetails = null; } 
+            else if (resolvedPlayerWhoCalledCheck) { resolvedNextPhase = 'finalTurnsPhase'; resolvedMatchDetails = null; }
             else { resolvedNextPhase = 'playPhase'; resolvedMatchDetails = null; }
-            
-            enqueue.assign({ 
-              pendingAbilities: pendingAbilitiesToAssign, 
-              currentPhase: resolvedNextPhase, 
-              globalAbilityTargets: globalAbilityTargetsToAssign, 
-              lastResolvedAbilityCardForCleanup: lastResolvedAbilityCardToAssign, 
-              lastResolvedAbilitySource: lastResolvedAbilitySourceToAssign, 
+
+            enqueue.assign({
+              pendingAbilities: pendingAbilitiesToAssign,
+              currentPhase: resolvedNextPhase,
+              globalAbilityTargets: globalAbilityTargetsToAssign,
+              lastResolvedAbilityCardForCleanup: lastResolvedAbilityCardToAssign,
+              lastResolvedAbilitySource: lastResolvedAbilitySourceToAssign,
               lastPlayerToResolveAbility: lastPlayerToResolveAbilityToAssign,
               playerWhoCalledCheck: resolvedPlayerWhoCalledCheck,
               matchResolvedDetails: resolvedMatchDetails,
@@ -484,10 +534,10 @@ export const gameMachine = setup({
 
             if (skipType === 'peek' && (abilityRank === Rank.King || abilityRank === Rank.Queen) && pendingAbility.currentAbilityStage === 'peek') {
               pendingAbilitiesToAssign[0].currentAbilityStage = 'swap';
-              globalAbilityTargetsToAssign = null; 
-              enqueue.assign({ 
-                  pendingAbilities: pendingAbilitiesToAssign, 
-                  currentPhase: 'abilityResolutionPhase', 
+              globalAbilityTargetsToAssign = null;
+              enqueue.assign({
+                  pendingAbilities: pendingAbilitiesToAssign,
+                  currentPhase: 'abilityResolutionPhase',
                   globalAbilityTargets: globalAbilityTargetsToAssign,
               });
             } else {
@@ -495,7 +545,7 @@ export const gameMachine = setup({
               lastResolvedAbilitySourceToAssign = pendingAbility.source;
               lastPlayerToResolveAbilityToAssign = pendingAbility.playerId;
               const skippedAbilitySource = pendingAbility.source;
-              pendingAbilitiesToAssign.shift(); 
+              pendingAbilitiesToAssign.shift();
               globalAbilityTargetsToAssign = null;
               if (skippedAbilitySource === 'discard' || skippedAbilitySource === 'stackSecondOfPair') {
                 if (matchingOpportunityInfoToAssign && matchingOpportunityInfoToAssign.cardToMatch.id === lastResolvedAbilityCardToAssign?.id) {
@@ -505,18 +555,18 @@ export const gameMachine = setup({
               let resolvedNextPhase: GamePhase;
               let resolvedPlayerWhoCalledCheck = context.playerWhoCalledCheck;
               let resolvedMatchDetails = context.matchResolvedDetails;
-              if (pendingAbilitiesToAssign.length > 0) { resolvedNextPhase = 'abilityResolutionPhase'; } 
+              if (pendingAbilitiesToAssign.length > 0) { resolvedNextPhase = 'abilityResolutionPhase'; }
               else if (resolvedMatchDetails?.isAutoCheck) { resolvedNextPhase = 'finalTurnsPhase'; if (!resolvedPlayerWhoCalledCheck) { resolvedPlayerWhoCalledCheck = resolvedMatchDetails.byPlayerId; } resolvedMatchDetails = null;}
-              else if (resolvedPlayerWhoCalledCheck) { resolvedNextPhase = 'finalTurnsPhase'; resolvedMatchDetails = null; } 
+              else if (resolvedPlayerWhoCalledCheck) { resolvedNextPhase = 'finalTurnsPhase'; resolvedMatchDetails = null; }
               else { resolvedNextPhase = 'playPhase'; resolvedMatchDetails = null; }
-              
-              enqueue.assign({ 
-                  pendingAbilities: pendingAbilitiesToAssign, 
-                  currentPhase: resolvedNextPhase, 
-                  globalAbilityTargets: globalAbilityTargetsToAssign, 
-                  lastResolvedAbilityCardForCleanup: lastResolvedAbilityCardToAssign, 
-                  lastResolvedAbilitySource: lastResolvedAbilitySourceToAssign, 
-                  lastPlayerToResolveAbility: lastPlayerToResolveAbilityToAssign, 
+
+              enqueue.assign({
+                  pendingAbilities: pendingAbilitiesToAssign,
+                  currentPhase: resolvedNextPhase,
+                  globalAbilityTargets: globalAbilityTargetsToAssign,
+                  lastResolvedAbilityCardForCleanup: lastResolvedAbilityCardToAssign,
+                  lastResolvedAbilitySource: lastResolvedAbilitySourceToAssign,
+                  lastPlayerToResolveAbility: lastPlayerToResolveAbilityToAssign,
                   matchingOpportunityInfo: matchingOpportunityInfoToAssign,
                   playerWhoCalledCheck: resolvedPlayerWhoCalledCheck,
                   matchResolvedDetails: resolvedMatchDetails,
@@ -530,19 +580,19 @@ export const gameMachine = setup({
             pendingAbilitiesToAssign[0].currentAbilityStage = 'swap';
             const logMsg = `${getPlayerNameForLog(event.playerId, context)} confirmed ${abilityRank} peek. Ready for swap.`;
             logEventsToEmit.push({ message: logMsg, type: 'game_event', actorId: event.playerId });
-            
-            enqueue.assign({ 
-                pendingAbilities: pendingAbilitiesToAssign, 
-                currentPhase: 'abilityResolutionPhase', 
+
+            enqueue.assign({
+                pendingAbilities: pendingAbilitiesToAssign,
+                currentPhase: 'abilityResolutionPhase',
             });
             for (const logData of logEventsToEmit) { enqueue.emit({ type: 'EMIT_LOG_PUBLIC', gameId: context.gameId, publicLogData: logData }); }
-            return; 
+            return;
           }
 
           if (pendingAbility.currentAbilityStage === 'swap' || abilityRank === Rank.Jack) {
             if (!args.swapTargets || !Array.isArray(args.swapTargets) || args.swapTargets.length !== 2) {
-                console.warn('[GameMachine-ResolveAbility] Swap targets issue: Missing, not an array, or incorrect number of targets.'); 
-                return; 
+                console.warn('[GameMachine-ResolveAbility] Swap targets issue: Missing, not an array, or incorrect number of targets.');
+                return;
             }
 
             for (const target of args.swapTargets) {
@@ -550,7 +600,7 @@ export const gameMachine = setup({
                 console.warn(`[GameMachine-ResolveAbility] Swap target invalid: Malformed target object ${JSON.stringify(target)}.`);
                 return;
               }
-              const targetPlayer = playersToAssign[target.playerID]; 
+              const targetPlayer = playersToAssign[target.playerID];
               if (!targetPlayer) {
                   console.warn(`[GameMachine-ResolveAbility] Swap target invalid: Player ${target.playerID} not found.`);
                   return;
@@ -579,8 +629,8 @@ export const gameMachine = setup({
             lastResolvedAbilityCardToAssign = pendingAbility.card;
             lastResolvedAbilitySourceToAssign = pendingAbility.source;
             lastPlayerToResolveAbilityToAssign = pendingAbility.playerId;
-            const resolvedAbilitySource = pendingAbility.source; 
-            pendingAbilitiesToAssign.shift(); 
+            const resolvedAbilitySource = pendingAbility.source;
+            pendingAbilitiesToAssign.shift();
 
             if (resolvedAbilitySource === 'discard' || resolvedAbilitySource === 'stackSecondOfPair') {
               if (matchingOpportunityInfoToAssign && matchingOpportunityInfoToAssign.cardToMatch.id === lastResolvedAbilityCardToAssign?.id) {
@@ -589,8 +639,8 @@ export const gameMachine = setup({
             }
 
             let finalNextPhaseToAssign: GamePhase;
-            let finalPlayerWhoCalledCheckToAssign = context.playerWhoCalledCheck; 
-            let finalMatchDetailsToAssign = context.matchResolvedDetails;       
+            let finalPlayerWhoCalledCheckToAssign = context.playerWhoCalledCheck;
+            let finalMatchDetailsToAssign = context.matchResolvedDetails;
             const logEventsForPhaseTransition: Array<Omit<RichGameLogMessage, 'timestamp' | 'logId' | 'isPublic' | 'recipientPlayerId'> & { actorId?: string }> = [];
 
             if (pendingAbilitiesToAssign.length > 0) {
@@ -598,45 +648,45 @@ export const gameMachine = setup({
             } else {
                 if (finalMatchDetailsToAssign?.isAutoCheck) {
                     finalNextPhaseToAssign = 'finalTurnsPhase';
-                    if (!finalPlayerWhoCalledCheckToAssign) { 
+                    if (!finalPlayerWhoCalledCheckToAssign) {
                         finalPlayerWhoCalledCheckToAssign = finalMatchDetailsToAssign.byPlayerId;
                     }
                     logEventsForPhaseTransition.push({ message: `Auto-check by ${getPlayerNameForLog(finalMatchDetailsToAssign.byPlayerId, context)} processed after abilities. Transitioning to final turns.`, type: 'game_event' });
-                } else if (finalPlayerWhoCalledCheckToAssign) { 
+                } else if (finalPlayerWhoCalledCheckToAssign) {
                     finalNextPhaseToAssign = 'finalTurnsPhase';
                     logEventsForPhaseTransition.push({ message: `Abilities resolved. Continuing final turns.`, type: 'game_event' });
-                } else { 
+                } else {
                     finalNextPhaseToAssign = 'playPhase';
                     logEventsForPhaseTransition.push({ message: `Abilities resolved. Transitioning to play phase.`, type: 'game_event' });
                 }
                 finalMatchDetailsToAssign = null;
-                globalAbilityTargetsToAssign = null; 
+                globalAbilityTargetsToAssign = null;
             }
-            
+
             enqueue.assign({
               players: playersToAssign,
               pendingAbilities: pendingAbilitiesToAssign,
-              currentPhase: finalNextPhaseToAssign, 
-              globalAbilityTargets: globalAbilityTargetsToAssign, 
+              currentPhase: finalNextPhaseToAssign,
+              globalAbilityTargets: globalAbilityTargetsToAssign,
               lastResolvedAbilityCardForCleanup: lastResolvedAbilityCardToAssign,
               lastResolvedAbilitySource: lastResolvedAbilitySourceToAssign,
               lastPlayerToResolveAbility: lastPlayerToResolveAbilityToAssign,
               matchingOpportunityInfo: matchingOpportunityInfoToAssign,
-              playerWhoCalledCheck: finalPlayerWhoCalledCheckToAssign, 
-              matchResolvedDetails: finalMatchDetailsToAssign,       
+              playerWhoCalledCheck: finalPlayerWhoCalledCheckToAssign,
+              matchResolvedDetails: finalMatchDetailsToAssign,
             });
-            
+
             for (const logData of logEventsToEmit) { enqueue.emit({ type: 'EMIT_LOG_PUBLIC', gameId: context.gameId, publicLogData: logData }); }
             for (const logData of logEventsForPhaseTransition) { enqueue.emit({ type: 'EMIT_LOG_PUBLIC', gameId: context.gameId, publicLogData: logData });}
-            return; 
+            return;
           }
 
           console.warn(`[GameMachine-ResolveAbility] Unhandled ability or stage: ${abilityRank}, stage: ${pendingAbility.currentAbilityStage}`);
-          pendingAbilitiesToAssign.shift(); 
+          pendingAbilitiesToAssign.shift();
           let fallbackNextPhase: GamePhase;
           let fallbackPlayerWhoCalledCheck = context.playerWhoCalledCheck;
           let fallbackMatchDetails = context.matchResolvedDetails;
-          let fallbackGlobalAbilityTargets = null; 
+          let fallbackGlobalAbilityTargets = null;
           const fallbackLogEvents: Array<Omit<RichGameLogMessage, 'timestamp' | 'logId' | 'isPublic' | 'recipientPlayerId'>> = [];
 
           if (pendingAbilitiesToAssign.length > 0) {
@@ -653,12 +703,12 @@ export const gameMachine = setup({
                 fallbackNextPhase = 'playPhase';
                 fallbackLogEvents.push({ message: `Abilities resolved (after fallback ability handling). Transitioning to play phase.`, type: 'game_event' });
             }
-            fallbackMatchDetails = null; 
+            fallbackMatchDetails = null;
           }
-          enqueue.assign({ 
-              pendingAbilities: pendingAbilitiesToAssign, 
-              currentPhase: fallbackNextPhase, 
-              globalAbilityTargets: fallbackGlobalAbilityTargets, 
+          enqueue.assign({
+              pendingAbilities: pendingAbilitiesToAssign,
+              currentPhase: fallbackNextPhase,
+              globalAbilityTargets: fallbackGlobalAbilityTargets,
               playerWhoCalledCheck: fallbackPlayerWhoCalledCheck,
               matchResolvedDetails: fallbackMatchDetails,
           });
@@ -682,7 +732,7 @@ export const gameMachine = setup({
             matchResolvedDetails: context.matchResolvedDetails,
           };
 
-          const forfeitedPlayerName = getPlayerNameForLog(forfeitedPlayerId, context); 
+          const forfeitedPlayerName = getPlayerNameForLog(forfeitedPlayerId, context);
           const activeNonForfeitedPlayers = Object.values(context.players).filter(p => p && !p.forfeited).length;
 
           if (activeNonForfeitedPlayers < 2 && newContextValues.currentPhase !== 'scoringPhase' && newContextValues.currentPhase !== 'gameOver') {
@@ -707,11 +757,11 @@ export const gameMachine = setup({
               const skippedAbility = newContextValues.pendingAbilities[0];
               logEventsToEmit.push({ message: `${forfeitedPlayerName} forfeited. Their ${skippedAbility.card.rank} ability is skipped.`, type: 'game_event' });
               newContextValues.pendingAbilities.shift();
-              newContextValues.activePlayers = {}; 
-              newContextValues.currentPlayerId = ''; 
+              newContextValues.activePlayers = {};
+              newContextValues.currentPlayerId = '';
               newContextValues.currentTurnSegment = null;
               changesMade = true;
-              newContextValues.currentPhase = 'abilityResolutionPhase'; 
+              newContextValues.currentPhase = 'abilityResolutionPhase';
             }
           }
 
@@ -724,7 +774,7 @@ export const gameMachine = setup({
             if (newContextValues.currentTurnSegment !== context.currentTurnSegment) assignments.currentTurnSegment = newContextValues.currentTurnSegment;
             if (newContextValues.playerWhoCalledCheck !== context.playerWhoCalledCheck) assignments.playerWhoCalledCheck = newContextValues.playerWhoCalledCheck;
             if (newContextValues.matchResolvedDetails !== context.matchResolvedDetails) assignments.matchResolvedDetails = newContextValues.matchResolvedDetails;
-            
+
             if (Object.keys(assignments).length > 0) {
               enqueue.assign(assignments);
             }
@@ -743,68 +793,11 @@ export const gameMachine = setup({
     },
   states: {
     awaitingPlayers: {
+      tags: ['INITIALIZATION_COMPLETED'],
       on: {
         PLAYER_JOIN_REQUEST: {
           guard: 'canPlayerJoin',
-          actions: [
-            assign(
-              ({ context, event }: {
-                context: GameMachineContext;
-                event: Extract<GameMachineEvent, { type: 'PLAYER_JOIN_REQUEST' }>;
-              }) => {
-                const { playerSetupData } = event;
-                const newPlayerId = playerSetupData.id;
-                const newDeck = [...context.deck];
-                const newPlayerHand = newDeck.splice(0, 4).map((card: Card) => ({ ...card, isFaceDownToOwner: true }));
-
-                const newPlayer: PlayerState = {
-                  hand: newPlayerHand,
-                  isReadyForInitialPeek: false,
-                hasUsedInitialPeek: false,
-                hasCompletedInitialPeek: false,
-                cardsToPeek: null,
-                peekAcknowledgeDeadline: null,
-                pendingDrawnCard: null,
-                pendingDrawnCardSource: null,
-                pendingSpecialAbility: null,
-                hasCalledCheck: false,
-                isLocked: false,
-                score: 0,
-                  name: playerSetupData.name,
-                  isConnected: true,
-                  socketId: playerSetupData.socketId!,
-                forfeited: false,
-                numMatches: 0,
-                numPenalties: 0,
-              };
-
-                const newPlayers = { ...context.players, [newPlayerId]: newPlayer };
-                const newTurnOrder = [...context.turnOrder, newPlayerId];
-                const newGameMasterId = context.gameMasterId || newPlayerId;
-
-            return {
-                  ...context,
-                  deck: newDeck,
-                  players: newPlayers,
-                  turnOrder: newTurnOrder,
-                  gameMasterId: newGameMasterId,
-                };
-              }
-            ),
-            enqueueActions(({ context, event, enqueue }: { context: GameMachineContext, event: GameMachineEvent, enqueue: any }) => {
-              const joinEvent = event as Extract<GameMachineEvent, { type: 'PLAYER_JOIN_REQUEST' }>;
-              const playerName = joinEvent.playerSetupData.name || `P-${joinEvent.playerSetupData.id.slice(-4)}`;
-              enqueue.emit({
-                type: 'EMIT_LOG_PUBLIC',
-                gameId: context.gameId,
-                publicLogData: {
-                  message: `${playerName} joined the game. Waiting for players to get ready...`,
-                type: 'game_event',
-                }
-              });
-              enqueue.emit({ type: 'BROADCAST_GAME_STATE', gameId: context.gameId });
-            })
-          ]
+          actions: 'handlePlayerJoin',
         },
         [PlayerActionType.DECLARE_READY_FOR_PEEK]: {
           target: 'updateAndCheckReady',
@@ -927,6 +920,29 @@ export const gameMachine = setup({
             })
           ]
         },
+        [PlayerActionType.ACKNOWLEDGE_PEEK]: {
+          actions: assign({
+            players: ({ context, event }) => {
+              const player = context.players[event.playerId];
+              if (!player) return context.players;
+              return {
+                ...context.players,
+                [event.playerId]: {
+                  ...player,
+                  hasAcknowledgedPeek: true,
+                },
+              };
+            },
+          }),
+        },
+      },
+      always: {
+        guard: ({ context }) => {
+          return context.turnOrder.every(
+            (pid) => context.players[pid]?.forfeited || context.players[pid]?.hasAcknowledgedPeek
+          );
+        },
+        target: 'playPhase',
       },
     },
     playPhase: {
@@ -950,17 +966,17 @@ export const gameMachine = setup({
                   };
                 }
 
-                const playerIsInvalidOrPhaseChanging = 
-                  !context.currentPlayerId || 
-                  !context.players[context.currentPlayerId] || 
-                  context.players[context.currentPlayerId].isLocked || 
+                const playerIsInvalidOrPhaseChanging =
+                  !context.currentPlayerId ||
+                  !context.players[context.currentPlayerId] ||
+                  context.players[context.currentPlayerId].isLocked ||
                   context.players[context.currentPlayerId].forfeited ||
                   context.currentPhase !== 'playPhase';
 
                 if (playerIsInvalidOrPhaseChanging) {
-                   currentPlayerIndex = -1; 
+                   currentPlayerIndex = -1;
                 }
-                
+
                 do {
                   currentPlayerIndex = (currentPlayerIndex + 1) % context.turnOrder.length;
                   const potentialNextPlayerId = context.turnOrder[currentPlayerIndex];
@@ -972,7 +988,7 @@ export const gameMachine = setup({
                   attempts++;
                 } while (attempts < context.turnOrder.length);
 
-                if (!nextPlayerId) { 
+                if (!nextPlayerId) {
                   return {
                     currentPlayerId: '',
                     globalAbilityTargets: null,
@@ -983,7 +999,7 @@ export const gameMachine = setup({
                     lastPlayerToResolveAbility: null,
                   };
                 }
-                
+
                 let newTotalTurnsInRound = context.totalTurnsInRound;
                 if (context.currentPlayerId !== nextPlayerId && !context.playerWhoCalledCheck) {
                     newTotalTurnsInRound++;
@@ -1004,13 +1020,13 @@ export const gameMachine = setup({
                 };
               }),
               always: [
-                { 
+                {
                   target: 'playerTurn',
                   guard: ({context}: { context: GameMachineContext }) => context.currentPlayerId !== '',
                   actions: assign({ currentPhase: 'playPhase' as GamePhase })
                 },
-                { 
-                  target: '#checkGame.scoringPhase', 
+                {
+                  target: '#checkGame.scoringPhase',
                   actions: [
                     assign({ currentPhase: 'scoringPhase' as GamePhase }),
                     enqueueActions(({ context, enqueue }: { context: GameMachineContext, enqueue: any }) => {
@@ -1018,8 +1034,8 @@ export const gameMachine = setup({
                         type: 'EMIT_LOG_PUBLIC',
                         gameId: context.gameId,
                         publicLogData: {
-                          message: "Stalemate: No valid player available. Proceeding to scoring.", 
-                          type: 'game_event' 
+                          message: "Stalemate: No valid player available. Proceeding to scoring.",
+                          type: 'game_event'
                         }
                       });
                     })
@@ -1031,11 +1047,11 @@ export const gameMachine = setup({
               invoke: {
                 id: 'turnTimer',
                 src: 'turnTimerActor',
-                input: ({ context }: { context: GameMachineContext }) => ({ 
-                    playerId: context.currentPlayerId, 
-                    duration: TURN_DURATION_MS 
+                input: ({ context }: { context: GameMachineContext }) => ({
+                    playerId: context.currentPlayerId,
+                    duration: TURN_DURATION_MS
                 }),
-                onDone: { 
+                onDone: {
                   target: '.handleTimeout'
                 }
               },
@@ -1052,18 +1068,18 @@ export const gameMachine = setup({
                       ]),
                       actions: [
                         assign(
-                          ({ context, event }: { 
-                            context: GameMachineContext; 
+                          ({ context, event }: {
+                            context: GameMachineContext;
                             event: Extract<GameMachineEvent, { type: PlayerActionType.DRAW_FROM_DECK }>;
                           }) => {
                         const player = context.players[event.playerId];
                             const newDeck = [...context.deck];
                             const cardDrawn = newDeck.pop()!;
                             const updatedPlayer = { ...player!, pendingDrawnCard: cardDrawn, pendingDrawnCardSource: 'deck' as const };
-                            
-            
-                            return { 
-                              players: { ...context.players, [event.playerId]: updatedPlayer }, 
+
+
+                            return {
+                              players: { ...context.players, [event.playerId]: updatedPlayer },
                               deck: newDeck
                             };
                           }
@@ -1072,7 +1088,7 @@ export const gameMachine = setup({
                           const drawEvent = event as Extract<GameMachineEvent, { type: PlayerActionType.DRAW_FROM_DECK }>;
                           const player = context.players[drawEvent.playerId];
                           const cardDrawn = player?.pendingDrawnCard;
-            
+
                           if (player && cardDrawn) {
                             const playerName = getPlayerNameForLog(drawEvent.playerId, context);
                             enqueue.emit({
@@ -1103,22 +1119,22 @@ export const gameMachine = setup({
                       target: 'awaitingPostDrawAction',
                       guard: and([
                           { type: 'canPerformInitialDrawAction' },
-                          { type: 'discardIsDrawable' } 
+                          { type: 'discardIsDrawable' }
                       ]),
                       actions: [
                         assign((
-                          { context, event }: { 
-                            context: GameMachineContext; 
+                          { context, event }: {
+                            context: GameMachineContext;
                             event: Extract<GameMachineEvent, { type: PlayerActionType.DRAW_FROM_DISCARD }>;
                           }) => {
                             const player = context.players[event.playerId];
                             const newDiscardPile = [...context.discardPile];
                             const cardDrawn = newDiscardPile.shift()!;
                             const updatedPlayer = { ...player!, pendingDrawnCard: cardDrawn, pendingDrawnCardSource: 'discard' as const };
-                            
-            
-                            return { 
-                              players: { ...context.players, [event.playerId]: updatedPlayer }, 
+
+
+                            return {
+                              players: { ...context.players, [event.playerId]: updatedPlayer },
                               discardPile: newDiscardPile
                             };
                           }
@@ -1127,7 +1143,7 @@ export const gameMachine = setup({
                           const drawEvent = event as Extract<GameMachineEvent, { type: PlayerActionType.DRAW_FROM_DISCARD }>;
                           const player = context.players[drawEvent.playerId];
                           const cardDrawn = player?.pendingDrawnCard;
-            
+
                           if (player && cardDrawn) {
                             const playerName = getPlayerNameForLog(drawEvent.playerId, context);
                             enqueue.emit({
@@ -1149,8 +1165,8 @@ export const gameMachine = setup({
                         guard: { type: 'isValidCallCheck' },
                         actions: [
                           assign(
-                            ({ context, event }: { 
-                              context: GameMachineContext; 
+                            ({ context, event }: {
+                              context: GameMachineContext;
                               event: Extract<GameMachineEvent, { type: PlayerActionType.CALL_CHECK }>;
                             }) => {
                             const player = context.players[event.playerId];
@@ -1159,9 +1175,9 @@ export const gameMachine = setup({
                             if (!context.playerWhoCalledCheck) {
                                 newPlayerWhoCalledCheck = event.playerId;
                             }
-                            
-                            
-                            return { 
+
+
+                            return {
                               players: { ...context.players, [event.playerId]: updatedPlayer },
                               playerWhoCalledCheck: newPlayerWhoCalledCheck,
                               finalTurnsTaken: 0,
@@ -1189,12 +1205,12 @@ export const gameMachine = setup({
                   entry: assign({ currentTurnSegment: 'postDrawAction' as TurnSegment }),
                   on: {
                     [PlayerActionType.SWAP_AND_DISCARD]: {
-                        target: '#checkGame.matchingStage', 
+                        target: '#checkGame.matchingStage',
                         guard: { type: 'isValidSwapAndDiscard' },
                         actions: [
                           assign(
                             ({ context, event }: {
-                              context: GameMachineContext; 
+                              context: GameMachineContext;
                               event: Extract<GameMachineEvent, { type: PlayerActionType.SWAP_AND_DISCARD; handIndex: number }>;
                             }) => {
                     const player = context.players[event.playerId];
@@ -1202,10 +1218,10 @@ export const gameMachine = setup({
                             const cardToPlaceInHand: Card = { ...player!.pendingDrawnCard!, isFaceDownToOwner: true };
                             const cardFromHand = newHand.splice(event.handIndex, 1, cardToPlaceInHand)[0];
                             const updatedPlayer = { ...player!, hand: newHand, pendingDrawnCard: null, pendingDrawnCardSource: null };
-                    
+
                             const newDiscardPile = [cardFromHand, ...context.discardPile];
                             const newLastRegularSwapInfo = { playerId: event.playerId, handIndex: event.handIndex, timestamp: Date.now() };
-                            
+
                             const potentialMatchers = Object.keys(context.players).filter((pId: string) => {
                         const p = context.players[pId];
                         return p && !p.isLocked && !p.hasCalledCheck;
@@ -1215,8 +1231,8 @@ export const gameMachine = setup({
                         acc[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION;
                         return acc;
                     }, {} as { [playerID: string]: PlayerActivityStatus });
-    
-                            return { 
+
+                            return {
                                 players: { ...context.players, [event.playerId]: updatedPlayer },
                                 discardPile: newDiscardPile,
                                 discardPileIsSealed: false,
@@ -1231,14 +1247,14 @@ export const gameMachine = setup({
                             const swapEvent = event as Extract<GameMachineEvent, { type: PlayerActionType.SWAP_AND_DISCARD; handIndex: number }>;
                             const player = context.players[swapEvent.playerId];
                             const playerName = getPlayerNameForLog(swapEvent.playerId, context);
-                            
+
                             const discardedCard = context.discardPile[0];
                             const keptCard = player?.hand[swapEvent.handIndex];
-    
+
                             if (player && discardedCard && keptCard) {
                               const discardedCardStr = `${discardedCard.rank}${discardedCard.suit}`;
                               const keptCardStr = `${keptCard.rank}${keptCard.suit}`;
-    
+
                               enqueue.emit({
                                 type: 'EMIT_LOG_PUBLIC',
                                 gameId: context.gameId,
@@ -1249,7 +1265,7 @@ export const gameMachine = setup({
                                   cardContext: `Discarded ${discardedCardStr}`
                                 }
                               });
-    
+
                               enqueue.emit({
                                 type: 'EMIT_LOG_PRIVATE',
                                 gameId: context.gameId,
@@ -1270,16 +1286,16 @@ export const gameMachine = setup({
                         guard: { type: 'isValidDiscardDrawnCard' },
                         actions: [
                           assign((
-                            { context, event }: { 
-                              context: GameMachineContext; 
+                            { context, event }: {
+                              context: GameMachineContext;
                               event: Extract<GameMachineEvent, { type: PlayerActionType.DISCARD_DRAWN_CARD }>;
                             }) => {
                     const player = context.players[event.playerId];
                             const drawnCardToDiscard = player.pendingDrawnCard!;
                             const updatedPlayer = { ...player, pendingDrawnCard: null, pendingDrawnCardSource: null };
                             const newDiscardPile = [drawnCardToDiscard, ...context.discardPile];
-    
-    
+
+
                             const potentialMatchers = Object.keys(context.players).filter((pId: string) => {
                         const p = context.players[pId];
                         return p && !p.isLocked && !p.hasCalledCheck;
@@ -1289,8 +1305,8 @@ export const gameMachine = setup({
                         acc[pId] = PlayerActivityStatus.AWAITING_MATCH_ACTION;
                         return acc;
                     }, {} as { [playerID: string]: PlayerActivityStatus });
-    
-                            return { 
+
+                            return {
                                 players: { ...context.players, [event.playerId]: updatedPlayer },
                                 discardPile: newDiscardPile,
                                 discardPileIsSealed: false,
@@ -1304,7 +1320,7 @@ export const gameMachine = setup({
                             const discardEvent = event as Extract<GameMachineEvent, { type: PlayerActionType.DISCARD_DRAWN_CARD }>;
                             const playerName = getPlayerNameForLog(discardEvent.playerId, context);
                             const discardedCard = context.discardPile[0];
-    
+
                             if (discardedCard) {
                               const discardedCardStr = `${discardedCard.rank}${discardedCard.suit}`;
                               enqueue.emit({
@@ -1328,9 +1344,9 @@ export const gameMachine = setup({
                       const timedOutPlayerId = event.output?.timedOutPlayerId || context.currentPlayerId;
                       const player = context.players[timedOutPlayerId];
                       const actorNameForLog = getPlayerNameForLog(timedOutPlayerId, context);
-                      
+
                       const logEventsToEmit: Array<Omit<RichGameLogMessage, 'timestamp' | 'logId' | 'isPublic' | 'recipientPlayerId'> & { actorId?: string, cardContext?: string, targetName?: string }> = [];
-      
+
                       let playersToAssign = { ...context.players };
                       let deckToAssign = [...context.deck];
                       let discardPileToAssign = [...context.discardPile];
@@ -1344,9 +1360,9 @@ export const gameMachine = setup({
                       let lastResolvedAbilityCardToAssign = context.lastResolvedAbilityCardForCleanup;
                       let lastResolvedAbilitySourceToAssign = context.lastResolvedAbilitySource;
                       let lastPlayerToResolveAbilityToAssign = context.lastPlayerToResolveAbility;
-      
+
                       let generalTimeoutMessage = `Player ${actorNameForLog} timed out`;
-      
+
                       if (!player && context.currentPhase !== 'abilityResolutionPhase') {
                         logEventsToEmit.push({
                           message: `Critical Error: Timed out player ${timedOutPlayerId} not found.`,
@@ -1356,25 +1372,25 @@ export const gameMachine = setup({
                         for (const logData of logEventsToEmit) { enqueue.emit({ type: 'EMIT_LOG_PUBLIC', gameId: context.gameId, publicLogData: logData }); }
                         return;
                       }
-                      
+
                       if (context.currentPhase === 'abilityResolutionPhase' && pendingAbilitiesToAssign.length > 0) {
                           const pendingAbility = pendingAbilitiesToAssign[0];
                           if (pendingAbility.playerId === timedOutPlayerId) {
                               generalTimeoutMessage = `${actorNameForLog} timed out during ${pendingAbility.card.rank} ability resolution. Ability skipped.`;
-                              
+
                               lastResolvedAbilityCardToAssign = pendingAbility.card;
                               lastResolvedAbilitySourceToAssign = pendingAbility.source;
                               lastPlayerToResolveAbilityToAssign = pendingAbility.playerId;
                               const skippedAbilitySource = pendingAbility.source;
-                              pendingAbilitiesToAssign.shift(); 
-                              globalAbilityTargetsToAssign = null; 
-      
+                              pendingAbilitiesToAssign.shift();
+                              globalAbilityTargetsToAssign = null;
+
                               if (skippedAbilitySource === 'discard' || skippedAbilitySource === 'stackSecondOfPair') {
                                   if (matchingOpportunityInfoToAssign && matchingOpportunityInfoToAssign.cardToMatch.id === lastResolvedAbilityCardToAssign?.id) {
                                       matchingOpportunityInfoToAssign = null;
                                   }
                               }
-                              nextPhaseToAssign = pendingAbilitiesToAssign.length > 0 ? 'abilityResolutionPhase' 
+                              nextPhaseToAssign = pendingAbilitiesToAssign.length > 0 ? 'abilityResolutionPhase'
                                           : (context.playerWhoCalledCheck ? 'finalTurnsPhase' : 'playPhase');
                               nextTurnSegmentToAssign = null;
                           } else {
@@ -1385,21 +1401,21 @@ export const gameMachine = setup({
                       } else if (context.currentTurnSegment === 'initialAction') {
                         generalTimeoutMessage += ' during their initial action. Turn advances.';
                         nextPhaseToAssign = context.playerWhoCalledCheck ? 'finalTurnsPhase' : 'playPhase';
-                        nextTurnSegmentToAssign = null; 
+                        nextTurnSegmentToAssign = null;
                       } else if (context.currentTurnSegment === 'postDrawAction') {
                         generalTimeoutMessage += ' after drawing a card.';
-                        if (playersToAssign[timedOutPlayerId] && playersToAssign[timedOutPlayerId].pendingDrawnCard) { 
+                        if (playersToAssign[timedOutPlayerId] && playersToAssign[timedOutPlayerId].pendingDrawnCard) {
                           const timedOutPlayerState = playersToAssign[timedOutPlayerId];
                           const drawnCard = timedOutPlayerState.pendingDrawnCard!;
                           const drawnCardStr = drawnCard.rank + drawnCard.suit;
                           if (timedOutPlayerState.pendingDrawnCardSource === 'deck') {
-                            logEventsToEmit.push({ 
-                                message: `${actorNameForLog} timed out and their drawn card ${drawnCardStr} was auto-discarded.`, 
-                                type: 'game_event', actorId: timedOutPlayerId, cardContext: drawnCardStr 
+                            logEventsToEmit.push({
+                                message: `${actorNameForLog} timed out and their drawn card ${drawnCardStr} was auto-discarded.`,
+                                type: 'game_event', actorId: timedOutPlayerId, cardContext: drawnCardStr
                             });
                             discardPileToAssign.unshift(drawnCard);
                             playersToAssign[timedOutPlayerId] = { ...timedOutPlayerState, pendingDrawnCard: null, pendingDrawnCardSource: null };
-                            
+
                             if (context.currentPhase === 'finalTurnsPhase') {
                               nextPhaseToAssign = 'matchingStage' as GamePhase;
                               discardPileIsSealedToAssign = false;
@@ -1428,27 +1444,27 @@ export const gameMachine = setup({
                           } else if (timedOutPlayerState.pendingDrawnCardSource === 'discard') {
                             let cardToUseForMatchingAndAbilities: Card | null = null;
                             if (timedOutPlayerState.hand.length > 0) {
-                              const cardFromHand = timedOutPlayerState.hand[0]; 
+                              const cardFromHand = timedOutPlayerState.hand[0];
                               cardToUseForMatchingAndAbilities = cardFromHand;
                               const cardFromHandStr = cardFromHand.rank + cardFromHand.suit;
                               const newHand = [...timedOutPlayerState.hand];
                               newHand.splice(0, 1, drawnCard);
                               discardPileToAssign.unshift(cardFromHand);
                               playersToAssign[timedOutPlayerId] = { ...timedOutPlayerState, hand: newHand, pendingDrawnCard: null, pendingDrawnCardSource: null };
-                              logEventsToEmit.push({ 
-                                  message: `${actorNameForLog} timed out. Card ${drawnCardStr} (from discard) kept, ${cardFromHandStr} from hand auto-discarded.`, 
+                              logEventsToEmit.push({
+                                  message: `${actorNameForLog} timed out. Card ${drawnCardStr} (from discard) kept, ${cardFromHandStr} from hand auto-discarded.`,
                                   type: 'game_event', actorId: timedOutPlayerId, cardContext: `Kept ${drawnCardStr}, Discarded ${cardFromHandStr}`
                               });
                             } else {
                               cardToUseForMatchingAndAbilities = drawnCard;
-                              logEventsToEmit.push({ 
-                                  message: `${actorNameForLog} timed out. Card ${drawnCardStr} (from discard) auto-discarded (hand empty).`, 
+                              logEventsToEmit.push({
+                                  message: `${actorNameForLog} timed out. Card ${drawnCardStr} (from discard) auto-discarded (hand empty).`,
                                   type: 'game_event', actorId: timedOutPlayerId, cardContext: drawnCardStr
                               });
                               discardPileToAssign.unshift(drawnCard);
                               playersToAssign[timedOutPlayerId] = { ...timedOutPlayerState, pendingDrawnCard: null, pendingDrawnCardSource: null };
                             }
-      
+
                             if (context.currentPhase === 'finalTurnsPhase') {
                               nextPhaseToAssign = 'matchingStage' as GamePhase;
                               discardPileIsSealedToAssign = false;
@@ -1485,15 +1501,15 @@ export const gameMachine = setup({
                         nextPhaseToAssign = context.playerWhoCalledCheck ? 'finalTurnsPhase' : (pendingAbilitiesToAssign.length > 0 ? 'abilityResolutionPhase': 'playPhase');
                         nextTurnSegmentToAssign = null;
                       }
-      
+
                       logEventsToEmit.push({
                         message: generalTimeoutMessage, type: 'game_event', actorId: timedOutPlayerId
                       });
-      
+
                       if (nextPhaseToAssign !== 'matchingStage' && nextPhaseToAssign !== 'abilityResolutionPhase') {
-                          activePlayersToAssign = {}; 
+                          activePlayersToAssign = {};
                       }
-      
+
                       enqueue.assign({
                         players: playersToAssign,
                         deck: deckToAssign,
@@ -1501,7 +1517,7 @@ export const gameMachine = setup({
                         matchingOpportunityInfo: matchingOpportunityInfoToAssign,
                         activePlayers: activePlayersToAssign,
                         currentPhase: nextPhaseToAssign,
-                        currentTurnSegment: nextTurnSegmentToAssign, 
+                        currentTurnSegment: nextTurnSegmentToAssign,
                         discardPileIsSealed: discardPileIsSealedToAssign,
                         pendingAbilities: pendingAbilitiesToAssign,
                         globalAbilityTargets: globalAbilityTargetsToAssign,
@@ -1512,11 +1528,11 @@ export const gameMachine = setup({
                           ...context.playerTimers,
                           [timedOutPlayerId]: {
                             ...(context.playerTimers?.[timedOutPlayerId]),
-                            turnTimerExpiresAt: undefined 
+                            turnTimerExpiresAt: undefined
                           }
                         },
                       });
-      
+
                       for (const logData of logEventsToEmit) {
                           enqueue.emit({ type: 'EMIT_LOG_PUBLIC', gameId: context.gameId, publicLogData: logData });
                       }
@@ -1566,16 +1582,16 @@ export const gameMachine = setup({
       on: {
         [PlayerActionType.ATTEMPT_MATCH]: {
             guard: { type: 'isValidMatchAttempt' },
-            actions: enqueueActions(( 
+            actions: enqueueActions((
               { context, event, enqueue }: {
-                context: GameMachineContext; 
+                context: GameMachineContext;
                 event: Extract<GameMachineEvent, { type: PlayerActionType.ATTEMPT_MATCH; handIndex: number }>;
                 enqueue: any;
               }) => {
               const player = context.players[event.playerId];
               const cardToMatch = context.matchingOpportunityInfo!.cardToMatch;
               const cardFromHand = player.hand[event.handIndex];
-              
+
               let playersToAssign = { ...context.players };
               let deckToAssign = [...context.deck];
               let discardPileToAssign = [...context.discardPile];
@@ -1621,12 +1637,12 @@ export const gameMachine = setup({
                   if (cardFromHand.rank === Rank.King || cardFromHand.rank === Rank.Queen) stageForCardY = 'peek';
                   else if (cardFromHand.rank === Rank.Jack) stageForCardY = 'swap';
                   pendingAbilitiesToAssign.push({ playerId: event.playerId, card: cardFromHand, source: 'stack', pairTargetId: matchingOpportunityInfoToAssign!.originalPlayerID, currentAbilityStage: stageForCardY });
-                  
+
                   let stageForCardX: 'peek' | 'swap' | undefined = undefined;
                   if (cardToMatch.rank === Rank.King || cardToMatch.rank === Rank.Queen) stageForCardX = 'peek';
                   else if (cardToMatch.rank === Rank.Jack) stageForCardX = 'swap';
                   pendingAbilitiesToAssign.push({ playerId: matchingOpportunityInfoToAssign!.originalPlayerID, card: cardToMatch, source: 'stackSecondOfPair', pairTargetId: event.playerId, currentAbilityStage: stageForCardX });
-                  
+
                   abilityResolutionRequired = true;
                 }
 
@@ -1642,7 +1658,7 @@ export const gameMachine = setup({
                     finalTurnsTakenToAssign = 0;
                   }
                   autoCheckOccurred = true;
-                  logEventsToEmit.push({ 
+                  logEventsToEmit.push({
                     message: `${getPlayerNameForLog(event.playerId, context)} emptied hand on match. Auto-Check!`,
                     type: 'game_event',
                     actorId: event.playerId
@@ -1650,8 +1666,8 @@ export const gameMachine = setup({
                 }
 
                 matchResolvedDetailsToAssign = { byPlayerId: event.playerId, isAutoCheck: autoCheckOccurred, abilityResolutionRequired };
-                matchingOpportunityInfoToAssign = null; 
-                activePlayersToAssign = {}; 
+                matchingOpportunityInfoToAssign = null;
+                activePlayersToAssign = {};
 
                 if (abilityResolutionRequired) {
                   nextPhaseToAssign = 'abilityResolutionPhase' as GamePhase;
@@ -1688,7 +1704,7 @@ export const gameMachine = setup({
                     nextPhaseToAssign = context.playerWhoCalledCheck ? 'finalTurnsPhase' as GamePhase : 'playPhase' as GamePhase;
                 }
               }
-              
+
               enqueue.assign({
                 players: playersToAssign,
                 deck: deckToAssign,
@@ -1719,7 +1735,7 @@ export const gameMachine = setup({
         [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
           actions: enqueueActions(
             ({ context, event, enqueue }: {
-                context: GameMachineContext; 
+                context: GameMachineContext;
               event: Extract<GameMachineEvent, { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }>;
                 enqueue: any;
               }) => {
@@ -2094,7 +2110,7 @@ export const gameMachine = setup({
       states: {
         deciding: {
           always: [
-            { 
+            {
               target: 'playerTurn',
               guard: ({ context }: { context: GameMachineContext }) => context.pendingAbilities.length > 0,
             },
@@ -2243,6 +2259,7 @@ export const gameMachine = setup({
                             isReadyForInitialPeek: false,
                             hasUsedInitialPeek: false,
                             hasCompletedInitialPeek: false,
+                            hasAcknowledgedPeek: false,
                             cardsToPeek: null,
                             peekAcknowledgeDeadline: null,
                             pendingDrawnCard: null,

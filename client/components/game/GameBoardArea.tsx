@@ -1,6 +1,6 @@
 import React from 'react';
-import { Card } from 'shared-types'; // Changed to alias
-import CardDisplay from '../ui/CardDisplay';
+import { Card, ClientCard, Rank, Suit } from 'shared-types'; // Import Rank and Suit enums
+import { CardDisplay } from '../ui/CardDisplay';
 
 interface GameBoardAreaProps {
   deckSize: number;
@@ -24,6 +24,13 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
   const deckClickableStyle = canDrawFromDeck && onDeckClick ? 'cursor-pointer hover:ring-2 hover:ring-green-500' : 'cursor-not-allowed';
   const discardClickableStyle = canDrawFromDiscard && discardPileTopCard && onDiscardClick ? 'cursor-pointer hover:ring-2 hover:ring-yellow-500' : discardPileTopCard ? '' : 'cursor-not-allowed';
 
+  // Create a card back that matches the expected Card interface
+  const cardBack: Card = {
+    id: 'deck-back',
+    rank: Rank.King, // Using King for back card
+    suit: Suit.Spades // Using Spades for back card
+  };
+
   return (
     <div className={`flex items-center justify-center space-x-8 p-4 bg-gray-200 rounded-lg shadow-inner ${className || ''}`}>
       {/* Deck Area */}
@@ -32,7 +39,7 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
           className={`relative ${deckClickableStyle}`}
           onClick={canDrawFromDeck ? onDeckClick : undefined}
         >
-          <CardDisplay layoutId="deck-back" card={{ id: 'deck-back', isHidden: true }} />
+          <CardDisplay layoutId="deck-back" card={cardBack} />
           {deckSize > 0 && (
             <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full px-2 py-1 shadow-md">
               {deckSize}
@@ -62,4 +69,4 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
   );
 };
 
-export default GameBoardArea; 
+export default GameBoardArea;

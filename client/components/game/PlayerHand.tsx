@@ -1,28 +1,50 @@
-import React from 'react';
-import { ClientCard } from 'shared-types';
-import CardDisplay from '../ui/CardDisplay';
+import React, { useState } from 'react';
+import { ClientCard, Card } from 'shared-types';
+import { CardDisplay } from '../ui/CardDisplay';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface PlayerHandProps {
   hand: ClientCard[];
   onCardClick: (card: ClientCard, index: number) => void;
   localPlayerId: string;
+  isPeeking?: boolean;
 }
 
-const PlayerHand: React.FC<PlayerHandProps> = ({ hand, onCardClick, localPlayerId }) => {
+const PlayerHand: React.FC<PlayerHandProps> = ({ hand, onCardClick, localPlayerId, isPeeking = false }) => {
+  const [revealedIndex, setRevealedIndex] = useState<number | null>(null);
+
+  const handleCardClick = (card: ClientCard, index: number) => {
+    if (isPeeking) return;
+    onCardClick(card, index);
+  };
+
   return (
-    <div className="bg-gray-700 p-4 rounded-lg shadow-lg">
-      <h2 className="text-xl font-bold mb-4">Your Hand</h2>
-      <div className="flex justify-center items-center space-x-2">
+    <div className="flex justify-center items-center space-x-2 p-4 min-h-[150px]">
+      <AnimatePresence>
         {hand.length > 0 ? (
           hand.map((card, index) => (
-            <div key={card.id} onClick={() => onCardClick(card, index)} className="cursor-pointer">
-              <CardDisplay card={card} />
-            </div>
+            <motion.div
+              key={card.id}
+              layout
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -50 }}
+              transition={{ duration: 0.3 }}
+              onClick={() => handleCardClick(card, index)}
+              onMouseEnter={() => isPeeking && setRevealedIndex(index)}
+              onMouseLeave={() => isPeeking && setRevealedIndex(null)}
+              className={!isPeeking ? 'cursor-pointer' : ''}
+            >
+              <CardDisplay
+                card={(card as Card).suit ? (card as Card) : undefined}
+                isFaceDown={isPeeking && revealedIndex !== index}
+              />
+            </motion.div>
           ))
         ) : (
-          <p className="text-gray-400">No cards in hand.</p>
+          <p className="text-muted-foreground">No cards in hand.</p>
         )}
-      </div>
+      </AnimatePresence>
     </div>
   );
 };

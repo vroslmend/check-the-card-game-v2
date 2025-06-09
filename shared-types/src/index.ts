@@ -69,6 +69,7 @@ export interface PlayerState {
   hasUsedInitialPeek: boolean;
   isReadyForInitialPeek: boolean;
   hasCompletedInitialPeek: boolean;
+  hasAcknowledgedPeek: boolean;
   cardsToPeek: Card[] | null;
   peekAcknowledgeDeadline: number | null;
   pendingDrawnCard: Card | null;
@@ -226,6 +227,7 @@ export enum PlayerActionType {
   PASS_ON_MATCH_ATTEMPT = 'passOnMatchAttempt',
   CALL_CHECK = 'callCheck',
   DECLARE_READY_FOR_PEEK = 'declareReadyForPeek',
+  ACKNOWLEDGE_PEEK = 'acknowledgePeek',
   REQUEST_PEEK_REVEAL = 'requestPeekReveal',
   RESOLVE_SPECIAL_ABILITY = 'resolveSpecialAbility',
   RESET_GAME = 'resetGame',
@@ -266,6 +268,7 @@ export interface ClientPlayerState {
   hasUsedInitialPeek: boolean;
   isReadyForInitialPeek: boolean;
   hasCompletedInitialPeek: boolean;
+  hasAcknowledgedPeek: boolean;
   cardsToPeek: Card[] | null;
   peekAcknowledgeDeadline: number | null;
   pendingDrawnCard: ClientCard | null;
@@ -419,3 +422,34 @@ export type GameMachineEmittedEvents =
 // ==================================
 // XState Machine Type Definitions
 // ==================================
+
+// Basic socket response structure
+export interface BasicResponse {
+  success: boolean;
+  message?: string;
+}
+
+// Response for creating a new game
+export interface CreateGameResponse extends BasicResponse {
+  gameId?: string;
+  playerId?: string;
+  gameState?: ClientCheckGameState;
+}
+
+// Response for joining an existing game
+export interface JoinGameResponse extends BasicResponse {
+  gameId?: string;
+  playerId?: string;
+  gameState?: ClientCheckGameState;
+}
+
+// Response for attempting to rejoin a game
+export interface AttemptRejoinResponse extends BasicResponse {
+  gameState?: ClientCheckGameState;
+}
+
+
+// CLIENT-FACING STATE
+// This section defines the shape of the game state as it should be seen by a client.
+// It redacts sensitive information like the full deck and other players' hands.
+// ... existing code ...

@@ -92,6 +92,7 @@ export const generatePlayerView = (
       hasUsedInitialPeek: serverPlayerState.hasUsedInitialPeek,
       isReadyForInitialPeek: serverPlayerState.isReadyForInitialPeek,
       hasCompletedInitialPeek: serverPlayerState.hasCompletedInitialPeek,
+      hasAcknowledgedPeek: serverPlayerState.hasAcknowledgedPeek,
       cardsToPeek: cardsToPeekForClient,
       peekAcknowledgeDeadline: pId === viewingPlayerId ? serverPlayerState.peekAcknowledgeDeadline : null,
 

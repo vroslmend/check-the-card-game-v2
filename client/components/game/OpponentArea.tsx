@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useUI } from '@/components/providers/uiMachineProvider';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
-import { useGameStore } from '@/store/gameStore';
-import { ClientPlayerState } from 'shared-types';
+import { type ClientPlayerState } from 'shared-types';
 
 const OpponentPlayer = ({ player, isCurrent, cardCount }: { player: ClientPlayerState; isCurrent: boolean; cardCount: number }) => {
   return (
@@ -28,11 +28,12 @@ const OpponentPlayer = ({ player, isCurrent, cardCount }: { player: ClientPlayer
 };
 
 export const OpponentArea = () => {
-  const localPlayerId = useGameStore((state) => state.localPlayerId);
-  const players = useGameStore((state) => state.currentGameState?.players ?? {});
-  const currentPlayerId = useGameStore((state) => state.currentGameState?.currentPlayerId);
+  const [state] = useUI();
+  const { localPlayerId, currentGameState } = state.context;
 
-  const opponentPlayers = Object.entries(players)
+  if (!currentGameState) return null;
+
+  const opponentPlayers = Object.entries(currentGameState.players)
     .filter(([id]) => id !== localPlayerId);
 
   return (
@@ -43,7 +44,7 @@ export const OpponentArea = () => {
             <OpponentPlayer
               key={id}
               player={player}
-              isCurrent={id === currentPlayerId}
+              isCurrent={id === currentGameState.currentPlayerId}
               cardCount={player.hand.length} 
             />
           ))}
@@ -51,4 +52,4 @@ export const OpponentArea = () => {
       </CardContent>
     </Card>
   );
-}; 
+};

@@ -1,17 +1,19 @@
 "use client"
 
 import React from 'react';
-import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, MessageSquare, Settings, Users, PanelLeftClose, PanelLeftOpen } from "lucide-react"
-import Link from "next/link"
-import { AnimatePresence } from 'framer-motion';
-import { useGameStore } from '@/store/gameStore';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useUI } from '@/components/providers/uiMachineProvider';
 
 export const GameHeader = () => {
-  const gameId = useGameStore((state) => state.gameId);
-  const isSidePanelOpen = useGameStore((state) => state.isSidePanelOpen);
-  const toggleSidePanel = useGameStore((state) => state.toggleSidePanel);
+  const [state, send] = useUI();
+
+  const { gameId, isSidePanelOpen } = state.context;
+
+  const toggleSidePanel = () => {
+    send({ type: 'TOGGLE_SIDE_PANEL' });
+  };
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b bg-card px-4 md:px-6">
@@ -30,11 +32,11 @@ export const GameHeader = () => {
             transition={{ duration: 0.2 }}
             className="flex items-center justify-center"
           >
-            {isSidePanelOpen ? <PanelLeftClose className="h-5 w-5"/> : <PanelLeftOpen className="h-5 w-5"/>}
+            {isSidePanelOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
           </motion.div>
         </AnimatePresence>
         <span className="sr-only">Toggle side panel</span>
       </Button>
     </header>
-  )
-} 
+  );
+}; 
