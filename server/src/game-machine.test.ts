@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createActor, type Actor } from 'xstate';
 import { gameMachine } from './game-machine.js';
 import { 
@@ -6,7 +6,9 @@ import {
   PlayerActionType, 
   GamePhase,
   Rank,
-  Suit
+  Suit,
+  Card,
+  PlayerActivityStatus
 } from 'shared-types';
 
 // By creating a specific type for our actor, we give TypeScript
@@ -30,6 +32,43 @@ describe('gameMachine', () => {
     actors = [];
     vi.restoreAllMocks();
   });
+
+  // Helper functions to set up testing scenarios
+  const setupGameWithPlayers = (gameId: string, numPlayers = 2) => {
+    const actor = createActor(gameMachine, { input: { gameId } }).start();
+    actors.push(actor);
+
+    // Add players
+    for (let i = 0; i < numPlayers; i++) {
+      actor.send({
+        type: 'PLAYER_JOIN_REQUEST',
+        playerSetupData: {
+          id: `player-${i+1}`,
+          name: `Player ${i+1}`,
+          socketId: `socket-${i+1}`
+        }
+      });
+    }
+
+    return actor;
+  };
+
+  const advanceToPlayPhase = (actor: GameMachineActor) => {
+    const snapshot = actor.getSnapshot();
+    const playerIds = Object.keys(snapshot.context.players);
+    
+    // Make all players ready
+    playerIds.forEach(playerId => {
+      actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId });
+    });
+    
+    // Skip peek phase
+    vi.useFakeTimers();
+    actor.send({ type: 'PEEK_TIMER_EXPIRED' });
+    vi.useRealTimers();
+    
+    return actor;
+  };
 
   it('should be created without errors', () => {
     expect(() => createActor(gameMachine, { input: { gameId: 'smoke-test' } })).not.toThrow();
@@ -143,7 +182,7 @@ describe('gameMachine', () => {
       actor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: player1Setup });
       actor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: player2Setup });
 
-      // Players declare ready - using proper event type
+      // Players declare ready
       actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: 'player-1' });
       actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: 'player-2' });
     });
@@ -311,6 +350,296 @@ describe('gameMachine', () => {
         clearTimeout(timeoutId);
         reject(error);
       }
+    });
+  });
+  
+  // NEW TESTS BELOW
+
+  it('should transition to matchingStage after player swaps and discards', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Test timed out waiting for matching stage'));
+      }, TEST_TIMEOUT);
+      
+      // Set up game and advance to play phase
+      const actor = setupGameWithPlayers('test-swap-discard');
+      advanceToPlayPhase(actor);
+      
+      const subscription = actor.subscribe((snapshot) => {
+        if (snapshot.context.currentPhase === 'matchingStage') {
+          try {
+            clearTimeout(timeoutId);
+            
+            // Verify matchingStage state
+            expect(snapshot.context.matchingOpportunityInfo).toBeTruthy();
+            expect(snapshot.context.discardPile.length).toBe(1);
+            
+            // Check that potential matchers are set
+            const activePlayers = Object.values(snapshot.context.activePlayers);
+            expect(activePlayers.length).toBeGreaterThan(0);
+            expect(activePlayers).toContain(PlayerActivityStatus.AWAITING_MATCH_ACTION);
+            
+            subscription.unsubscribe();
+            resolve();
+          } catch (error) {
+            clearTimeout(timeoutId);
+            subscription.unsubscribe();
+            reject(error);
+          }
+        }
+      });
+      
+      // Wait a bit for the play phase to be ready
+      setTimeout(() => {
+        const snapshot = actor.getSnapshot();
+        const currentPlayerId = snapshot.context.currentPlayerId;
+        
+        // First draw a card
+        actor.send({
+          type: PlayerActionType.DRAW_FROM_DECK,
+          playerId: currentPlayerId
+        });
+        
+        // Then swap and discard
+        setTimeout(() => {
+          actor.send({
+            type: PlayerActionType.SWAP_AND_DISCARD,
+            playerId: currentPlayerId,
+            handIndex: 0
+          });
+        }, 50);
+      }, 50);
+    });
+  });
+  
+  it('should allow a player to call check and transition to finalTurnsPhase', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Test timed out waiting for check call'));
+      }, TEST_TIMEOUT);
+      
+      // Set up game and advance to play phase
+      const actor = setupGameWithPlayers('test-call-check');
+      advanceToPlayPhase(actor);
+      
+      const subscription = actor.subscribe((snapshot) => {
+        if (snapshot.context.currentPhase === 'finalTurnsPhase' && snapshot.context.playerWhoCalledCheck) {
+          try {
+            clearTimeout(timeoutId);
+            
+            const checkingPlayer = snapshot.context.playerWhoCalledCheck;
+            expect(snapshot.context.players[checkingPlayer].hasCalledCheck).toBe(true);
+            expect(snapshot.context.players[checkingPlayer].isLocked).toBe(true);
+            expect(snapshot.context.finalTurnsTaken).toBeGreaterThanOrEqual(0);
+            
+            subscription.unsubscribe();
+            resolve();
+          } catch (error) {
+            clearTimeout(timeoutId);
+            subscription.unsubscribe();
+            reject(error);
+          }
+        }
+      });
+      
+      // Wait a bit for the play phase to be ready
+      setTimeout(() => {
+        const snapshot = actor.getSnapshot();
+        const currentPlayerId = snapshot.context.currentPlayerId;
+        
+        // Call check
+        actor.send({
+          type: PlayerActionType.CALL_CHECK,
+          playerId: currentPlayerId
+        });
+      }, 50);
+    });
+  });
+  
+  it('should handle matching attempt correctly', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Test timed out waiting for matching attempt'));
+      }, TEST_TIMEOUT);
+      
+      // Setup game with fewer validations for test control
+      const actor = createActor(gameMachine, {
+        input: { gameId: 'test-matching' },
+      }).start();
+      actors.push(actor);
+      
+      // Add test players
+      actor.send({
+        type: 'PLAYER_JOIN_REQUEST',
+        playerSetupData: { id: 'player-1', name: 'Player 1' }
+      });
+      actor.send({
+        type: 'PLAYER_JOIN_REQUEST',
+        playerSetupData: { id: 'player-2', name: 'Player 2' }
+      });
+      
+      // Make ready
+      actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: 'player-1' });
+      actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: 'player-2' });
+      actor.send({ type: 'PEEK_TIMER_EXPIRED' });
+
+      // Listen for matching outcome in logs
+      actor.on('EMIT_LOG_PUBLIC', event => {
+        if (event.publicLogData?.message?.includes('matched') || 
+            event.publicLogData?.message?.includes('failed to match')) {
+          try {
+            clearTimeout(timeoutId);
+            // Just verify we got to the matching logic
+            resolve();
+          } catch (error) {
+            clearTimeout(timeoutId);
+            reject(error);
+          }
+        }
+      });
+      
+      // Wait for game to be ready
+      setTimeout(() => {
+        const snapshot = actor.getSnapshot();
+        const currentPlayerId = snapshot.context.currentPlayerId;
+        
+        // First draw a card
+        actor.send({
+          type: PlayerActionType.DRAW_FROM_DECK,
+          playerId: currentPlayerId
+        });
+        
+        // Then swap and discard to get to matching stage
+        setTimeout(() => {
+          actor.send({
+            type: PlayerActionType.SWAP_AND_DISCARD,
+            playerId: currentPlayerId,
+            handIndex: 0
+          });
+          
+          // In matching stage, have the other player attempt match
+          setTimeout(() => {
+            const otherPlayerId = Object.keys(actor.getSnapshot().context.players)
+              .find(id => id !== currentPlayerId);
+            
+            if (otherPlayerId) {
+              actor.send({
+                type: PlayerActionType.ATTEMPT_MATCH,
+                playerId: otherPlayerId,
+                handIndex: 0
+              });
+            }
+          }, 50);
+        }, 50);
+      }, 50);
+    });
+  });
+  
+  it('should forfeit disconnected player after grace period expires', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Test timed out waiting for forfeiture'));
+      }, TEST_TIMEOUT);
+      
+      const actor = setupGameWithPlayers('test-disconnect-forfeit');
+      
+      // Instead of mocking stopChild, we'll directly observe the context changes
+      
+      const subscription = actor.subscribe((snapshot) => {
+        // Check if the player has been marked as forfeited
+        if (snapshot.context.players['player-1']?.forfeited === true) {
+          try {
+            clearTimeout(timeoutId);
+            
+            expect(snapshot.context.players['player-1'].isConnected).toBe(false);
+            expect(snapshot.context.players['player-1'].forfeited).toBe(true);
+            
+            subscription.unsubscribe();
+            resolve();
+          } catch (error) {
+            clearTimeout(timeoutId);
+            subscription.unsubscribe();
+            reject(error);
+          }
+        }
+      });
+      
+      // Disconnect player and immediately trigger grace timer expiration
+      actor.send({
+        type: 'PLAYER_DISCONNECTED',
+        playerId: 'player-1'
+      });
+      
+      // Simulate grace timer expiry
+      setTimeout(() => {
+        actor.send({
+          type: 'DISCONNECT_GRACE_TIMER_EXPIRED',
+          timedOutGracePlayerId: 'player-1'
+        });
+      }, 50);
+    });
+  });
+  
+  it('should transition to scoringPhase at game end', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Test timed out waiting for game end'));
+      }, TEST_TIMEOUT);
+      
+      const actor = setupGameWithPlayers('test-game-end');
+      advanceToPlayPhase(actor);
+      
+      const subscription = actor.subscribe((snapshot) => {
+        if (snapshot.context.currentPhase === 'scoringPhase') {
+          try {
+            clearTimeout(timeoutId);
+            
+            expect(snapshot.context.gameover).toBeDefined();
+            
+            subscription.unsubscribe();
+            resolve();
+          } catch (error) {
+            clearTimeout(timeoutId);
+            subscription.unsubscribe();
+            reject(error);
+          }
+        }
+      });
+      
+      // Force the game to end via a check call followed by final turn
+      setTimeout(() => {
+        const snapshot = actor.getSnapshot();
+        const currentPlayerId = snapshot.context.currentPlayerId;
+        
+        // Call check to start final turns
+        actor.send({
+          type: PlayerActionType.CALL_CHECK,
+          playerId: currentPlayerId
+        });
+        
+        // Force transition to scoring
+        setTimeout(() => {
+          // Get a player other than the current player
+          const otherPlayerId = Object.keys(actor.getSnapshot().context.players)
+            .find(id => id !== currentPlayerId);
+            
+          if (otherPlayerId) {
+            // Simulate all players have taken their final turns
+            actor.send({
+              type: 'PLAYER_DISCONNECTED',
+              playerId: otherPlayerId
+            });
+            
+            setTimeout(() => {
+              // Force disconnect grace timer expiry to trigger game end
+              actor.send({
+                type: 'DISCONNECT_GRACE_TIMER_EXPIRED',
+                timedOutGracePlayerId: otherPlayerId
+              });
+            }, 50);
+          }
+        }, 50);
+      }, 50);
     });
   });
 });
