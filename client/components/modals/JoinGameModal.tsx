@@ -20,7 +20,7 @@ export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
   const [username, setUsername] = useState("")
   const [gameIdToJoin, setGameIdToJoin] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const { joinGame } = useGameStore()
+  const joinGame = useGameStore((state) => state.joinGame)
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,8 +47,15 @@ export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
         })
         router.push(`/game/${gameIdToJoin}`)
         onClose()
+      } else {
+        toast.error("Failed to Join Game", {
+          description: "Please check the Lobby ID and try again.",
+        })
       }
-      // Note: The joinGame function in the store should handle errors and show toasts.
+    } catch (error) {
+      toast.error("Failed to Join Game", {
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+      })
     } finally {
       setIsLoading(false)
     }

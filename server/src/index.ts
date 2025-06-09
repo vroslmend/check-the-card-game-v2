@@ -2,6 +2,7 @@ import http from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { createActor, ActorRefFrom } from 'xstate';
 import dotenv from 'dotenv';
+import { nanoid } from 'nanoid';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -9,7 +10,7 @@ dotenv.config();
 import { gameMachine } from './game-machine.js';
 import {
     generatePlayerView
-} from './game-manager.js';
+} from './state-redactor.js';
 import {
     InitialPlayerSetupData,
     CheckGameState as ServerCheckGameState,
@@ -63,7 +64,7 @@ const io = new SocketIOServer(httpServer, {
   }
 });
 
-const GAME_ID_REGEX = /^game_[a-zA-Z0-9]{6}$/;
+const GAME_ID_REGEX = /^[a-zA-Z0-9_-]{6}$/;
 const NUM_RECENT_LOGS_ON_JOIN_REJOIN = 20;
 
 const escapeHTML = (str: string) =>
@@ -234,8 +235,9 @@ io.on('connection', (socket: Socket) => {
   
   socket.on(SocketEventName.CREATE_GAME, (playerSetupData: InitialPlayerSetupData, callback: (response: CreateGameResponse) => void) => {
     try {
-      // Use the player's ID as the game ID for simplicity
-      const gameId = playerSetupData.id;
+      // Use nanoid to generate a unique, URL-friendly game ID
+      const gameId = nanoid(6);
+      console.log(`[Server] Game ID ${gameId} generated for new game.`);
 
       // 1. Create the game machine actor
       const gameActor = createActor(gameMachine, {
@@ -254,11 +256,33 @@ io.on('connection', (socket: Socket) => {
 
           // Handle emitted events from the machine
           for (const emitted of (snapshot as any).emitted || []) {
-            if (emitted.type === 'SEND_TO_PLAYER') {
-              const playerSocket = getSocketForPlayer(emitted.payload.playerId);
-              if (playerSocket) {
-                playerSocket.emit(SocketEventName.SERVER_EVENT, emitted.payload.event);
-              }
+            switch (emitted.type) {
+              case 'BROADCAST_GAME_STATE':
+                // The machine's context is the source of truth.
+                broadcastGameStateCustom(gameId, snapshot.context);
+                break;
+              
+              case 'EMIT_LOG_PUBLIC':
+                io.to(emitted.gameId).emit(SocketEventName.SERVER_LOG_ENTRY, emitted.publicLogData);
+                break;
+                
+              case 'EMIT_LOG_PRIVATE':
+                const playerSocketPrivate = getSocketForPlayer(emitted.playerId);
+                if (playerSocketPrivate) {
+                  playerSocketPrivate.emit(SocketEventName.SERVER_LOG_ENTRY, emitted.privateLogData);
+                }
+                break;
+
+              case 'SEND_EVENT_TO_PLAYER':
+                const playerSocketEvent = getSocketForPlayer(emitted.payload.playerId);
+                if (playerSocketEvent) {
+                  playerSocketEvent.emit(emitted.payload.eventName, emitted.payload.eventData);
+                }
+                break;
+                
+              default:
+                // For any other specific emitted events if necessary
+                break;
             }
           }
 
@@ -269,18 +293,8 @@ io.on('connection', (socket: Socket) => {
             createGameCallbackCalled = true;
             console.log(`[Server] Game ${gameId} created for ${playerSetupData.id}. Initial state sent via CREATE_GAME callback.`);
           }
-
-          // Broadcast the updated state to all players in the game
-          const { context } = snapshot;
-          if (context.players) {
-            Object.keys(context.players).forEach(playerId => {
-              const playerSocket = getSocketForPlayer(playerId);
-              if (playerSocket) {
-                const playerView = generatePlayerView(context, playerId);
-                playerSocket.emit(SocketEventName.GAME_STATE_UPDATE, playerView);
-              }
-            });
-          }
+          
+          // No longer need manual broadcast here, handled by BROADCAST_GAME_STATE emission.
         },
         error: (error: unknown) => {
           console.error(`[Server] Game machine actor for ${gameId} reported an error:`, error);
@@ -309,7 +323,7 @@ io.on('connection', (socket: Socket) => {
       // 5. Send the initial event to the machine to add the creator as a player
       const joinEvent: GameMachineEvent = {
         type: 'PLAYER_JOIN_REQUEST',
-        playerSetupData
+        playerSetupData: { ...playerSetupData, socketId: socket.id }
       };
       gameActor.send(joinEvent);
 

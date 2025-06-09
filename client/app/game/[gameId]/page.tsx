@@ -9,13 +9,19 @@ import { LocalPlayerArea } from '@/components/game/LocalPlayerArea';
 import SidePanel from '@/components/layout/SidePanel';
 import { GameLobby } from '@/components/game/GameLobby';
 import { useGameStore } from '@/store/gameStore';
+import { ClientCard, GamePhase } from 'shared-types';
 
 const GamePage = () => {
-  const gamePhase = useGameStore((state) => state.currentGameState?.currentPhase);
+  const gameState = useGameStore((state) => state.currentGameState);
+  const gamePhase: GamePhase | undefined = gameState?.currentPhase;
   const isLoading = useGameStore((state) => !state.currentGameState || !state.localPlayerId);
   const gameId = useGameStore((state) => state.gameId);
 
-  if (isLoading) {
+  const handleCardClick = (card: ClientCard, index: number) => {
+    console.log(`Card clicked: ${card.id} at index ${index}`);
+  };
+
+  if (isLoading || !gameState) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-4">
         <h1 className="text-3xl font-bold">[Loading Game...]</h1>
@@ -24,10 +30,11 @@ const GamePage = () => {
     );
   }
 
-  if (gamePhase === 'initialPeekPhase') {
+  // The lobby is shown when the server is in the 'awaitingPlayers' or 'initialPeekPhase' phase.
+  if (gamePhase && (gamePhase === 'awaitingPlayers' || gamePhase === 'initialPeekPhase')) {
     return <GameLobby />;
   }
-
+  
   return (
     <LayoutGroup>
       <div className="flex h-screen flex-col bg-background text-foreground">
@@ -46,7 +53,7 @@ const GamePage = () => {
 
             {/* Local Player Area */}
             <motion.div className="flex-[4]" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
-              <LocalPlayerArea />
+              <LocalPlayerArea onCardClick={handleCardClick} />
             </motion.div>
       </main>
 

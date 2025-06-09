@@ -28,7 +28,7 @@ import {
 } from 'shared-types';
 import { createDeckWithIds, shuffleDeck } from './lib/deck-utils.js';
 import 'xstate/guards';
-// Durations (configurable in game-manager, hardcoded here for now)
+// Game timing constants. Configurable via environment variables with fallback defaults.
 const PEEK_TOTAL_DURATION_MS = parseInt(process.env.PEEK_DURATION_MS || '10000', 10);
 const TURN_DURATION_MS = parseInt(process.env.TURN_DURATION_MS || '60000', 10);
 const MATCHING_STAGE_DURATION_MS = parseInt(process.env.MATCHING_STAGE_DURATION_MS || '20000', 10);

@@ -87,6 +87,7 @@ export interface PlayerState {
 
 // Define GamePhase type
 export type GamePhase =
+  | 'awaitingPlayers'
   | 'initialPeekPhase'
   | 'playPhase'
   | 'matchingStage'

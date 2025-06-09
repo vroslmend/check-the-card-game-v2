@@ -20,11 +20,10 @@ interface NewGameModalProps {
 export function NewGameModal({ isOpen, onClose }: NewGameModalProps) {
   const [username, setUsername] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const emit = useGameStore((state) => state.emit)
-  const gameId = useGameStore((state) => state.gameId)
+  const createGame = useGameStore((state) => state.createGame)
   const router = useRouter()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!username.trim()) {
       toast.error("Username Required", {
@@ -34,25 +33,23 @@ export function NewGameModal({ isOpen, onClose }: NewGameModalProps) {
     }
     setIsLoading(true)
 
-    const playerSetupData: Pick<InitialPlayerSetupData, "name"> = {
-      name: username,
-    }
-
-    emit(
-      SocketEventName.CREATE_GAME,
-      playerSetupData,
-      (response: { success: boolean; gameId?: string; error?: string }) => {
-        setIsLoading(false)
-        if (response.success && response.gameId) {
-          router.push(`/game/${response.gameId}`)
-          onClose()
-        } else {
-          toast.error("Failed to Create Game", {
-            description: response.error || "An unknown error occurred.",
-          })
-        }
+    try {
+      const newGameId = await createGame(username)
+      if (newGameId) {
+        router.push(`/game/${newGameId}`)
+        onClose()
+      } else {
+        toast.error("Failed to Create Game", {
+          description: "An unknown error occurred.",
+        })
       }
-    )
+    } catch (error) {
+      toast.error("Failed to Create Game", {
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (

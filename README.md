@@ -2,7 +2,7 @@
 
 ## 🃏 Overview
 
-"Check!" is a web-based, free-to-play online multiplayer card game. The primary goal is to have the lowest total card value in your hand at the end of a round. This project implements the card game with a Node.js/Socket.IO backend and a new, modern Next.js/React frontend.
+"Check!" is a web-based, free-to-play online multiplayer card game. The primary goal is to have the lowest total card value in your hand at the end of a round. This project implements the card game with a Node.js/Socket.IO backend and a modern Next.js/React frontend.
 
 This README provides a comprehensive guide to understanding, setting up, and running the project. Detailed documentation, including game rules and architecture, can be found in the `/docs` directory.
 
@@ -29,14 +29,14 @@ This project utilizes a modern technology stack for a robust and interactive exp
     *   Socket.IO (for WebSocket-based real-time communication)
     *   TypeScript
     *   **XState**: Core game logic, state management, and phase transitions (`game-machine.ts`).
-*   **Frontend (`client/` - New Architecture):**
+*   **Frontend (`client/`):**
     *   Next.js (latest, using the App Router)
     *   React (latest)
     *   TypeScript
     *   Tailwind CSS (latest, for styling)
     *   **shadcn/ui**: Collection of accessible and customizable UI components, built with Radix UI and Tailwind CSS.
     *   **Zustand**: For managing the global store of server-sent data (`ClientCheckGameState`, game logs, chat messages).
-    *   **XState (`@xstate/react`)**: For client-side UI interaction flows, orchestrating complex animation sequences, and managing local UI component states (`AnimationMachine`).
+    *   **XState (`@xstate/react`)**: For client-side UI interaction flows, orchestrating complex game actions, and managing local UI state (`uiMachine.ts`).
     *   **Framer Motion**: For all animations, especially `layoutId` for smooth card movements and UI transitions.
     *   Socket.IO Client: For real-time communication with the backend.
 *   **Shared Code (`shared-types/`):**
@@ -49,24 +49,24 @@ This project utilizes a modern technology stack for a robust and interactive exp
 
 ```
 check-the-card-game-v2/
-├── client/                 # Next.js Frontend Application (New Architecture)
+├── client/                 # Next.js Frontend Application
 │   ├── app/                # App Router: layouts, pages, global styles
-│   ├── components/         # Reusable UI components (custom or from shadcn/ui)
-│   ├── context/            # React Context providers
-│   ├── hooks/              # Custom React hooks (e.g., useSocketManager)
+│   ├── components/         # Reusable UI components
+│   ├── hooks/              # Custom React hooks
 │   ├── lib/                # Client-side utility functions, constants
-│   ├── machines/           # XState machines for UI/animation logic
+│   ├── machines/           # XState machines for UI logic
 │   ├── public/             # Static assets
 │   ├── store/              # Zustand global state store
 │   ├── next.config.ts      # Next.js configuration
-│   ├── postcss.config.mjs  # PostCSS config (for Tailwind CSS)
 │   ├── tsconfig.json       # TypeScript configuration
 │   └── package.json        # Dependencies and scripts
 ├── docs/                   # Project documentation
 ├── server/                 # Node.js Socket.IO Game Server
 │   ├── src/                # TypeScript source files
 │   │   ├── index.ts        # Main server entry point, Socket.IO setup
-│   │   └── game-machine.ts # XState machine for core game logic
+│   │   ├── game-machine.ts # XState machine for core game logic
+│   │   ├── state-redactor.ts # Redacts server state for clients
+│   │   └── lib/            # Utility functions (e.g., deck-utils.ts)
 │   ├── tsconfig.json       # TypeScript configuration
 │   └── package.json        # Dependencies and scripts
 ├── shared-types/           # Shared TypeScript Interfaces & Types
@@ -78,16 +78,13 @@ check-the-card-game-v2/
 └── README.md               # This file
 ```
 
-## ✨ Key Architectural Decisions (New Frontend - `client/`)
+## ✨ Key Architectural Decisions
 
-The new frontend is being rebuilt from scratch to leverage modern state management and animation practices:
-
-*   **Server-Authoritative Game State**: The backend `server/` (specifically its XState `game-machine.ts`) remains the single source of truth for all game logic and state.
-*   **Zustand for Server Data**: The `client/` will use a Zustand store to hold the `ClientCheckGameState`, game logs, and chat messages received from the server. This provides an efficient, global, and reactive way for components to access this data.
-*   **XState for UI/Animation Orchestration**: A client-side XState machine (referred to as `AnimationMachine`) will manage complex UI interaction sequences (e.g., multi-step abilities) and orchestrate animation sequences. It will *not* duplicate game logic but will react to server state changes and user inputs to manage visual flows.
-*   **Framer Motion for All Animations**: All visual animations, especially card movements (using `layoutId`), transitions, and UI effects, will be handled by Framer Motion, driven by states from the `uiMachine` and data from the Zustand store.
-*   **shadcn/ui for Core UI Components**: Base UI elements (buttons, modals, inputs) will be built using shadcn/ui for speed, consistency, and accessibility, styled with Tailwind CSS.
-*   **Component-Driven Design**: Components will be designed to be reactive to the state provided by Zustand and the XState `AnimationMachine`, minimizing local component state for complex logic.
+*   **Server-Authoritative Game State**: The backend `server/` (specifically its XState `game-machine.ts`) is the single source of truth for all game logic and state.
+*   **Zustand for Server Data**: The `client/` uses a Zustand store to hold the `ClientCheckGameState`, game logs, and chat messages received from the server. This provides an efficient, global, and reactive way for components to access this data.
+*   **XState for UI Orchestration**: A client-side XState machine (`uiMachine.ts`) manages complex UI interaction sequences (e.g., multi-step abilities) and orchestrates game actions. It does *not* duplicate game logic but reacts to server state changes and user inputs to manage the UI flow.
+*   **Framer Motion for All Animations**: All visual animations, especially card movements (using `layoutId`), transitions, and UI effects, are handled by Framer Motion, driven by states from the `uiMachine` and data from the Zustand store.
+*   **shadcn/ui for Core UI Components**: Base UI elements (buttons, modals, inputs) are built using shadcn/ui for speed, consistency, and accessibility, styled with Tailwind CSS.
 
 ## ⚙️ Setup and Installation
 
@@ -98,120 +95,73 @@ The new frontend is being rebuilt from scratch to leverage modern state manageme
     ```
 
 2.  **Install All Dependencies:**
-    NPM workspaces will handle installing dependencies for `client`, `server`, and `shared-types` simultaneously. From the project root:
+    From the project root:
     ```bash
     npm install
     ```
 
 3.  **Build All Packages:**
-    It's crucial to build `shared-types` first, as both `server` and `client` depend on its output. The root build script handles this order. From the project root:
+    It's crucial to build `shared-types` first. The root build script handles this order. From the project root:
     ```bash
     npm run build
     ```
-    This command will:
-    *   Build `shared-types`
-    *   Build `server`
-    *   Build `client`
 
-4.  **Managing UI Components (shadcn/ui in Frontend):**
-    This project uses `shadcn/ui` for its frontend components. The initial setup for `shadcn/ui` is already completed and its configuration is part of the repository.
-    If you need to add *new* `shadcn/ui` components during development, navigate to the client directory and use the `shadcn/ui` CLI:
+4.  **Managing UI Components (shadcn/ui):**
+    The initial setup is complete. To add *new* `shadcn/ui` components, navigate to the client directory:
     ```bash
     cd client
-    npx shadcn@latest add button input
+    npx shadcn@latest add <component_name>
     cd ..
     ```
 
 ## ▶️ How to Run the Game
 
-The application can be run in two modes: **Development** for active coding and **Production** for the final, optimized version.
-
 ### Development Mode (For Coding)
 
-This mode is ideal for development, providing hot-reloading and detailed error messages.
-
 1.  **Start Both Server and Client:**
-    Ensure all packages have been built at least once (see Setup step 3). From the project root (`check-the-card-game-v2/`):
+    From the project root (`check-the-card-game-v2/`):
     ```bash
     npm run dev
     ```
-    This command uses `concurrently` to:
-    *   Start the backend server.
-    *   Start the Next.js frontend development server.
-
-    You should see output from both processes in your terminal.
-    *   The server typically starts on `http://localhost:8000`.
-    *   The client typically starts on `http://localhost:3000`.
+    *   Server starts on `http://localhost:8000`.
+    *   Client starts on `http://localhost:3000`.
 
 2.  **Access the Game:**
     Open your browser to `http://localhost:3000`.
 
 ### Production Mode (After Building)
 
-This mode runs the fully optimized, production-ready version of the application. This is how the game would run if it were deployed on a live server.
-
 1.  **Build the Application:**
-    First, ensure you have a complete production build of all packages. From the project root:
+    From the project root:
     ```bash
     npm run build
     ```
 
 2.  **Start the Production Server:**
-    Once the build is complete, start the application with:
     ```bash
     npm start
     ```
-    This will launch both the optimized backend server and the frontend client.
-
-### Running Services Individually (Optional)
-
-If you need to run the client or server individually (e.g., for focused debugging or after building for production):
-
-*   **Start Only the Backend Server:**
-    ```bash
-    npm run start:server 
-    ```
-*   **Start Only the Frontend Development Server:**
-    ```bash
-    npm run dev:client
-    ```
-*   **Build Individual Packages:**
-    ```bash
-    npm run build:shared
-    npm run build:server
-    npm run build:client
-    ```
-
-## 📝 Current Development Status & Focus
-
-*   **Backend Refactor (Completed):** The backend has been successfully refactored to use XState (`game-machine.ts`) for managing all game logic and state. It is considered the authoritative source of truth.
-*   **Frontend Rebuild (In Progress):** The frontend is being rebuilt from scratch in the `client/` directory using Next.js, TypeScript, Tailwind CSS, shadcn/ui, Zustand for server state, XState for UI/animation orchestration, and Framer Motion for animations. This aims for a more robust, maintainable, and animated user experience.
-*   **`shared-types` (Updated):** Crucial shared types (like `Card.id` becoming mandatory) are being updated to support the new architecture.
 
 ## 🔧 Environment Variables
 
+It's recommended to create `.env` files in the `server` and `client` directories for local development.
+
 *   **Client (`client/.env.local`):**
-    *   `NEXT_PUBLIC_SERVER_URL`: URL for the backend Socket.IO server (defaults to `http://localhost:8000` if not set).
+    *   `NEXT_PUBLIC_WEBSOCKET_URL`: URL for the backend Socket.IO server (defaults to `http://localhost:8000` if not set).
+
 *   **Server (`server/.env`):**
     *   `PORT`: Port for the backend server (defaults to `8000`).
+    *   `CORS_ORIGIN`: Allowed origin for CORS (defaults to `http://localhost:3000`).
+    *   `PEEK_DURATION_MS`: Duration of initial peek phase in milliseconds (default: `10000`).
+    *   `TURN_DURATION_MS`: Duration of a player's turn timer in milliseconds (default: `30000`).
+    *   `MATCHING_STAGE_DURATION_MS`: Duration of the matching stage in milliseconds (default: `5000`).
+    *   `DISCONNECT_GRACE_PERIOD_MS`: Time before a disconnected player is removed (default: `60000`).
 
-## ☁️ Deployment Considerations
+## 📝 Current Development Status
 
-*   The Socket.IO `server/` will likely need hosting on a platform supporting long-running Node.js applications (e.g., Heroku, Render, DigitalOcean, AWS).
-*   The Next.js `client/` can be deployed to platforms like Vercel or Netlify, with `NEXT_PUBLIC_SERVER_URL` configured to point to the deployed backend.
-
-## 🎯 Next Steps & Project Roadmap
-
-1.  **Initialize `client/` Project:** Set up the Next.js application with Tailwind and shadcn/ui.
-2.  **Update `shared-types`:** Make `Card.id` mandatory and ensure server compatibility.
-3.  **Build Core `client/` Infrastructure:**
-    *   Implement Socket.IO manager.
-    *   Set up Zustand store for server data (`ClientCheckGameState`, logs, chat).
-    *   Define and provide the initial client-side XState `AnimationMachine`.
-4.  **Develop UI Components:** Re-implement game UI components using shadcn/ui and Tailwind, driven by the new state management.
-5.  **Implement Animation Sequences:** Integrate Framer Motion, orchestrated by the `AnimationMachine`, for key interactions (card drawing, playing, etc.).
-6.  **Iterative Feature Implementation:** Continue building out all game phases, player actions, and UI feedback.
-7.  **Thorough Testing:** Unit, integration, and end-to-end testing for both client and server.
+*   **Backend Refactor (Completed):** The backend uses XState (`game-machine.ts`) for all authoritative game logic.
+*   **Frontend Architecture (Completed):** The frontend has been architected using Next.js, TypeScript, Zustand for server state, and XState (`uiMachine.ts`) for UI orchestration.
+*   **Core UI Components (In Progress):** Development is focused on refining UI components, animations, and ensuring all game phases are fully represented in the UI.
 
 ---
 Happy Gaming and Coding!

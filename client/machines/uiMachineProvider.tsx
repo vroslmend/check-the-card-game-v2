@@ -4,64 +4,77 @@ import React, { useEffect, createContext, useContext } from 'react';
 import { useActorRef, useSelector } from '@xstate/react';
 import { uiMachine } from './uiMachine';
 import { useGameStore } from '@/store/gameStore';
-import {
-  SocketEventName,
-  ClientCheckGameState,
-  RichGameLogMessage,
-  ChatMessage,
-  RespondCardDetailsPayload,
-} from 'shared-types';
-import { ActorRefFrom, InterpreterFrom } from 'xstate';
+import { type ActorRefFrom } from 'xstate';
+import { SocketEventName, type RespondCardDetailsPayload, type ClientCheckGameState } from 'shared-types';
 
-// 1. Create a standard React Context for the actor reference
-const UIMachineContext = createContext<ActorRefFrom<typeof uiMachine> | null>(null);
+type UIContextType = {
+  actor: ActorRefFrom<typeof uiMachine>;
+  state: ReturnType<ActorRefFrom<typeof uiMachine>['getSnapshot']>;
+};
 
-// 2. Create our custom Provider component that orchestrates everything
+const UIContext = createContext<UIContextType | undefined>(undefined);
+
 export const UIMachineProvider = ({ children }: { children: React.ReactNode }) => {
-  const { connect, emit, socket } = useGameStore();
+  const { socket, emit, currentGameState, isConnected } = useGameStore((state) => ({
+    socket: state.socket,
+    emit: state.emit,
+    currentGameState: state.currentGameState,
+    isConnected: state.socket?.connected,
+  }));
+
   const actorRef = useActorRef(uiMachine);
 
-  // EFFECT #1: Establish socket connection
+  // Syncs the Zustand store's full game state with the UI machine's context
   useEffect(() => {
-    connect();
-  }, [connect]);
+    if (currentGameState) {
+      actorRef.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState: currentGameState });
+    }
+  }, [currentGameState, actorRef]);
 
-
-  // EFFECT #2: Sending events TO the server
+  // Listens for events emitted from the UI machine and sends them to the socket
   useEffect(() => {
-    const subscription = actorRef.on('EMIT_TO_SOCKET', (event: any) => {
-      emit(event.eventName, event.payload);
+    if (!isConnected) return;
+
+    const subscription = actorRef.on('*', (emitted) => {
+      if (emitted.type === 'EMIT_TO_SOCKET') {
+        emit(emitted.eventName, emitted.payload);
+      }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [actorRef, emit]);
+  }, [isConnected, actorRef, emit]);
 
-  // Provide the actorRef we created to all children
-  return (
-    <UIMachineContext.Provider value={actorRef}>
-      {children}
-    </UIMachineContext.Provider>
-  );
+  // Listens for specific server events to forward to the UI machine
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleServerEvent = (payload: RespondCardDetailsPayload) => {
+      actorRef.send({
+        type: 'SERVER_PROVIDED_CARD_FOR_ABILITY',
+        card: payload.card,
+        playerId: payload.playerId,
+        cardIndex: payload.cardIndex,
+      });
+    };
+
+    socket.on(SocketEventName.RESPOND_CARD_DETAILS_FOR_ABILITY, handleServerEvent);
+
+    return () => {
+      socket.off(SocketEventName.RESPOND_CARD_DETAILS_FOR_ABILITY, handleServerEvent);
+    };
+  }, [socket, actorRef]);
+
+  const state = useSelector(actorRef, (snapshot) => snapshot);
+
+  return <UIContext.Provider value={{ actor: actorRef, state }}>{children}</UIContext.Provider>;
 };
 
-// 3. Export hooks that components will use. These now use the standard context.
-export const useUIMachineRef = () => {
-  const actorRef = useContext(UIMachineContext);
-  if (!actorRef) {
-    throw new Error('useUIMachineRef must be used within a UIMachineProvider');
+export const useUI = () => {
+  const context = useContext(UIContext);
+  if (context === undefined) {
+    throw new Error('useUI must be used within a UIMachineProvider');
   }
-  return actorRef;
-};
-
-// Define the type of the interpreter to help the selector hook
-type UIMachineInterpreter = InterpreterFrom<typeof uiMachine>;
-
-export const useUIMachineSelector = <T,>(
-  selector: (state: ReturnType<UIMachineInterpreter['getSnapshot']>) => T,
-  equalityFn?: (a: T, b: T) => boolean
-) => {
-  const actorRef = useUIMachineRef();
-  return useSelector(actorRef, selector, equalityFn);
+  return context;
 };
