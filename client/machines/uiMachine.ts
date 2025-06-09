@@ -821,7 +821,7 @@ export const uiMachine = setup({
                   type: 'EMIT_TO_SOCKET',
                   eventName: SocketEventName.PLAYER_ACTION,
                   payload: {
-                    type: PlayerActionType.PASS_MATCH,
+                    type: PlayerActionType.PASS_ON_MATCH_ATTEMPT,
                     playerId: context.localPlayerId!,
                   } as ConcretePlayerActionEvents,
                 }))),

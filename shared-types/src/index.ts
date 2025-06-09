@@ -110,8 +110,13 @@ export interface MatchResolvedDetails {
 
 // Data structure for game over information - DEFINED FIRST
 export interface GameOverData {
-  winner?: string | string[];
-  scores: { [playerId: string]: number };
+  winnerId: string | null;
+  players: {
+    id: string;
+    score: number;
+    hand: Card[];
+  }[];
+  scores?: { [playerId: string]: number };
   finalHands?: { [playerId: string]: Card[] };
   totalTurns?: number;
   playerStats?: {
@@ -160,6 +165,7 @@ export interface CheckGameState {
   };
   currentTurnSegment: TurnSegment; // Added new field
   matchingStageTimerExpiresAt?: number; // New field for matching stage timer
+  disconnectGraceTimerExpiresAt?: number; // ADDED: For global grace timer tracking
   logHistory?: RichGameLogMessage[]; // Added for storing recent logs on server
 }
 
@@ -168,6 +174,7 @@ export enum PlayerActivityStatus {
   AWAITING_READINESS = 'awaitingReadiness',
   PLAY_PHASE_ACTIVE = 'playPhaseActive',
   AWAITING_MATCH_ACTION = 'awaitingMatchAction',
+  MATCH_ACTION_CONCLUDED = 'matchActionConcluded',
   ABILITY_RESOLUTION_ACTIVE = 'abilityResolutionActive',
   FINAL_TURN_ACTIVE = 'finalTurnActive',
   // Add any other distinct statuses used in activePlayers here
@@ -216,11 +223,12 @@ export enum PlayerActionType {
   SWAP_AND_DISCARD = 'swapAndDiscard',
   DISCARD_DRAWN_CARD = 'discardDrawnCard',
   ATTEMPT_MATCH = 'attemptMatch',
-  PASS_MATCH = 'passMatch',
+  PASS_ON_MATCH_ATTEMPT = 'passOnMatchAttempt',
   CALL_CHECK = 'callCheck',
   DECLARE_READY_FOR_PEEK = 'declareReadyForPeek',
   REQUEST_PEEK_REVEAL = 'requestPeekReveal',
   RESOLVE_SPECIAL_ABILITY = 'resolveSpecialAbility',
+  RESET_GAME = 'resetGame',
 }
 
 // Data structure for players joining a game or being set up initially
@@ -363,22 +371,51 @@ type PlayerActionEvents = {
 
 export type ConcretePlayerActionEvents = PlayerActionEvents[PlayerActionType]; // Added export
 
-// GameMachineEvent represents all possible events the game machine can handle.
+// Events that the game machine can receive
 export type GameMachineEvent =
   | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData }
+  | { type: 'PLAYER_DECLARES_READY_FOR_PEEK'; playerId: string }
   | ConcretePlayerActionEvents // All events derived from PlayerActionType
   // Internal events
   | { type: 'PEEK_TIMER_EXPIRED' }
   | { type: 'MATCHING_STAGE_TIMER_EXPIRED' }
-  | { type: 'TURN_TIMER_EXPIRED'; timedOutPlayerId: string } // Ensure payload identifies player
+  | { type: 'TURN_TIMER_EXPIRED'; timedOutPlayerId: string }
   | { type: 'DISCONNECT_GRACE_TIMER_EXPIRED'; timedOutGracePlayerId: string }
   | { type: 'PLAYER_DISCONNECTED'; playerId: string }
   | { type: 'PLAYER_RECONNECTED'; playerId: string; newSocketId: string }
   | { type: '_HANDLE_FORFEITURE_CONSEQUENCES'; forfeitedPlayerId: string };
 
 export type GameMachineEmittedEvents =
-  | { type: 'EMIT_LOG_PUBLIC'; gameId: string; publicLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'recipientPlayerId' | 'logId'> & { actorId?: string }; privateLogConfig?: { message: string; recipientPlayerId: string; cardContext?: string; type?: RichGameLogMessage['type']; actorId?: string; } }
-  | { type: 'EMIT_LOG_PRIVATE'; gameId: string; privateLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'logId'> & { actorId?: string }; recipientPlayerId: string; }
-  | { type: 'BROADCAST_GAME_STATE'; gameId: string; }
-  | { type: 'BROADCAST_PLAYER_SPECIFIC_STATE'; gameId: string; playerId: string; } // For peek reveal type scenarios
-  | { type: 'EMIT_ERROR_TO_CLIENT'; gameId: string; playerId?: string; message: string; errorDetails?: any; };
+  | {
+      type: 'EMIT_LOG_PUBLIC';
+      gameId: string;
+      publicLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'recipientPlayerId' | 'logId'> & {
+        actorId?: string;
+        cardContext?: string;
+        targetName?: string;
+      };
+      privateLogConfig?: {
+        recipientPlayerId: string;
+        privateLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'recipientPlayerId' | 'logId'> & {
+          actorId?: string;
+          cardContext?: string;
+          targetName?: string;
+        };
+      };
+    }
+  | {
+      type: 'EMIT_LOG_PRIVATE';
+      gameId: string;
+      recipientPlayerId: string;
+      privateLogData: Omit<RichGameLogMessage, 'timestamp' | 'actorName' | 'isPublic' | 'recipientPlayerId' | 'logId'> & {
+        actorId?: string;
+        cardContext?: string;
+        targetName?: string;
+      };
+    }
+  | { type: 'BROADCAST_GAME_STATE'; gameId: string }
+  | { type: 'EMIT_GAME_OVER'; gameId: string; gameOverData: GameOverData };
+
+// ==================================
+// XState Machine Type Definitions
+// ==================================

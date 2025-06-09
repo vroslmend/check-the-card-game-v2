@@ -486,8 +486,8 @@ io.on('connection', (socket: Socket) => {
             return;
           }
           break;
-        case PlayerActionType.PASS_MATCH: 
-          machineEvent = { type: PlayerActionType.PASS_MATCH, playerId };
+        case PlayerActionType.PASS_ON_MATCH_ATTEMPT: 
+          machineEvent = { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT, playerId };
           break;
         case PlayerActionType.CALL_CHECK: 
           machineEvent = { type: PlayerActionType.CALL_CHECK, playerId };

@@ -34,9 +34,11 @@
     "dev:client": "npm run dev -w client",
     "dev": "concurrently \"npm:dev:client\" \"npm:start:server\"",
     "start": "concurrently \"npm:start:client\" \"npm:start:server\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest",
+    "test:ui": "vitest --ui"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "vitest": "^3.2.2"
   }
 }
