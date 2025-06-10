@@ -3,10 +3,10 @@
 import { useContext } from 'react';
 import { useSelector } from '@xstate/react';
 import { UIContext } from '@/components/providers/UIMachineProvider';
-import type { UIMachineState } from '@/machines/uiMachine';
+import type { UIMachineSnapshot } from '@/machines/uiMachine';
 
 export function useUIMachineSelector<T>(
-  selector: (state: UIMachineState) => T,
+  selector: (state: UIMachineSnapshot) => T,
   compare?: (a: T, b: T) => boolean,
 ): T {
   const context = useContext(UIContext);

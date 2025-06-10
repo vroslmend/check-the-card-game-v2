@@ -1,4 +1,4 @@
-import { setup, assign, emit, assertEvent, type ActorRefFrom, type SnapshotFrom, fromPromise } from 'xstate';
+import { setup, assign, emit, assertEvent, type ActorRefFrom, type SnapshotFrom, type StateFrom } from 'xstate';
 import {
   PlayerActionType,
   SocketEventName,
@@ -103,13 +103,13 @@ export const uiMachine = setup({
       gameLog: ({ context, event }) => {
         assertEvent(event, 'NEW_GAME_LOG');
         return [...context.gameLog, event.logMessage];
-      },
+      }
     }),
     setInitialLogs: assign({
       gameLog: ({ event }) => {
         assertEvent(event, 'INITIAL_LOGS_RECEIVED');
         return event.logs;
-      },
+      }
     }),
     addChatMessage: assign({
       chatMessages: ({ context, event }) => {
@@ -124,22 +124,26 @@ export const uiMachine = setup({
         return [...context.chatMessages, newChatMessage];
       },
     }),
-    setGameIdAndPlayerId: assign(({ event }) => {
-      assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-      return {
-        gameId: event.response.gameId,
-        localPlayerId: event.response.playerId,
-      };
-    }),
-    setInitialGameState: assign(({ event }) => {
+    setGameIdAndPlayerId: assign({
+      gameId: ({ event }) => {
         assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-  
-        if (event.type === 'GAME_JOINED_SUCCESSFULLY' && event.response.gameState) {
-          return { currentGameState: event.response.gameState };
+        return event.response.gameId!;
+      },
+      localPlayerId: ({ event }) => {
+        assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
+        return event.response.playerId!;
+      },
+    }),
+    setInitialGameState: assign({
+      currentGameState: ({ event }) => {
+        assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
+        if (event.type === 'GAME_JOINED_SUCCESSFULLY') {
+          return event.response.gameState!;
         }
-  
+        
+        // Create a default state for the creator on GAME_CREATED_SUCCESSFULLY
         const { gameId, playerId } = event.response;
-        const defaultGameState: ClientCheckGameState = {
+        return {
           gameId: gameId!,
           viewingPlayerId: playerId!,
           gameMasterId: playerId!,
@@ -158,8 +162,8 @@ export const uiMachine = setup({
           log: [],
           chat: [],
         };
-        return { currentGameState: defaultGameState };
-      }),
+      },
+    }),
     resetGameContext: assign({
         localPlayerId: null,
         gameId: null,
@@ -174,7 +178,7 @@ export const uiMachine = setup({
     // #endregion
 
     // #region ----- Socket Emitters -----
-    emitCreateGame: emit(({ event, self }) => {
+    emitCreateGame: emit(({ self, event }) => {
       assertEvent(event, 'CREATE_GAME_REQUESTED');
       return {
         type: 'EMIT_TO_SOCKET',
@@ -189,7 +193,7 @@ export const uiMachine = setup({
         },
       } as const;
     }),
-    emitJoinGame: emit(({ event, self }) => {
+    emitJoinGame: emit(({ self, event }) => {
       assertEvent(event, 'JOIN_GAME_REQUESTED');
       return {
         type: 'EMIT_TO_SOCKET',
@@ -230,86 +234,26 @@ export const uiMachine = setup({
       eventName: SocketEventName.PLAYER_ACTION,
       payload: { type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: context.localPlayerId },
     })),
-    emitPlayCard: emit(({ event }) => {
-      assertEvent(event, 'PLAY_CARD');
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.PLAYER_ACTION,
-        payload: {
-          type: PlayerActionType.SWAP_AND_DISCARD,
-          payload: { handCardIndex: event.cardIndex },
-        },
-      };
-    }),
-    emitDrawCard: emit(({ context }) => ({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION,
-      payload: { type: PlayerActionType.DRAW_FROM_DECK, playerId: context.localPlayerId },
-    })),
-    emitPlayerAction: emit(({ event }) => {
+    emitPlayerAction: emit(({ context, event }) => {
       assertEvent(event, 'PLAYER_ACTION');
       return {
         type: 'EMIT_TO_SOCKET' as const,
         eventName: SocketEventName.PLAYER_ACTION,
-        payload: event.payload,
+        payload: {
+          ...event.payload,
+          playerId: context.localPlayerId,
+        },
       };
     }),
     emitSendMessage: emit(({ event }) => {
       assertEvent(event, 'SUBMIT_CHAT_MESSAGE');
-      const { type, ...payload } = event;
+      const { message, senderId, senderName, gameId } = event;
       return {
         type: 'EMIT_TO_SOCKET' as const,
         eventName: SocketEventName.SEND_CHAT_MESSAGE,
-        payload,
+        payload: { message, senderId, senderName, gameId },
       };
     }),
-    emitUseAbility: emit(({ context }) => {
-      const { abilityContext } = context;
-      if (!abilityContext) {
-        // This case should be prevented by the guard on the transition,
-        // but this check satisfies TypeScript and provides a fallback.
-        console.error("Attempted to use ability without a valid context.");
-        return {
-          type: 'EMIT_TO_SOCKET' as const,
-          eventName: SocketEventName.ERROR_MESSAGE,
-          payload: { message: 'Client error: ability context missing.' },
-        };
-      }
-
-      let payload: AbilityActionPayload;
-
-      if (abilityContext.stage === 'peeking') {
-        payload = {
-          action: 'peek',
-          targets: abilityContext.selectedPeekTargets,
-        };
-      } else { // 'swapping' stage
-        payload = {
-          action: 'swap',
-          source: abilityContext.selectedSwapTargets[0]!,
-          target: abilityContext.selectedSwapTargets[1]!,
-        };
-      }
-
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.PLAYER_ACTION,
-        payload: {
-          type: PlayerActionType.USE_ABILITY,
-          playerId: context.localPlayerId,
-          payload,
-        },
-      };
-    }),
-    emitSkipAbility: emit(({ context }) => ({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION,
-      payload: {
-        type: PlayerActionType.USE_ABILITY,
-        playerId: context.localPlayerId,
-        payload: { action: 'skip' } satisfies SkipAbilityPayload,
-      }
-    })),
     // #endregion
 
     // #region ----- UI Actions -----
@@ -350,12 +294,10 @@ export const uiMachine = setup({
         const serverAbility = context.currentGameState?.activeAbility;
         const clientAbility = context.abilityContext;
 
-        // If server has no ability, or it's not for the local player, clear the context.
         if (!serverAbility || serverAbility.playerId !== context.localPlayerId) {
           return null;
         }
 
-        // If the server ability is different from client, or client has none, re-initialize.
         if (!clientAbility || clientAbility.type !== serverAbility.type) {
           const { type, stage, playerId } = serverAbility;
           let maxPeekTargets = 0;
@@ -374,18 +316,14 @@ export const uiMachine = setup({
           return newContext;
         }
 
-        // If the stage has changed, update it and reset selections for the new stage.
         if (clientAbility.stage !== serverAbility.stage) {
           return {
             ...clientAbility,
             stage: serverAbility.stage,
             selectedPeekTargets: [],
             selectedSwapTargets: [],
-            // Do not clear peekedCards, they are needed for the swap stage.
           };
         }
-
-        // Otherwise, keep the client context as is to preserve selections.
         return clientAbility;
       },
     }),
@@ -400,7 +338,6 @@ export const uiMachine = setup({
 
         if (abilityContext.stage === 'peeking') {
           const currentTargets = abilityContext.selectedPeekTargets;
-          // Avoid adding duplicates
           if (currentTargets.some(t => t.playerId === newTarget.playerId && t.cardIndex === newTarget.cardIndex)) {
             return abilityContext;
           }
@@ -431,7 +368,6 @@ export const uiMachine = setup({
       abilityContext: null,
     }),
     // #endregion
-
   },
   guards: {
     isAbilityActionComplete: ({ context }) => {
@@ -481,10 +417,10 @@ export const uiMachine = setup({
       id: 'outOfGame',
       on: {
         CREATE_GAME_REQUESTED: {
-            actions: 'emitCreateGame',
+          actions: 'emitCreateGame',
         },
         JOIN_GAME_REQUESTED: {
-            actions: 'emitJoinGame',
+          actions: 'emitJoinGame',
         },
         GAME_CREATED_SUCCESSFULLY: {
           target: 'inGame',
@@ -506,26 +442,37 @@ export const uiMachine = setup({
         CLIENT_GAME_STATE_UPDATED: {
           actions: ['setCurrentGameState', 'syncAbilityContext'],
         },
-        INITIAL_PEEK_INFO: { actions: 'setInitialPeekCards' },
-        ABILITY_PEEK_RESULT: { actions: 'addPeekedCardToContext' },
-        NEW_GAME_LOG: { actions: 'addGameLog' },
-        INITIAL_LOGS_RECEIVED: { actions: 'setInitialLogs' },
-        SUBMIT_CHAT_MESSAGE: { actions: ['addChatMessage', 'emitSendMessage'] },
+        INITIAL_PEEK_INFO: {
+          actions: 'setInitialPeekCards'
+        },
+        ABILITY_PEEK_RESULT: {
+          actions: 'addPeekedCardToContext'
+        },
+        NEW_GAME_LOG: {
+          actions: 'addGameLog'
+        },
+        INITIAL_LOGS_RECEIVED: {
+          actions: 'setInitialLogs'
+        },
+        SUBMIT_CHAT_MESSAGE: {
+          actions: ['addChatMessage', 'emitSendMessage'],
+        },
         DECLARE_READY_FOR_PEEK_CLICKED: { actions: 'emitDeclareReadyForPeek' },
+        PLAYER_ACTION: { actions: 'emitPlayerAction' },
       },
       states: {
         lobby: {
           on: {
             START_GAME: { actions: 'emitStartGame' },
             PLAYER_READY: { actions: 'emitPlayerReady' },
-            CLIENT_GAME_STATE_UPDATED: [ // Re-check transition after any update
+            CLIENT_GAME_STATE_UPDATED: [
               {
                 target: 'playing',
                 guard: ({ event }) => event.gameState.gameStage !== GameStage.WAITING_FOR_PLAYERS,
-                actions: ['setCurrentGameState', 'clearTemporaryCardStates'],
+                actions: ['setCurrentGameState', 'clearTemporaryCardStates', 'syncAbilityContext'],
               },
               {
-                actions: 'setCurrentGameState', // otherwise, just update the state
+                actions: ['setCurrentGameState', 'syncAbilityContext'],
               },
             ],
           },
@@ -533,9 +480,48 @@ export const uiMachine = setup({
         playing: {
             initial: 'idle',
             on: {
-                PLAY_CARD: { actions: 'emitPlayCard' },
-                DRAW_CARD: { actions: 'emitDrawCard' },
-                PLAYER_ACTION: { actions: 'emitPlayerAction' },
+                PLAY_CARD: {
+                  actions: {
+                    type: 'emitPlayerAction',
+                    params: ({ event }: { event: { type: 'PLAY_CARD', cardIndex: number }}) => ({
+                      type: PlayerActionType.SWAP_AND_DISCARD,
+                      payload: { handCardIndex: event.cardIndex },
+                    }),
+                  },
+                },
+                DRAW_CARD: {
+                  actions: {
+                    type: 'emitPlayerAction',
+                    params: { type: PlayerActionType.DRAW_FROM_DECK },
+                  },
+                },
+                CONFIRM_ABILITY_ACTION: {
+                  guard: 'isAbilityActionComplete',
+                  actions: {
+                    type: 'emitPlayerAction',
+                    params: ({ context }: { context: UIMachineContext }) => {
+                        const { abilityContext } = context;
+                        if (!abilityContext) throw new Error('Ability context missing');
+                        
+                        let payload: AbilityActionPayload;
+                        if (abilityContext.stage === 'peeking') {
+                          payload = { action: 'peek', targets: abilityContext.selectedPeekTargets };
+                        } else {
+                          payload = { action: 'swap', source: abilityContext.selectedSwapTargets[0]!, target: abilityContext.selectedSwapTargets[1]! };
+                        }
+                        return { type: PlayerActionType.USE_ABILITY, payload };
+                    },
+                  },
+                },
+                SKIP_ABILITY_STAGE: {
+                  actions: {
+                    type: 'emitPlayerAction',
+                    params: {
+                      type: PlayerActionType.USE_ABILITY,
+                      payload: { action: 'skip' } satisfies SkipAbilityPayload,
+                    }
+                  }
+                },
             },
             states: {
                 idle: {
@@ -551,13 +537,6 @@ export const uiMachine = setup({
                     },
                     on: {
                         PLAYER_SLOT_CLICKED_FOR_ABILITY: { actions: 'updateAbilityContext' },
-                        CONFIRM_ABILITY_ACTION: {
-                            actions: ['emitUseAbility'],
-                            guard: 'isAbilityActionComplete',
-                        },
-                        SKIP_ABILITY_STAGE: {
-                            actions: ['emitSkipAbility'],
-                        },
                         CANCEL_ABILITY: {
                             target: 'idle',
                             actions: ['clearAbilityContext'],
@@ -578,7 +557,7 @@ export const uiMachine = setup({
           entry: 'emitRejoinGame',
           on: {
             CLIENT_GAME_STATE_UPDATED: {
-              target: 'playing', // Go back to playing state on successful rejoin
+              target: 'playing',
               actions: ['setCurrentGameState', 'syncAbilityContext'],
             },
           },
@@ -590,3 +569,4 @@ export const uiMachine = setup({
 
 export type UIMachineActorRef = ActorRefFrom<typeof uiMachine>;
 export type UIMachineState = SnapshotFrom<typeof uiMachine>;
+export type UIMachineSnapshot = StateFrom<typeof uiMachine>;

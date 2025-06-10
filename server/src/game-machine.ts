@@ -14,18 +14,16 @@ import {
   ChatMessage,
   SocketEventName,
   PlayerStatus,
-  PeekTarget,
 } from 'shared-types';
 import { createDeck, shuffleDeck } from './lib/deck-utils.js';
 import 'xstate/guards';
 
 // #region Constants & Server-Side Types
 const PEEK_TOTAL_DURATION_MS = parseInt(process.env.PEEK_DURATION_MS || '5000', 10);
-const TURN_DURATION_MS = parseInt(process.env.TURN_DURATION_MS || '60000', 10);
 const MAX_PLAYERS = 4;
 const CARDS_PER_PLAYER = 4;
 
-interface ServerPlayer {
+export interface ServerPlayer {
   id: PlayerId;
   name: string;
   socketId: string;
@@ -90,7 +88,9 @@ type PlayerActionEvents =
   | { type: PlayerActionType.CALL_CHECK; playerId: PlayerId }
   | { type: PlayerActionType.DECLARE_READY_FOR_PEEK; playerId: PlayerId }
   | { type: PlayerActionType.PLAY_AGAIN; playerId: PlayerId }
-  | { type: PlayerActionType.USE_ABILITY; playerId: PlayerId; payload: AbilityActionPayload };
+  | { type: PlayerActionType.USE_ABILITY; playerId: PlayerId; payload: AbilityActionPayload }
+  | { type: PlayerActionType.SEND_CHAT_MESSAGE, payload: Omit<ChatMessage, 'id' | 'timestamp'> };
+
 
 type GameEvent =
   | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData; playerId: PlayerId }
@@ -98,8 +98,7 @@ type GameEvent =
   | { type: 'PLAYER_DISCONNECTED'; playerId: PlayerId }
   | PlayerActionEvents
   | { type: 'TIMER.PEEK_EXPIRED' }
-  | { type: 'TIMER.MATCHING_EXPIRED' }
-  | { type: 'endTurn' };
+  | { type: 'TIMER.MATCHING_EXPIRED' };
 
 type EmittedEvent =
   | { type: 'BROADCAST_GAME_STATE' }
@@ -115,7 +114,7 @@ type EmittedEvent =
     };
 
 const getPlayerNameForLog = (playerId: string, context: GameContext): string => {
-  return context.players[playerId]?.name || 'P-' + playerId.slice(-4);
+    return context.players[playerId]?.name || 'P-' + playerId.slice(-4);
 };
 
 const createLogEntry = (
@@ -187,7 +186,6 @@ export const gameMachine = setup({
     },
     matchWillEmptyHand: ({ context, event }) => {
         assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
-        // Auto-check if player's hand will be empty after matching.
         return context.players[event.playerId]!.hand.length === 1;
     },
     isAbilityCardDiscarded: ({ context }) => {
@@ -207,10 +205,9 @@ export const gameMachine = setup({
     },
     isValidAbilityAction: ({ context, event }) => {
       assertEvent(event, PlayerActionType.USE_ABILITY);
-      const { playerId, payload } = event;
+      const { playerId } = event;
       const { activeAbility } = context;
       if (!activeAbility || activeAbility.playerId !== playerId) return false;
-      // Further validation logic can be added here based on ability type and stage
       return true;
     },
     isNotLocked: ({ context, event }) => {
@@ -219,10 +216,7 @@ export const gameMachine = setup({
     },
   },
   actions: {
-    // Communication
-    broadcastGameState: emit({
-      type: 'BROADCAST_GAME_STATE' as const,
-    }),
+    broadcastGameState: emit({ type: 'BROADCAST_GAME_STATE' as const }),
     emitPlayerJoinSuccessful: emit(({ event }) => {
       assertEvent(event, 'PLAYER_JOIN_REQUEST');
       return { type: 'PLAYER_JOIN_SUCCESSFUL' as const, playerId: event.playerId };
@@ -231,8 +225,6 @@ export const gameMachine = setup({
       assertEvent(event, 'PLAYER_RECONNECTED');
       return { type: 'PLAYER_RECONNECT_SUCCESSFUL' as const, playerId: event.playerId };
     }),
-    
-    // Player Management
     createPlayer: assign({
       players: ({ context, event }) => {
         assertEvent(event, 'PLAYER_JOIN_REQUEST');
@@ -304,8 +296,6 @@ export const gameMachine = setup({
         return newPlayers;
       },
     }),
-    
-    // Logging
     addPlayerJoinedLog: assign({
       log: ({ context, event }) => {
         assertEvent(event, 'PLAYER_JOIN_REQUEST');
@@ -328,8 +318,17 @@ export const gameMachine = setup({
           return [...context.log, createLogEntry(context, { message: `${getPlayerNameForLog(event.playerId, context)} disconnected.`, type: 'public', tags: ['system-message'] })];
         }
     }),
-
-    // Game Flow & State
+    addChatMessage: assign({
+      chat: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.SEND_CHAT_MESSAGE);
+        const newChatMessage: ChatMessage = {
+          id: `chat_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          ...event.payload,
+        };
+        return [...context.chat, newChatMessage];
+      }
+    }),
     dealCards: assign(({ context }) => {
       const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
       const newDeck = [...context.deck];
@@ -361,13 +360,11 @@ export const gameMachine = setup({
         const nextIndex = (currentIndex + 1) % turnOrder.length;
         return { currentPlayerId: turnOrder[nextIndex]! };
     }),
-
-    // Turn Actions
     drawFromDeck: assign(({ context, event }) => {
       assertEvent(event, PlayerActionType.DRAW_FROM_DECK);
       const newDeck = [...context.deck];
       const drawnCard = newDeck.pop();
-      if (!drawnCard) return {}; // Should ideally handle deck empty case
+      if (!drawnCard) return {}; 
       const newPlayers = { ...context.players };
       newPlayers[event.playerId]!.pendingDrawnCard = { card: drawnCard, source: 'deck' };
       return { deck: newDeck, players: newPlayers, currentTurnSegment: TurnPhase.DISCARD };
@@ -412,8 +409,6 @@ export const gameMachine = setup({
       
       return { players: newPlayers, discardPile: newDiscardPile };
     }),
-
-    // Matching
     setupMatchingOpportunity: assign({
       matchingOpportunity: ({ context }) => {
         const cardToMatch = context.discardPile[context.discardPile.length - 1];
@@ -439,10 +434,9 @@ export const gameMachine = setup({
         
         const newDiscardPile = [...context.discardPile, cardToPlaceOnPile];
 
-        // If matching player empties hand, they call Check automatically
         const handIsEmpty = newMatchingPlayerHand.length === 0;
         const checkDetails = handIsEmpty
-          ? { callerId: playerId, playersYetToPlay: [] } // playersYetToPlay set on CHECK entry
+          ? { callerId: playerId, playersYetToPlay: [] } 
           : context.checkDetails;
         
         if (handIsEmpty) {
@@ -454,7 +448,7 @@ export const gameMachine = setup({
           discardPile: newDiscardPile, 
           matchingOpportunity: null, 
           checkDetails,
-          discardPileIsSealed: true // Rule 8: seal the pile on a match
+          discardPileIsSealed: true 
         };
     }),
     handlePlayerPassedOnMatch: assign({
@@ -466,12 +460,10 @@ export const gameMachine = setup({
       }
     }),
     clearMatchingOpportunity: assign({ matchingOpportunity: null }),
-    
-    // Check
     setCheckCaller: assign({
       checkDetails: ({ event }) => {
         assertEvent(event, PlayerActionType.CALL_CHECK);
-        return { callerId: event.playerId, playersYetToPlay: [] }; // playersYetToPlay will be set on state entry
+        return { callerId: event.playerId, playersYetToPlay: [] };
       },
     }),
     lockPlayer: assign({
@@ -486,7 +478,6 @@ export const gameMachine = setup({
       checkDetails: ({ context }) => {
         const { callerId } = context.checkDetails!;
         const callerIndex = context.turnOrder.indexOf(callerId);
-        // Create a list of players for the final round, starting from the player after the caller
         const playersInOrder = [...context.turnOrder.slice(callerIndex + 1), ...context.turnOrder.slice(0, callerIndex)];
         return { callerId, playersYetToPlay: playersInOrder };
       }
@@ -503,8 +494,6 @@ export const gameMachine = setup({
         return newCheckDetails;
       },
     }),
-    
-    // Game Over & Round End
     calculateScoresAndEndRound: assign({
       gameover: ({ context }) => {
         let loserId: PlayerId | null = null;
@@ -520,7 +509,7 @@ export const gameMachine = setup({
             return [id, score];
           })
         );
-        return { winnerId: null, loserId, playerScores }; // Winner logic can be more complex
+        return { winnerId: null, loserId, playerScores };
       }
     }),
     resetForNextRound: assign(({ context }) => ({
@@ -536,8 +525,6 @@ export const gameMachine = setup({
         lastRoundLoserId: context.gameover?.loserId ?? null,
         turnOrder: context.lastRoundLoserId ? [context.lastRoundLoserId, ...context.turnOrder.filter(id => id !== context.lastRoundLoserId)] : context.turnOrder,
     })),
-    
-    // Peek
     sendPeekInfoToAllPlayers: enqueueActions(({ context, enqueue }) => {
       context.turnOrder.forEach((playerId) => {
         const player = context.players[playerId]!;
@@ -551,8 +538,6 @@ export const gameMachine = setup({
         });
       });
     }),
-    
-    // Abilities
     activateAbility: assign({
         activeAbility: ({ context }) => {
             const card = context.discardPile[context.discardPile.length - 1]!;
@@ -560,7 +545,6 @@ export const gameMachine = setup({
               : (card.rank === CardRank.Queen ? 'peek' : 'swap');
             const newAbility: ActiveAbility = {
                 type,
-                // For Jack (swap), there is no peek stage.
                 stage: type === 'swap' ? 'swapping' : 'peeking',
                 playerId: context.currentPlayerId!,
             };
@@ -600,16 +584,14 @@ export const gameMachine = setup({
         let newActiveAbility = { ...activeAbility };
 
         if (payload.action === 'skip') {
-            // For King/Queen, skipping peek moves to swap. For Jack, or skipping swap, it ends.
             if ((newActiveAbility.type === 'king' || newActiveAbility.type === 'peek') && newActiveAbility.stage === 'peeking') {
                 newActiveAbility.stage = 'swapping';
                 return { activeAbility: newActiveAbility };
             }
-            return { activeAbility: null }; // End ability
+            return { activeAbility: null };
         }
 
         if (payload.action === 'peek' && newActiveAbility.stage === 'peeking') {
-            // After peeking, always advance to the swap stage for King/Queen.
             newActiveAbility.stage = 'swapping';
             return { activeAbility: newActiveAbility };
         }
@@ -629,17 +611,16 @@ export const gameMachine = setup({
             const newSourceHand = [...sourcePlayer.hand];
             const newTargetHand = [...targetPlayer.hand];
 
-            // Perform the swap
             newSourceHand[source.cardIndex] = targetCard;
             newTargetHand[target.cardIndex] = sourceCard;
 
             newPlayers[source.playerId]!.hand = newSourceHand;
             newPlayers[target.playerId]!.hand = newTargetHand;
             
-            return { players: newPlayers, activeAbility: null }; // Ability is complete
+            return { players: newPlayers, activeAbility: null };
         }
 
-        return {}; // No change if action is invalid for current state
+        return {};
     }),
   },
   actors: {
@@ -648,7 +629,7 @@ export const gameMachine = setup({
       return {};
     }),
     matchingTimerActor: fromPromise(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // 5s for matching
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       return {};
     }),
   },
@@ -673,6 +654,19 @@ export const gameMachine = setup({
     chat: [],
     discardPileIsSealed: false,
   }),
+  on: {
+    PLAYER_RECONNECTED: {
+      actions: [
+        'setPlayerConnected',
+        'emitPlayerReconnectSuccessful',
+        'addPlayerReconnectedLog',
+        'broadcastGameState',
+      ],
+    },
+    PLAYER_DISCONNECTED: {
+      actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
+    },
+  },
   states: {
     [GameStage.WAITING_FOR_PLAYERS]: {
       on: {
@@ -685,17 +679,6 @@ export const gameMachine = setup({
             'broadcastGameState',
           ],
         },
-        PLAYER_RECONNECTED: {
-          actions: [
-            'setPlayerConnected',
-            'emitPlayerReconnectSuccessful',
-            'addPlayerReconnectedLog',
-            'broadcastGameState',
-          ],
-        },
-        PLAYER_DISCONNECTED: {
-          actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
-        },
         [PlayerActionType.DECLARE_LOBBY_READY]: {
           actions: ['setPlayerReady', 'broadcastGameState'],
         },
@@ -703,14 +686,13 @@ export const gameMachine = setup({
           guard: and(['isGameMaster', 'areAllPlayersReady']),
           target: GameStage.DEALING,
         },
+        [PlayerActionType.SEND_CHAT_MESSAGE]: {
+          actions: ['addChatMessage', 'broadcastGameState'],
+        },
       },
     },
     [GameStage.DEALING]: {
-      entry: [
-        'dealCards', 
-        'setAllPlayersToPlaying',
-        'broadcastGameState'
-      ],
+      entry: [ 'dealCards', 'setAllPlayersToPlaying', 'broadcastGameState' ],
       after: {
         100: { target: GameStage.INITIAL_PEEK },
       },
@@ -741,6 +723,9 @@ export const gameMachine = setup({
           target: GameStage.CHECK,
           actions: ['setCheckCaller', 'lockPlayer'],
         },
+        [PlayerActionType.SEND_CHAT_MESSAGE]: {
+          actions: ['addChatMessage', 'broadcastGameState'],
+        },
       },
       states: {
         turn: {
@@ -762,15 +747,8 @@ export const gameMachine = setup({
             },
             action: {
               always: [
-                {
-                  guard: ({ context }) => !!context.activeAbility,
-                  target: 'ABILITY'
-                },
-                {
-                  guard: 'isAbilityCardDiscarded',
-                  target: 'ABILITY',
-                  actions: 'activateAbility',
-                },
+                { guard: ({ context }) => !!context.activeAbility, target: 'ABILITY' },
+                { guard: 'isAbilityCardDiscarded', target: 'ABILITY', actions: 'activateAbility' },
                 { target: 'MATCHING' },
               ],
             },
@@ -831,81 +809,74 @@ export const gameMachine = setup({
       },
       states: {
         turn: {
-            initial: 'DRAW',
-            states: {
-              DRAW: {
-                entry: ['broadcastGameState'],
-                on: {
-                  [PlayerActionType.DRAW_FROM_DECK]: { guard: 'isPlayerTurn', actions: 'drawFromDeck', target: 'DISCARD' },
-                  [PlayerActionType.DRAW_FROM_DISCARD]: { guard: and(['isPlayerTurn', 'canDrawFromDiscard']), actions: 'drawFromDiscard', target: 'DISCARD' },
-                },
+          initial: 'DRAW',
+          states: {
+            DRAW: {
+              entry: ['broadcastGameState'],
+              on: {
+                [PlayerActionType.DRAW_FROM_DECK]: { guard: 'isPlayerTurn', actions: 'drawFromDeck', target: 'DISCARD' },
+                [PlayerActionType.DRAW_FROM_DISCARD]: { guard: and(['isPlayerTurn', 'canDrawFromDiscard']), actions: 'drawFromDiscard', target: 'DISCARD' },
               },
-              DISCARD: {
-                entry: 'broadcastGameState',
-                on: {
-                  [PlayerActionType.SWAP_AND_DISCARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard']), actions: 'swapAndDiscard', target: 'action' },
-                  [PlayerActionType.DISCARD_DRAWN_CARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard', 'wasDrawnFromDeck']), actions: 'discardDrawnCard', target: 'action' },
-                },
+            },
+            DISCARD: {
+              entry: 'broadcastGameState',
+              on: {
+                [PlayerActionType.SWAP_AND_DISCARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard']), actions: 'swapAndDiscard', target: 'action' },
+                [PlayerActionType.DISCARD_DRAWN_CARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard', 'wasDrawnFromDeck']), actions: 'discardDrawnCard', target: 'action' },
               },
-              action: {
-                always: [
-                  {
-                    guard: ({ context }) => !!context.activeAbility,
-                    target: 'ABILITY'
-                  },
-                  {
-                    guard: 'isAbilityCardDiscarded',
-                    target: 'ABILITY',
-                    actions: 'activateAbility',
-                  },
-                  { target: 'MATCHING' },
-                ],
-              },
-              ABILITY: {
-                entry: ['broadcastGameState'],
-                on: {
-                  [PlayerActionType.USE_ABILITY]: {
-                    guard: 'isValidAbilityAction',
-                    actions: ['performAbilityAction', 'sendPeekResults', 'broadcastGameState'],
-                    target: 'action',
-                  }
+            },
+            action: {
+              always: [
+                { guard: ({ context }) => !!context.activeAbility, target: 'ABILITY' },
+                { guard: 'isAbilityCardDiscarded', target: 'ABILITY', actions: 'activateAbility' },
+                { target: 'MATCHING' },
+              ],
+            },
+            ABILITY: {
+              entry: ['broadcastGameState'],
+              on: {
+                [PlayerActionType.USE_ABILITY]: {
+                  guard: 'isValidAbilityAction',
+                  actions: ['performAbilityAction', 'sendPeekResults', 'broadcastGameState'],
+                  target: 'action',
                 }
-              },
-              MATCHING: {
-                entry: ['setupMatchingOpportunity', 'broadcastGameState'],
-                invoke: {
-                  id: 'matchingTimer',
-                  src: 'matchingTimerActor',
-                  onDone: { target: 'endOfTurn', actions: 'clearMatchingOpportunity' },
-                },
-                on: {
-                  [PlayerActionType.ATTEMPT_MATCH]: {
-                      guard: 'canAttemptMatch',
-                      actions: 'handleSuccessfulMatch',
-                      target: 'endOfTurn'
-                  },
-                  [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
-                      actions: 'handlePlayerPassedOnMatch',
-                  }
-                },
-                always: {
-                  guard: ({ context }) => context.matchingOpportunity?.remainingPlayerIDs.length === 0,
-                  target: 'endOfTurn',
-                  actions: 'clearMatchingOpportunity',
-                }
-              },
-              endOfTurn: {
-                  entry: ['advanceCheckRound', 'setNextCheckPlayer', 'broadcastGameState'],
-                  always: [
-                    {
-                      guard: ({ context }) => !context.currentPlayerId,
-                      target: `#game.${GameStage.GAMEOVER}`
-                    },
-                    { target: 'DRAW' }
-                  ]
               }
             },
+            MATCHING: {
+              entry: ['setupMatchingOpportunity', 'broadcastGameState'],
+              invoke: {
+                id: 'matchingTimer',
+                src: 'matchingTimerActor',
+                onDone: { target: 'endOfTurn', actions: 'clearMatchingOpportunity' },
+              },
+              on: {
+                [PlayerActionType.ATTEMPT_MATCH]: {
+                    guard: 'canAttemptMatch',
+                    actions: 'handleSuccessfulMatch',
+                    target: 'endOfTurn'
+                },
+                [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
+                    actions: 'handlePlayerPassedOnMatch',
+                }
+              },
+              always: {
+                guard: ({ context }) => context.matchingOpportunity?.remainingPlayerIDs.length === 0,
+                target: 'endOfTurn',
+                actions: 'clearMatchingOpportunity',
+              }
+            },
+            endOfTurn: {
+                entry: ['advanceCheckRound', 'setNextCheckPlayer', 'broadcastGameState'],
+                always: [
+                  {
+                    guard: ({ context }) => !context.currentPlayerId,
+                    target: `#game.${GameStage.GAMEOVER}`
+                  },
+                  { target: 'DRAW' }
+                ]
+            }
           },
+        },
       },
     },
     [GameStage.GAMEOVER]: {
@@ -916,22 +887,6 @@ export const gameMachine = setup({
           target: GameStage.DEALING,
         },
       },
-    },
-  },
-  on: {
-    PLAYER_RECONNECTED: {
-      actions: [
-        'setPlayerConnected',
-        'emitPlayerReconnectSuccessful',
-        'addPlayerReconnectedLog',
-        'broadcastGameState',
-      ],
-    },
-    PLAYER_DISCONNECTED: {
-      actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
-    },
-    [PlayerActionType.SEND_CHAT_MESSAGE]: {
-      actions: ['addChatMessage', 'broadcastGameState'],
     },
   },
 });

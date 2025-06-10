@@ -10,57 +10,10 @@ import {
   ChatMessage,
   ActiveAbility,
 } from 'shared-types';
+import type { GameContext, ServerPlayer } from './game-machine.js';
 
 // The server-side context now comes from the game machine itself.
 // These types are defined locally in the machine file.
-interface ServerPlayer {
-  id: PlayerId;
-  name: string;
-  socketId: string;
-  hand: Card[];
-  isReady: boolean;
-  isDealer: boolean;
-  hasCalledCheck: boolean;
-  isLocked: boolean;
-  score: number;
-  isConnected: boolean;
-  pendingDrawnCard: {
-    card: Card;
-    source: 'deck' | 'discard';
-  } | null;
-  forfeited: boolean;
-  status: PlayerStatus;
-}
-
-interface GameContext {
-  gameId: string;
-  deck: Card[];
-  players: Record<PlayerId, ServerPlayer>;
-  discardPile: Card[];
-  turnOrder: PlayerId[];
-  gameMasterId: PlayerId | null;
-  currentPlayerId: PlayerId | null;
-  currentTurnSegment: TurnPhase | null;
-  matchingOpportunity: {
-    cardToMatch: Card;
-    originalPlayerID: PlayerId;
-    remainingPlayerIDs: PlayerId[];
-  } | null;
-  activeAbility: ActiveAbility | null;
-  checkDetails: {
-    callerId: PlayerId;
-    playersYetToPlay: PlayerId[];
-  } | null;
-  gameover: {
-    winnerId: PlayerId | null;
-    loserId: PlayerId | null;
-    playerScores: Record<PlayerId, number>;
-  } | null;
-  lastRoundLoserId: PlayerId | null;
-  log: RichGameLogMessage[];
-  chat: ChatMessage[];
-  discardPileIsSealed: boolean;
-}
 
 
 /**

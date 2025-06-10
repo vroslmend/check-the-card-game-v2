@@ -6,7 +6,7 @@ import { socket } from '@/lib/socket';
 import {
   uiMachine,
   type UIMachineActorRef,
-  type UIMachineState,
+  type UIMachineSnapshot,
 } from '@/machines/uiMachine';
 import {
   type ClientCheckGameState,
@@ -131,7 +131,7 @@ export const UIMachineProvider = ({
   return <UIContext.Provider value={{ actorRef }}>{children}</UIContext.Provider>;
 };
 
-export const useUI = (): [UIMachineState, UIMachineActorRef['send']] => {
+export const useUI = (): [UIMachineSnapshot, UIMachineActorRef['send']] => {
   const context = useContext(UIContext);
   if (context === undefined) {
     throw new Error('useUI must be used within a UIMachineProvider');

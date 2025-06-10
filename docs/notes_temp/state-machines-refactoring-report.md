@@ -436,3 +436,43 @@ Based on the problems we solved, here is the list of the documentation files tha
 These documents were the core set I referred to for the most complex parts of our work together.
 
 ====
+
+Of course. I will now search for best practices on creating reusable, typed logic in XState v5, using both a general web search and the specialized Context7 documentation search tool as you requested. This should help us find the most robust and type-safe solution.
+
+First, I'll perform a broad web search for established patterns.
+Ran tool
+The web search results confirm that the official XState documentation is the best resource. The article "State machines and Actors in XState v5" by Sandro Maglione is particularly interesting as it outlines a pattern for structuring machine files that could be very helpful.
+
+I will now use the Context7 tool to perform a more focused search on the XState documentation. First, I need to resolve "xstate" to a library ID.
+Ran tool
+Excellent. The library ID for XState is `/statelyai/xstate`.
+
+Now, I'll search the XState documentation for information on how to create reusable, type-safe logic. Based on the previous findings, a good topic to search for would be related to actors, setup, and TypeScript. I'll search for "reusable actors typescript".
+Ran tool
+The search results offer a wealth of information on using actors in XState v5. While they don't provide a single, magic-bullet function for creating reusable state logic chunks with perfect type inference out-of-the-box, they strongly point towards a specific, powerful pattern.
+
+The "XState way" to achieve what we want is to encapsulate the reusable logic into its own, separate machine (an "actor"), and then `invoke` that actor from within the parent machine.
+
+This approach has several advantages:
+1.  **Strong Typing:** Each machine defines its own `context`, `events`, and `input` via `setup()`, giving us robust, self-contained typings. When we invoke it, XState's TypeScript inference ensures that the `input` we provide and the `output` we receive are correctly typed.
+2.  **Clean Abstraction:** The logic is truly separated. The parent machine doesn't need to know about the internal states of the child actor; it only cares about the `input` it needs to provide and the final `output` it gets back when the actor is `done`.
+3.  **Reusability:** The actor can be invoked from any state in any machine that needs that piece of logic.
+
+This is a more structured and robust solution than trying to create a simple function that generates a piece of a state machine config. It avoids the TypeScript inference issues we were seeing and aligns perfectly with XState's actor model philosophy.
+
+Therefore, I will refactor `game-machine.ts` to use this pattern.
+
+**Plan:**
+1.  Create a new, separate machine called `turnMachine` that encapsulates the logic currently in the `createTurnLogic` function. This machine will handle the `DRAW`, `DISCARD`, `ACTION`, and `RESPOND` phases of a turn.
+2.  The `turnMachine` will accept `input` to configure its behavior (e.g., the specific transitions for `onMatch` and `onEndOfTurn`).
+3.  In the main `gameMachine`, I will remove the `createTurnLogic` function.
+4.  I will replace the `turn` states inside both `PLAYING` and `CHECK` with an `invoke` of the new `turnMachine`.
+5.  The `invoke` will pass the appropriate configuration (the `onMatch` and `onEndOfTurn` transitions) as `input` to the `turnMachine`.
+6.  The `onDone` transition from the invoked `turnMachine` will handle the logic for what happens when the turn is over, effectively replacing the old `onEndOfTurn` and `onMatch` transitions.
+
+This is a significant but important refactoring that will make the code much cleaner, more maintainable, and fully type-safe without any `as any` hacks.
+
+First, I will read the `game-machine.ts` file to have the latest version of the code.
+Read file: server/src/game-machine.ts
+Okay, I have the latest version of `game-machine.ts`.
+
