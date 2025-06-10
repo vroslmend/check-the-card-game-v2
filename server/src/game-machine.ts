@@ -19,9 +19,10 @@ import { createDeck, shuffleDeck } from './lib/deck-utils.js';
 import 'xstate/guards';
 
 // #region Constants & Server-Side Types
-const PEEK_TOTAL_DURATION_MS = parseInt(process.env.PEEK_DURATION_MS || '5000', 10);
-const MAX_PLAYERS = 4;
-const CARDS_PER_PLAYER = 4;
+const PEEK_TOTAL_DURATION_MS = parseInt(process.env.PEEK_DURATION_MS || '10000', 10);
+const MATCHING_STAGE_DURATION_MS = parseInt(process.env.MATCHING_STAGE_DURATION_MS || '5000', 10);
+const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || '4', 10);
+const CARDS_PER_PLAYER = parseInt(process.env.CARDS_PER_PLAYER || '4', 10);
 
 export interface ServerPlayer {
   id: PlayerId;
@@ -629,7 +630,7 @@ export const gameMachine = setup({
       return {};
     }),
     matchingTimerActor: fromPromise(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, MATCHING_STAGE_DURATION_MS));
       return {};
     }),
   },

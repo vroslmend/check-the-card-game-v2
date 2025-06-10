@@ -35,8 +35,7 @@ This project utilizes a modern technology stack for a robust and interactive exp
     *   TypeScript
     *   Tailwind CSS (latest, for styling)
     *   **shadcn/ui**: Collection of accessible and customizable UI components, built with Radix UI and Tailwind CSS.
-    *   **Zustand**: For managing the global store of server-sent data (`ClientCheckGameState`, game logs, chat messages).
-    *   **XState (`@xstate/react`)**: For client-side UI interaction flows, orchestrating complex game actions, and managing local UI state (`uiMachine.ts`).
+    *   **XState (`@xstate/react`)**: For client-side UI interaction flows, orchestrating complex game actions, and managing all local and server-derived UI state (`uiMachine.ts`).
     *   **Framer Motion**: For all animations, especially `layoutId` for smooth card movements and UI transitions.
     *   Socket.IO Client: For real-time communication with the backend.
 *   **Shared Code (`shared-types/`):**
@@ -81,9 +80,8 @@ check-the-card-game-v2/
 ## ✨ Key Architectural Decisions
 
 *   **Server-Authoritative Game State**: The backend `server/` (specifically its XState `game-machine.ts`) is the single source of truth for all game logic and state.
-*   **Zustand for Server Data**: The `client/` uses a Zustand store to hold the `ClientCheckGameState`, game logs, and chat messages received from the server. This provides an efficient, global, and reactive way for components to access this data.
-*   **XState for UI Orchestration**: A client-side XState machine (`uiMachine.ts`) manages complex UI interaction sequences (e.g., multi-step abilities) and orchestrates game actions. It does *not* duplicate game logic but reacts to server state changes and user inputs to manage the UI flow.
-*   **Framer Motion for All Animations**: All visual animations, especially card movements (using `layoutId`), transitions, and UI effects, are handled by Framer Motion, driven by states from the `uiMachine` and data from the Zustand store.
+*   **XState for All Client-Side State**: The `client/` uses a single, root XState machine (`uiMachine.ts`) to manage all client-side state. This includes complex UI interaction sequences (e.g., multi-step abilities), orchestrating game actions, and holding the `ClientCheckGameState` received from the server. This provides a robust and centralized state management solution.
+*   **Framer Motion for All Animations**: All visual animations, especially card movements (using `layoutId`), transitions, and UI effects, are handled by Framer Motion, driven by states from the `uiMachine`.
 *   **shadcn/ui for Core UI Components**: Base UI elements (buttons, modals, inputs) are built using shadcn/ui for speed, consistency, and accessibility, styled with Tailwind CSS.
 
 ## ⚙️ Setup and Installation
@@ -94,14 +92,14 @@ check-the-card-game-v2/
     cd check-the-card-game-v2
     ```
 
-2.  **Install All Dependencies:**
-    From the project root:
+2.  **Install Dependencies:**
+    From the project root, this command installs all dependencies for the server, client, and shared packages.
     ```bash
     npm install
     ```
 
 3.  **Build All Packages:**
-    It's crucial to build `shared-types` first. The root build script handles this order. From the project root:
+    This command builds all packages in the correct order, ensuring `shared-types` is available for the client and server.
     ```bash
     npm run build
     ```
@@ -116,20 +114,18 @@ check-the-card-game-v2/
 
 ## ▶️ How to Run the Game
 
-### Development Mode (For Coding)
+### Development Mode
 
-1.  **Start Both Server and Client:**
-    From the project root (`check-the-card-game-v2/`):
-    ```bash
-    npm run dev
-    ```
-    *   Server starts on `http://localhost:8000`.
-    *   Client starts on `http://localhost:3000`.
+Run the following command from the project root (`check-the-card-game-v2/`):
+```bash
+npm run dev
+```
+*   The server will start on `http://localhost:8000`.
+*   The client will start on `http://localhost:3000`.
 
-2.  **Access the Game:**
-    Open your browser to `http://localhost:3000`.
+Access the game by opening your browser to `http://localhost:3000`.
 
-### Production Mode (After Building)
+### Production Mode
 
 1.  **Build the Application:**
     From the project root:
@@ -138,29 +134,40 @@ check-the-card-game-v2/
     ```
 
 2.  **Start the Production Server:**
+    From the project root:
     ```bash
     npm start
     ```
+    This command will start both the Next.js frontend and the Node.js backend server.
+
+## 🚀 Deployment
+
+This project is designed for a split deployment:
+
+*   **Frontend (`client`):** Deploy as a Next.js site on **Vercel**.
+*   **Backend (`server`):** Deploy as a Node.js Web Service on **Render**.
+
+You will need to set the environment variables in the respective hosting provider's dashboard. The `NEXT_PUBLIC_WEBSOCKET_URL` on Vercel must point to the public URL of your Render service.
 
 ## 🔧 Environment Variables
 
-It's recommended to create `.env` files in the `server` and `client` directories for local development.
+Create `.env` files in the `server` and `client` directories for local development.
 
 *   **Client (`client/.env.local`):**
-    *   `NEXT_PUBLIC_WEBSOCKET_URL`: URL for the backend Socket.IO server (defaults to `http://localhost:8000` if not set).
+    *   `NEXT_PUBLIC_WEBSOCKET_URL`: Full URL of the backend Socket.IO server. (Defaults to `http://localhost:8000` for local development).
 
 *   **Server (`server/.env`):**
-    *   `PORT`: Port for the backend server (defaults to `8000`).
-    *   `CORS_ORIGIN`: Allowed origin for CORS (defaults to `http://localhost:3000`).
-    *   `PEEK_DURATION_MS`: Duration of initial peek phase in milliseconds (default: `10000`).
-    *   `TURN_DURATION_MS`: Duration of a player's turn timer in milliseconds (default: `30000`).
+    *   `PORT`: Port for the backend server (default: `8000`).
+    *   `CORS_ORIGIN`: The client URL for CORS validation (default: `http://localhost:3000`).
+    *   `MAX_PLAYERS`: The maximum number of players in a game (default: `4`).
+    *   `CARDS_PER_PLAYER`: The number of cards dealt to each player (default: `4`).
+    *   `PEEK_DURATION_MS`: Duration of the initial card peek phase in milliseconds (default: `10000`).
     *   `MATCHING_STAGE_DURATION_MS`: Duration of the matching stage in milliseconds (default: `5000`).
-    *   `DISCONNECT_GRACE_PERIOD_MS`: Time before a disconnected player is removed (default: `60000`).
 
 ## 📝 Current Development Status
 
 *   **Backend Refactor (Completed):** The backend uses XState (`game-machine.ts`) for all authoritative game logic.
-*   **Frontend Architecture (Completed):** The frontend has been architected using Next.js, TypeScript, Zustand for server state, and XState (`uiMachine.ts`) for UI orchestration.
+*   **Frontend Architecture (Completed):** The frontend has been architected using Next.js, TypeScript, and a single root XState machine (`uiMachine.ts`) for all client-side state orchestration.
 *   **Core UI Components (In Progress):** Development is focused on refining UI components, animations, and ensuring all game phases are fully represented in the UI.
 
 ---

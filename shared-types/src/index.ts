@@ -41,6 +41,7 @@ export enum PlayerStatus {
 //                                      CARD & DECK TYPES
 // ================================================================================================
 export interface Card {
+  id: string;
   suit: Suit;
   rank: CardRank;
 }
@@ -123,8 +124,6 @@ export enum SocketEventName {
   ERROR_MESSAGE = 'ERROR_MESSAGE',
   ATTEMPT_REJOIN = 'ATTEMPT_REJOIN',
   SEND_CHAT_MESSAGE = 'SEND_CHAT_MESSAGE',
-  SERVER_LOG_ENTRY = 'SERVER_LOG_ENTRY',
-  INITIAL_LOGS = 'INITIAL_LOGS',
   INITIAL_PEEK_INFO = 'INITIAL_PEEK_INFO',
   ABILITY_PEEK_RESULT = 'ABILITY_PEEK_RESULT',
 }

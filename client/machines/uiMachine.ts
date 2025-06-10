@@ -137,31 +137,7 @@ export const uiMachine = setup({
     setInitialGameState: assign({
       currentGameState: ({ event }) => {
         assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-        if (event.type === 'GAME_JOINED_SUCCESSFULLY') {
-          return event.response.gameState!;
-        }
-        
-        // Create a default state for the creator on GAME_CREATED_SUCCESSFULLY
-        const { gameId, playerId } = event.response;
-        return {
-          gameId: gameId!,
-          viewingPlayerId: playerId!,
-          gameMasterId: playerId!,
-          players: {},
-          deckSize: 52,
-          discardPile: [],
-          turnOrder: [],
-          gameStage: GameStage.WAITING_FOR_PLAYERS,
-          currentPlayerId: null,
-          turnPhase: null,
-          activeAbility: null,
-          matchingOpportunity: null,
-          checkDetails: null,
-          gameover: null,
-          lastRoundLoserId: null,
-          log: [],
-          chat: [],
-        };
+        return event.response.gameState!;
       },
     }),
     resetGameContext: assign({

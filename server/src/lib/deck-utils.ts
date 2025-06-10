@@ -1,4 +1,5 @@
 import { Card, Suit, CardRank } from 'shared-types';
+import { nanoid } from 'nanoid';
 
 // Helper function to create a standard 52-card deck
 export const createDeck = (): Card[] => {
@@ -7,7 +8,7 @@ export const createDeck = (): Card[] => {
   const deck: Card[] = [];
   for (const suit of suits) {
     for (const rank of ranks) {
-      deck.push({ suit, rank }); // Card interface no longer has an ID
+      deck.push({ id: nanoid(), suit, rank });
     }
   }
   return deck;

@@ -27,7 +27,15 @@ These are events that the client emits to the server.
 
 *   **Event Name:** `SocketEventName.JOIN_GAME`
 *   **Payload:** `(gameIdToJoin: string, playerSetupData: InitialPlayerSetupData, callback)`
-*   **Description:** Allows a player to join an existing game lobby using a specific `gameId`. The `playerSetupData` is the same as for `CREATE_GAME`. The server responds via a callback with `{ success: boolean, gameId?: string, playerId?: string, gameState?: ClientCheckGameState }`.
+*   **Description:** Allows a player to join an existing game lobby using a specific `gameId`. The `playerSetupData` is the same as for `CREATE_GAME`. The server responds via a callback with `{ success: boolean, gameId?: string, playerId?: string, gameState?: ClientCheckGameState }`. The request will fail if the game is not found, is already full, or has already started.
+
+---
+
+### `ATTEMPT_REJOIN`
+
+*   **Event Name:** `SocketEventName.ATTEMPT_REJOIN`
+*   **Payload:** `{ gameId: string, playerId: string }`
+*   **Description:** Allows a disconnected player to attempt to reconnect to an active game. If successful, the server will re-associate their new socket with their player identity in the game and send them the latest `GAME_STATE_UPDATE`.
 
 ---
 
@@ -36,13 +44,16 @@ These are events that the client emits to the server.
 *   **Event Name:** `SocketEventName.PLAYER_ACTION`
 *   **Payload:** A union of all possible player actions, defined by `ConcretePlayerActionEvents`. The `type` property uses the `PlayerActionType` enum.
     ```typescript
-    // Example Payload
+    // Example Payload for a match attempt
     {
-      type: PlayerActionType.DRAW_FROM_DECK,
-      playerId: string
+      type: PlayerActionType.ATTEMPT_MATCH,
+      playerId: string,
+      payload: {
+          cardFromHand: Card;
+      }
     }
     ```
-*   **Description:** This is the primary event for all in-game actions. The server routes this event to the correct game machine instance, which then processes the specific action based on the `type` in the payload. See `PlayerActionType` in `shared-types` for a full list of possible actions (e.g., `DRAW_FROM_DECK`, `CALL_CHECK`, `ATTEMPT_MATCH`, `RESOLVE_SPECIAL_ABILITY`).
+*   **Description:** This is the primary event for all in-game actions. The server routes this event to the correct game machine instance, which then processes the specific action based on the `type` and `payload`. See `PlayerActionType` in `shared-types` for a full list of possible actions (e.g., `DRAW_FROM_DECK`, `CALL_CHECK`, `ATTEMPT_MATCH`, `DISCARD_FROM_HAND`, `USE_ABILITY`).
 
 ---
 
@@ -64,18 +75,17 @@ These are events that the client emits to the server.
 ### `SEND_CHAT_MESSAGE`
 
 *   **Event Name:** `SocketEventName.SEND_CHAT_MESSAGE`
-*   **Payload:** `ChatMessage`
+*   **Payload:** `Omit<ChatMessage, 'id' | 'timestamp'>`
     ```typescript
-    interface ChatMessage {
-      id: string;
+    // Example Payload
+    {
       gameId: string;
       senderId: PlayerId;
       senderName: string;
       message: string;
-      timestamp: number;
     }
     ```
-*   **Description:** Sends a chat message from a client to the server to be broadcast to other players in the same game. The server confirms receipt and validity via a callback: `(ack: {success: boolean, messageId?: string, error?: string}) => void`.
+*   **Description:** Sends a chat message from a client to the server. The server's game machine will add it to the game's chat history and the updated chat log will be sent to all players in the next `GAME_STATE_UPDATE`. This event does not have a callback.
 
 ## Server-to-Client Events
 
@@ -87,7 +97,7 @@ These are events that the server emits to clients.
 
 *   **Event Name:** `SocketEventName.GAME_STATE_UPDATE`
 *   **Payload:** `ClientCheckGameState`
-*   **Description:** The primary event for broadcasting the game state. The server sends this to all players in a game whenever the state changes. The payload is a redacted version of the full server state, tailored for each receiving player to hide sensitive information (like other players' cards).
+*   **Description:** The primary event for broadcasting the game state. The server sends this to all players in a game whenever the state changes. The payload is a redacted version of the full server state, tailored for each receiving player to hide sensitive information (like other players' cards). This event is also sent directly to a player who successfully rejoins a game.
 
 ---
 
@@ -95,35 +105,20 @@ These are events that the server emits to clients.
 
 *   **Event Name:** `SocketEventName.SERVER_LOG_ENTRY`
 *   **Payload:** `RichGameLogMessage`
-*   **Description:** Sends a structured log message to clients to be displayed in the game log. This is used to inform players about key game events (e.g., "Player X drew a card," "Player Y called Check!"). Some logs may be public (sent to all players) or private (sent to only one player).
+*   **Description:** Sends a structured log message to clients to be displayed in the game log. This is used to inform players about key game events (e.g., "Player X drew a card," "Player Y called Check!"). This is an older method of communication; most log entries are now delivered as part of the `GAME_STATE_UPDATE`.
 
 ---
 
-### `CHAT_MESSAGE`
+### `ABILITY_PEEK_RESULT`
 
-*   **Event Name:** `SocketEventName.CHAT_MESSAGE`
-*   **Payload:** `ChatMessage`
-*   **Description:** Broadcasts a chat message received from one client to all other clients in the same game.
-
----
-
-### `RESPOND_CARD_DETAILS_FOR_ABILITY`
-
-*   **Event Name:** `SocketEventName.RESPOND_CARD_DETAILS_FOR_ABILITY`
-*   **Payload:** `RespondCardDetailsPayload`
-     ```typescript
-    interface RespondCardDetailsPayload {
-      card: Card;
-      playerId: PlayerId;
-      cardIndex: number;
-    }
-    ```
-*   **Description:** Sent in response to a `REQUEST_CARD_DETAILS_FOR_ABILITY` event. This provides a client with the details of a card they were allowed to peek at, allowing the `uiMachine` to proceed with the ability flow.
+*   **Event Name:** `SocketEventName.ABILITY_PEEK_RESULT`
+*   **Payload:** `{ card: Card, playerId: PlayerId, cardIndex: number }`
+*   **Description:** Sent directly to a player in response to them using a "peek" ability. This provides the client with the details of a card they were allowed to see, allowing the `uiMachine` to proceed with the ability flow.
 
 ---
 
 ### Error Handling
 
-Instead of a generic `ERROR_MESSAGE` event, the server communicates errors in two primary ways:
-1.  **Callback Responses:** Most client-to-server events that expect a response (e.g., `CREATE_GAME`, `JOIN_GAME`, `PLAYER_ACTION`) use a callback function. The first argument to this callback is an object that contains a `success: boolean` field and often a `message: string` field with error details if `success` is `false`.
-2.  **Private Log Entries:** For errors that occur outside of a direct request-response flow, the server may send a private `SERVER_LOG_ENTRY` to the specific player who caused or is affected by the error. This allows the client to display the error message in the game log or as a toast notification. 
+Instead of a single, generic `ERROR_MESSAGE` event, the server communicates errors in two primary ways:
+1.  **Callback Responses:** Client-to-server events that expect a direct response (e.g., `CREATE_GAME`, `JOIN_GAME`) use a callback function. The first argument to this callback is an object that contains a `success: boolean` field and often a `message: string` field with error details if `success` is `false`. This is used for immediate validation feedback.
+2.  **Game State:** Some "errors" or invalid actions are handled directly by the game machine's logic and are reflected in the next `GAME_STATE_UPDATE`. For example, if a player tries to perform an action when it's not their turn, the server won't crash or send a specific error; the game state will simply not change. 

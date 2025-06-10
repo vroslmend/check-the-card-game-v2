@@ -17,6 +17,7 @@ import {
   PlayerId,
   GameId,
   GameStage,
+  ChatMessage,
 } from 'shared-types';
 
 // These types are defined in the game machine file. We are aliasing them here
@@ -73,28 +74,41 @@ io.on('connection', (socket: Socket) => {
 
       const gameActor = createActor(gameMachine, { input: { gameId } });
 
+      // Listener for the initial join callback
       const joinSubscription = gameActor.on('PLAYER_JOIN_SUCCESSFUL', (event) => {
         if (event.playerId === playerId) {
           const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
           callback({ success: true, gameId, playerId, gameState: playerSpecificView });
-          
-          // Once we've sent the initial state, we can stop listening for this specific event
+          // This is a one-time subscription for the creating player
           joinSubscription.unsubscribe();
         }
       });
-      
+
+      // Listener for broadcasting game state to all in the room
       const broadcastSubscription = gameActor.on('BROADCAST_GAME_STATE', () => {
-        broadcastGameState(gameId, gameActor);
+          broadcastGameState(gameId, gameActor);
       });
-      
-      gameActor.subscribe({
-        error: (err) => console.error(`[GameMachineError] Game ${gameId}:`, err),
-        complete: () => {
-          console.log(`[Server] Game machine for ${gameId} has completed.`);
-          activeGameMachines.delete(gameId);
-          broadcastSubscription.unsubscribe();
-          joinSubscription.unsubscribe();
-        }
+
+      // Listener for sending a specific event to a single player
+      const directMessageSubscription = gameActor.on('SEND_EVENT_TO_PLAYER', (event) => {
+          const { playerId: targetPlayerId, eventName, eventData } = event.payload;
+          const targetPlayer = gameActor.getSnapshot().context.players[targetPlayerId];
+          if (targetPlayer?.socketId && targetPlayer.isConnected) {
+              io.to(targetPlayer.socketId).emit(eventName, eventData);
+          }
+      });
+
+      // General subscriber for cleanup
+      const actorSubscription = gameActor.subscribe({
+          error: (err) => console.error(`[GameMachineError] Game ${gameId}:`, err),
+          complete: () => {
+              console.log(`[Server] Game machine for ${gameId} has completed.`);
+              activeGameMachines.delete(gameId);
+              // Clean up all subscriptions for this actor
+              broadcastSubscription.unsubscribe();
+              directMessageSubscription.unsubscribe();
+              actorSubscription.unsubscribe(); // unsubscribe self
+          }
       });
       
       gameActor.start();
@@ -125,7 +139,7 @@ io.on('connection', (socket: Socket) => {
         return;
       }
       
-      const MAX_PLAYERS = 4; // This should ideally be shared from the machine config
+      const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || '4', 10);
       if (Object.keys(currentState.context.players).length >= MAX_PLAYERS) {
         if (callback) callback({ success: false, message: 'Game is full.' });
         return;
@@ -182,6 +196,18 @@ io.on('connection', (socket: Socket) => {
         // We trust the client to send a valid action shape. The machine will validate it.
         // Using `as any` here to bridge the client-side action with the machine's specific event types.
         gameActor.send({ ...action, playerId: session.playerId } as any);
+    }
+  });
+
+  socket.on(SocketEventName.SEND_CHAT_MESSAGE, (payload: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    const session = getSocketSession();
+    if (!session) return;
+    const gameActor = activeGameMachines.get(session.gameId);
+    if (gameActor) {
+        gameActor.send({
+            type: PlayerActionType.SEND_CHAT_MESSAGE,
+            payload,
+        });
     }
   });
 

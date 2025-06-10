@@ -248,4 +248,4 @@ This section provides actionable rules and conventions to ensure consistency and
     *   **Components:** `PascalCase` (e.g., `PlayerHand.tsx`).
     *   **Hooks:** `useCamelCase` (e.g., `useSocketManager.ts`).
     *   **Types/Interfaces:** `PascalCase` (e.g., `interface GameBoardProps`).
-    *   **Directory Structure:** Adhere to the established structure (`/components`, `/hooks`, `/store`, etc.). New components or utilities should be placed in the appropriate directory. 
+    *   **Directory Structure:** Adhere to the established structure (`/components`, `/hooks`, `/lib`, `/machines`, etc.). New components or utilities should be placed in the appropriate directory. 
