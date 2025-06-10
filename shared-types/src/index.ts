@@ -14,6 +14,7 @@ export type GameId = string;
 export enum GameStage {
   WAITING_FOR_PLAYERS = 'WAITING_FOR_PLAYERS',
   DEALING = 'DEALING',
+  INITIAL_PEEK = 'INITIAL_PEEK',
   PLAYING = 'PLAYING',
   CHECK = 'CHECK',
   GAMEOVER = 'GAMEOVER',
@@ -22,6 +23,7 @@ export enum GameStage {
 export enum TurnPhase {
   DRAW = 'DRAW',
   DISCARD = 'DISCARD',
+  MATCHING = 'MATCHING',
   ACTION = 'ACTION',
   ABILITY = 'ABILITY',
 }
@@ -91,6 +93,10 @@ export interface ClientCheckGameState {
   currentPlayerId: PlayerId | null;
   turnPhase: TurnPhase | null;
   activeAbility: ActiveAbility | null; // <-- ADDED FOR ABILITY UI
+  matchingOpportunity: {
+    cardToMatch: Card;
+    originalPlayerID: PlayerId;
+  } | null;
   checkDetails: {
     callerId: PlayerId | null;
   } | null;
@@ -119,6 +125,8 @@ export enum SocketEventName {
   SEND_CHAT_MESSAGE = 'SEND_CHAT_MESSAGE',
   SERVER_LOG_ENTRY = 'SERVER_LOG_ENTRY',
   INITIAL_LOGS = 'INITIAL_LOGS',
+  // Server -> Client: Sent to a single player with the cards they can see in the initial peek
+  INITIAL_PEEK_INFO = 'INITIAL_PEEK_INFO',
   // Server -> Client: Sent to a single player with the results of their peek
   ABILITY_PEEK_RESULT = 'ABILITY_PEEK_RESULT',
 }
@@ -192,6 +200,7 @@ export enum PlayerActionType {
   // Game Actions
   CALL_CHECK = 'CALL_CHECK',
   DECLARE_READY_FOR_PEEK = 'DECLARE_READY_FOR_PEEK',
+  PLAY_AGAIN = 'PLAY_AGAIN',
 
   // Ability Resolution
   USE_ABILITY = 'USE_ABILITY',
@@ -201,7 +210,7 @@ export enum PlayerActionType {
 //                                    ABILITIES
 // ================================================================================================
 
-export type AbilityType = 'peek' | 'swap';
+export type AbilityType = 'peek' | 'swap' | 'king';
 
 export interface PeekTarget {
   playerId: PlayerId;
@@ -220,21 +229,31 @@ export interface ActiveAbility {
 }
 
 export type PeekAbilityPayload = {
-  type: 'peek';
-  targetPlayerId: PlayerId;
-  cardIndex: number;
+  action: 'peek';
+  targets: {
+    playerId: PlayerId;
+    cardIndex: number;
+  }[];
 };
 
 export type SwapAbilityPayload = {
-  type: 'swap';
-  sourcePlayerId: PlayerId;
-  sourceCardIndex: number;
-  targetPlayerId: PlayerId;
-  targetCardIndex: number;
+  action: 'swap';
+  source: {
+    playerId: PlayerId;
+    cardIndex: number;
+  };
+  target: {
+    playerId: PlayerId;
+    cardIndex: number;
+  };
 };
 
-// This is the payload for the SUBMIT_ABILITY_* actions
-export type AbilityPayload = PeekAbilityPayload | SwapAbilityPayload;
+export type SkipAbilityPayload = {
+  action: 'skip';
+};
+
+// This is the payload for the USE_ABILITY player action
+export type AbilityActionPayload = PeekAbilityPayload | SwapAbilityPayload | SkipAbilityPayload;
 
 // ================================================================================================
 //                                    CLIENT-SPECIFIC STATE
