@@ -15,7 +15,6 @@ import {
   type Card,
   type PlayerId,
 } from 'shared-types';
-import { SnapshotFrom } from 'xstate';
 
 type UIContextType = {
   actorRef: UIMachineActorRef;
@@ -27,20 +26,54 @@ export const UIMachineProvider = ({
   children,
   gameId,
   localPlayerId,
-  initialState,
+  initialGameState,
 }: {
   children: React.ReactNode;
   gameId: string;
   localPlayerId: string;
-  initialState: SnapshotFrom<typeof uiMachine> | null;
+  initialGameState?: ClientCheckGameState;
 }) => {
+  const getPersistedState = () => {
+    // If we've been given a fresh initial state, don't try to load a stale one.
+    if (initialGameState) {
+      return undefined;
+    }
+
+    try {
+      const persistedStateJSON = sessionStorage.getItem('ui-machine-persisted-state');
+      if (persistedStateJSON) {
+        const persistedState = JSON.parse(persistedStateJSON);
+        // Basic validation: ensure it's for the right game.
+        if (persistedState.context.gameId === gameId) {
+          // Clear the state so it's only used once for initialization
+          sessionStorage.removeItem('ui-machine-persisted-state');
+          return persistedState;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to read persisted state from sessionStorage", e);
+    }
+    return undefined;
+  };
+
+  const persistedState = getPersistedState();
+
   const actorRef = useActorRef(uiMachine, {
-    snapshot: initialState ?? undefined,
-    input: initialState ? undefined : {
+    snapshot: persistedState,
+    input: {
       gameId,
       localPlayerId,
+      initialGameState,
     },
   });
+
+  useEffect(() => {
+    // If we didn't restore from a persisted state, we need to initialize.
+    // This is the flow for a player joining a game, or rejoining after a refresh.
+    if (!persistedState) {
+      actorRef.send({ type: 'RECONNECT' });
+    }
+  }, [actorRef, persistedState]);
 
   useEffect(() => {
     const onGameStateUpdate = (gameState: ClientCheckGameState) => {
@@ -50,7 +83,7 @@ export const UIMachineProvider = ({
       actorRef.send({ type: 'NEW_GAME_LOG', logMessage });
     };
     const onCardDetails = (payload: { card: Card; playerId: PlayerId; cardIndex: number }) => {
-      actorRef.send({ type: 'SERVER_PROVIDED_CARD_FOR_ABILITY', ...payload });
+      actorRef.send({ type: 'ABILITY_PEEK_RESULT', ...payload });
     };
     const onError = (error: { message: string }) => {
       actorRef.send({ type: 'ERROR_RECEIVED', error: error.message });
@@ -86,47 +119,6 @@ export const UIMachineProvider = ({
       subscription.unsubscribe();
     };
   }, [actorRef]);
-
-  // Forward socket connection events to the state machine
-  useEffect(() => {
-    const handleConnect = () => actorRef.send({ type: 'CONNECT' });
-    const handleDisconnect = () => actorRef.send({ type: 'DISCONNECT' });
-
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
-
-    // If the socket is already connected when we load, immediately tell the machine.
-    if (socket.connected) {
-      handleConnect();
-    } else {
-      // If not connected, we might need to manually connect.
-      // This can happen if the user navigates directly to the game URL.
-      socket.connect();
-    }
-
-    return () => {
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
-      socket.disconnect();
-    };
-  }, [actorRef]);
-
-  useEffect(() => {
-    actorRef.send({ type: 'RECONNECT' });
-  }, [actorRef]);
-
-  // Initializes the machine with top-level context
-  useEffect(() => {
-    // If the machine was NOT rehydrated from a persisted state,
-    // then we need to kick off the rejoin attempt.
-    if (!initialState && localPlayerId && gameId) {
-      actorRef.send({
-        type: 'INITIALIZE',
-        localPlayerId,
-        gameId,
-      });
-    }
-  }, [actorRef, gameId, localPlayerId, initialState]);
 
   return <UIContext.Provider value={{ actorRef }}>{children}</UIContext.Provider>;
 };

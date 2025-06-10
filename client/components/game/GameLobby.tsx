@@ -19,6 +19,8 @@ export const GameLobby = () => {
 
   const players = currentGameState.players;
   const localPlayer = localPlayerId ? players[localPlayerId] : null;
+  const gameMasterId = currentGameState.gameMasterId;
+  const isGameMaster = localPlayerId === gameMasterId;
   
   // Calculate status information
   const playerCount = Object.keys(players).length;
@@ -27,9 +29,9 @@ export const GameLobby = () => {
   const hasEnoughPlayers = playerCount >= 2;
   const hasDisconnectedPlayers = Object.values(players).some((player: Player) => !player.isConnected);
   
-  const handleDeclareReady = () => {
+  const handleStartGame = () => {
     if (localPlayerId) {
-      send({ type: 'DECLARE_READY_FOR_PEEK_CLICKED' });
+      send({ type: 'START_GAME' });
     }
   };
 
@@ -143,7 +145,7 @@ export const GameLobby = () => {
               <Button 
                 size="lg" 
                 className="w-full h-12 text-lg font-light" 
-                onClick={handleDeclareReady}
+                onClick={handleStartGame}
                 disabled={!hasEnoughPlayers}
               >
                 Declare Ready
@@ -163,6 +165,22 @@ export const GameLobby = () => {
             >
               <CheckCircle className="h-6 w-6 text-green-500 mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">You&apos;re ready! Waiting for others...</p>
+            </motion.div>
+          )}
+          {isGameMaster && allPlayersReady && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Button 
+                size="lg" 
+                className="w-full h-12 text-lg font-light bg-green-600 hover:bg-green-700" 
+                onClick={handleStartGame}
+              >
+                Start Game
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>

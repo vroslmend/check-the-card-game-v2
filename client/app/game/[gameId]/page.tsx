@@ -1,16 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { use } from 'react';
 import { useUI } from '@/components/providers/UIMachineProvider';
 import { GameBoard } from '@/components/game/GameBoard';
 import { GameLobby } from '@/components/game/GameLobby';
 import LoadingOrError from '@/components/layout/LoadingOrError';
 import { Toaster } from '@/components/ui/sonner';
 import { GameStage } from 'shared-types';
-import { UIMachineProvider } from '@/components/providers/UIMachineProvider';
-import GameClient from './GameClient';
 
-export default function GamePage({ params }: { params: { gameId: string } }) {
+function GameView() {
   const [state] = useUI();
   // Safely access currentGameState. It might not exist on the initial render
   // or during certain machine transitions.
@@ -61,4 +59,8 @@ export default function GamePage({ params }: { params: { gameId: string } }) {
       <Toaster richColors />
       </>
     );
-  }
+}
+
+export default function GamePage() {
+  return <GameView />;
+}

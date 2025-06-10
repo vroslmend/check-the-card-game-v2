@@ -16,6 +16,7 @@ import {
   SocketEventName,
   PlayerId,
   GameId,
+  GameStage,
 } from 'shared-types';
 
 // These types are defined in the game machine file. We are aliasing them here
@@ -92,8 +93,8 @@ io.on('connection', (socket: Socket) => {
           }
 
           if (callback && !createGameCallbackCalled && snapshot.context.players[playerId]) {
-            const persistedState = gameActor.getPersistedSnapshot();
-            callback({ success: true, gameId, playerId, gameState: persistedState });
+            const clientState = generatePlayerView(snapshot.context, playerId);
+            callback({ success: true, gameId, playerId, gameState: clientState });
             createGameCallbackCalled = true;
             console.log(`[Server] Player ${playerSetupData.name} created game ${gameId}. Initial state sent.`);
           }
@@ -125,23 +126,64 @@ io.on('connection', (socket: Socket) => {
           if (callback) callback({ success: false, message: 'Game not found.' });
           return;
       }
+
+      const currentState = gameActor.getSnapshot();
+      if (currentState.value !== GameStage.WAITING_FOR_PLAYERS) {
+        if (callback) callback({ success: false, message: 'Game has already started.' });
+        return;
+      }
+      
+      const MAX_PLAYERS = 4; // This should ideally be shared from the machine config
+      if (Object.keys(currentState.context.players).length >= MAX_PLAYERS) {
+        if (callback) callback({ success: false, message: 'Game is full.' });
+        return;
+      }
       
       const playerId = nanoid();
       const finalPlayerSetupData = { ...playerSetupData, id: playerId, socketId: socket.id };
 
-      let joinGameCallbackCalled = false;
-      gameActor.subscribe({
-        next: (snapshot) => {
-          if (callback && !joinGameCallbackCalled && snapshot.context.players[playerId]) {
-            callback({ success: true, gameId, playerId, gameState: generatePlayerView(snapshot.context, playerId) });
-            joinGameCallbackCalled = true;
+      let callbackHasBeenCalled = false;
+      const tempSubscription = gameActor.subscribe((snapshot) => {
+        // The machine's context has been updated with the new player.
+        // We can now safely send the updated state to the joining player.
+        if (snapshot.context.players[playerId] && !callbackHasBeenCalled) {
+          const playerSpecificView = generatePlayerView(snapshot.context, playerId);
+          if (callback) {
+            callback({ success: true, gameId, playerId, gameState: playerSpecificView });
           }
-        },
+          callbackHasBeenCalled = true;
+          // The subscription has served its purpose, so we remove it.
+          tempSubscription.unsubscribe();
+        }
       });
 
       socket.join(gameId);
       registerSocketSession(gameId, playerId);
       gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData });
+  });
+
+  socket.on(SocketEventName.ATTEMPT_REJOIN, (data: { gameId: GameId, playerId: PlayerId }) => {
+    const { gameId, playerId } = data;
+    const gameActor = activeGameMachines.get(gameId);
+
+    if (gameActor) {
+      console.log(`[Server] Player ${playerId} attempting to rejoin game ${gameId} with new socket ${socket.id}`);
+      socket.join(gameId);
+      registerSocketSession(gameId, playerId);
+      gameActor.send({ type: 'PLAYER_RECONNECTED', playerId, newSocketId: socket.id });
+
+      // After a short delay, send the latest state to the rejoining player
+      setTimeout(() => {
+        const latestState = gameActor.getSnapshot().context;
+        const playerSpecificView = generatePlayerView(latestState, playerId);
+        socket.emit(SocketEventName.GAME_STATE_UPDATE, playerSpecificView);
+        console.log(`[Server] Sent latest game state to rejoining player ${playerId}`);
+      }, 250);
+
+    } else {
+      console.warn(`[Server] Attempted rejoin for non-existent game: ${gameId}`);
+      // TODO: Maybe emit an error event back to the client?
+    }
   });
 
   socket.on(SocketEventName.PLAYER_ACTION, (action: { type: PlayerActionType, playerId: PlayerId, payload?: any }) => {

@@ -23,6 +23,7 @@ import 'xstate/guards';
 // #region Constants & Server-Side Types
 const PEEK_TOTAL_DURATION_MS = parseInt(process.env.PEEK_DURATION_MS || '5000', 10);
 const TURN_DURATION_MS = parseInt(process.env.TURN_DURATION_MS || '60000', 10);
+const MAX_PLAYERS = 4;
 
 interface ServerPlayer {
   id: PlayerId;
@@ -231,6 +232,29 @@ export const gameMachine = setup({
       enqueue.assign({ activeAbility: null, currentTurnSegment: null });
       enqueue.raise({ type: 'endTurn' });
     }),
+    reconnectPlayer: assign({
+      players: ({ context, event }) => {
+        assertEvent(event, 'PLAYER_RECONNECTED');
+        const { playerId, newSocketId } = event;
+        const newPlayers = { ...context.players };
+        if (newPlayers[playerId]) {
+          newPlayers[playerId]!.socketId = newSocketId;
+          newPlayers[playerId]!.isConnected = true;
+        }
+        return newPlayers;
+      },
+    }),
+    disconnectPlayer: assign({
+      players: ({ context, event }) => {
+        assertEvent(event, 'PLAYER_DISCONNECTED');
+        const { playerId } = event;
+        const newPlayers = { ...context.players };
+        if (newPlayers[playerId]) {
+          newPlayers[playerId]!.isConnected = false;
+        }
+        return newPlayers;
+      },
+    }),
   },
   guards: {
     canUseAbility: ({ context, event }) => {
@@ -249,6 +273,11 @@ export const gameMachine = setup({
         const topOfDiscard = context.discardPile[context.discardPile.length - 1];
         if (!topOfDiscard) return false;
         return !specialRanks.has(topOfDiscard.rank);
+    },
+    canJoinGame: ({ context }) => {
+      return (
+        Object.keys(context.players).length < MAX_PLAYERS
+      );
     }
   },
   actors: {
@@ -258,7 +287,7 @@ export const gameMachine = setup({
     }),
   }
 }).createMachine({
-  id: 'checkGame',
+  id: 'game',
     context: ({ input }: { input: GameInput }): GameContext => ({
       gameId: input.gameId,
       deck: shuffleDeck(createDeck()),
@@ -278,13 +307,20 @@ export const gameMachine = setup({
     }),
     initial: GameStage.WAITING_FOR_PLAYERS,
     on: {
-      PLAYER_JOIN_REQUEST: {
-        actions: 'createPlayer',
+      PLAYER_RECONNECTED: {
+        actions: 'reconnectPlayer',
+      },
+      PLAYER_DISCONNECTED: {
+        actions: 'disconnectPlayer',
       },
     },
       states: {
       [GameStage.WAITING_FOR_PLAYERS]: {
         on: {
+          PLAYER_JOIN_REQUEST: {
+            guard: 'canJoinGame',
+            actions: 'createPlayer',
+          },
           START_GAME: {
             target: GameStage.DEALING,
             actions: 'setAllPlayersToPlaying',
@@ -301,7 +337,7 @@ export const gameMachine = setup({
                 on: {
                     [PlayerActionType.DRAW_FROM_DECK]: { actions: 'drawFromDeck' },
                     [PlayerActionType.DRAW_FROM_DISCARD]: { guard: 'canDrawFromDiscard', actions: 'drawFromDiscard' },
-                    [PlayerActionType.CALL_CHECK]: { target: `#checkGame.${GameStage.CHECK}`, actions: 'callCheck' },
+                    [PlayerActionType.CALL_CHECK]: { target: `#game.${GameStage.CHECK}`, actions: 'callCheck' },
                 }
             },
             [TurnPhase.DISCARD]: {

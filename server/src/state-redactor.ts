@@ -107,6 +107,7 @@ export const generatePlayerView = (
   const clientGameState: ClientCheckGameState = {
     gameId: fullGameContext.gameId,
     viewingPlayerId,
+    gameMasterId: fullGameContext.gameMasterId,
     players: clientPlayers,
     deckSize: fullGameContext.deck.length,
     discardPile: fullGameContext.discardPile,

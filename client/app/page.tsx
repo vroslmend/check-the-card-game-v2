@@ -648,8 +648,8 @@ export default function Home() {
         </div>
       </motion.footer>
 
-      <NewGameModal isOpen={showNewGame} onClose={() => setShowNewGame(false)} />
-      <JoinGameModal isOpen={showJoinGame} onClose={() => setShowJoinGame(false)} />
+      <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
+      <JoinGameModal isModalOpen={showJoinGame} setIsModalOpen={setShowJoinGame} />
     </div>
   )
 }

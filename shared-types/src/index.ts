@@ -8,12 +8,6 @@
 export type PlayerId = string;
 export type GameId = string;
 
-// A generic type for a persisted XState snapshot. The client receives this on game
-// creation to hydrate its own state machine.
-// eslint-disable-next-line @typescript-eslint/ban-types
-export type PersistedState = object;
-
-
 // ================================================================================================
 //                                      GAME ENUMERATIONS
 // ================================================================================================
@@ -88,6 +82,7 @@ export interface Player {
 export interface ClientCheckGameState {
   gameId: GameId;
   viewingPlayerId: PlayerId;
+  gameMasterId: PlayerId | null;
   players: Record<PlayerId, Player>;
   deckSize: number;
   discardPile: Card[];
@@ -136,7 +131,7 @@ export interface BasicResponse {
 export interface CreateGameResponse extends BasicResponse {
   gameId?: GameId;
   playerId?: PlayerId;
-  gameState?: PersistedState;
+  gameState?: ClientCheckGameState;
 }
 
 export interface JoinGameResponse extends BasicResponse {

@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useUI } from '@/components/providers/UIMachineProvider';
-import { GamePhaseIndicator } from "./GamePhaseIndicator"
 
 export const GameHeader = () => {
   const [state, send] = useUI();

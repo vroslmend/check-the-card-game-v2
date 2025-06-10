@@ -12,13 +12,13 @@ const OpponentPlayer = ({ player, isCurrent }: { player: Player; isCurrent: bool
   const [state, send] = useUI();
   const { abilityContext } = state.context;
 
-  const isAbilityActive = state.matches({ inGame: { connected: { ability: 'collectingInput' } } });
+  const isAbilityActive = state.matches({ inGame: { playing: { ability: 'selecting' } } });
 
   const handleCardClick = (card: Card | { facedown: true }, index: number) => {
     if (isAbilityActive) {
       send({
         type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY',
-        targetPlayerId: player.id,
+        playerId: player.id,
         cardIndex: index,
       });
     }

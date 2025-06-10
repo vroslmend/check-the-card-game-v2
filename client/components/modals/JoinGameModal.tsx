@@ -1,144 +1,108 @@
 "use client"
 
-import { useRouter } from 'next/navigation'
-import { useState, useEffect } from "react"
-import { useLocalStorage } from "usehooks-ts"
-import { nanoid } from "nanoid"
-import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Modal } from "@/components/ui/Modal"
-import { Loader } from "lucide-react"
-import { socket } from '@/lib/socket'
-import { SocketEventName, type JoinGameResponse } from 'shared-types'
-import { toast } from 'sonner'
-import { createActor } from 'xstate'
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { socket } from '@/lib/socket';
+import { joinGame } from '@/lib/api';
+import { toast } from 'sonner';
+
+import { Button } from '@/components/ui/button';
 import {
-  uiMachine,
-  type UIMachineInput,
-} from '@/machines/uiMachine'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface JoinGameModalProps {
-  isOpen: boolean
-  onClose: () => void
+  isModalOpen: boolean;
+  setIsModalOpen: (isOpen: boolean) => void;
 }
 
-export function JoinGameModal({ isOpen, onClose }: JoinGameModalProps) {
-  const router = useRouter()
+export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProps) {
+  const [gameId, setGameId] = useState('');
+  const [playerName, setPlayerName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [playerName, setPlayerName] = useLocalStorage("playerName", "", {
-    serializer: v => v,
-    deserializer: v => v,
-  });
-  const [localPlayerId, setLocalPlayerId] = useLocalStorage<string | null>(
-    "localPlayerId",
-    null,
-    {
-      serializer: v => (v === null ? "%%NULL%%" : v),
-      deserializer: v => (v === "%%NULL%%" ? null : v),
-    },
-  );
-  const [gameId, setGameId] = useState("");
+  const router = useRouter();
 
-  // Ensure a player ID exists for reuse.
-  useEffect(() => {
-    if (!localPlayerId) {
-      setLocalPlayerId(nanoid());
+  const handleJoinGame = async () => {
+    if (!socket.connected) {
+      // The provider should handle this, but as a fallback:
+      socket.connect();
+      toast.info('Connecting to server... please try again in a moment.');
+      return;
     }
-  }, [localPlayerId, setLocalPlayerId]);
+    if (!gameId.trim() || !playerName.trim()) {
+      toast.error('Please enter a game ID and your name.');
+      return;
+    }
 
-  const handleJoinGame = () => {
-    if (playerName.trim() && gameId.trim()) {
-      setIsLoading(true);
-      if (!socket.connected) {
-        socket.connect();
-      }
-      socket.emit(SocketEventName.JOIN_GAME, { name: playerName.trim(), gameId: gameId.trim() }, (response: JoinGameResponse) => {
-        setIsLoading(false);
-        if (response.success && response.gameId && response.playerId && response.gameState) {
-            const tempActor = createActor(uiMachine, {
-              input: {
-                gameId: response.gameId,
-                localPlayerId: response.playerId,
-                gameState: response.gameState,
-              } as UIMachineInput,
-            });
+    setIsLoading(true);
+    const response = await joinGame(socket, gameId, playerName);
 
-            // Get the official, serializable snapshot.
-            const persistedState = tempActor.getPersistedSnapshot();
-
-            sessionStorage.setItem('localPlayerId', response.playerId);
-            sessionStorage.setItem('initialGameState', JSON.stringify(persistedState));
-            router.push(`/game/${response.gameId}`);
-        } else {
-            toast.error(response.message || 'Failed to join game. Please try again.');
-        }
-      });
+    if (response.success && response.playerId && response.gameId && response.gameState) {
+      localStorage.setItem('localPlayerId', response.playerId);
+      localStorage.setItem('localPlayerName', playerName);
+      sessionStorage.setItem('initialGameState', JSON.stringify(response.gameState));
+      toast.success(`Joined game ${gameId}`);
+      router.push(`/game/${response.gameId}`);
+    } else {
+      toast.error(`Failed to join game: ${response.message ?? 'Unknown error'}`);
+      setIsLoading(false);
     }
   };
 
-  // Cleanup socket connection on modal close/unmount
-  useEffect(() => {
-    return () => {
-        // The UIMachineProvider on the game page will handle disconnection.
-    }
-  }, []);
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && playerName.trim() && gameId.trim() && !isLoading) {
+    if (e.key === 'Enter') {
       handleJoinGame();
     }
-  }
+  };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Join an Existing Game">
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="player-name">Your Name</Label>
-          <Input
-            id="player-name"
-            placeholder="e.g., Jane Doe"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            className="text-base"
-            onKeyDown={onKeyDown}
-          />
+    <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Join a Game</DialogTitle>
+          <DialogDescription>Enter a game ID and your name to join an existing game.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="player-name" className="text-right">
+              Your Name
+            </Label>
+            <Input
+              id="player-name"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Your Name"
+              className="col-span-3"
+              onKeyDown={onKeyDown}
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="game-id" className="text-right">
+              Game ID
+            </Label>
+            <Input
+              id="game-id"
+              value={gameId}
+              onChange={(e) => setGameId(e.target.value)}
+              placeholder="Enter the game ID"
+              className="col-span-3"
+              onKeyDown={onKeyDown}
+            />
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="game-id">Game ID</Label>
-          <Input
-            id="game-id"
-            placeholder="Enter the game ID"
-            value={gameId}
-            onChange={(e) => setGameId(e.target.value)}
-            className="text-base"
-            onKeyDown={onKeyDown}
-          />
-        </div>
-        <motion.div
-          className="flex justify-end pt-4"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.3 }}
-        >
-          <Button
-            size="lg"
-            onClick={handleJoinGame}
-            disabled={isLoading || !playerName.trim() || !gameId.trim()}
-            className="w-full sm:w-auto"
-          >
-            {isLoading ? (
-              <>
-                <Loader className="mr-2 h-4 w-4 animate-spin" />
-                Joining...
-              </>
-            ) : (
-              "Join Game"
-            )}
+        <DialogFooter>
+          <Button type="button" onClick={handleJoinGame} disabled={isLoading}>
+            {isLoading ? 'Joining...' : 'Join Game'}
           </Button>
-        </motion.div>
-      </div>
-    </Modal>
-  )
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

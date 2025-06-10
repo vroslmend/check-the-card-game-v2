@@ -7,6 +7,7 @@ import CustomCursor from '@/components/ui/CustomCursor';
 import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
 import { Toaster } from "@/components/ui/sonner"
 import { CursorProvider } from "@/components/providers/CursorProvider";
+import { SocketConnectionProvider } from "@/components/providers/SocketConnectionProvider";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -38,12 +39,14 @@ export default function RootLayout({
           defaultTheme="dark"
           enableSystem
         >
-          <CursorProvider>
-            <SmoothScrollProvider>
-              {children}
-            </SmoothScrollProvider>
-            <CustomCursor />
-          </CursorProvider>
+          <SocketConnectionProvider>
+            <CursorProvider>
+              <SmoothScrollProvider>
+                {children}
+              </SmoothScrollProvider>
+              <CustomCursor />
+            </CursorProvider>
+          </SocketConnectionProvider>
           <Toaster />
         </ThemeProvider>
       </body>
