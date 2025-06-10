@@ -92,7 +92,7 @@ export interface ClientCheckGameState {
   gameStage: GameStage;
   currentPlayerId: PlayerId | null;
   turnPhase: TurnPhase | null;
-  activeAbility: ActiveAbility | null; // <-- ADDED FOR ABILITY UI
+  activeAbility: ActiveAbility | null;
   matchingOpportunity: {
     cardToMatch: Card;
     originalPlayerID: PlayerId;
@@ -125,9 +125,7 @@ export enum SocketEventName {
   SEND_CHAT_MESSAGE = 'SEND_CHAT_MESSAGE',
   SERVER_LOG_ENTRY = 'SERVER_LOG_ENTRY',
   INITIAL_LOGS = 'INITIAL_LOGS',
-  // Server -> Client: Sent to a single player with the cards they can see in the initial peek
   INITIAL_PEEK_INFO = 'INITIAL_PEEK_INFO',
-  // Server -> Client: Sent to a single player with the results of their peek
   ABILITY_PEEK_RESULT = 'ABILITY_PEEK_RESULT',
 }
 
@@ -187,6 +185,10 @@ export interface RichGameLogMessage {
 }
 
 export enum PlayerActionType {
+  // Lobby
+  START_GAME = 'START_GAME',
+  DECLARE_LOBBY_READY = 'DECLARE_LOBBY_READY',
+  
   // Turn Actions
   DRAW_FROM_DECK = 'DRAW_FROM_DECK',
   DRAW_FROM_DISCARD = 'DRAW_FROM_DISCARD',
@@ -219,13 +221,10 @@ export interface PeekTarget {
 
 export interface SwapTarget extends PeekTarget {}
 
-// This represents an ability that is currently being resolved.
-// It's part of the public game state so the UI can show a "resolving ability" state,
-// but the sensitive `peekedCards` data is sent privately.
 export interface ActiveAbility {
   type: AbilityType;
   stage: 'peeking' | 'swapping' | 'done';
-  playerId: PlayerId; // The player using the ability
+  playerId: PlayerId;
 }
 
 export type PeekAbilityPayload = {
@@ -252,14 +251,11 @@ export type SkipAbilityPayload = {
   action: 'skip';
 };
 
-// This is the payload for the USE_ABILITY player action
 export type AbilityActionPayload = PeekAbilityPayload | SwapAbilityPayload | SkipAbilityPayload;
 
 // ================================================================================================
 //                                    CLIENT-SPECIFIC STATE
 // ================================================================================================
-// This is not a shared game state, but a type for the UI machine's internal context
-// to manage an ongoing ability interaction.
 export interface ClientAbilityContext {
   type: AbilityType;
   stage: 'peeking' | 'swapping' | 'done';

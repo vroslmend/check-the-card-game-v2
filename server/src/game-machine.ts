@@ -1,4 +1,4 @@
-import { setup, assign, raise, enqueueActions, fromPromise, assertEvent } from 'xstate';
+import { setup, assign, fromPromise, assertEvent, emit, and, enqueueActions } from 'xstate';
 import {
   Card,
   CardRank,
@@ -56,13 +56,16 @@ export interface GameContext {
   matchingOpportunity: {
     cardToMatch: Card;
     originalPlayerID: PlayerId;
+    remainingPlayerIDs: PlayerId[];
   } | null;
   activeAbility: ActiveAbility | null;
   checkDetails: {
     callerId: PlayerId;
+    playersYetToPlay: PlayerId[];
   } | null;
   gameover: {
     winnerId: PlayerId | null;
+    loserId: PlayerId | null;
     playerScores: Record<PlayerId, number>;
   } | null;
   lastRoundLoserId: PlayerId | null;
@@ -75,26 +78,27 @@ type GameInput = {
   gameId: string;
 };
 
-// This creates a discriminated union of all possible player actions.
 type PlayerActionEvents =
-  | { type: PlayerActionType.DRAW_FROM_DECK; playerId: PlayerId; }
-  | { type: PlayerActionType.DRAW_FROM_DISCARD; playerId: PlayerId; }
-  | { type: PlayerActionType.SWAP_AND_DISCARD; playerId: PlayerId; payload: { cardIndex: number } }
-  | { type: PlayerActionType.DISCARD_DRAWN_CARD; playerId: PlayerId; }
-  | { type: PlayerActionType.ATTEMPT_MATCH; playerId: PlayerId; payload: { cardIndex: number } }
-  | { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT; playerId: PlayerId; }
-  | { type: PlayerActionType.CALL_CHECK; playerId: PlayerId; }
-  | { type: PlayerActionType.DECLARE_READY_FOR_PEEK; playerId: PlayerId; }
-  | { type: PlayerActionType.PLAY_AGAIN; playerId: PlayerId; }
+  | { type: PlayerActionType.START_GAME; playerId: PlayerId; }
+  | { type: PlayerActionType.DECLARE_LOBBY_READY; playerId: PlayerId; }
+  | { type: PlayerActionType.DRAW_FROM_DECK; playerId: PlayerId }
+  | { type: PlayerActionType.DRAW_FROM_DISCARD; playerId: PlayerId }
+  | { type: PlayerActionType.SWAP_AND_DISCARD; playerId: PlayerId; payload: { handCardIndex: number } }
+  | { type: PlayerActionType.DISCARD_DRAWN_CARD; playerId: PlayerId }
+  | { type: PlayerActionType.ATTEMPT_MATCH; playerId: PlayerId; payload: { handCardIndex: number } }
+  | { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT; playerId: PlayerId }
+  | { type: PlayerActionType.CALL_CHECK; playerId: PlayerId }
+  | { type: PlayerActionType.DECLARE_READY_FOR_PEEK; playerId: PlayerId }
+  | { type: PlayerActionType.PLAY_AGAIN; playerId: PlayerId }
   | { type: PlayerActionType.USE_ABILITY; playerId: PlayerId; payload: AbilityActionPayload };
 
 type GameEvent =
-  | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData }
+  | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData; playerId: PlayerId }
   | { type: 'PLAYER_RECONNECTED'; playerId: PlayerId; newSocketId: string }
   | { type: 'PLAYER_DISCONNECTED'; playerId: PlayerId }
-  | { type: 'START_GAME' }
   | PlayerActionEvents
   | { type: 'TIMER.PEEK_EXPIRED' }
+  | { type: 'TIMER.MATCHING_EXPIRED' }
   | { type: 'endTurn' };
 
 type EmittedEvent =
@@ -110,14 +114,14 @@ type EmittedEvent =
     };
 
 const getPlayerNameForLog = (playerId: string, context: GameContext): string => {
-    return context.players[playerId]?.name || 'P-' + playerId.slice(-4);
+  return context.players[playerId]?.name || 'P-' + playerId.slice(-4);
 };
 
 const createLogEntry = (
   context: GameContext,
   data: Omit<RichGameLogMessage, 'id' | 'timestamp'>
 ): RichGameLogMessage => {
-              return {
+  return {
     id: `log_${context.gameId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     timestamp: new Date().toISOString(),
     ...data,
@@ -141,26 +145,86 @@ export const gameMachine = setup({
     emitted: {} as EmittedEvent,
     input: {} as GameInput,
   },
+  guards: {
+    canJoinGame: ({ context }) => Object.keys(context.players).length < MAX_PLAYERS,
+    isGameMaster: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.START_GAME);
+      return event.playerId === context.gameMasterId;
+    },
+    areAllPlayersReady: ({ context }) => {
+      const connectedPlayers = Object.values(context.players).filter((p) => p.isConnected);
+      if (connectedPlayers.length < 2) return false;
+      return connectedPlayers.every((p) => p.isReady);
+    },
+    allPlayersReadyForPeek: ({ context }) => {
+      return context.turnOrder.every((id) => context.players[id]?.isReady);
+    },
+    isPlayerTurn: ({ context, event }) => {
+      assertEvent(event, [
+        PlayerActionType.DRAW_FROM_DECK,
+        PlayerActionType.DRAW_FROM_DISCARD,
+        PlayerActionType.SWAP_AND_DISCARD,
+        PlayerActionType.DISCARD_DRAWN_CARD,
+        PlayerActionType.CALL_CHECK,
+      ]);
+      return event.playerId === context.currentPlayerId;
+    },
+    hasDrawnCard: ({ context, event }) => {
+      assertEvent(event, [PlayerActionType.SWAP_AND_DISCARD, PlayerActionType.DISCARD_DRAWN_CARD]);
+      return !!context.players[event.playerId]?.pendingDrawnCard;
+    },
+    canDrawFromDiscard: ({ context }) => {
+      if (context.discardPileIsSealed) return false;
+      const topOfDiscard = context.discardPile[context.discardPile.length - 1];
+      if (!topOfDiscard) return false;
+      return !specialRanks.has(topOfDiscard.rank);
+    },
+    isAbilityCardDiscarded: ({ context }) => {
+      const topCard = context.discardPile[context.discardPile.length - 1];
+      if (!topCard) return false;
+      return abilityRanks.has(topCard.rank);
+    },
+    canAttemptMatch: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
+      const { playerId, payload } = event;
+      const { matchingOpportunity } = context;
+      if (!matchingOpportunity) return false;
+
+      const player = context.players[playerId];
+      const cardInHand = player?.hand[payload.handCardIndex];
+      return !!cardInHand && cardInHand.rank === matchingOpportunity.cardToMatch.rank;
+    },
+    isValidAbilityAction: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.USE_ABILITY);
+      const { playerId, payload } = event;
+      const { activeAbility } = context;
+      if (!activeAbility || activeAbility.playerId !== playerId) return false;
+      // Further validation logic can be added here based on ability type and stage
+      return true;
+    },
+    isNotLocked: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.CALL_CHECK);
+      return !context.players[event.playerId]?.isLocked;
+    },
+  },
   actions: {
+    // Communication
+    broadcastGameState: emit(({ context }) => ({
+      type: 'BROADCAST_GAME_STATE' as const,
+      gameId: context.gameId,
+    })),
+    
+    // Player Management
     createPlayer: assign({
       players: ({ context, event }) => {
         assertEvent(event, 'PLAYER_JOIN_REQUEST');
-                const { playerSetupData } = event;
+        const { playerSetupData } = event;
         const newPlayers = { ...context.players };
         newPlayers[playerSetupData.id!] = {
-          id: playerSetupData.id!,
-          name: playerSetupData.name,
-          socketId: playerSetupData.socketId!,
-          hand: [],
-          isReady: false,
-          isDealer: Object.keys(newPlayers).length === 0, // First player is the dealer
-                hasCalledCheck: false,
-                isLocked: false,
-                score: 0,
-                  isConnected: true,
-          status: PlayerStatus.WAITING,
-          pendingDrawnCard: null,
-                forfeited: false,
+          id: playerSetupData.id!, name: playerSetupData.name, socketId: playerSetupData.socketId!,
+          hand: [], isReady: false, isDealer: Object.keys(newPlayers).length === 0,
+          hasCalledCheck: false, isLocked: false, score: 0, isConnected: true,
+          status: PlayerStatus.WAITING, pendingDrawnCard: null, forfeited: false,
         };
         return newPlayers;
       },
@@ -170,21 +234,84 @@ export const gameMachine = setup({
       },
       gameMasterId: ({ context, event }) => {
         assertEvent(event, 'PLAYER_JOIN_REQUEST');
-        if (context.gameMasterId === null) {
-          return event.playerSetupData.id!;
+        return context.gameMasterId === null ? event.playerSetupData.id! : context.gameMasterId;
+      },
+    }),
+    setPlayerConnected: assign({
+      players: ({ context, event }) => {
+        assertEvent(event, 'PLAYER_RECONNECTED');
+        const newPlayers = { ...context.players };
+        if (newPlayers[event.playerId]) {
+          newPlayers[event.playerId]!.isConnected = true;
+          newPlayers[event.playerId]!.socketId = event.newSocketId;
         }
-        return context.gameMasterId;
+        return newPlayers;
+      },
+    }),
+    setPlayerDisconnected: assign({
+      players: ({ context, event }) => {
+        assertEvent(event, 'PLAYER_DISCONNECTED');
+        const newPlayers = { ...context.players };
+        if (newPlayers[event.playerId]) newPlayers[event.playerId]!.isConnected = false;
+        return newPlayers;
+      },
+    }),
+    setPlayerReady: assign({
+      players: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.DECLARE_LOBBY_READY);
+        const newPlayers = { ...context.players };
+        if (newPlayers[event.playerId]) newPlayers[event.playerId]!.isReady = true;
+        return newPlayers;
+      },
+    }),
+    setPlayerReadyForPeek: assign({
+      players: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.DECLARE_READY_FOR_PEEK);
+        const newPlayers = { ...context.players };
+        if (newPlayers[event.playerId]) newPlayers[event.playerId]!.isReady = true;
+        return newPlayers;
+      },
+    }),
+    resetPlayersReadyStatus: assign({
+      players: ({ context }) => {
+        const newPlayers = { ...context.players };
+        for (const p of Object.values(newPlayers)) p.isReady = false;
+        return newPlayers;
       },
     }),
     setAllPlayersToPlaying: assign({
       players: ({ context }) => {
         const newPlayers = { ...context.players };
-        for (const playerId in newPlayers) {
-          newPlayers[playerId]!.status = PlayerStatus.PLAYING;
-        }
+        for (const playerId in newPlayers) newPlayers[playerId]!.status = PlayerStatus.PLAYING;
         return newPlayers;
       },
     }),
+    
+    // Logging
+    addPlayerJoinedLog: assign({
+      log: ({ context, event }) => {
+        assertEvent(event, 'PLAYER_JOIN_REQUEST');
+        const logEntry = createLogEntry(context, {
+          message: `${getPlayerNameForLog(event.playerId, context)} joined the game.`,
+          type: 'public', tags: ['system-message', 'player-action'],
+        });
+        return [...context.log, logEntry];
+      },
+    }),
+    addPlayerReconnectedLog: assign({
+      log: ({ context, event }) => {
+        assertEvent(event, 'PLAYER_RECONNECTED');
+        return [...context.log, createLogEntry(context, { message: `${getPlayerNameForLog(event.playerId, context)} reconnected.`, type: 'public', tags: ['system-message'] })];
+      }
+    }),
+    addPlayerDisconnectedLog: assign({
+        log: ({ context, event }) => {
+          assertEvent(event, 'PLAYER_DISCONNECTED');
+          return [...context.log, createLogEntry(context, { message: `${getPlayerNameForLog(event.playerId, context)} disconnected.`, type: 'public', tags: ['system-message'] })];
+        }
+    }),
+
+    // Game Flow & State
     dealCards: assign(({ context }) => {
       const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
       const newDeck = [...context.deck];
@@ -192,693 +319,413 @@ export const gameMachine = setup({
       for (let i = 0; i < CARDS_PER_PLAYER; i++) {
         for (const playerId of context.turnOrder) {
           const card = newDeck.pop();
-          if (card) {
-            newPlayers[playerId]!.hand.push(card);
-          }
+          if (card) newPlayers[playerId]!.hand.push(card);
         }
       }
 
       const newDiscardPile = [...context.discardPile];
       let topCard = newDeck.pop();
-
-      // Per game rules, the discard pile cannot start with a special card.
-      // If a special card is drawn, it is inserted into the middle of the deck.
       while (topCard && specialRanks.has(topCard.rank)) {
         newDeck.splice(Math.floor(newDeck.length / 2), 0, topCard);
         topCard = newDeck.pop();
       }
+      if (topCard) newDiscardPile.push(topCard);
 
-      if (topCard) {
-        newDiscardPile.push(topCard);
-      }
-
-      return {
-        players: newPlayers,
-        deck: newDeck,
-        discardPile: newDiscardPile,
-      };
+      return { players: newPlayers, deck: newDeck, discardPile: newDiscardPile };
     }),
     initializePlayState: assign({
       currentPlayerId: ({ context }) => context.turnOrder[0]!,
       currentTurnSegment: TurnPhase.DRAW,
     }),
-    resetPlayersReadyStatus: assign({
-      players: ({ context }) => {
-        const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
-        for (const p of Object.values(newPlayers)) {
-          p.isReady = false;
-        }
-        return newPlayers;
-      },
+    setNextPlayer: assign(({ context }) => {
+        const { currentPlayerId, turnOrder } = context;
+        const currentIndex = turnOrder.indexOf(currentPlayerId!);
+        const nextIndex = (currentIndex + 1) % turnOrder.length;
+        return { currentPlayerId: turnOrder[nextIndex]! };
     }),
-    setPlayerReady: assign({
-      players: ({ context, event }) => {
-        assertEvent(event, PlayerActionType.DECLARE_READY_FOR_PEEK);
-        const { playerId } = event;
-        const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
-        if (newPlayers[playerId]) {
-          newPlayers[playerId]!.isReady = true;
-        }
-        return newPlayers;
-      },
-    }),
+
+    // Turn Actions
     drawFromDeck: assign(({ context, event }) => {
-        assertEvent(event, PlayerActionType.DRAW_FROM_DECK);
-        const newDeck = [...context.deck];
-        const drawnCard = newDeck.pop();
-        if (!drawnCard) return {};
-            const newPlayers = { ...context.players };
-        newPlayers[event.playerId]!.pendingDrawnCard = { card: drawnCard, source: 'deck' };
-        return { deck: newDeck, players: newPlayers, currentTurnSegment: TurnPhase.DISCARD };
+      assertEvent(event, PlayerActionType.DRAW_FROM_DECK);
+      const newDeck = [...context.deck];
+      const drawnCard = newDeck.pop();
+      if (!drawnCard) return {}; // Should ideally handle deck empty case
+      const newPlayers = { ...context.players };
+      newPlayers[event.playerId]!.pendingDrawnCard = { card: drawnCard, source: 'deck' };
+      return { deck: newDeck, players: newPlayers, currentTurnSegment: TurnPhase.DISCARD };
     }),
     drawFromDiscard: assign(({ context, event }) => {
-        assertEvent(event, PlayerActionType.DRAW_FROM_DISCARD);
-        const newDiscard = [...context.discardPile];
-        const drawnCard = newDiscard.pop();
-        if (!drawnCard) return {};
-        const newPlayers = { ...context.players };
-        newPlayers[event.playerId]!.pendingDrawnCard = { card: drawnCard, source: 'discard' };
-        return { discardPile: newDiscard, players: newPlayers, currentTurnSegment: TurnPhase.DISCARD };
-    }),
-    discardDrawnCard: assign(({ context, event }) => {
-      assertEvent(event, PlayerActionType.DISCARD_DRAWN_CARD);
-      const { playerId } = event;
-      const player = context.players[playerId];
-      if (!player?.pendingDrawnCard) return {};
-
-      const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
-      newPlayers[playerId]!.pendingDrawnCard = null;
-
-      const newDiscardPile = [...context.discardPile, player.pendingDrawnCard.card];
-
-      return {
-        players: newPlayers,
-        discardPile: newDiscardPile,
-      };
+      assertEvent(event, PlayerActionType.DRAW_FROM_DISCARD);
+      const newDiscard = [...context.discardPile];
+      const drawnCard = newDiscard.pop();
+      if (!drawnCard) return {};
+      const newPlayers = { ...context.players };
+      newPlayers[event.playerId]!.pendingDrawnCard = { card: drawnCard, source: 'discard' };
+      return { discardPile: newDiscard, players: newPlayers, currentTurnSegment: TurnPhase.DISCARD };
     }),
     swapAndDiscard: assign(({ context, event }) => {
       assertEvent(event, PlayerActionType.SWAP_AND_DISCARD);
-      const { playerId, payload } = event;
+      const { playerId, payload: { handCardIndex } } = event;
+      const player = context.players[playerId]!;
+      const drawn = player.pendingDrawnCard;
+      if (!drawn) return {};
+
+      const newHand = [...player.hand];
+      const cardToDiscard = newHand[handCardIndex]!;
+      newHand[handCardIndex] = drawn.card;
       
-      const player = context.players[playerId];
-      if (!player?.pendingDrawnCard) return {};
-
-      const handCard = player.hand[payload.cardIndex];
-      if (!handCard) return {};
-
-      const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
-      newPlayers[playerId]!.hand[payload.cardIndex] = player.pendingDrawnCard.card;
+      const newPlayers = { ...context.players };
+      newPlayers[playerId]!.hand = newHand;
       newPlayers[playerId]!.pendingDrawnCard = null;
 
-      const newDiscardPile = [...context.discardPile, handCard];
-
-      return {
-        players: newPlayers,
-        discardPile: newDiscardPile,
-      };
+      const newDiscardPile = [...context.discardPile, cardToDiscard];
+      
+      return { players: newPlayers, discardPile: newDiscardPile };
     }),
-    prepareAbility: assign({
-      activeAbility: ({ context }) => {
-        const discardedCard = context.discardPile[context.discardPile.length - 1];
-        if (!discardedCard) return null;
-
-        if (discardedCard.rank === CardRank.Queen) {
-          return {
-            type: 'peek' as const,
-            stage: 'peeking' as const,
-            playerId: context.currentPlayerId!,
-          };
-        }
-
-        if (discardedCard.rank === CardRank.Jack) {
-          return {
-            type: 'swap' as const,
-            stage: 'swapping' as const,
-            playerId: context.currentPlayerId!,
-          };
-        }
-
-        if (discardedCard.rank === CardRank.King) {
-          return {
-            type: 'king' as const,
-            stage: 'peeking' as const,
-            playerId: context.currentPlayerId!,
-          };
-        }
-
-        return null;
-      },
-      currentTurnSegment: TurnPhase.ACTION,
+    discardDrawnCard: assign(({ context, event }) => {
+      assertEvent(event, PlayerActionType.DISCARD_DRAWN_CARD);
+      const player = context.players[event.playerId]!;
+      const drawn = player.pendingDrawnCard;
+      if (!drawn) return {};
+      
+      const newPlayers = { ...context.players };
+      newPlayers[event.playerId]!.pendingDrawnCard = null;
+      const newDiscardPile = [...context.discardPile, drawn.card];
+      
+      return { players: newPlayers, discardPile: newDiscardPile };
     }),
-    advanceTurn: assign({
-      currentPlayerId: ({ context }) => {
-        if (!context.currentPlayerId) return context.currentPlayerId;
-        const currentIndex = context.turnOrder.indexOf(context.currentPlayerId);
-        const nextIndex = (currentIndex + 1) % context.turnOrder.length;
-        return context.turnOrder[nextIndex]!;
-      },
-      currentTurnSegment: TurnPhase.DRAW,
-    }),
-    callCheck: assign({
-      checkDetails: ({ event }) => {
-        assertEvent(event, PlayerActionType.CALL_CHECK);
-        return { callerId: event.playerId };
-      },
-      players: ({ context, event }) => {
-        assertEvent(event, PlayerActionType.CALL_CHECK);
-        const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
-        newPlayers[event.playerId]!.hasCalledCheck = true;
-        newPlayers[event.playerId]!.isLocked = true;
-        return newPlayers;
-      },
-      currentPlayerId: ({ context, event }) => {
-        assertEvent(event, PlayerActionType.CALL_CHECK);
-        const currentIndex = context.turnOrder.indexOf(event.playerId);
-        const nextIndex = (currentIndex + 1) % context.turnOrder.length;
-        return context.turnOrder[nextIndex]!;
-      },
-      currentTurnSegment: TurnPhase.DRAW,
-    }),
-    handleAbilityAction: enqueueActions(({ context, event, enqueue }) => {
-      assertEvent(event, PlayerActionType.USE_ABILITY);
-      const { playerId, payload } = event;
-      const { activeAbility, players } = context;
 
-      if (!activeAbility || activeAbility.playerId !== playerId) return;
-
-      if (payload.action === 'skip') {
-        if (activeAbility.stage === 'peeking') {
-          enqueue.assign({ activeAbility: { ...activeAbility, stage: 'swapping' }});
-        } else if (activeAbility.stage === 'swapping') {
-          enqueue.assign({ activeAbility: { ...activeAbility, stage: 'done' }});
-        }
-        return;
-      }
-
-      if (payload.action === 'peek' && activeAbility.stage === 'peeking') {
-        const peekedCards = payload.targets.map((target: PeekTarget) => {
-          const targetPlayer = players[target.playerId];
-          const card = targetPlayer?.hand[target.cardIndex];
-          return { ...target, card };
-        }).filter((item): item is PeekTarget & { card: Card } => !!item.card);
-
-        if (peekedCards.length > 0) {
-          enqueue.emit({
-            type: 'SEND_EVENT_TO_PLAYER',
-            payload: {
-              playerId,
-              eventName: SocketEventName.ABILITY_PEEK_RESULT,
-              eventData: { cards: peekedCards }
-            }
-          });
-        }
-        // After peeking, Queen and King abilities move to the swap stage.
-        enqueue.assign({ activeAbility: { ...activeAbility, stage: 'swapping' } });
-        return;
-      }
-
-      if (payload.action === 'swap' && activeAbility.stage === 'swapping') {
-        const { source, target } = payload;
-        const player1 = players[source.playerId];
-        const player2 = players[target.playerId];
-        const card1 = player1?.hand[source.cardIndex];
-        const card2 = player2?.hand[target.cardIndex];
-
-        if (player1 && player2 && card1 && card2) {
-          const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(players));
-          newPlayers[source.playerId]!.hand[source.cardIndex] = card2;
-          newPlayers[target.playerId]!.hand[target.cardIndex] = card1;
-          enqueue.assign({ players: newPlayers });
-        }
-        // After swapping, the ability is done.
-        enqueue.assign({ activeAbility: { ...activeAbility, stage: 'done' } });
-      }
-    }),
-    sendPeekInfoToPlayers: enqueueActions(({ context, enqueue }) => {
-      // According to rules, players peek at their bottom two cards (indices 2 and 3)
-      const peekableIndices = [2, 3];
-      for (const player of Object.values(context.players)) {
-        const peekableCards = peekableIndices.map(index => ({
-          index,
-          card: player.hand[index],
-        }));
-        enqueue.emit({
-          type: 'SEND_EVENT_TO_PLAYER',
-          payload: {
-            playerId: player.id,
-            eventName: SocketEventName.INITIAL_PEEK_INFO,
-            eventData: { cards: peekableCards },
-          }
-        });
-      }
-    }),
-    prepareNewRound: assign({
-      deck: shuffleDeck(createDeck()),
-      discardPile: [],
-      players: ({ context }) => {
-        const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
-        for (const p of Object.values(newPlayers)) {
-          p.hand = [];
-          p.hasCalledCheck = false;
-          p.isLocked = false;
-          p.isReady = false;
-          p.pendingDrawnCard = null;
-        }
-        return newPlayers;
-      },
-      turnOrder: ({ context }) => {
-        if (!context.lastRoundLoserId) return context.turnOrder;
-
-        const newTurnOrder = [...context.turnOrder];
-        const loserIndex = newTurnOrder.indexOf(context.lastRoundLoserId);
-
-        if (loserIndex > -1) {
-          const [loserId] = newTurnOrder.splice(loserIndex, 1);
-          newTurnOrder.unshift(loserId);
-        }
-        return newTurnOrder;
-      },
-      gameover: null,
-      lastRoundLoserId: null,
-      checkDetails: null,
-      activeAbility: null,
-      currentPlayerId: null,
-      currentTurnSegment: null,
-    }),
-    tallyRoundScores: assign(({ context }) => {
-      const playerHandValues: Record<PlayerId, number> = {};
-      for (const p of Object.values(context.players)) {
-        playerHandValues[p.id] = p.hand.reduce((sum, card) => sum + cardScoreValues[card.rank], 0);
-      }
-
-      const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
-      let roundWinnerId: PlayerId | null = null;
-      let roundLoserId: PlayerId | null = null;
-      let lowestScore = Infinity;
-      let highestScore = -Infinity;
-
-      for (const playerId in newPlayers) {
-        const handValue = playerHandValues[playerId]!;
-        newPlayers[playerId]!.score += handValue; // Update total score
-
-        if (handValue < lowestScore) {
-          lowestScore = handValue;
-          roundWinnerId = playerId;
-        }
-        if (handValue > highestScore) {
-          highestScore = handValue;
-          roundLoserId = playerId;
-        }
-      }
-
-      const finalPlayerScores = Object.fromEntries(Object.values(newPlayers).map((p) => [p.id, p.score]));
-
-      return {
-        players: newPlayers,
-        gameover: {
-          winnerId: roundWinnerId,
-          playerScores: finalPlayerScores,
-        },
-        lastRoundLoserId: roundLoserId,
-      };
-    }),
-    reconnectPlayer: assign({
-      players: ({ context, event }) => {
-        assertEvent(event, 'PLAYER_RECONNECTED');
-        const { playerId, newSocketId } = event;
-        const newPlayers = { ...context.players };
-        if (newPlayers[playerId]) {
-          newPlayers[playerId]!.socketId = newSocketId;
-          newPlayers[playerId]!.isConnected = true;
-        }
-        return newPlayers;
-      },
-    }),
-    disconnectPlayer: assign({
-      players: ({ context, event }) => {
-        assertEvent(event, 'PLAYER_DISCONNECTED');
-        const { playerId } = event;
-        const newPlayers = { ...context.players };
-        if (newPlayers[playerId]) {
-          newPlayers[playerId]!.isConnected = false;
-        }
-        return newPlayers;
-      },
-    }),
+    // Matching
     setupMatchingOpportunity: assign({
       matchingOpportunity: ({ context }) => {
         const cardToMatch = context.discardPile[context.discardPile.length - 1];
-        if (!cardToMatch) return null;
-        return {
-          cardToMatch: cardToMatch,
-          originalPlayerID: context.currentPlayerId!,
-        };
+        if (!cardToMatch || specialRanks.has(cardToMatch.rank)) return null;
+        
+        const originalPlayerID = context.currentPlayerId!;
+        const otherPlayerIDs = context.turnOrder.filter(id => id !== originalPlayerID);
+
+        return { cardToMatch, originalPlayerID, remainingPlayerIDs: otherPlayerIDs };
       },
-      discardPileIsSealed: false,
     }),
-    handleSuccessfulMatch: enqueueActions(({ context, event, enqueue }) => {
-      assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
-      const { playerId, payload } = event;
-      
-      const player = context.players[playerId];
-      const matchingCard = player?.hand[payload.cardIndex];
-      if (!player || !matchingCard) return;
+    handleSuccessfulMatch: assign(({ context, event }) => {
+        assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
+        const { playerId, payload: { handCardIndex } } = event;
+        const matchingPlayer = context.players[playerId]!;
+        const originalPlayer = context.players[context.matchingOpportunity!.originalPlayerID]!;
 
-      const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
-      const playerHand = newPlayers[playerId]!.hand;
-      
-      playerHand.splice(payload.cardIndex, 1);
+        const cardToSwap = matchingPlayer.hand[handCardIndex]!;
+        const cardToTake = context.matchingOpportunity!.cardToMatch;
+        
+        const newPlayers = { ...context.players };
+        // Give matched card to original player
+        newPlayers[originalPlayer.id]!.hand.push(cardToTake);
+        // Swap card from matching player's hand to discard
+        const newMatchingPlayerHand = [...matchingPlayer.hand];
+        newMatchingPlayerHand.splice(handCardIndex, 1);
+        newPlayers[matchingPlayer.id]!.hand = newMatchingPlayerHand;
+        
+        const newDiscardPile = [...context.discardPile];
+        newDiscardPile[newDiscardPile.length-1] = cardToSwap;
 
-      const newDiscardPile = [...context.discardPile, matchingCard];
+        // If matching player empties hand, they call Check automatically
+        const checkDetails = newMatchingPlayerHand.length === 0 
+          ? { callerId: playerId, playersYetToPlay: context.turnOrder.filter(id => id !== playerId) } 
+          : context.checkDetails;
 
-      enqueue.assign({
-        players: newPlayers,
-        discardPile: newDiscardPile,
-        discardPileIsSealed: true,
-        matchingOpportunity: null,
-      });
-
-      // Automatic "Check" if hand is empty and check hasn't been called
-      if (playerHand.length === 0 && !context.checkDetails) {
-        enqueue.assign({
-          checkDetails: { callerId: playerId },
-          players: ({ context: currentContext }) => {
-            const playersAfterCheck = JSON.parse(JSON.stringify(currentContext.players));
-            playersAfterCheck[playerId]!.hasCalledCheck = true;
-            playersAfterCheck[playerId]!.isLocked = true;
-            return playersAfterCheck;
-          }
+        return { players: newPlayers, discardPile: newDiscardPile, matchingOpportunity: null, checkDetails };
+    }),
+    handlePlayerPassedOnMatch: assign({
+      matchingOpportunity: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.PASS_ON_MATCH_ATTEMPT);
+        const newOpp = { ...context.matchingOpportunity! };
+        newOpp.remainingPlayerIDs = newOpp.remainingPlayerIDs.filter(id => id !== event.playerId);
+        return newOpp;
+      }
+    }),
+    clearMatchingOpportunity: assign({ matchingOpportunity: null }),
+    
+    // Check
+    setCheckCaller: assign({
+      checkDetails: ({ event }) => {
+        assertEvent(event, PlayerActionType.CALL_CHECK);
+        return { callerId: event.playerId, playersYetToPlay: [] }; // playersYetToPlay will be set on state entry
+      },
+    }),
+    lockPlayer: assign({
+      players: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.CALL_CHECK);
+        const newPlayers = { ...context.players };
+        newPlayers[event.playerId]!.isLocked = true;
+        return newPlayers;
+      },
+    }),
+    setupCheckRound: assign({
+      checkDetails: ({ context }) => {
+        const { callerId } = context.checkDetails!;
+        const callerIndex = context.turnOrder.indexOf(callerId);
+        // Create a list of players for the final round, starting from the player after the caller
+        const playersInOrder = [...context.turnOrder.slice(callerIndex + 1), ...context.turnOrder.slice(0, callerIndex)];
+        return { callerId, playersYetToPlay: playersInOrder };
+      }
+    }),
+    advanceCheckRound: assign({
+      checkDetails: ({ context }) => {
+        const newCheckDetails = { ...context.checkDetails! };
+        newCheckDetails.playersYetToPlay.shift();
+        return newCheckDetails;
+      },
+    }),
+    
+    // Game Over & Round End
+    calculateScoresAndEndRound: assign({
+      gameover: ({ context }) => {
+        let loserId: PlayerId | null = null;
+        let minScore = Infinity;
+        
+        const playerScores = Object.fromEntries(
+          Object.entries(context.players).map(([id, player]) => {
+            const score = player.hand.reduce((acc, card) => acc + cardScoreValues[card.rank], 0);
+            if (score < minScore) {
+              minScore = score;
+              loserId = id;
+            }
+            return [id, score];
+          })
+        );
+        return { winnerId: null, loserId, playerScores }; // Winner logic can be more complex
+      }
+    }),
+    resetForNextRound: assign(({ context }) => ({
+        deck: shuffleDeck(createDeck()),
+        discardPile: [],
+        players: Object.fromEntries(
+            Object.entries(context.players).map(([id, player]) => [id, { ...player, hand: [], isReady: false, isLocked: false, hasCalledCheck: false, pendingDrawnCard: null }])
+        ),
+        currentPlayerId: null,
+        currentTurnSegment: null,
+        checkDetails: null,
+        gameover: null,
+        lastRoundLoserId: context.gameover?.loserId ?? null,
+        turnOrder: context.lastRoundLoserId ? [context.lastRoundLoserId, ...context.turnOrder.filter(id => id !== context.lastRoundLoserId)] : context.turnOrder,
+    })),
+    
+    // Peek
+    sendPeekInfoToAllPlayers: enqueueActions(({ context, enqueue }) => {
+      context.turnOrder.forEach((playerId) => {
+        const player = context.players[playerId]!;
+        enqueue.emit({
+          type: 'SEND_EVENT_TO_PLAYER',
+          payload: {
+            playerId,
+            eventName: SocketEventName.INITIAL_PEEK_INFO,
+            eventData: { hand: [player.hand[0], player.hand[1]] },
+          },
         });
-      }
+      });
     }),
-    clearMatchingOpportunity: assign({
-      matchingOpportunity: null,
+    
+    // Abilities
+    activateAbility: assign({
+        activeAbility: ({ context }) => {
+            const card = context.discardPile[context.discardPile.length - 1]!;
+            const type: AbilityType = card.rank === CardRank.King ? 'king' : (card.rank === CardRank.Queen ? 'peek' : 'swap');
+            const newAbility: ActiveAbility = {
+                type,
+                stage: 'peeking', // All abilities start with a potential peek
+                playerId: context.currentPlayerId!,
+            };
+            return newAbility;
+        },
+        currentTurnSegment: TurnPhase.ABILITY,
     }),
-  },
-  guards: {
-    isValidAbilityAction: ({ context, event }) => {
-      assertEvent(event, PlayerActionType.USE_ABILITY);
-      const { playerId, payload } = event;
-      const { activeAbility } = context;
-
-      if (!activeAbility || activeAbility.playerId !== playerId) return false;
-
-      const { type, stage } = activeAbility;
-
-      if (payload.action === 'skip') return true;
-
-      if (payload.action === 'peek' && stage === 'peeking') {
-        if (type === 'peek' && payload.targets.length === 1) return true; // Queen
-        if (type === 'king' && payload.targets.length <= 2) return true; // King
-      }
-
-      if (payload.action === 'swap' && stage === 'swapping') {
-        if (type === 'swap' || type === 'peek' || type === 'king') return true;
-      }
-
-      return false;
-    },
-    canDrawFromDiscard: ({ context }) => {
-        if (context.discardPileIsSealed) return false;
-        const topOfDiscard = context.discardPile[context.discardPile.length - 1];
-        if (!topOfDiscard) return false;
-        return !specialRanks.has(topOfDiscard.rank);
-    },
-    canJoinGame: ({ context }) => {
-      return (
-        Object.keys(context.players).length < MAX_PLAYERS
-      );
-    },
-    isAbilityCardDiscarded: ({ context }) => {
-      const topCard = context.discardPile[context.discardPile.length - 1];
-      if (!topCard) return false;
-      return abilityRanks.has(topCard.rank);
-    },
-    areAllPlayersReady: ({ context }) => {
-      return context.turnOrder.every((id) => context.players[id]?.isReady);
-    },
-    canAttemptMatch: ({ context, event }) => {
-      assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
-      const { playerId, payload } = event;
-      const { matchingOpportunity } = context;
-
-      if (!matchingOpportunity) {
-        return false;
-      }
-
-      const player = context.players[playerId];
-      const card = player?.hand[payload.cardIndex];
-
-      return !!card && card.rank === matchingOpportunity.cardToMatch.rank;
-    },
+    clearActiveAbility: assign({ activeAbility: null }),
+    performAbilityAction: assign((
+      { context, event }) => {
+        assertEvent(event, PlayerActionType.USE_ABILITY);
+        // Example: if skipping, just clear ability
+        if (event.payload.action === 'skip') {
+          return { activeAbility: null };
+        }
+        return {}; // Return mutated context
+    }),
   },
   actors: {
     peekTimerActor: fromPromise(async () => {
-        await new Promise(resolve => setTimeout(resolve, PEEK_TOTAL_DURATION_MS));
-        return {};
+      await new Promise((resolve) => setTimeout(resolve, PEEK_TOTAL_DURATION_MS));
+      return {};
     }),
     matchingTimerActor: fromPromise(async () => {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        return {};
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // 5s for matching
+      return {};
     }),
-  }
+  },
 }).createMachine({
   id: 'game',
-    context: ({ input }: { input: GameInput }): GameContext => ({
-      gameId: input.gameId,
-      deck: shuffleDeck(createDeck()),
-      players: {},
-      discardPile: [],
-      turnOrder: [],
-      gameMasterId: null,
-      currentPlayerId: null,
-      currentTurnSegment: null,
-      matchingOpportunity: null,
-      activeAbility: null,
-      checkDetails: null,
-      gameover: null,
-      lastRoundLoserId: null,
-      log: [],
-      chat: [],
-      discardPileIsSealed: false,
-    }),
-    initial: GameStage.WAITING_FOR_PLAYERS,
-    on: {
-      PLAYER_RECONNECTED: {
-        actions: 'reconnectPlayer',
-      },
-      PLAYER_DISCONNECTED: {
-        actions: 'disconnectPlayer',
+  initial: GameStage.WAITING_FOR_PLAYERS,
+  context: ({ input }) => ({
+    gameId: input.gameId,
+    deck: shuffleDeck(createDeck()),
+    players: {},
+    discardPile: [],
+    turnOrder: [],
+    gameMasterId: null,
+    currentPlayerId: null,
+    currentTurnSegment: null,
+    matchingOpportunity: null,
+    activeAbility: null,
+    checkDetails: null,
+    gameover: null,
+    lastRoundLoserId: null,
+    log: [],
+    chat: [],
+    discardPileIsSealed: false,
+  }),
+  states: {
+    [GameStage.WAITING_FOR_PLAYERS]: {
+      on: {
+        PLAYER_JOIN_REQUEST: {
+          guard: 'canJoinGame',
+          actions: ['createPlayer', 'addPlayerJoinedLog', 'broadcastGameState'],
+        },
+        PLAYER_RECONNECTED: {
+          actions: ['setPlayerConnected', 'addPlayerReconnectedLog', 'broadcastGameState'],
+        },
+        PLAYER_DISCONNECTED: {
+          actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
+        },
+        [PlayerActionType.DECLARE_LOBBY_READY]: {
+          actions: ['setPlayerReady', 'broadcastGameState'],
+        },
+        [PlayerActionType.START_GAME]: {
+          guard: and(['isGameMaster', 'areAllPlayersReady']),
+          target: GameStage.DEALING,
+        },
       },
     },
+    [GameStage.DEALING]: {
+      entry: [
+        'dealCards', 
+        'setAllPlayersToPlaying',
+        'broadcastGameState'
+      ],
+      after: {
+        100: { target: GameStage.INITIAL_PEEK },
+      },
+    },
+    [GameStage.INITIAL_PEEK]: {
+      entry: ['resetPlayersReadyStatus', 'sendPeekInfoToAllPlayers', 'broadcastGameState'],
+      invoke: {
+        id: 'peekTimer',
+        src: 'peekTimerActor',
+        onDone: { target: GameStage.PLAYING },
+      },
+      on: {
+        [PlayerActionType.DECLARE_READY_FOR_PEEK]: {
+          actions: ['setPlayerReadyForPeek', 'broadcastGameState'],
+        },
+      },
+      always: {
+        guard: 'allPlayersReadyForPeek',
+        target: GameStage.PLAYING,
+      },
+    },
+    [GameStage.PLAYING]: {
+      initial: 'turn',
+      entry: ['initializePlayState', 'broadcastGameState'],
+      on: {
+        [PlayerActionType.CALL_CHECK]: {
+          guard: and(['isPlayerTurn', 'isNotLocked']),
+          target: GameStage.CHECK,
+          actions: ['setCheckCaller', 'lockPlayer'],
+        },
+      },
       states: {
-      [GameStage.WAITING_FOR_PLAYERS]: {
-        on: {
-          PLAYER_JOIN_REQUEST: {
-            guard: 'canJoinGame',
-            actions: 'createPlayer',
-          },
-          START_GAME: {
-            target: GameStage.DEALING,
-            actions: 'setAllPlayersToPlaying',
-          },
-        },
-      },
-      [GameStage.DEALING]: {
-        entry: assign({
-          log: ({ context }) => [
-            ...context.log,
-            createLogEntry(context, {
-              message: 'The game has started. Dealing cards...',
-              type: 'public',
-              tags: ['system-message'],
-            }),
-          ],
-        }),
-        always: {
-          target: GameStage.INITIAL_PEEK,
-          actions: ['dealCards', 'resetPlayersReadyStatus'],
-        },
-      },
-      [GameStage.INITIAL_PEEK]: {
-        entry: [
-          'sendPeekInfoToPlayers',
-          assign({
-            log: ({ context }) => [
-              ...context.log,
-              createLogEntry(context, {
-                message: `Players have ${PEEK_TOTAL_DURATION_MS / 1000} seconds to peek at their cards.`,
-                type: 'public',
-                tags: ['game-event'],
-              }),
-            ],
-          }),
-        ],
-        invoke: {
-          src: 'peekTimerActor',
-          onDone: {
-            target: GameStage.PLAYING,
-            actions: [
-              assign({
-                log: ({ context }) => [
-                  ...context.log,
-                  createLogEntry(context, {
-                    message: 'Peek time expired. Starting game.',
-                    type: 'public',
-                    tags: ['system-message'],
-                  }),
-                ],
-              }),
-              'initializePlayState'
-            ],
-          },
-        },
-        on: {
-          [PlayerActionType.DECLARE_READY_FOR_PEEK]: {
-            actions: 'setPlayerReady',
-          },
-        },
-        always: {
-          guard: 'areAllPlayersReady',
-          target: GameStage.PLAYING,
-          actions: 'initializePlayState',
-        },
-      },
-      [GameStage.PLAYING]: {
-        initial: TurnPhase.DRAW,
-        on: {
-          endTurn: {
-            target: `.${TurnPhase.DRAW}`,
-            actions: 'advanceTurn',
-          },
-        },
-      states: {
-            [TurnPhase.DRAW]: {
-                on: {
-                    [PlayerActionType.DRAW_FROM_DECK]: { actions: 'drawFromDeck' },
-                    [PlayerActionType.DRAW_FROM_DISCARD]: { guard: 'canDrawFromDiscard', actions: 'drawFromDiscard' },
-                    [PlayerActionType.CALL_CHECK]: { target: `#game.${GameStage.CHECK}`, actions: 'callCheck' },
-                }
-            },
-            [TurnPhase.DISCARD]: {
+        turn: {
+          initial: 'DRAW',
+          states: {
+            DRAW: {
+              entry: ['broadcastGameState'],
               on: {
-                [PlayerActionType.DISCARD_DRAWN_CARD]: {
-                  actions: 'discardDrawnCard',
-                },
-                [PlayerActionType.SWAP_AND_DISCARD]: {
-                  actions: 'swapAndDiscard',
-                },
-              },
-              always: {
-                target: TurnPhase.MATCHING,
-                actions: 'setupMatchingOpportunity',
+                [PlayerActionType.DRAW_FROM_DECK]: { guard: 'isPlayerTurn', actions: 'drawFromDeck', target: 'DISCARD' },
+                [PlayerActionType.DRAW_FROM_DISCARD]: { guard: and(['isPlayerTurn', 'canDrawFromDiscard']), actions: 'drawFromDiscard', target: 'DISCARD' },
               },
             },
-            [TurnPhase.MATCHING]: {
-              always: {
-                // If a match was just made, the opportunity is gone. We then check for abilities or end the turn.
-                guard: ({ context }) => context.matchingOpportunity === null,
-                target: TurnPhase.DISCARD, // Re-evaluates on an empty transition
-                reenter: true,
-              },
-              invoke: {
-                src: 'matchingTimerActor',
-                onDone: [
-                  {
-                    guard: 'isAbilityCardDiscarded',
-                    target: TurnPhase.ACTION,
-                    actions: ['clearMatchingOpportunity', 'prepareAbility'],
-                  },
-                  {
-                    actions: ['clearMatchingOpportunity', raise({ type: 'endTurn' })],
-                  },
-                ],
-              },
+            DISCARD: {
+              entry: 'broadcastGameState',
               on: {
-                [PlayerActionType.ATTEMPT_MATCH]: {
-                  guard: 'canAttemptMatch',
-                  actions: 'handleSuccessfulMatch',
-                  target: TurnPhase.MATCHING,
-                  reenter: true,
-                },
+                [PlayerActionType.SWAP_AND_DISCARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard']), actions: 'swapAndDiscard', target: 'action' },
+                [PlayerActionType.DISCARD_DRAWN_CARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard']), actions: 'discardDrawnCard', target: 'action' },
               },
             },
-            [TurnPhase.ACTION]: {
+            action: {
+              always: [
+                { guard: 'isAbilityCardDiscarded', target: 'ABILITY' },
+                { target: 'MATCHING' },
+              ],
+            },
+            ABILITY: {
+              entry: ['activateAbility', 'broadcastGameState'],
               on: {
                 [PlayerActionType.USE_ABILITY]: {
                   guard: 'isValidAbilityAction',
-                  actions: 'handleAbilityAction',
+                  actions: ['performAbilityAction', 'clearActiveAbility', 'broadcastGameState'],
+                  target: 'endOfTurn',
+                }
+              }
+            },
+            MATCHING: {
+              entry: ['setupMatchingOpportunity', 'broadcastGameState'],
+              invoke: {
+                id: 'matchingTimer',
+                src: 'matchingTimerActor',
+                onDone: { target: 'endOfTurn', actions: 'clearMatchingOpportunity' },
+              },
+              on: {
+                [PlayerActionType.ATTEMPT_MATCH]: {
+                    guard: 'canAttemptMatch',
+                    actions: 'handleSuccessfulMatch',
+                    target: 'endOfTurn' // Or check for auto-check
                 },
+                [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
+                    actions: 'handlePlayerPassedOnMatch',
+                }
               },
               always: {
-                guard: ({ context }) => context.activeAbility?.stage === 'done',
-                actions: raise({ type: 'endTurn' }),
-              },
+                // If all players passed
+                guard: ({ context }) => context.matchingOpportunity?.remainingPlayerIDs.length === 0,
+                target: 'endOfTurn',
+                actions: 'clearMatchingOpportunity',
+              }
+            },
+            endOfTurn: {
+                entry: ['setNextPlayer', 'broadcastGameState'],
+                after: { 10: 'DRAW' }
             }
-        }
-      },
-      [GameStage.CHECK]: {
-        always: [
-          {
-            guard: ({ context }) => context.checkDetails !== null && context.players[context.checkDetails.callerId]!.hand.length === 0,
-            target: GameStage.GAMEOVER,
-            actions: 'tallyRoundScores',
-          },
-          {
-            guard: ({ context }) => context.currentPlayerId === context.checkDetails?.callerId,
-            target: GameStage.GAMEOVER,
-            actions: 'tallyRoundScores',
-          }
-        ],
-        initial: TurnPhase.DRAW,
-        on: {
-          endTurn: {
-            target: `.${TurnPhase.DRAW}`,
-            actions: 'advanceTurn',
-          },
-        },
-        states: {
-          [TurnPhase.DRAW]: {
-            on: {
-              [PlayerActionType.DRAW_FROM_DECK]: { actions: 'drawFromDeck' },
-              [PlayerActionType.DRAW_FROM_DISCARD]: { guard: 'canDrawFromDiscard', actions: 'drawFromDiscard' },
-            },
-          },
-          [TurnPhase.DISCARD]: {
-            on: {
-              [PlayerActionType.DISCARD_DRAWN_CARD]: {
-                actions: 'discardDrawnCard',
-              },
-              [PlayerActionType.SWAP_AND_DISCARD]: {
-                actions: 'swapAndDiscard',
-              },
-            },
-            always: {
-              target: TurnPhase.MATCHING,
-              actions: 'setupMatchingOpportunity',
-            },
-          },
-          [TurnPhase.ACTION]: {
-            on: {
-              [PlayerActionType.USE_ABILITY]: {
-                guard: 'isValidAbilityAction',
-                actions: 'handleAbilityAction',
-              },
-             },
-             always: {
-                guard: ({ context }) => context.activeAbility?.stage === 'done',
-                actions: raise({ type: 'endTurn' }),
-             },
           },
         },
       },
-      [GameStage.GAMEOVER]: {
-        on: {
-          [PlayerActionType.PLAY_AGAIN]: {
-            target: GameStage.DEALING,
-            actions: 'prepareNewRound',
-          },
+    },
+    [GameStage.CHECK]: {
+      entry: ['setupCheckRound', 'broadcastGameState'],
+      always: {
+        // If the round is over immediately
+        guard: ({ context }) => context.checkDetails!.playersYetToPlay.length === 0,
+        target: GameStage.GAMEOVER,
+      },
+      // Turn logic is largely the same as PLAYING, but simpler and needs to be implemented.
+      on: {
+        // Events for drawing, discarding etc. would go here.
+        // After each player's turn in check, we would need an event to advance the check round.
+      },
+    },
+    [GameStage.GAMEOVER]: {
+      entry: ['calculateScoresAndEndRound', 'broadcastGameState'],
+      on: {
+        [PlayerActionType.PLAY_AGAIN]: {
+          actions: ['resetForNextRound', 'broadcastGameState'],
+          target: GameStage.DEALING,
         },
       },
-    }
+    },
+  },
 });

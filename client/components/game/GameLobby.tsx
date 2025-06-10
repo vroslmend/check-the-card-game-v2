@@ -29,10 +29,12 @@ export const GameLobby = () => {
   const hasEnoughPlayers = playerCount >= 2;
   const hasDisconnectedPlayers = Object.values(players).some((player: Player) => !player.isConnected);
   
+  const handlePlayerReady = () => {
+    send({ type: 'PLAYER_READY' });
+  };
+
   const handleStartGame = () => {
-    if (localPlayerId) {
-      send({ type: 'START_GAME' });
-    }
+    send({ type: 'START_GAME' });
   };
 
   return (
@@ -145,7 +147,7 @@ export const GameLobby = () => {
               <Button 
                 size="lg" 
                 className="w-full h-12 text-lg font-light" 
-                onClick={handleStartGame}
+                onClick={handlePlayerReady}
                 disabled={!hasEnoughPlayers}
               >
                 Declare Ready
