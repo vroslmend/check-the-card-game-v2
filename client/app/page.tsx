@@ -194,6 +194,14 @@ export default function Home() {
     window.scrollTo(0, 0);
   }, []);
 
+  // Add the missing event listener for mouse movement
+  useEffect(() => {
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [handleMouseMove]);
+
   return (
     <div
       ref={containerRef}

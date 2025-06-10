@@ -74,6 +74,7 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
               onChange={(e) => setPlayerName(e.target.value)}
               className="col-span-3"
               onKeyDown={onKeyDown}
+              autoComplete="off"
             />
           </div>
         </div>

@@ -75,6 +75,7 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
               placeholder="Your Name"
               className="col-span-3"
               onKeyDown={onKeyDown}
+              autoComplete="off"
             />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
@@ -88,6 +89,7 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
               placeholder="Enter the game ID"
               className="col-span-3"
               onKeyDown={onKeyDown}
+              autoComplete="off"
             />
           </div>
         </div>
