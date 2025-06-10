@@ -4,11 +4,11 @@ import { cn } from "@/lib/utils"
 
 import { motion } from "framer-motion"
 import { CardBack } from "../ui/CardBack"
-import { Crown, Clock, CheckCircle, XCircle, Pause } from "lucide-react"
-import { ClientPlayerState } from "shared-types"
+import { Crown, Clock, CheckCircle, XCircle, Pause, User, Trophy } from "lucide-react"
+import { Player, PlayerStatus } from "shared-types"
 
 interface PlayerPodProps {
-  player: ClientPlayerState;
+  player: Player;
   playerId: string;
   isCurrentPlayer: boolean;
   position: number;
@@ -16,33 +16,39 @@ interface PlayerPodProps {
 
 export function PlayerPod({ player, playerId, isCurrentPlayer, position }: PlayerPodProps) {
   const statusConfig = {
-    waiting: {
+    [PlayerStatus.WAITING]: {
       color: "text-stone-600 dark:text-stone-400",
       label: "Waiting",
       icon: Pause,
       bgColor: "bg-stone-100/20 dark:bg-stone-900/20",
     },
-    playing: {
+    [PlayerStatus.PLAYING]: {
       color: "text-stone-900 dark:text-stone-100",
       label: "Playing",
       icon: Clock,
       bgColor: "bg-stone-50 dark:bg-stone-900",
     },
-    checking: {
+    [PlayerStatus.CALLED_CHECK]: {
       color: "text-stone-900 dark:text-stone-100",
       label: "Check!",
       icon: CheckCircle,
       bgColor: "bg-stone-900/10 dark:bg-stone-100/10",
     },
-    folded: {
-      color: "text-stone-600 dark:text-stone-400",
-      label: "Folded",
+    [PlayerStatus.WINNER]: {
+        color: "text-amber-500",
+        label: "Winner!",
+        icon: Trophy,
+        bgColor: "bg-amber-500/10",
+    },
+    [PlayerStatus.LOSER]: {
+      color: "text-red-600 dark:text-red-500",
+      label: "Loser",
       icon: XCircle,
-      bgColor: "bg-stone-200/10 dark:bg-stone-800/10",
+      bgColor: "bg-red-500/10",
     },
   }
 
-  const status = player.hasCalledCheck ? "checking" : "playing"; // This will need to be mapped to our actual player status from the game state
+  const status = player.status || PlayerStatus.WAITING;
   const config = statusConfig[status];
   const StatusIcon = config.icon
 
@@ -90,20 +96,20 @@ export function PlayerPod({ player, playerId, isCurrentPlayer, position }: Playe
           <div className="flex items-center justify-center gap-1">
             <motion.div
               animate={
-                status === "playing"
+                status === PlayerStatus.PLAYING
                   ? {
                       rotate: 360,
                       scale: [1, 1.2, 1],
                     }
-                  : status === "checking"
+                  : status === PlayerStatus.CALLED_CHECK
                     ? {
                         scale: [1, 1.3, 1],
                       }
                     : {}
               }
               transition={{
-                duration: status === "playing" ? 2 : 1,
-                repeat: status === "playing" || status === "checking" ? Number.POSITIVE_INFINITY : 0,
+                duration: status === PlayerStatus.PLAYING ? 2 : 1,
+                repeat: status === PlayerStatus.PLAYING || status === PlayerStatus.CALLED_CHECK ? Number.POSITIVE_INFINITY : 0,
               }}
             >
               <StatusIcon className={`h-3 w-3 ${config.color}`} />
@@ -154,7 +160,7 @@ export function PlayerPod({ player, playerId, isCurrentPlayer, position }: Playe
                   transition: { duration: 0.2 },
                 }}
               >
-                <CardBack size="sm" layoutId={`opponent-${playerId}-card-${i}`} />
+                <CardBack size="sm" />
               </motion.div>
             ))}
           </motion.div>
@@ -193,11 +199,11 @@ export function PlayerPod({ player, playerId, isCurrentPlayer, position }: Playe
         )}
 
         {/* Status Glow */}
-        {(status === "checking" || status === "playing") && (
+        {(status === PlayerStatus.CALLED_CHECK || status === PlayerStatus.PLAYING) && (
           <motion.div
             className={cn(
               "absolute -z-10 inset-0 rounded-lg blur-xl",
-              status === "checking"
+              status === PlayerStatus.CALLED_CHECK
                 ? "bg-stone-900/20 dark:bg-stone-100/20"
                 : "bg-stone-900/10 dark:bg-stone-100/10",
             )}

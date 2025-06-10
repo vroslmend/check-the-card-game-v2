@@ -11,57 +11,57 @@ import {
 import {
   type ClientCheckGameState,
   type RichGameLogMessage,
-  type ChatMessage,
-  type RespondCardDetailsPayload,
   SocketEventName,
+  type Card,
+  type PlayerId,
 } from 'shared-types';
+import { SnapshotFrom } from 'xstate';
 
 type UIContextType = {
   actorRef: UIMachineActorRef;
 };
 
-const UIContext = createContext<UIContextType | undefined>(undefined);
+export const UIContext = createContext<UIContextType | undefined>(undefined);
 
 export const UIMachineProvider = ({
   children,
   gameId,
   localPlayerId,
+  initialState,
 }: {
   children: React.ReactNode;
   gameId: string;
   localPlayerId: string;
+  initialState: SnapshotFrom<typeof uiMachine> | null;
 }) => {
   const actorRef = useActorRef(uiMachine, {
-    input: {
+    snapshot: initialState ?? undefined,
+    input: initialState ? undefined : {
       gameId,
       localPlayerId,
     },
   });
 
   useEffect(() => {
-    const onGameStateUpdate = (data: { gameState: ClientCheckGameState }) => {
-        actorRef.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState: data.gameState });
+    const onGameStateUpdate = (gameState: ClientCheckGameState) => {
+      actorRef.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState });
     };
-    const onNewLog = (data: { logEntry: RichGameLogMessage }) => {
-        actorRef.send({ type: 'NEW_GAME_LOG', logMessage: data.logEntry });
+    const onNewLog = (logMessage: RichGameLogMessage) => {
+      actorRef.send({ type: 'NEW_GAME_LOG', logMessage });
     };
-    const onNewChatMessage = (chatMessage: ChatMessage) => {
-        actorRef.send({ type: 'NEW_CHAT_MESSAGE', chatMessage });
-    };
-    const onCardDetails = (payload: RespondCardDetailsPayload) => {
+    const onCardDetails = (payload: { card: Card; playerId: PlayerId; cardIndex: number }) => {
       actorRef.send({ type: 'SERVER_PROVIDED_CARD_FOR_ABILITY', ...payload });
     };
-    const onError = (data: { message: string }) => {
-        actorRef.send({ type: 'ERROR_RECEIVED', error: data.message });
+    const onError = (error: { message: string }) => {
+      actorRef.send({ type: 'ERROR_RECEIVED', error: error.message });
     };
-    const onInitialLogs = (data: { logs: RichGameLogMessage[] }) => {
-        actorRef.send({ type: 'INITIAL_LOGS_RECEIVED', logs: data.logs });
+    const onInitialLogs = (logs: RichGameLogMessage[]) => {
+      actorRef.send({ type: 'INITIAL_LOGS_RECEIVED', logs });
     };
 
     socket.on(SocketEventName.GAME_STATE_UPDATE, onGameStateUpdate);
     socket.on(SocketEventName.SERVER_LOG_ENTRY, onNewLog);
-    socket.on(SocketEventName.CHAT_MESSAGE, onNewChatMessage);
-    socket.on(SocketEventName.RESPOND_CARD_DETAILS_FOR_ABILITY, onCardDetails);
+    socket.on(SocketEventName.ABILITY_PEEK_RESULT, onCardDetails);
     socket.on(SocketEventName.ERROR_MESSAGE, onError);
     socket.on(SocketEventName.INITIAL_LOGS, onInitialLogs);
 
@@ -69,27 +69,39 @@ export const UIMachineProvider = ({
     return () => {
       socket.off(SocketEventName.GAME_STATE_UPDATE, onGameStateUpdate);
       socket.off(SocketEventName.SERVER_LOG_ENTRY, onNewLog);
-      socket.off(SocketEventName.CHAT_MESSAGE, onNewChatMessage);
-      socket.off(SocketEventName.RESPOND_CARD_DETAILS_FOR_ABILITY, onCardDetails);
+      socket.off(SocketEventName.ABILITY_PEEK_RESULT, onCardDetails);
       socket.off(SocketEventName.ERROR_MESSAGE, onError);
       socket.off(SocketEventName.INITIAL_LOGS, onInitialLogs);
     };
   }, [actorRef]);
 
+  // It subscribes to specific events emitted by the machine and forwards them to the socket.
+  // This is the preferred, type-safe way to handle emitted events from an actor.
+  useEffect(() => {
+    const subscription = actorRef.on('EMIT_TO_SOCKET', (event) => {
+      socket.emit(event.eventName, event.payload);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [actorRef]);
+
   // Forward socket connection events to the state machine
   useEffect(() => {
-    socket.connect(); // Manually connect the socket when the provider mounts
-    
     const handleConnect = () => actorRef.send({ type: 'CONNECT' });
     const handleDisconnect = () => actorRef.send({ type: 'DISCONNECT' });
 
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
 
+    // If the socket is already connected when we load, immediately tell the machine.
     if (socket.connected) {
       handleConnect();
     } else {
-      handleDisconnect();
+      // If not connected, we might need to manually connect.
+      // This can happen if the user navigates directly to the game URL.
+      socket.connect();
     }
 
     return () => {
@@ -99,16 +111,22 @@ export const UIMachineProvider = ({
     };
   }, [actorRef]);
 
+  useEffect(() => {
+    actorRef.send({ type: 'RECONNECT' });
+  }, [actorRef]);
+
   // Initializes the machine with top-level context
   useEffect(() => {
-    if (localPlayerId && gameId) {
+    // If the machine was NOT rehydrated from a persisted state,
+    // then we need to kick off the rejoin attempt.
+    if (!initialState && localPlayerId && gameId) {
       actorRef.send({
         type: 'INITIALIZE',
         localPlayerId,
         gameId,
       });
     }
-  }, [actorRef, gameId, localPlayerId]);
+  }, [actorRef, gameId, localPlayerId, initialState]);
 
   return <UIContext.Provider value={{ actorRef }}>{children}</UIContext.Provider>;
 };
@@ -121,14 +139,3 @@ export const useUI = (): [UIMachineState, UIMachineActorRef['send']] => {
   const state = useSelector(context.actorRef, (s) => s);
   return [state, context.actorRef.send];
 };
-
-export function useUIMachineSelector<T>(
-  selector: (state: UIMachineState) => T,
-  compare?: (a: T, b: T) => boolean,
-): T {
-  const context = useContext(UIContext);
-  if (context === undefined) {
-    throw new Error('useUIMachineSelector must be used within a UIMachineProvider');
-  }
-  return useSelector(context.actorRef, selector, compare);
-}

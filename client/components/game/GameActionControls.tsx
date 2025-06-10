@@ -3,49 +3,50 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { useState, useRef } from "react"
-import { CheckCircle, Circle, Eye, Shuffle, Users, X } from "lucide-react"
-import { useUI } from "@/components/providers/uiMachineProvider"
+import { CheckCircle, Circle, Eye, Shuffle, Ban, X, Search, GitCommitHorizontal } from "lucide-react"
+import { useUI } from "@/components/providers/UIMachineProvider"
 import { type UIMachineEvent } from "@/machines/uiMachine"
 import Magnetic from "../ui/Magnetic";
-import { PlayerActionType } from "shared-types"
+import { CardRank, GameStage, TurnPhase } from "shared-types"
 
-// This defines the structure for a button in the action bar.
 type ActionButton = {
-  id: string; // A unique key for React
-  label: string;
-  icon: React.ElementType;
+  id: string;
+  label: string; 
+  icon: React.ElementType; 
   event: UIMachineEvent;
-  holdToConfirm?: boolean;
+  holdToConfirm?: boolean; 
   variant?: 'ghost' | 'default' | 'destructive' | 'outline' | 'secondary' | 'link';
+  disabled?: boolean;
 };
 
-export function ActionBar() {
+export function GameActionControls() {
   const [state, send] = useUI();
 
   const {
-    selectedHandCardIndex,
     localPlayerId,
     currentGameState,
+    abilityContext,
   } = state.context;
 
-  const localPlayer = localPlayerId && currentGameState?.players[localPlayerId];
-  const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
+  // Comprehensive guard to prevent crashes on initial render
+  if (!currentGameState || !currentGameState.players) {
+    return null; // Or a loading spinner, but null is safest for now
+  }
 
-  // State for the "hold to confirm" button feature
+  const localPlayer = localPlayerId ? currentGameState.players[localPlayerId] : null;
+  const isMyTurn = currentGameState.currentPlayerId === localPlayerId;
+
   const [holdingAction, setHoldingAction] = useState<string | null>(null);
   const [holdProgress, setHoldProgress] = useState(0);
   const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleAction = (event: UIMachineEvent) => {
-    if (state.can(event)) {
-      send(event);
-    }
+    send(event);
   };
 
   const startHold = (button: ActionButton) => {
-    if (!state.can(button.event)) return;
-
+    if (button.disabled) return;
     setHoldingAction(button.id);
     setHoldProgress(0);
 
@@ -58,7 +59,7 @@ export function ActionBar() {
         }
         return newProgress;
       });
-    }, 20); // 50 updates per second for smooth progress
+    }, 20);
 
     holdTimeoutRef.current = setTimeout(() => completeHold(button.event), 1000);
   };
@@ -75,96 +76,115 @@ export function ActionBar() {
     if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
   };
 
-  // This function determines which action buttons are available based on the current game state.
   const getAvailableActions = (): ActionButton[] => {
     if (!currentGameState || !localPlayer || !localPlayerId) return [];
 
     const actions: ActionButton[] = [];
-    const can = (event: UIMachineEvent) => state.can(event);
-
-    // Initial Peek Phase
-    if (currentGameState.currentPhase === 'awaitingPlayers' && !localPlayer.isReadyForInitialPeek) {
-      const event: UIMachineEvent = { type: 'DECLARE_READY_FOR_PEEK_CLICKED' };
-      if (can(event)) {
-        actions.push({ id: 'ready-peek', label: 'Ready to Peek', icon: Eye, event });
+    
+    if (state.matches({ inGame: { connected: { ability: 'collectingInput' } } }) || state.matches({ inGame: { connected: { ability: 'confirming' } } })) {
+      if (abilityContext?.type === 'peek') {
+        const { payload } = abilityContext;
+        const requiredCount = 1;
+        const selectedCount = payload.targetPlayerId ? 1 : 0;
+        actions.push({
+          id: 'confirm-peek',
+          label: `Confirm Peek (${selectedCount}/${requiredCount})`,
+          icon: CheckCircle,
+          event: { type: 'ABILITY_CONFIRM_ACTION' },
+          disabled: selectedCount !== requiredCount,
+        });
+      } else if (abilityContext?.type === 'swap') {
+        const { payload } = abilityContext;
+        const selectedCount = ('sourcePlayerId' in payload ? 1 : 0) + ('targetPlayerId' in payload ? 1 : 0);
+        actions.push({
+          id: 'confirm-swap',
+          label: `Confirm Swap (${selectedCount}/2)`,
+          icon: Shuffle,
+          event: { type: 'ABILITY_CONFIRM_ACTION' },
+          disabled: selectedCount !== 2,
+        });
       }
+      actions.push({ id: 'cancel-ability', label: 'Cancel', icon: Ban, event: { type: 'ABILITY_CANCEL_ACTION' } });
+      return actions.map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled || !state.can(action.event) }));
     }
-    if (currentGameState.currentPhase === 'initialPeekPhase' && !localPlayer.hasCompletedInitialPeek) {
-      const event: UIMachineEvent = { type: 'INITIAL_PEEK_ACKNOWLEDGED_CLICKED' };
-      if (can(event)) {
-        actions.push({ id: 'ack-peek', label: 'Acknowledge Peek', icon: CheckCircle, event });
-      }
+
+    if (currentGameState.gameStage === GameStage.DEALING && !localPlayer.isReady) {
+      actions.push({ id: 'ready-peek', label: 'Ready', icon: Eye, event: { type: 'DECLARE_READY_FOR_PEEK_CLICKED' } });
     }
     
-    // Player's Turn Actions
-    if (isMyTurn) {
-      if (!localPlayer.pendingDrawnCard) {
-        // Initial draw actions
-        const drawDeckEvent: UIMachineEvent = { type: 'DRAW_FROM_DECK_CLICKED' };
-        if (can(drawDeckEvent)) {
-          actions.push({ id: 'draw-deck', label: 'Draw from Deck', icon: Circle, event: drawDeckEvent });
+    if (isMyTurn && currentGameState.turnPhase) {
+      const turnPhase = currentGameState.turnPhase;
+      if (turnPhase === TurnPhase.DRAW) {
+        actions.push({ id: 'draw-deck', label: 'Draw from Deck', icon: Circle, event: { type: 'DRAW_FROM_DECK_CLICKED' } });
+        
+        const topOfDiscard = currentGameState.discardPile[currentGameState.discardPile.length - 1];
+        const isDiscardDrawable = topOfDiscard && !new Set([CardRank.King, CardRank.Queen, CardRank.Jack]).has(topOfDiscard.rank);
+        actions.push({ id: 'draw-discard', label: 'Draw from Discard', icon: Eye, event: { type: 'DRAW_FROM_DISCARD_CLICKED' }, disabled: !isDiscardDrawable });
+
+        actions.push({ id: 'call-check', label: 'Call Check!', icon: CheckCircle, event: { type: 'CALL_CHECK_CLICKED' }, holdToConfirm: true });
+      } else if (turnPhase === TurnPhase.DISCARD) {
+        actions.push({ id: 'discard-drawn', label: 'Discard Drawn Card', icon: X, event: { type: 'CONFIRM_DISCARD_PENDING_DRAWN_CARD' } });
+        if (state.context.selectedHandCardIndex !== null) {
+          actions.push({ id: 'swap-card', label: 'Swap with Selected', icon: Shuffle, event: { type: 'CONFIRM_SWAP_PENDING_CARD_WITH_HAND', handCardIndex: state.context.selectedHandCardIndex } });
         }
-        const drawDiscardEvent: UIMachineEvent = { type: 'DRAW_FROM_DISCARD_CLICKED' };
-        if (can(drawDiscardEvent)) {
-          actions.push({ id: 'draw-discard', label: 'Draw from Discard', icon: Eye, event: drawDiscardEvent });
-        }
-        const callCheckEvent: UIMachineEvent = { type: 'PLAYER_ACTION_CLICKED', action: { type: PlayerActionType.CALL_CHECK, playerId: localPlayerId } };
-        if (can(callCheckEvent)) {
-            actions.push({ id: 'call-check', label: 'Call Check!', icon: CheckCircle, event: callCheckEvent, holdToConfirm: true });
-        }
-      } else {
-        // Post-draw actions
-        const discardDrawnEvent: UIMachineEvent = { type: 'CONFIRM_DISCARD_PENDING_DRAWN_CARD' };
-        if (can(discardDrawnEvent)) {
-          actions.push({ id: 'discard-drawn', label: 'Discard Drawn Card', icon: X, event: discardDrawnEvent });
-        }
-        if (selectedHandCardIndex !== null) {
-          const swapEvent: UIMachineEvent = { type: 'CONFIRM_SWAP_PENDING_CARD_WITH_HAND', handCardIndex: selectedHandCardIndex };
-          if (can(swapEvent)) {
-            actions.push({ id: 'swap-card', label: 'Swap with Selected', icon: Shuffle, event: swapEvent });
-          }
-        }
+      } else if (turnPhase === TurnPhase.ACTION) {
+        actions.push({
+          id: 'use-peek',
+          label: 'Peek (King)',
+          icon: Search,
+          event: { type: 'START_ABILITY', abilityType: 'peek', payload: { type: 'peek' } },
+        });
+        actions.push({
+          id: 'use-swap',
+          label: 'Swap (Queen)',
+          icon: GitCommitHorizontal,
+          event: { type: 'START_ABILITY', abilityType: 'swap', payload: { type: 'swap' } },
+        });
+        actions.push({
+          id: 'end-turn',
+          label: 'End Turn',
+          icon: CheckCircle,
+          event: { type: 'CONFIRM_DISCARD_PENDING_DRAWN_CARD' }
+        });
       }
     }
 
-    // Matching Stage Actions
-    if (currentGameState.currentPhase === 'matchingStage') {
-        const passEvent: UIMachineEvent = { type: 'PLAYER_ACTION_CLICKED', action: { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT, playerId: localPlayerId } };
-        if(can(passEvent)) {
-            actions.push({ id: 'pass-match', label: 'Pass', icon: Circle, event: passEvent });
-        }
-        if (selectedHandCardIndex !== null) {
-            const matchEvent: UIMachineEvent = { type: 'PLAYER_ACTION_CLICKED', action: { type: PlayerActionType.ATTEMPT_MATCH, playerId: localPlayerId, handIndex: selectedHandCardIndex } };
-            if (can(matchEvent)) {
-                actions.push({ id: 'attempt-match', label: 'Attempt Match', icon: Users, event: matchEvent });
-            }
-        }
-    }
-
-    return actions.map(action => ({ ...action, variant: 'ghost' as const }));
+    return actions.map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled || !state.can(action.event) }));
   }
 
-  // This function determines the instructional text based on the game state.
   const getInstructionText = () => {
-    if (!currentGameState || !localPlayer) return "Loading...";
+    if (!currentGameState || !localPlayer || !currentGameState.players) return "Loading...";
 
-    if (currentGameState.currentPhase === 'awaitingPlayers' && !localPlayer.isReadyForInitialPeek) {
-      return "Click when you're ready to see your initial cards.";
+    if (state.matches({ inGame: { connected: { ability: 'collectingInput' } } })) {
+      if (abilityContext?.type === 'peek') {
+        return `You played a King. Select one card from any player to peek at.`;
+      }
+      if (abilityContext?.type === 'swap') {
+        const selected = ('sourcePlayerId' in abilityContext.payload ? 1 : 0) + ('targetPlayerId' in abilityContext.payload ? 1 : 0);
+        if (selected === 0) return `You played a Queen. Select the first card to swap.`;
+        if (selected === 1) return `First card selected. Now select the second card to swap.`;
+      }
     }
-    if (currentGameState.currentPhase === 'initialPeekPhase') {
-      return "Memorize your two center cards, then click Acknowledge.";
+
+    if (currentGameState.gameStage === GameStage.DEALING && !localPlayer.isReady) {
+      return "The dealer is dealing. Click when you're ready to peek at your cards.";
     }
-    if (currentGameState.currentPhase === 'matchingStage') {
-        return "A card was discarded. Select one of your cards to attempt a match, or pass.";
+    if (currentGameState.gameStage === GameStage.DEALING && localPlayer.isReady) {
+      return "Waiting for other players to be ready for the peek...";
     }
     if (isMyTurn) {
-        if (!localPlayer.pendingDrawnCard) {
-            return "It's your turn. Draw a card from the deck or discard pile, or call Check.";
-        } else {
+        if (currentGameState.turnPhase === TurnPhase.DRAW) {
+            return "It's your turn. Draw a card, or call Check.";
+        } else if (currentGameState.turnPhase === TurnPhase.DISCARD) {
             return "You've drawn a card. Discard it, or select a card from your hand to swap with.";
+        } else if (currentGameState.turnPhase === TurnPhase.ACTION) {
+            return "You discarded a special card. Choose an ability to use, or end your turn.";
         }
     }
-    const currentPlayerName = currentGameState.players[currentGameState.currentPlayerId]?.name ?? 'Opponent';
+    const currentPlayerId = currentGameState.currentPlayerId;
+    if (!currentPlayerId) return "Waiting for game to start...";
+    
+    const currentPlayerName = currentGameState.players[currentPlayerId]?.name ?? 'Opponent';
     return `Waiting for ${currentPlayerName}...`;
   }
 
@@ -207,6 +227,7 @@ export function ActionBar() {
                       <div className="relative">
                         <Button
                           variant={action.variant}
+                          disabled={action.disabled}
                           className="relative min-w-[140px] overflow-hidden text-sm font-light transition-all duration-200"
                           onMouseDown={() => startHold(action)}
                           onMouseUp={clearHold}
@@ -228,6 +249,7 @@ export function ActionBar() {
                     ) : (
                       <Button
                         variant={action.variant}
+                        disabled={action.disabled}
                         className="min-w-[140px] text-sm font-light"
                         onClick={() => handleAction(action.event)}
                       >

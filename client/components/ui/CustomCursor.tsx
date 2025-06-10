@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, useSpring, useMotionValue, Variants } from 'framer-motion';
-import { useCursorStore } from '@/store/cursorStore';
+import { useCursor } from '@/components/providers/CursorProvider';
 import { useTheme } from 'next-themes';
 
 const CustomCursor = () => {
-  const { variant, setVariant } = useCursorStore();
+  const { variant, setVariant } = useCursor();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isPointerInViewport, setIsPointerInViewport] = useState(false);
@@ -121,57 +121,48 @@ const CustomCursor = () => {
       resetIdleTimeout();
 
       const target = e.target as HTMLElement;
-      const currentVariant = useCursorStore.getState().variant;
       
       const area = target.closest('[data-cursor-area]');
       if (area) {
-        if (currentVariant !== 'area' && currentVariant !== 'pressed') setVariant('area');
+        if (variant !== 'area' && variant !== 'pressed') setVariant('area');
         return;
       }
       
       const iconLink = target.closest('[data-cursor-icon]');
       if (iconLink) {
-        if (currentVariant !== 'icon' && currentVariant !== 'pressed') setVariant('icon');
+        if (variant !== 'icon' && variant !== 'pressed') setVariant('icon');
         return;
       }
       
       const clickableLink = target.closest('[data-cursor-link]');
       if (clickableLink) {
-        if (currentVariant !== 'link' && currentVariant !== 'pressed') setVariant('link');
+        if (variant !== 'link' && variant !== 'pressed') setVariant('link');
         return;
       }
 
       const textInput = target.closest('[data-cursor-text]');
       if (textInput) {
-        if (currentVariant !== 'text' && currentVariant !== 'pressed') setVariant('text');
+        if (variant !== 'text' && variant !== 'pressed') setVariant('text');
         return;
       }
   
       if (target.matches('a, button, [role="button"], [data-clickable]')) {
-        if (currentVariant !== 'link' && currentVariant !== 'pressed') setVariant('link');
+        if (variant !== 'link' && variant !== 'pressed') setVariant('link');
       } else {
-        if (currentVariant !== 'default' && currentVariant !== 'pressed') setVariant('default');
+        if (variant !== 'default' && variant !== 'pressed') setVariant('default');
       }
     };
 
     const handleMouseLeave = () => setIsPointerInViewport(false);
     
     const handleMouseDown = () => {
-      previousVariant.current = useCursorStore.getState().variant;
+      previousVariant.current = variant;
       setVariant('pressed');
     };
     
     const handleMouseUp = () => {
       setVariant(previousVariant.current as any);
     };
-
-    const unsubscribe = useCursorStore.subscribe(
-      (state, prevState) => {
-        if (state.variant !== 'pressed' && state.variant !== prevState.variant) {
-          previousVariant.current = state.variant;
-        }
-      }
-    );
 
     document.documentElement.addEventListener('mouseleave', handleMouseLeave);
     window.addEventListener('mousemove', handleMouseMove);
@@ -187,9 +178,8 @@ const CustomCursor = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
-      unsubscribe();
     };
-  }, [setVariant, isPointerInViewport]); 
+  }, [setVariant, isPointerInViewport, variant, mouseX, mouseY]);
   
   if (!mounted) {
     return null;

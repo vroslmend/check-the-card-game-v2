@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ChevronDown, Spade, Heart, Diamond, Users, ArrowRight } from "lucide-react"
 import { FaGithub, FaSpotify, FaDiscord } from "react-icons/fa"
-import { NewGameModal } from "@/components/modals/NewGameModal"
-import { JoinGameModal } from "@/components/modals/JoinGameModal"
+import dynamic from "next/dynamic"
 import { OptimizedShapes } from "@/components/ui/OptimizedShapes"
 import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements"
 import { PrincipleCard } from "@/components/ui/PrincipleCard"
@@ -18,6 +17,11 @@ import { AnimateOnView } from "@/components/ui/AnimateOnView"
 import Magnetic from "@/components/ui/Magnetic"
 import { Signature } from "@/components/ui/Signature"
 import { Scrollytelling } from "@/components/ui/Scrollytelling"
+// import { MainNav } from "@/components/layout/MainNav" // This line is commented out as the file does not exist
+import { socket } from "@/lib/socket"
+
+const NewGameModal = dynamic(() => import('@/components/modals/NewGameModal').then(mod => mod.NewGameModal), { ssr: false });
+const JoinGameModal = dynamic(() => import('@/components/modals/JoinGameModal').then(mod => mod.JoinGameModal), { ssr: false });
 
 const textContainerVariants = {
   hover: {
@@ -55,7 +59,7 @@ function FeatureItem({
 
   const opacity = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.5, 1, 1, 1, 0.5])
   const scale = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.9, 1, 1, 1, 0.9])
-  
+
   const bgOpacity = useTransform(diff, [-0.5, 0, 0.5], [0, 1, 0])
 
   const backgroundColor = useTransform(bgOpacity, v => `rgba(var(--feature-item-bg-rgb), ${v})`)
@@ -106,7 +110,7 @@ export default function Home() {
   const shouldReduceMotion = useReducedMotion()
 
   const isModalOpen = showNewGame || showJoinGame
-  
+
   const features = [
     {
       title: "Seamless UI",
@@ -184,30 +188,6 @@ export default function Home() {
   )
 
   useEffect(() => {
-    let lastTime = 0
-    const throttleDelay = 16 // ~60fps
-
-    const throttledMouseMove = (e: MouseEvent) => {
-      if (isModalOpen) {
-        mouseX.set(0)
-        mouseY.set(0)
-        return
-      }
-
-      const now = Date.now()
-      if (now - lastTime >= throttleDelay) {
-        handleMouseMove(e)
-        lastTime = now
-      }
-    }
-
-    window.addEventListener("mousemove", throttledMouseMove, { passive: true })
-    return () => {
-      window.removeEventListener("mousemove", throttledMouseMove)
-    }
-  }, [handleMouseMove, isModalOpen, mouseX, mouseY])
-
-  useEffect(() => {
     if ('scrollRestoration' in history) {
       history.scrollRestoration = 'manual';
     }
@@ -219,6 +199,7 @@ export default function Home() {
       ref={containerRef}
       className="relative flex min-h-screen flex-col bg-stone-50 dark:bg-zinc-950 noselect"
     >
+      {/* <MainNav onNewGame={() => setShowNewGame(true)} onJoinGame={() => setShowJoinGame(true)} /> */}
       <OptimizedShapes mouseX={mouseX} mouseY={mouseY} scrollY={shapeY} shouldReduceMotion={shouldReduceMotion ?? false} />
 
       <motion.header

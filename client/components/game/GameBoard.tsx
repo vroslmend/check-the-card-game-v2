@@ -2,17 +2,22 @@
 
 import { WifiOff, Loader, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUI } from '@/components/providers/uiMachineProvider';
+import { useUI } from '@/components/providers/UIMachineProvider';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { TableArea } from './TableArea';
 import { OpponentArea } from './OpponentArea';
-import { ActionBar } from './GameActionControls';
+import { GameActionControls } from './GameActionControls';
 import { LocalPlayerArea } from './LocalPlayerArea';
+import { toast } from 'sonner';
 
 export function GameBoard() {
   const [state] = useUI();
   const { currentGameState: gameState, localPlayerId } = state.context;
-  const isDisconnected = state.matches({ socket: 'disconnected' });
+  const isDisconnected = state.tags.has('disconnected');
+
+  if (isDisconnected) {
+    toast.error('You are disconnected. Attempting to reconnect...');
+  }
 
   // Early return for missing data
   if (!gameState || !localPlayerId) {
@@ -52,7 +57,7 @@ export function GameBoard() {
       </AnimatePresence>
 
       {/* Game warning for invalid state */}
-      {(!gameState.players || Object.keys(gameState.players).length === 0) && (
+      {gameState && (!gameState.players || Object.keys(gameState.players).length === 0) && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm z-40">
           <Alert variant="destructive" className="max-w-md">
             <AlertCircle className="h-4 w-4" />
@@ -83,7 +88,7 @@ export function GameBoard() {
         </div>
 
         {/* Action bar */}
-        <ActionBar />
+        <GameActionControls />
       </div>
     </div>
   );

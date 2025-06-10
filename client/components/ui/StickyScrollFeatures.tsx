@@ -139,7 +139,7 @@ export function StickyScrollFeatures() {
                       return <Icon size={56} strokeWidth={1} className="text-stone-600 dark:text-stone-300"/>;
                     })()}
                   </motion.div>
-                  <CardStack activeCard={activeIndex} />
+                  {/* <CardStack activeCard={activeIndex} /> */}
                 </motion.div>
               </motion.div>
             </AnimatePresence>

@@ -2,61 +2,44 @@
 
 import { AnimatePresence } from "framer-motion"
 import { HandGrid } from "./HandGrid"
-import { useUI } from "@/components/providers/uiMachineProvider"
+import { useUI } from "@/components/providers/UIMachineProvider"
 import { DeckCard } from "../cards/DeckCard"
-import { type UIMachineEvent } from "@/machines/uiMachine"
-import { type ClientCard, type Card } from "shared-types"
+import { TurnPhase } from "shared-types"
+import type { Card } from "shared-types"
 
 export function LocalPlayerArea() {
-  const [state, send] = useUI()
-  const { currentGameState: gameState, localPlayerId, selectedHandCardIndex } = state.context;
+  const [state] = useUI()
+  const { currentGameState: gameState, localPlayerId } = state.context;
 
-  if (!gameState || !localPlayerId) return null;
+  if (!gameState || !localPlayerId || !gameState.players) return null;
 
   const localPlayer = gameState.players[localPlayerId];
   if (!localPlayer) return null;
 
   const isMyTurn = gameState.currentPlayerId === localPlayerId;
-  const hasPendingCard = !!localPlayer.pendingDrawnCard;
-
-  const selectedCardId =
-    selectedHandCardIndex !== null && localPlayer.hand[selectedHandCardIndex]
-      ? localPlayer.hand[selectedHandCardIndex].id
-      : null;
-
-  const handleCardClick = (card: ClientCard, index: number) => {
-    const event: UIMachineEvent = { type: "HAND_CARD_CLICKED", cardIndex: index };
-    send(event);
-  }
+  const pendingCard = localPlayer.pendingDrawnCard;
+  const hasPendingCard = !!pendingCard && !('facedown' in pendingCard);
 
   // Determine if the local player can interact with their hand
-  const canInteract = isMyTurn && hasPendingCard;
-
-  // Extract peekable cards for the local player if they exist
-  const peekableCards = localPlayer.cardsToPeek?.map((card: Card) => {
-    const handIndex = localPlayer.hand.findIndex(c => c.id === card.id);
-    return { card, index: handIndex };
-  }).filter(item => item.index !== -1) as { card: Card; index: number }[] | undefined;
+  const isAbilityActive = state.matches({ inGame: { connected: { ability: 'collectingInput' } } });
+  const canInteract = (isMyTurn && gameState.turnPhase === TurnPhase.DISCARD) || isAbilityActive;
 
   return (
     <div className="relative w-full">
       <div className="mb-4 flex items-end justify-center" style={{ minHeight: '130px' }}>
         <AnimatePresence>
-          {isMyTurn && hasPendingCard && localPlayer.pendingDrawnCard && (
+          {isMyTurn && hasPendingCard && pendingCard && (
             <div className="absolute bottom-full mb-4 transform">
-              <DeckCard card={localPlayer.pendingDrawnCard} />
+              <DeckCard card={pendingCard as Card} />
             </div>
           )}
         </AnimatePresence>
       </div>
 
       <HandGrid
-        cards={localPlayer.hand}
-        onCardClick={handleCardClick}
-        selectedCardId={selectedCardId}
+        ownerId={localPlayerId}
+        hand={localPlayer.hand}
         canInteract={canInteract}
-        gamePhase={gameState.currentPhase}
-        peekableCards={peekableCards}
       />
 
       <div className="mt-4 flex justify-center">

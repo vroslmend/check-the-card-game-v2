@@ -6,6 +6,7 @@ import { Playfair_Display, Inter } from "next/font/google";
 import CustomCursor from '@/components/ui/CustomCursor';
 import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
 import { Toaster } from "@/components/ui/sonner"
+import { CursorProvider } from "@/components/providers/CursorProvider";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -37,10 +38,12 @@ export default function RootLayout({
           defaultTheme="dark"
           enableSystem
         >
-          <SmoothScrollProvider>
-            {children}
-          </SmoothScrollProvider>
-          <CustomCursor />
+          <CursorProvider>
+            <SmoothScrollProvider>
+              {children}
+            </SmoothScrollProvider>
+            <CustomCursor />
+          </CursorProvider>
           <Toaster />
         </ThemeProvider>
       </body>

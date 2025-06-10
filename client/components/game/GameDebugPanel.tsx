@@ -1,7 +1,9 @@
 'use client';
 
-import { useUI } from '@/components/providers/uiMachineProvider';
+import { useUI } from '@/components/providers/UIMachineProvider';
 import { socket } from '@/lib/socket';
+import { Button } from "../ui/button";
+import { GameStage } from "shared-types";
 
 const GameDebugPanel = () => {
   const [uiState] = useUI();
@@ -9,7 +11,7 @@ const GameDebugPanel = () => {
   const debugInfo = {
     socket: {
       id: socket?.id,
-      connected: uiState.matches({ socket: 'connected' }),
+      connected: uiState.tags.has('connected'),
     },
     session: {
       localPlayerId: uiState.context.localPlayerId,

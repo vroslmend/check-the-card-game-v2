@@ -1,18 +1,23 @@
 "use client"
 
 import { useRouter } from 'next/navigation'
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useLocalStorage } from "usehooks-ts"
 import { nanoid } from "nanoid"
 import { motion } from "framer-motion"
-import { socket } from '@/lib/socket'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Modal } from "@/components/ui/Modal"
-import { toast } from "sonner"
 import { Loader } from "lucide-react"
-import { type CreateGameResponse, type InitialPlayerSetupData } from 'shared-types'
+import { socket } from '@/lib/socket'
+import { SocketEventName, type CreateGameResponse } from 'shared-types'
+import { toast } from 'sonner'
+import { createActor } from 'xstate'
+import {
+  uiMachine,
+  type UIMachineInput,
+} from '@/machines/uiMachine'
 
 interface NewGameModalProps {
   isOpen: boolean
@@ -21,66 +26,63 @@ interface NewGameModalProps {
 
 export function NewGameModal({ isOpen, onClose }: NewGameModalProps) {
   const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false);
   const [playerName, setPlayerName] = useLocalStorage("playerName", "", {
-    serializer: (value) => value,
-    deserializer: (value) => value,
-  })
-  const [localPlayerId, setLocalPlayerId] = useLocalStorage<string | null>('localPlayerId', null, {
-    serializer: (value) => value ?? '',
-    deserializer: (value) => value,
+    serializer: v => v,
+    deserializer: v => v,
   });
-  const [isLoading, setIsLoading] = useState(false)
-  const isLoadingRef = useRef(isLoading);
-  isLoadingRef.current = isLoading;
+  const [localPlayerId, setLocalPlayerId] = useLocalStorage<string | null>(
+    "localPlayerId",
+    null,
+    {
+      serializer: v => (v === null ? "%%NULL%%" : v),
+      deserializer: v => (v === "%%NULL%%" ? null : v),
+    },
+  );
 
-  // Ensure a player ID exists on component mount if one isn't already there.
+  // Ensure a player ID exists for reuse.
   useEffect(() => {
     if (!localPlayerId) {
       setLocalPlayerId(nanoid());
     }
   }, [localPlayerId, setLocalPlayerId]);
 
-  // Manually connect the shared socket when the modal is open
-  useEffect(() => {
-    if (isOpen) {
+  const handleCreateGame = () => {
+    if (playerName.trim()) {
+      setIsLoading(true);
+      if (!socket.connected) {
       socket.connect();
     }
-    return () => {
-        // Disconnect when modal closes or we navigate away, but only if we are not in the process of creating a game.
-        if (!isLoadingRef.current) {
-            socket.disconnect();
-        }
-    }
-  }, [isOpen]);
+      socket.emit(SocketEventName.CREATE_GAME, { name: playerName.trim() }, (response: CreateGameResponse) => {
+        setIsLoading(false);
+        if (response.success && response.gameId && response.playerId && response.gameState) {
+            const tempActor = createActor(uiMachine, {
+              input: {
+                gameId: response.gameId,
+                localPlayerId: response.playerId,
+                gameState: response.gameState,
+              } as UIMachineInput,
+            });
 
+            // Get the official, serializable snapshot.
+            const persistedState = tempActor.getPersistedSnapshot();
 
-  const handleCreateGame = async () => {
-    if (!playerName.trim()) {
-      toast.error("Please enter your name.")
-      return
-    }
-    if (!localPlayerId) {
-      toast.error("Player ID could not be generated. Please try again.")
-      return
-    }
-
-    setIsLoading(true)
-
-    const playerSetupData: InitialPlayerSetupData = {
-      id: localPlayerId,
-      name: playerName.trim(),
-    };
-
-    socket.emit('CREATE_GAME', playerSetupData, (response: CreateGameResponse) => {
-        if (response.success && response.gameId) {
-            toast.success(`Game ${response.gameId} created! Joining now...`);
+            sessionStorage.setItem('localPlayerId', response.playerId);
+            sessionStorage.setItem('initialGameState', JSON.stringify(persistedState));
             router.push(`/game/${response.gameId}`);
         } else {
             toast.error(response.message || 'Failed to create game. Please try again.');
-            setIsLoading(false);
         }
     });
   }
+  };
+
+  // Cleanup socket connection on modal close/unmount
+  useEffect(() => {
+    return () => {
+        // The UIMachineProvider on the game page will handle disconnection.
+    }
+  }, []);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Start a New Game">
@@ -93,6 +95,11 @@ export function NewGameModal({ isOpen, onClose }: NewGameModalProps) {
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
             className="text-base"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && playerName.trim() && !isLoading) {
+                handleCreateGame();
+              }
+            }}
           />
         </div>
         <motion.div

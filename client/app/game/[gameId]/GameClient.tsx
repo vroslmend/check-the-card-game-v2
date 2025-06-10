@@ -2,8 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
-import { UIMachineProvider } from '@/components/providers/uiMachineProvider';
+import { UIMachineProvider } from '@/components/providers/UIMachineProvider';
 import LoadingOrError from '@/components/layout/LoadingOrError';
+import { SnapshotFrom } from 'xstate';
+import { uiMachine } from '@/machines/uiMachine';
+import { Toaster } from "@/components/ui/sonner"
+import { RejoinModal } from '@/components/modals/RejoinModal'
+import { GameBoard } from '@/components/game/GameBoard'
 
 export default function GameClient({
   children,
@@ -12,11 +17,32 @@ export default function GameClient({
   children: React.ReactNode;
   gameId: string;
 }) {
-  const [localPlayerId] = useLocalStorage<string | null>('localPlayerId', null);
+  const [localPlayerId] = useLocalStorage<string | null>(
+    "localPlayerId",
+    null,
+    {
+      serializer: v => (v === null ? "%%NULL%%" : v),
+      deserializer: v => (v === "%%NULL%%" ? null : v),
+    },
+  );
   const [isClient, setIsClient] = useState(false);
+  const [initialState, setInitialState] = useState<SnapshotFrom<typeof uiMachine> | null>(null);
 
   useEffect(() => {
     setIsClient(true);
+    // On the first client-side render, try to retrieve the initial state.
+    const persistedStateJSON = sessionStorage.getItem('initialGameState');
+    if (persistedStateJSON) {
+      try {
+        const persistedState = JSON.parse(persistedStateJSON);
+        setInitialState(persistedState);
+        // Clean up the storage immediately after use.
+        sessionStorage.removeItem('initialGameState');
+      } catch (e) {
+        console.error("Failed to parse persisted state:", e);
+        sessionStorage.removeItem('initialGameState');
+      }
+    }
   }, []);
 
   if (!isClient) {
@@ -38,8 +64,12 @@ export default function GameClient({
   }
 
   return (
-    <UIMachineProvider gameId={gameId} localPlayerId={localPlayerId}>
-      {children}
-    </UIMachineProvider>
+    <>
+      <UIMachineProvider gameId={gameId} localPlayerId={localPlayerId} initialState={initialState}>
+        <GameBoard />
+        <RejoinModal />
+      </UIMachineProvider>
+      <Toaster />
+    </>
   );
 } 

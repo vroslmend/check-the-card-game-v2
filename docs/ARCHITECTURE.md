@@ -9,7 +9,7 @@ The core architectural philosophy for "Check!" centers around creating a seamles
 *   **Authoritative Server:** Maintaining a single source of truth for game state and rules on the server using XState to prevent inconsistencies and cheating.
 *   **Robust State Management:** Utilizing clear and predictable state management patterns:
     *   **Server-side:** XState (`server/src/game-machine.ts`) for all game logic and authoritative state.
-    *   **Client-side:** Zustand (`client/store/gameStore.ts`) for storing server-pushed game data and managing the socket connection, and XState (`client/machines/uiMachine.ts`) for orchestrating UI interactions and complex user flows.
+    *   **Client-side:** A pure XState architecture. A single root machine (`client/machines/uiMachine.ts`) manages all client-side state, from socket connection status to complex UI interaction flows.
 *   **Engaging User Experience:** Leveraging Next.js (App Router), TypeScript, and Tailwind CSS to create an intuitive and visually appealing interface, with Framer Motion for animations.
 
 ## 2. System Components
@@ -17,28 +17,29 @@ The core architectural philosophy for "Check!" centers around creating a seamles
 The project is structured as a monorepo using npm workspaces, comprising three main packages: `client`, `server`, and `shared-types`.
 
 *   ### 2.1. Frontend (Client)
-    *   **Technology:** Next.js (App Router), TypeScript, Tailwind CSS, XState, Zustand.
+    *   **Technology:** Next.js (App Router), TypeScript, Tailwind CSS, XState.
     *   **Responsibilities:**
         *   Rendering the game interface (lobby, game board, cards, player hands, actions).
         *   Handling user input and interactions.
-        *   Managing local UI state, interaction flows (e.g., multi-step abilities, selections), and animation cues via the `uiMachine`.
-        *   Storing and displaying core game data (`ClientCheckGameState`, logs, chat) received from the server in a Zustand store (`gameStore`).
-        *   Managing the Socket.IO connection lifecycle, processing incoming server events, and sending outgoing events via middleware within the `gameStore`.
+        *   **Game Page State:** Managing the entire client-side state for an active game session, including the Socket.IO connection lifecycle, UI interaction flows, and animation cues via a single XState machine (`uiMachine`).
+        *   **Landing Page Modals:** The modals for creating and joining a game are self-contained and handle their own logic, using direct socket communication to the server. They are not controlled by the `uiMachine`.
     *   **Key Directories/Modules:**
-        *   `client/app/layout.tsx`: Root application layout, integrates global providers like `SocketProvider` and `UIMachineProvider`.
-        *   `client/app/page.tsx`: The main landing page, serving as a **Lobby** for users to input their name and create or join games.
-        *   `client/app/(game)/[gameId]/page.tsx`: The primary page for rendering the active game session for a specific `gameId`.
+        *   `client/app/layout.tsx`: Root application layout, integrates global providers.
+        *   `client/app/page.tsx`: The main landing page. It is a largely static page for presentation and uses modals to handle the "Create Game" and "Join Game" interactions.
+        *   `client/app/game/[gameId]/page.tsx`: The primary page for rendering an active game session.
+        *   `client/app/game/[gameId]/GameClient.tsx`: This is the core client-side component for an active game. It wraps the entire game experience with the `UIMachineProvider`, bringing the `uiMachine` to life for that session.
         *   `client/components/`:
-            *   `game/`: Game-specific React components (e.g., `PlayerHand.tsx`, `TableArea.tsx`).
-            *   `ui/`: General UI elements (e.g., `Card.tsx`, buttons, modals from `shadcn/ui`).
-            *   `providers/`: Contains simple wrapper providers like `SocketProvider`.
-        *   `client/machines/uiMachine.ts`: Defines the client-side XState machine (`uiMachine`) that orchestrates all UI logic, user interaction flows (e.g., drawing cards, initial peek, multi-step abilities), manages temporary UI-specific state (e.g., selected cards, ability progress), and triggers server communication by emitting `EMIT_TO_SOCKET` events.
-        *   `client/machines/uiMachineProvider.tsx`: The "smart" provider. It provides the `uiMachine` actor instance to the component tree. It acts as the central client-side orchestrator by:
-            *   Subscribing to the `gameStore` to sync the `ClientCheckGameState` into the `uiMachine`.
-            *   Subscribing to specific server events (forwarded by the `gameStore`) that the `uiMachine` needs to react to directly (e.g., `RESPOND_CARD_DETAILS_FOR_ABILITY`).
-            *   Subscribing to `EMIT_TO_SOCKET` events from its `uiMachine` actor and using the `emit` function from `gameStore` to send these actions to the server.
-        *   `client/store/gameStore.ts`: The central Zustand store. It uses custom middleware (`socketMiddleware.ts`) to manage the entire Socket.IO connection. It holds the `ClientCheckGameState`, `localPlayerId`, game logs, chat messages, and exposes `connect`, `disconnect`, and `emit` functions. It is the single point of contact with the server.
-        *   `client/lib/`: Client-side utilities, constants, and client-specific types.
+            *   `game/`: Game-specific React components (e.g., `LocalPlayerArea.tsx`, `OpponentArea.tsx`).
+            *   `modals/`: Contains the `NewGameModal` and `JoinGameModal`, which are self-contained and use direct socket communication.
+            *   `ui/`: General UI elements (e.g., buttons, base `Modal` component).
+            *   `providers/`: Contains the core `UIMachineProvider`.
+        *   `client/machines/uiMachine.ts`: Defines the client-side XState machine (`uiMachine`) that orchestrates all client-side logic **while in an active game**. It manages the socket connection state, the `ClientCheckGameState`, user interaction flows, and temporary UI-specific state. It triggers server communication by emitting `EMIT_TO_SOCKET` events.
+        *   `client/components/providers/uiMachineProvider.tsx`: A "smart" provider that acts as the bridge between the React component tree, the `uiMachine` actor, and the Socket.IO connection **for a specific game session**. Its responsibilities are:
+            *   Spawning and providing the `uiMachine` actor instance to the component tree.
+            *   Registering listeners for all relevant incoming Socket.IO events (e.g., `GAME_STATE_UPDATE`, `SERVER_LOG_ENTRY`) and forwarding them as events to the `uiMachine` actor.
+            *   Subscribing to `EMIT_TO_SOCKET` events from its `uiMachine` actor and sending the corresponding event and payload to the server via the socket.
+            *   Managing the raw socket connection lifecycle (`connect`, `disconnect`) and syncing this status with the `uiMachine`.
+        *   `client/lib/socket.ts`: Exports a singleton `socket` instance, configured for client-side use.
 
 *   ### 2.2. Backend (Server)
     *   **Technology:** Node.js, Socket.IO, TypeScript, XState.
@@ -101,54 +102,53 @@ This section provides a bird's-eye view of how the major architectural pieces of
     *   **`server/src/state-redactor.ts`:** Its most critical current role is providing the `generatePlayerView` utility. Other logic has been migrated to the `gameMachine`.
 
 *   **Client-Side Architecture (`client/`):**
-    *   **User Interface (React Components):** Renders the game and captures user interactions.
-    *   **Socket Communication & State (`client/store/gameStore.ts`):** The Zustand store is the heart of client-server communication. Using middleware, it manages the raw socket connection, registers all event listeners, and provides an `emit` function. It holds the `ClientCheckGameState`, logs, and chat messages.
-    *   **UI Orchestration (`client/machines/uiMachine.ts`):** An XState machine that manages complex UI flows and user interactions.
-    *   **Central Orchestrator (`client/machines/uiMachineProvider.tsx`):** A "smart" provider that hosts the `uiMachine` actor. It syncs data from the `gameStore` into the `uiMachine` and sends events from the `uiMachine` back to the server via the `gameStore`'s `emit` function. This establishes a clear, one-way data flow.
-    *   **Client-Side Game Data (`client/store/gameStore.ts`):** A Zustand store that holds the `ClientCheckGameState`, logs, and chat messages. It is written to by its own socket middleware and read by UI components and the `UIMachineProvider`.
+    *   **User Interface (React Components):** Renders the game. On the landing page, modals handle creating/joining games. On the game page, components subscribe to the `uiMachine`.
+    *   **Socket Communication:**
+        *   **On the landing page,** the modals for creating/joining games manage their own temporary socket connection and use `socket.emit` with a callback to handle the server's response.
+        *   **On the game page,** the `UIMachineProvider` manages the persistent socket connection for the game session.
+    *   **UI Orchestration (`client/machines/uiMachine.ts`):** **For in-game logic only.** An XState machine that manages complex UI flows and user interactions during a game.
+    *   **Central Orchestrator (`client/machines/uiMachineProvider.tsx`):** **For in-game logic only.** A "smart" provider that hosts the `uiMachine` actor and connects it to the socket and the React UI.
 
-*   **Typical Interaction Flow (Example: Player Drawing a Card):**
+*   **Typical Interaction Flow (Example: Player Drawing a Card - In-Game):**
     1.  **User Input:** Player clicks the "Draw Card" button in the client UI.
-    2.  **UI Machine:** The React component sends an event (e.g., `DRAW_FROM_DECK_CLICKED`) to the `uiMachine`.
-    3.  **Action Emission:** The `uiMachine` processes this, determines a `DRAW_FROM_DECK` action needs to be sent to the server, and emits `EMIT_TO_SOCKET` with the necessary payload.
-    4.  **Socket Transmission (Client):** `UIMachineProvider` catches `EMIT_TO_SOCKET` and uses the `gameStore`'s `emit` function to send a `PLAYER_ACTION` over WebSockets to the server.
+    2.  **UI Machine Event:** The React component's `onClick` handler sends an event to the `uiMachine` via the `useUI()` hook.
+    3.  **Action Emission:** The `uiMachine` processes this event and emits an `EMIT_TO_SOCKET` side-effect.
+    4.  **Socket Transmission (Client):** The `UIMachineProvider` catches the `EMIT_TO_SOCKET` event and calls `socket.emit()`.
     5.  **Server Reception:** `server/src/index.ts` receives the `PLAYER_ACTION`.
-    6.  **Game Logic Processing:** `server/src/index.ts` forwards the action as an event to the appropriate `gameMachine` instance.
-    7.  **State Update & Emission:** The `gameMachine` validates and executes the draw action, updates its `GameMachineContext`, and its next snapshot contains emitted events (like `BROADCAST_GAME_STATE` and log events) in its `snapshot.emitted` array.
-    8.  **Broadcast Preparation:** `server/src/index.ts` receives the new snapshot and iterates through the `snapshot.emitted` array. For each relevant event, it calls the necessary function (e.g., `generatePlayerView` for each player in the game).
-    9.  **Socket Transmission (Server):** `server/src/index.ts` sends `GAME_STATE_UPDATE` and `SERVER_LOG_ENTRY` events to the connected clients.
-    10. **Client Reception & State Update:** The `gameStore`'s socket middleware listener receives these events and updates the store's state (e.g., `currentGameState`, `gameLog`).
-    11. **UI Re-render:** React components subscribed to `gameStore` re-render. The `UIMachineProvider` also detects the change in `gameStore` and syncs the new state into the `uiMachine`, potentially causing it to transition and trigger further UI updates.
+    6.  **Game Logic Processing:** `server/src/index.ts` forwards the action to the appropriate `gameMachine` instance.
+    7.  **State Update & Emission:** The `gameMachine` updates its context and its next snapshot contains emitted events (like `BROADCAST_GAME_STATE`).
+    8.  **Broadcast Preparation:** `server/src/index.ts` processes the emitted events.
+    9.  **Socket Transmission (Server):** `server/src/index.ts` sends `GAME_STATE_UPDATE` to clients.
+    10. **Client Reception & State Update:** The `UIMachineProvider`'s socket listeners forward the event to the `uiMachine`.
+    11. **UI Re-render:** The `uiMachine` updates its context, and subscribed React components re-render.
 
 This interconnected system ensures that the server remains the authority on game state, while the client provides a responsive and interactive user experience, with `shared-types` ensuring both sides speak the same language.
 
 ## 4. State Management Strategy
 
-*   **3.1. Server-Side (Authoritative Game State):**
+*   **4.1. Server-Side (Authoritative Game State):**
     *   **XState (`server/src/game-machine.ts`):** The `gameMachine` is the **sole and definitive source of truth** for all game rules, states, valid transitions, and actions that execute game logic.
-    *   The machine's `context` (`GameMachineContext`) holds the complete `ServerCheckGameState`, including `gameId`, `deck`, `discardPile`, `players` map (with `PlayerState`), `currentPhase`, `currentPlayerId`, `turnOrder`, `pendingAbilities`, `logHistory`, etc.
-    *   Client actions (received by `server/src/index.ts` via Socket.IO) are translated into `GameMachineEvent`s and sent to the corresponding `gameMachine` actor instance.
-    *   The `gameMachine` processes these events, updates its context immutably (via XState's `assign`), and triggers `GameMachineEmittedEvents` (side effects) that are handled by `server/src/index.ts` to communicate changes back to clients.
+    *   The machine's `context` (`GameContext`) holds the complete server-side game state.
+    *   Client actions (received by `server/src/index.ts` via Socket.IO) are translated into `GameEvent`s and sent to the corresponding `gameMachine` actor instance.
+    *   The `gameMachine` processes these events, updates its context immutably (via XState's `assign`), and uses `emit` to create side-effects that are handled by `server/src/index.ts` to communicate changes back to clients.
 
-*   **3.2. Client-Side (UI State, Local Data Cache, Interaction Orchestration):**
-    *   A combination of Zustand and XState is used.
-    *   **Zustand (`client/store/gameStore.ts`):**
-        *   Serves as a reactive store for global client-side data that is primarily pushed by the server.
-        *   Uses middleware to manage the entire socket connection lifecycle.
-        *   Stores: `ClientCheckGameState`, `localPlayerId`, `RichGameLogMessage[]`, `ChatMessage[]`.
-        *   **Updates:** Updated by its own socket middleware upon receiving server events.
+*   **4.2. Client-Side (UI State, Local Data Cache, Interaction Orchestration):**
+    *   A pure XState architecture is used.
     *   **XState (`client/machines/uiMachine.ts`):**
-        *   Orchestrates UI logic, user interaction flows, and manages temporary UI-specific state.
-        *   **Server Communication (Sending):** `uiMachine` emits `EMIT_TO_SOCKET` -> `UIMachineProvider` catches this and uses `gameStore.emit()`.
-        *   **Server Communication (Receiving):** `gameStore`'s middleware receives server events and updates the store. The `UIMachineProvider` subscribes to the `gameStore` and syncs the relevant state into the `uiMachine`.
-
+        *   Serves as the single source of truth for the entire client application.
+        *   It manages the socket connection status, holds the `ClientCheckGameState`, game logs, chat messages, and all transient UI state (e.g., selected cards, ability progress).
+        *   It is the central point for all client-side logic.
+    *   **`UIMachineProvider` (`client/components/providers/uiMachineProvider.tsx`):**
+        *   The vital link between the `uiMachine` and the outside world (React UI and Socket.IO server).
+        *   It listens to socket events and translates them into `uiMachine` events.
+        *   It listens for `EMIT_TO_SOCKET` events from the `uiMachine` and sends them to the server.
     *   **Interaction Model:**
-        1.  **Data Display:** UI Components subscribe to `gameStore` (Zustand) and the `uiMachine`'s state via the `useUI` hook.
-        2.  **User Actions:** UI interactions send events to `uiMachine`.
-        3.  **Client-Side Logic:** `uiMachine` processes events, updates its context.
-        4.  **Sending to Server:** `uiMachine` emits `EMIT_TO_SOCKET` -> `UIMachineProvider` -> `gameStore.emit()`.
-        5.  **Receiving from Server:** `gameStore`'s middleware receives event -> updates `gameStore` state.
-        6.  **UI Re-render:** Components re-render based on `gameStore` changes. The `UIMachineProvider` also syncs the new state to the `uiMachine`, potentially causing further UI updates.
+        1.  **Data Display:** UI Components subscribe to the `uiMachine`'s state via the `useUI` hook.
+        2.  **User Actions:** UI interactions send events directly to the `uiMachine`.
+        3.  **Client-Side Logic:** `uiMachine` processes all events, updates its context, and determines if communication with the server is necessary.
+        4.  **Sending to Server:** If needed, `uiMachine` emits an `EMIT_TO_SOCKET` event, which the `UIMachineProvider` catches and sends over the socket.
+        5.  **Receiving from Server:** The `UIMachineProvider`'s socket listeners receive an event and send a corresponding event to the `uiMachine`.
+        6.  **State Update & UI Re-render:** The `uiMachine` updates its context, and all subscribed components re-render automatically.
 
 ## 5. Real-Time Communication
 
@@ -164,7 +164,7 @@ This interconnected system ensures that the server remains the authority on game
         *   The `gameMachine` processes `PLAYER_JOIN_REQUEST` (in `awaitingPlayers` state): updates its context (deals cards, adds player to `turnOrder`), emits `BROADCAST_GAME_STATE`.
         *   `server/src/index.ts` receives `BROADCAST_GAME_STATE`, generates player-specific views using `generatePlayerView`, and sends `GAME_STATE_UPDATE` to clients.
     3.  **Client Action (e.g., Player Draws a Card):**
-        *   Client UI (`uiMachine` -> `UIMachineProvider` -> `gameStore`) sends `SocketEventName.PLAYER_ACTION` with `PlayerActionType.DRAW_FROM_DECK` and payload (`{ playerId }`).
+        *   The client's `uiMachine` emits an `EMIT_TO_SOCKET` event. The `UIMachineProvider` sends this as a `SocketEventName.PLAYER_ACTION` with a payload like `{ type: 'DRAW_FROM_DECK', playerId: '...' }` to the server.
         *   `server/src/index.ts` receives this and sends the event (e.g., `{ type: 'DRAW_FROM_DECK', playerId: '...' }`) to the correct `gameMachine` actor.
     4.  **Server Game Logic Processing (`gameMachine`):**
         *   `gameMachine` receives the `DRAW_FROM_DECK` event.
@@ -176,9 +176,9 @@ This interconnected system ensures that the server remains the authority on game
         *   For log events, it sends `SERVER_LOG_ENTRY` to the relevant clients.
         *   For `BROADCAST_GAME_STATE`, it calls `generatePlayerView` for each player and sends them their tailored `GAME_STATE_UPDATE`.
     6.  **Client Receives Update:**
-        *   The `gameStore`'s socket middleware listener for `GAME_STATE_UPDATE` updates the store.
-        *   The listener for `SERVER_LOG_ENTRY` also updates the store.
-        *   UI components re-render.
+        *   The `UIMachineProvider`'s socket listener for `GAME_STATE_UPDATE` receives the data and sends a `CLIENT_GAME_STATE_UPDATED` event to the `uiMachine`.
+        *   The `uiMachine` updates its context.
+        *   UI components subscribed to the `uiMachine` re-render.
 
 ## 6. Key Data Structures
 
@@ -194,12 +194,13 @@ The integrity and consistency of the game rely on well-defined data structures i
 *   `SocketEventName`: Enums for all client-server socket event names.
 *   `PlayerActionType`: Enums for all player actions sent within the `PLAYER_ACTION` socket event.
 *   `RichGameLogMessage`, `ChatMessage`: For structured logging and chat.
+*   **Client-Side:** The `UIMachineProvider` forwards `SocketEventName.ERROR_MESSAGE` events from the server into the `uiMachine`. The `uiMachine` can then transition to an error state or update its context, allowing the UI to display a toast notification or modal.
 
 ## 7. Error Handling Strategy
 
 *   **Server-Side:** The `gameMachine` can identify invalid actions or inconsistent states. When an error occurs that needs client notification, it emits an `EMIT_ERROR_TO_CLIENT` event, often including a `playerId` if the error is specific, and a descriptive `message`.
 *   **Server `index.ts`:** Listens for `EMIT_ERROR_TO_CLIENT` from the game machine and relays the error information to the specified client(s) using the `SocketEventName.ERROR_MESSAGE` (or a general purpose server message).
-*   **Client-Side:** The `gameStore`'s socket middleware has a listener for `SocketEventName.ERROR_MESSAGE`. Upon receipt, it can add the error to its own log and/or the `UIMachineProvider` can forward an event to the `uiMachine` to trigger UI feedback like a toast notification or modal.
+*   **Client-Side:** The `UIMachineProvider`'s socket listeners catch `SocketEventName.ERROR_MESSAGE` events and forward them to the `uiMachine`. The `uiMachine` can then transition to an error state or update its context, allowing the UI to display a toast notification or modal.
 
 ## 8. Project Setup and Running
 
@@ -234,8 +235,9 @@ This section provides actionable rules and conventions to ensure consistency and
     *   **Component Granularity:** If a component's render logic becomes too long, strongly consider breaking it down into smaller, more focused sub-components.
 
 *   **State Management Rules:**
-    *   **Zustand (`/store`):** Use for storing global data that is primarily sent *from the server* (e.g., `currentGameState`, `gameLog`, chat messages). It acts as the client-side mirror of the server's state. Components should subscribe to this store for displaying game data.
-    *   **XState (`/machines`):** Use for managing complex, multi-step *client-side UI interactions* and flows (e.g., the sequence of clicks for a card ability, multi-stage forms, complex animations). It orchestrates user input and decides when to send actions to the server.
+    *   **XState (`/machines/uiMachine.ts`):** This is the single source of truth for all client-side state **during an active game**. Use it to manage the game state received from the server, the socket connection status, and any complex UI interaction flows. Components get this state via the `useUI` hook.
+    *   **React State (`useState`):** For simple, component-local state. This is used effectively in the `NewGameModal` and `JoinGameModal` to handle their own loading and input states, which is the correct pattern for self-contained components.
+    *   **No Other State Managers:** Avoid introducing other global state management libraries (like Zustand, Redux, or Jotai) to maintain architectural simplicity.
 
 *   **Styling and CSS Conventions:**
     *   **Utility-First:** All styling should be done using Tailwind CSS utility classes directly in the JSX of the components.

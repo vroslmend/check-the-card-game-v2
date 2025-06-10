@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { Swords } from 'lucide-react';
-import { ThemeToggle } from './ThemeToggle';
+import { ThemeToggle } from '../ui/ThemeToggle';
 
 const Header = () => {
   return (

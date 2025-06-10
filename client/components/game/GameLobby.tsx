@@ -1,36 +1,32 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUI } from '@/components/providers/uiMachineProvider';
+import { useUI } from '@/components/providers/UIMachineProvider';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, CheckCircle, Circle, Users, WifiOff, Clock } from 'lucide-react';
-import { ClientPlayerState } from 'shared-types';
+import { Player } from 'shared-types';
 
 export const GameLobby = () => {
   const [state, send] = useUI();
 
   const { currentGameState, localPlayerId, gameId } = state.context;
-  const players = currentGameState?.players ?? {};
 
+  if (!currentGameState || !currentGameState.players) {
+    // This is a transitional state, so render a minimal loader or nothing.
+    return <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-4">Loading Lobby...</div>;
+  }
+
+  const players = currentGameState.players;
   const localPlayer = localPlayerId ? players[localPlayerId] : null;
   
   // Calculate status information
   const playerCount = Object.keys(players).length;
-  const readyPlayersCount = Object.values(players).filter((player: ClientPlayerState) => player.isReadyForInitialPeek).length;
+  const readyPlayersCount = Object.values(players).filter((player: Player) => player.isReady).length;
   const allPlayersReady = readyPlayersCount === playerCount && playerCount > 0;
   const hasEnoughPlayers = playerCount >= 2;
-  const hasDisconnectedPlayers = Object.values(players).some((player: ClientPlayerState) => !player.isConnected);
+  const hasDisconnectedPlayers = Object.values(players).some((player: Player) => !player.isConnected);
   
-  // Calculate remaining time for peek phase if available
-  const peekTimeRemaining = useMemo(() => {
-    if (currentGameState?.initialPeekAllReadyTimestamp && localPlayer?.peekAcknowledgeDeadline) {
-      const remainingMs = localPlayer.peekAcknowledgeDeadline - Date.now();
-      return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
-    }
-    return null;
-  }, [currentGameState?.initialPeekAllReadyTimestamp, localPlayer?.peekAcknowledgeDeadline]);
-
   const handleDeclareReady = () => {
     if (localPlayerId) {
       send({ type: 'DECLARE_READY_FOR_PEEK_CLICKED' });
@@ -50,16 +46,10 @@ export const GameLobby = () => {
           <h2 className="text-3xl font-light">Game Lobby</h2>
           <div className="flex items-center gap-2">
             <p className="text-muted-foreground">
-              {currentGameState?.currentPhase === 'initialPeekPhase'
-                ? "Peek phase starting..."
+              {currentGameState?.gameStage === 'DEALING'
+                ? "Dealing cards..."
                 : "Waiting for players to get ready..."}
             </p>
-            {peekTimeRemaining !== null && (
-              <div className="flex items-center gap-1 text-amber-500">
-                <Clock className="h-4 w-4" />
-                <span>{peekTimeRemaining}s</span>
-              </div>
-            )}
           </div>
           
           {!hasEnoughPlayers && (
@@ -112,7 +102,7 @@ export const GameLobby = () => {
         )}
         
         <div className="space-y-3 mb-8">
-          {Object.entries(players).map(([id, player]: [string, ClientPlayerState]) => (
+          {Object.entries(players).map(([id, player]: [string, Player]) => (
             <motion.div 
               key={id} 
               className="flex items-center justify-between p-4 rounded-xl bg-background"
@@ -124,7 +114,7 @@ export const GameLobby = () => {
                 {player.name} {id === localPlayerId && "(You)"}
               </span>
               {player.isConnected ? (
-                player.isReadyForInitialPeek ? (
+                player.isReady ? (
                   <span className="flex items-center gap-2 text-green-500">
                     <CheckCircle className="h-5 w-5" /> Ready
                   </span>
@@ -143,7 +133,7 @@ export const GameLobby = () => {
         </div>
 
         <AnimatePresence>
-          {localPlayer && !localPlayer.isReadyForInitialPeek && (
+          {localPlayer && !localPlayer.isReady && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }} 
               animate={{ opacity: 1, y: 0 }} 
@@ -165,14 +155,14 @@ export const GameLobby = () => {
               )}
             </motion.div>
           )}
-          {localPlayer && localPlayer.isReadyForInitialPeek && !allPlayersReady && (
+          {localPlayer && localPlayer.isReady && !allPlayersReady && (
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               className="text-center p-4 bg-muted/30 rounded-xl"
             >
               <CheckCircle className="h-6 w-6 text-green-500 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">You're ready! Waiting for others...</p>
+              <p className="text-sm text-muted-foreground">You&apos;re ready! Waiting for others...</p>
             </motion.div>
           )}
         </AnimatePresence>

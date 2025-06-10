@@ -1,60 +1,64 @@
 'use client';
 
-import React, { useEffect } from 'react';
-
-import { useUI } from '@/components/providers/uiMachineProvider';
+import React from 'react';
+import { useUI } from '@/components/providers/UIMachineProvider';
 import { GameBoard } from '@/components/game/GameBoard';
 import { GameLobby } from '@/components/game/GameLobby';
 import LoadingOrError from '@/components/layout/LoadingOrError';
 import { Toaster } from '@/components/ui/sonner';
-import InitialPeek from '@/components/game/InitialPeek';
+import { GameStage } from 'shared-types';
+import { UIMachineProvider } from '@/components/providers/UIMachineProvider';
+import GameClient from './GameClient';
 
-import type { GamePhase } from 'shared-types';
+export default function GamePage({ params }: { params: { gameId: string } }) {
+  const [state] = useUI();
+  // Safely access currentGameState. It might not exist on the initial render
+  // or during certain machine transitions.
+  const currentGameState = state.context?.currentGameState;
 
-export default function GamePage() {
-  const [state, send] = useUI();
-
-  const isDisconnected = state.matches({ socket: 'disconnected' });
+  // The socket connection is managed by the machine, but a top-level
+  // check for a disconnected state is still useful for a banner/overlay.
+  // The machine will automatically attempt to reconnect.
+  const isDisconnected = state.tags?.has('disconnected');
 
   // Use the machine's state to determine what to render.
-  // This is much cleaner and less prone to duplication.
   const content = () => {
-    if (state.matches({ game: 'uninitialized' }) || state.matches({ game: 'loading' })) {
+    // If we don't have a game state yet, we're loading.
+    if (!currentGameState) {
       return <LoadingOrError message="Initializing game..." />;
     }
-    if (state.matches({ game: 'lobby' })) {
+
+    const { gameStage } = currentGameState;
+
+    // Show lobby while waiting for players or dealing cards
+    if (gameStage === GameStage.WAITING_FOR_PLAYERS || gameStage === GameStage.DEALING) {
       return <GameLobby />;
     }
-    if (state.matches({ game: 'initialPeek' })) {
-      return <InitialPeek />;
-    }
-    if (
-      state.matches({ game: 'playing' }) ||
-      state.matches({ game: 'matching' }) ||
-      state.matches({ game: 'abilityResolution' }) ||
-      state.matches({ game: 'gameOver' })
-    ) {
+    
+    // All other active stages render the main board.
+    if (state.matches('inGame')) {
       return <GameBoard />;
     }
-    // Fallback loading state
-    return <LoadingOrError message="Entering a new game phase..." />;
+
+    // Fallback for any other state is a generic loading screen.
+    return <LoadingOrError message="Loading..." />;
   };
 
   if (isDisconnected) {
     return (
       <LoadingOrError
         isError={true}
-        message="You have been disconnected from the server. Please refresh to reconnect."
+        message="You have been disconnected. Attempting to reconnect..."
       />
     );
   }
 
-  return (
-    <>
+    return (
+      <>
       <main className="relative flex min-h-screen flex-col items-center justify-center p-4 overflow-hidden">
         {content()}
       </main>
       <Toaster richColors />
-    </>
-  );
-}
+      </>
+    );
+  }

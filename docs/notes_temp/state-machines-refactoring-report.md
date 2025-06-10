@@ -412,3 +412,27 @@ So, you will be able to:
 The functional breakdown will happen immediately after the peek phase ends and the first player tries to take a turn, because the client and server have fundamentally different models of what a "turn" consists of.
 
 **In summary:** The `uiMachine.ts` is ironically "more correct" than the `game-machine.ts` because it aligns with the official game rules. The core problem is that the server is lagging far behind the client's capabilities. The path forward is not to "fix" the client, but to implement the missing logic in the `game-machine.ts` to make it match the client's expectations.
+
+====
+
+### Important Documentation Files for XState:
+
+Of course. Throughout our extensive refactoring, several documents from the `references/xstate_docs` folder were instrumental in solving key architectural challenges.
+
+Based on the problems we solved, here is the list of the documentation files that I found most helpful and referenced to get our application to its current state:
+
+1.  **`persistence.mdx`**: This was arguably the most critical file. We consulted it to understand how to correctly persist and rehydrate the state of our `uiMachine`. It led us to the `actor.getPersistedSnapshot()` method, which was the correct and robust way to create a storable snapshot, solving a major crash.
+
+2.  **`xstate-react.mdx`**: This document was essential for integrating XState with our React components. We used its guidance for `useSelector` to subscribe to state changes. Most importantly, reviewing it helped confirm that adding defensive guards (`if (!gameState) return null;`) in our UI components is the standard, recommended practice for handling asynchronous state updates from a machine.
+
+3.  **`context.mdx`**: We referenced this to understand how to properly manage and update the machine's `context`. It was crucial for debugging the initial persistent crash (`TypeError: Cannot destructure property 'currentGameState' of 'state.context' as it is undefined`).
+
+4.  **`input.mdx`**: This file became important when we refactored the `uiMachine` to accept initial data. It explained the `input` property, which we used to pass the `gameId` and `playerId` when creating the actor, allowing us to generate a correct snapshot in the modals.
+
+5.  **`actors.mdx`**: This provided the foundational concepts for how we structured our application. Understanding the actor model was key to refactoring the socket connection logic and creating temporary actors in the modals to generate snapshots.
+
+6.  **`invoke.mdx`**: We relied on this to understand how to handle asynchronous operations, specifically the logic within our machines for fetching data from the server via the WebSocket connection.
+
+These documents were the core set I referred to for the most complex parts of our work together.
+
+====

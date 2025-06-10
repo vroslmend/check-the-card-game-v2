@@ -1,10 +1,10 @@
 import React from 'react';
-import { Card, ClientCard, Rank, Suit } from 'shared-types'; // Import Rank and Suit enums
-import { CardDisplay } from '../ui/CardDisplay';
+import { Card } from 'shared-types';
+import { PlayingCard } from '../cards/PlayingCard';
 
 interface GameBoardAreaProps {
   deckSize: number;
-  discardPileTopCard: Card | null; // Server provides actual card, not ClientCard, for discard top
+  discardPileTopCard: Card | null;
   onDeckClick?: () => void;
   onDiscardClick?: () => void;
   className?: string;
@@ -18,18 +18,11 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
   onDeckClick,
   onDiscardClick,
   className,
-  canDrawFromDeck = true, // Default to true for styling, actual logic via uiMachine
+  canDrawFromDeck = true,
   canDrawFromDiscard = true,
 }) => {
   const deckClickableStyle = canDrawFromDeck && onDeckClick ? 'cursor-pointer hover:ring-2 hover:ring-green-500' : 'cursor-not-allowed';
   const discardClickableStyle = canDrawFromDiscard && discardPileTopCard && onDiscardClick ? 'cursor-pointer hover:ring-2 hover:ring-yellow-500' : discardPileTopCard ? '' : 'cursor-not-allowed';
-
-  // Create a card back that matches the expected Card interface
-  const cardBack: Card = {
-    id: 'deck-back',
-    rank: Rank.King, // Using King for back card
-    suit: Suit.Spades // Using Spades for back card
-  };
 
   return (
     <div className={`flex items-center justify-center space-x-8 p-4 bg-gray-200 rounded-lg shadow-inner ${className || ''}`}>
@@ -39,7 +32,7 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
           className={`relative ${deckClickableStyle}`}
           onClick={canDrawFromDeck ? onDeckClick : undefined}
         >
-          <CardDisplay layoutId="deck-back" card={cardBack} />
+          <PlayingCard isFaceDown={true} layoutId="deck-back" canInteract={!!onDeckClick && canDrawFromDeck} />
           {deckSize > 0 && (
             <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full px-2 py-1 shadow-md">
               {deckSize}
@@ -56,9 +49,13 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
           onClick={canDrawFromDiscard && discardPileTopCard ? onDiscardClick : undefined}
         >
           {discardPileTopCard ? (
-            <CardDisplay layoutId={discardPileTopCard.id} card={discardPileTopCard} />
+            <PlayingCard 
+              layoutId={`${discardPileTopCard.rank}-${discardPileTopCard.suit}`} 
+              card={discardPileTopCard} 
+              canInteract={!!onDiscardClick && canDrawFromDiscard}
+            />
           ) : (
-            <div className="w-20 h-28 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center bg-gray-100">
+            <div className="w-32 h-48 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center bg-gray-100">
               <span className="text-gray-400 text-sm">Empty</span>
             </div>
           )}
