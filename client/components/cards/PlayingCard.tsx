@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import type { Card } from 'shared-types';
 import { CardBack } from "../ui/CardBack"
+import { useState, useEffect } from "react"
 
 // This is the specific renderer for a face-up card's visuals.
 const PlayingCardRenderer = ({ card, size = "lg" }: { card: Card, size?: "sm" | "md" | "lg" }) => {
@@ -27,7 +28,7 @@ const PlayingCardRenderer = ({ card, size = "lg" }: { card: Card, size?: "sm" | 
   return (
     <div
       className={cn(
-        'relative rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-md flex flex-col justify-between font-serif',
+        'relative rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-md flex flex-col justify-between font-serif h-full w-full',
         sizeClasses[size]
       )}
     >
@@ -78,22 +79,25 @@ export function PlayingCard({
   className,
   position
 }: PlayingCardProps) {
+  // Track the previous face-down state to enable animations
+  const [previousIsFaceDown, setPreviousIsFaceDown] = useState(isFaceDown);
+  const [isFlipping, setIsFlipping] = useState(false);
+  
+  // Detect changes in isFaceDown to trigger flip animation
+  useEffect(() => {
+    if (previousIsFaceDown !== isFaceDown) {
+      setIsFlipping(true);
+      const timer = setTimeout(() => {
+        setIsFlipping(false);
+        setPreviousIsFaceDown(isFaceDown);
+      }, 400); // Match this with the flip animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [isFaceDown, previousIsFaceDown]);
 
-  if (isFaceDown || !card) {
-    return (
-      <CardBack
-        layoutId={layoutId}
-        size={size}
-        onClick={onClick}
-        canInteract={canInteract}
-        isSelected={isSelected}
-        isTarget={isTarget}
-        isPeeked={isPeeked}
-        position={position}
-      />
-    )
-  }
-
+  // Determine if we should show the front or back based on animation state
+  const showFront = (isFlipping ? previousIsFaceDown : !isFaceDown) && !!card;
+  
   const springConfig = { type: "spring", stiffness: 400, damping: 25 };
   
   // Define animation variants
@@ -142,10 +146,21 @@ export function PlayingCard({
           y: -6,
           boxShadow: "0 15px 20px rgba(0,0,0,0.12)"
         }
-      : {
-          y: 0,
-          boxShadow: "0 5px 15px rgba(0,0,0,0.08)"
-        };
+      : isPeeked
+        ? {
+            y: -5,
+            boxShadow: "0 15px 20px rgba(0,0,0,0.12)"
+          }
+        : {
+            y: 0,
+            boxShadow: "0 5px 15px rgba(0,0,0,0.08)"
+          };
+
+  const sizeClasses = {
+    sm: "w-12 h-16",
+    md: "w-16 h-24",
+    lg: "w-20 h-28",
+  };
 
   return (
     <motion.div
@@ -163,21 +178,76 @@ export function PlayingCard({
         "relative cursor-pointer transition-all duration-200",
         isSelected && "ring-2 ring-blue-500/50",
         isTarget && "ring-2 ring-amber-500/50",
+        isPeeked && "ring-2 ring-green-500/50",
         !canInteract && "cursor-not-allowed opacity-70",
+        sizeClasses[size],
         className
       )}
       onClick={canInteract ? onClick : undefined}
       data-cursor-link={canInteract}
+      style={{ 
+        perspective: "1000px"
+      }}
     >
-      <PlayingCardRenderer card={card} size={size} />
+      <motion.div 
+        className="relative w-full h-full"
+        animate={{ 
+          rotateY: showFront ? 0 : 180
+        }}
+        transition={{ 
+          duration: 0.4,
+          type: "spring",
+          stiffness: 260,
+          damping: 20
+        }}
+        style={{ 
+          transformStyle: "preserve-3d"
+        }}
+      >
+        {/* Front of card (face up) */}
+        <motion.div 
+          className={cn(
+            "absolute inset-0 w-full h-full backface-hidden",
+            !showFront && "invisible"
+          )}
+          style={{ 
+            backfaceVisibility: "hidden",
+            transform: showFront ? "rotateY(0deg)" : "rotateY(180deg)",
+          }}
+        >
+          {card && <PlayingCardRenderer card={card} size={size} />}
+        </motion.div>
+
+        {/* Back of card (face down) */}
+        <motion.div 
+          className={cn(
+            "absolute inset-0 w-full h-full backface-hidden",
+            showFront && "invisible"
+          )}
+          style={{ 
+            backfaceVisibility: "hidden",
+            transform: !showFront ? "rotateY(0deg)" : "rotateY(180deg)",
+          }}
+        >
+          <CardBack
+            size={size}
+            isSelected={isSelected}
+            isTarget={isTarget}
+            isPeeked={isPeeked}
+            position={position}
+          />
+        </motion.div>
+      </motion.div>
       
-      {/* Highlight for selected/target states */}
-      {(isSelected || isTarget) && (
+      {/* Highlight for selected/target/peeked states */}
+      {(isSelected || isTarget || isPeeked) && (
         <motion.div
           layoutId={`${layoutId}-glow`}
           className={cn(
             "absolute inset-0 rounded-xl -z-10 opacity-75",
-            isSelected ? "bg-blue-500/10" : "bg-amber-500/10"
+            isSelected ? "bg-blue-500/10" : 
+            isTarget ? "bg-amber-500/10" : 
+            "bg-green-500/10"
           )}
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.75 }}

@@ -1,4 +1,4 @@
-import { setup, assign, emit, assertEvent, type ActorRefFrom, type SnapshotFrom, type StateFrom } from 'xstate';
+import { setup, assign, emit, assertEvent, type ActorRefFrom, type SnapshotFrom, type StateFrom, fromCallback } from 'xstate';
 import {
   PlayerActionType,
   SocketEventName,
@@ -23,6 +23,10 @@ import {
 } from 'shared-types';
 import { toast } from 'sonner';
 
+// Constants for error handling
+const MAX_RECONNECT_ATTEMPTS = parseInt(process.env.NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS || '3', 10);
+const RECONNECT_INTERVAL_MS = parseInt(process.env.NEXT_PUBLIC_RECONNECT_INTERVAL_MS || '5000', 10);
+
 // #region ----- TYPE DEFINITIONS -----
 
 type EmittedEvent = {
@@ -30,6 +34,11 @@ type EmittedEvent = {
   eventName: SocketEventName;
   payload?: any;
   ack?: (...args: any[]) => void;
+} | {
+  type: 'REPORT_ERROR_TO_SERVER';
+  errorType: string;
+  message: string;
+  context?: any;
 };
 
 export type UIMachineInput = {
@@ -38,19 +47,36 @@ export type UIMachineInput = {
   initialGameState?: ClientCheckGameState;
 };
 
+export type PeekedCardInfo = {
+  playerId: PlayerId | null;
+  cardIndex: number;
+  card: Card;
+  expireAt?: number; // Optional timestamp when this peek should expire
+  source: 'ability' | 'initial-peek'; // Source of the peek
+};
+
 export type UIMachineContext = {
   localPlayerId: PlayerId | null;
   gameId: GameId | null;
   currentGameState: ClientCheckGameState | null;
   abilityContext: ClientAbilityContext | null;
-  peekedCard: { card: Card; playerId: PlayerId; cardIndex: number } | null;
-  initialPeekCards: Card[] | null;
+  visibleCards: PeekedCardInfo[];
   chatMessages: ChatMessage[];
   gameLog: RichGameLogMessage[];
   isSidePanelOpen: boolean;
   error: {
     message: string;
     details?: string;
+  } | null;
+  reconnectionAttempts: number;
+  connectionErrors: {
+    message: string;
+    timestamp: string;
+  }[];
+  modal?: {
+    type: string;
+    title: string;
+    message: string;
   } | null;
 };
 
@@ -80,7 +106,13 @@ export type UIMachineEvents =
   | { type: 'DRAW_CARD' }
   | { type: 'PLAYER_ACTION'; payload: { type: PlayerActionType; payload?: any } }
   | { type: 'TOGGLE_SIDE_PANEL' }
-  | { type: 'DECLARE_READY_FOR_PEEK_CLICKED' };
+  | { type: 'DECLARE_READY_FOR_PEEK_CLICKED' }
+  | { type: 'CONNECTION_ERROR'; message: string }
+  | { type: 'SERVER_ERROR'; message: string; details?: string }
+  | { type: 'RETRY_RECONNECTION' }
+  | { type: 'RECOVERY_FAILED' }
+  | { type: 'DISMISS_MODAL' }
+  | { type: 'CLEANUP_EXPIRED_CARDS' };
 
 // #endregion
 
@@ -90,6 +122,16 @@ export const uiMachine = setup({
     events: {} as UIMachineEvents,
     emitted: {} as EmittedEvent,
     input: {} as UIMachineInput,
+  },
+  actors: {
+    cardVisibilityCleanup: fromCallback(({ sendBack }) => {
+      // Clean up expired cards every second
+      const interval = setInterval(() => {
+        sendBack({ type: 'CLEANUP_EXPIRED_CARDS' });
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }),
   },
   actions: {
     // #region ----- Context Updaters -----
@@ -145,11 +187,13 @@ export const uiMachine = setup({
         gameId: null,
         currentGameState: null,
         abilityContext: null,
-        peekedCard: null,
-        initialPeekCards: null,
+        visibleCards: [],
         chatMessages: [],
         gameLog: [],
         error: null,
+        reconnectionAttempts: 0,
+        connectionErrors: [],
+        modal: null,
     }),
     // #endregion
 
@@ -240,27 +284,40 @@ export const uiMachine = setup({
     toggleSidePanel: assign({
         isSidePanelOpen: ({ context }) => !context.isSidePanelOpen,
     }),
+    dismissModal: assign({
+        modal: null,
+    }),
     addPeekedCardToContext: assign({
-        abilityContext: ({ context, event }) => {
-          assertEvent(event, 'ABILITY_PEEK_RESULT');
-          if (!context.abilityContext) return null;
-          const newPeekedCards = [...(context.abilityContext.peekedCards || []), {
+      visibleCards: ({ context, event }) => {
+        assertEvent(event, 'ABILITY_PEEK_RESULT');
+        return [
+          ...context.visibleCards,
+          {
             playerId: event.playerId,
             cardIndex: event.cardIndex,
             card: event.card,
-          }];
-          return { ...context.abilityContext, peekedCards: newPeekedCards };
-        },
+            source: 'ability' as const,
+            // Set an expiration time, e.g., 5 seconds from now
+            expireAt: Date.now() + 5000
+          }
+        ];
+      },
     }),
     setInitialPeekCards: assign({
-      initialPeekCards: ({ event }) => {
+      visibleCards: ({ context, event }) => {
         assertEvent(event, 'INITIAL_PEEK_INFO');
-        return event.hand;
+        // Get the indices of the bottom two cards in a 2x2 grid
+        const bottomCards = [2, 3]; 
+        return event.hand.map((card, idx) => ({
+          playerId: context.localPlayerId,
+          cardIndex: bottomCards[idx],
+          card,
+          source: 'initial-peek' as const,
+        }));
       },
     }),
     clearTemporaryCardStates: assign({
-      peekedCard: null,
-      initialPeekCards: null,
+      visibleCards: [],
     }),
     // #endregion
 
@@ -344,6 +401,58 @@ export const uiMachine = setup({
       abilityContext: null,
     }),
     // #endregion
+
+    // #region ----- Error Handling -----
+    showConnectionErrorToast: ({ event }) => {
+      assertEvent(event, 'CONNECTION_ERROR');
+      toast.error(`Connection error: ${event.message}. Attempting to reconnect...`);
+    },
+    
+    showServerErrorToast: ({ event }) => {
+      assertEvent(event, 'SERVER_ERROR');
+      toast.error(`Server error: ${event.message}`);
+    },
+    
+    addConnectionError: assign({
+      connectionErrors: ({ context, event }) => {
+        assertEvent(event, 'CONNECTION_ERROR');
+        return [...context.connectionErrors, {
+          message: event.message,
+          timestamp: new Date().toISOString()
+        }];
+      }
+    }),
+    
+    clearErrors: assign({
+      error: null,
+      connectionErrors: []
+    }),
+    
+    incrementReconnectionAttempts: assign({
+      reconnectionAttempts: ({ context }) => context.reconnectionAttempts + 1
+    }),
+    
+    resetReconnectionAttempts: assign({
+      reconnectionAttempts: 0
+    }),
+    
+    reportErrorToServer: emit(({ event }) => {
+      assertEvent(event, ['ERROR_RECEIVED', 'CONNECTION_ERROR', 'SERVER_ERROR']);
+      return {
+        type: 'REPORT_ERROR_TO_SERVER' as const,
+        errorType: event.type,
+        message: 'error' in event ? event.error : event.message,
+        context: 'details' in event ? event.details : undefined
+      };
+    }),
+    // #endregion
+
+    cleanupExpiredVisibleCards: assign({
+      visibleCards: ({ context }) => {
+        const now = Date.now();
+        return context.visibleCards.filter(vc => !vc.expireAt || vc.expireAt > now);
+      }
+    }),
   },
   guards: {
     isAbilityActionComplete: ({ context }) => {
@@ -357,6 +466,7 @@ export const uiMachine = setup({
         }
         return false;
       },
+    canAttemptReconnection: ({ context }) => context.reconnectionAttempts < MAX_RECONNECT_ATTEMPTS,
   },
 }).createMachine({
   id: 'ui',
@@ -365,17 +475,30 @@ export const uiMachine = setup({
     gameId: input.gameId ?? null,
     currentGameState: input.initialGameState ?? null,
     abilityContext: null,
-    peekedCard: null,
-    initialPeekCards: null,
+    visibleCards: [],
     chatMessages: input.initialGameState?.chat ?? [],
     gameLog: input.initialGameState?.log ?? [],
     isSidePanelOpen: false,
     error: null,
+    reconnectionAttempts: 0,
+    connectionErrors: [],
+    modal: null,
   }),
   initial: 'initializing',
   on: {
-    RECONNECT: '#ui.inGame.rejoining',
-    ERROR_RECEIVED: { actions: 'showErrorToast' },
+    RECONNECT: '#ui.inGame.reconnecting',
+    ERROR_RECEIVED: { 
+      actions: ['showErrorToast', 'reportErrorToServer'] 
+    },
+    CONNECTION_ERROR: { 
+      actions: ['showConnectionErrorToast', 'addConnectionError', 'reportErrorToServer'] 
+    },
+    SERVER_ERROR: { 
+      actions: ['showServerErrorToast', 'reportErrorToServer'],
+    },
+    DISMISS_MODAL: {
+      actions: 'dismissModal'
+    }
   },
   states: {
     initializing: {
@@ -412,7 +535,12 @@ export const uiMachine = setup({
       id: 'inGame',
       initial: 'lobby',
       on: {
-        DISCONNECT: '.disconnected',
+        DISCONNECT: {
+          target: '.disconnected',
+          actions: assign({
+            error: { message: 'You have been disconnected from the game server' }
+          })
+        },
         LEAVE_GAME: { target: '.leaving' },
         TOGGLE_SIDE_PANEL: { actions: 'toggleSidePanel' },
         CLIENT_GAME_STATE_UPDATED: {
@@ -454,7 +582,7 @@ export const uiMachine = setup({
           },
         },
         playing: {
-            initial: 'idle',
+            initial: 'active',
             on: {
                 PLAY_CARD: {
                   actions: {
@@ -500,6 +628,22 @@ export const uiMachine = setup({
                 },
             },
             states: {
+                active: {
+                  invoke: {
+                    src: 'cardVisibilityCleanup',
+                  },
+                  on: {
+                    CLEANUP_EXPIRED_CARDS: {
+                      actions: 'cleanupExpiredVisibleCards'
+                    }
+                  },
+                  always: [
+                    {
+                      target: 'ability',
+                      guard: ({ context }) => !!context.abilityContext,
+                    }
+                  ]
+                },
                 idle: {
                     always: {
                         target: 'ability',
@@ -507,14 +651,16 @@ export const uiMachine = setup({
                     },
                 },
                 ability: {
-                    always: {
-                        target: 'idle',
+                    always: [
+                      {
+                        target: 'active',
                         guard: ({ context }) => !context.abilityContext,
-                    },
+                      }
+                    ],
                     on: {
                         PLAYER_SLOT_CLICKED_FOR_ABILITY: { actions: 'updateAbilityContext' },
                         CANCEL_ABILITY: {
-                            target: 'idle',
+                            target: 'active',
                             actions: ['clearAbilityContext'],
                         },
                     },
@@ -526,17 +672,50 @@ export const uiMachine = setup({
           always: '#outOfGame',
         },
         disconnected: {
-          on: { CONNECT: 'rejoining' },
+          entry: 'incrementReconnectionAttempts',
+          on: { 
+            CONNECT: 'reconnecting',
+            RETRY_RECONNECTION: {
+              target: 'reconnecting',
+              guard: 'canAttemptReconnection',
+              actions: 'incrementReconnectionAttempts'
+            },
+            RECOVERY_FAILED: 'recoveryFailed'
+          },
+          after: {
+            [RECONNECT_INTERVAL_MS]: [
+              {
+                target: 'reconnecting',
+                guard: 'canAttemptReconnection',
+                actions: 'incrementReconnectionAttempts'
+              },
+              {
+                target: 'recoveryFailed'
+              }
+            ]
+          }
         },
-        rejoining: {
+        reconnecting: {
           tags: ['loading'],
-          entry: 'emitRejoinGame',
+          entry: ['emitRejoinGame'],
           on: {
             CLIENT_GAME_STATE_UPDATED: {
               target: 'playing',
-              actions: ['setCurrentGameState', 'syncAbilityContext'],
+              actions: ['setCurrentGameState', 'syncAbilityContext', 'resetReconnectionAttempts', 'clearErrors'],
             },
+            CONNECTION_ERROR: 'disconnected'
           },
+          after: {
+            [RECONNECT_INTERVAL_MS]: 'disconnected'
+          }
+        },
+        recoveryFailed: {
+          entry: ({ context }) => {
+            toast.error(`Failed to reconnect after ${context.reconnectionAttempts} attempts. Please refresh the page and try again.`);
+          },
+          on: {
+            CONNECT: 'reconnecting',
+          }
         },
       },
     },

@@ -31,47 +31,20 @@ export function CardBack({
     lg: "w-20 h-28",
   }
 
-  const springConfig = { type: "spring", stiffness: 400, damping: 25 }
-
   return (
-    <motion.div
-      layoutId={layoutId}
+    <div
       className={cn(
-        "relative rounded-xl border-2 transition-all duration-200",
+        "relative rounded-xl border-2 h-full w-full",
         sizeClasses[size],
         isSelected
           ? "border-blue-500 shadow-lg shadow-blue-500/10 dark:border-blue-400 dark:shadow-blue-400/10"
           : isTarget
           ? "border-amber-500 shadow-lg shadow-amber-500/10 dark:border-amber-400 dark:shadow-amber-400/10"
+          : isPeeked
+          ? "border-green-500 shadow-lg shadow-green-500/10 dark:border-green-400 dark:shadow-green-400/10"
           : "border-stone-200 dark:border-zinc-800",
         !canInteract && "cursor-not-allowed opacity-60"
       )}
-      onClick={canInteract ? onClick : undefined}
-      whileHover={
-        canInteract
-          ? {
-              y: -8,
-              boxShadow: "0 15px 30px -10px rgba(0,0,0,0.15)",
-              transition: { duration: 0.2 },
-            }
-          : {}
-      }
-      whileTap={canInteract ? { scale: 0.98 } : {}}
-      // Using custom animation states
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
-      animate={{ 
-        opacity: 1, 
-        y: isSelected ? -10 : isTarget ? -6 : 0, 
-        scale: 1,
-        boxShadow: isSelected 
-          ? "0 20px 25px rgba(0,0,0,0.15)" 
-          : isTarget 
-            ? "0 15px 20px rgba(0,0,0,0.12)" 
-            : "0 5px 15px rgba(0,0,0,0.08)",
-        transition: { duration: 0.3, ...springConfig }
-      }}
-      exit={{ opacity: 0, y: 20, scale: 0.95, transition: { duration: 0.2 } }}
-      data-cursor-link={canInteract}
     >
       {/* Card Pattern Background */}
       <div className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-br from-white to-stone-100 dark:from-zinc-900 dark:to-zinc-950">
@@ -142,15 +115,6 @@ export function CardBack({
           {position}
         </motion.div>
       )}
-
-      {/* Interactive Glow Effect */}
-      {canInteract && (
-        <motion.div
-          className="absolute inset-0 rounded-xl bg-gradient-to-br from-stone-900/5 to-stone-900/10 opacity-0 dark:from-stone-100/5 dark:to-stone-100/10"
-          whileHover={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
-        />
-      )}
-    </motion.div>
+    </div>
   )
 } 

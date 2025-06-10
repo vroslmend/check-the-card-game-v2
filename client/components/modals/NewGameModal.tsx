@@ -121,7 +121,6 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
                   className="rounded-xl border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 h-12 px-4"
                   onKeyDown={onKeyDown}
                   autoComplete="off"
-                  autoFocus
                 />
               </div>
               

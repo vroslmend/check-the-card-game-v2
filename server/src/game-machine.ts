@@ -23,6 +23,8 @@ const PEEK_TOTAL_DURATION_MS = parseInt(process.env.PEEK_DURATION_MS || '10000',
 const MATCHING_STAGE_DURATION_MS = parseInt(process.env.MATCHING_STAGE_DURATION_MS || '5000', 10);
 const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || '4', 10);
 const CARDS_PER_PLAYER = parseInt(process.env.CARDS_PER_PLAYER || '4', 10);
+const RECONNECT_TIMEOUT_MS = parseInt(process.env.RECONNECT_TIMEOUT_MS || '30000', 10);
+const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3', 10);
 
 export interface ServerPlayer {
   id: PlayerId;
@@ -71,6 +73,13 @@ export interface GameContext {
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
+  errorState: {
+    message: string;
+    retryCount: number;
+    errorType: 'DECK_EMPTY' | 'NETWORK_ERROR' | 'PLAYER_ERROR' | 'GENERAL_ERROR' | null;
+    affectedPlayerId?: PlayerId;
+    recoveryState?: any;
+  } | null;
 }
 
 type GameInput = {
@@ -97,6 +106,7 @@ type GameEvent =
   | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData; playerId: PlayerId }
   | { type: 'PLAYER_RECONNECTED'; playerId: PlayerId; newSocketId: string }
   | { type: 'PLAYER_DISCONNECTED'; playerId: PlayerId }
+  | { type: 'CLIENT_ERROR_REPORT'; playerId: PlayerId; errorType: string; message: string; context?: any }
   | PlayerActionEvents
   | { type: 'TIMER.PEEK_EXPIRED' }
   | { type: 'TIMER.MATCHING_EXPIRED' };
@@ -112,6 +122,12 @@ type EmittedEvent =
         eventName: SocketEventName;
         eventData: unknown;
       };
+    }
+  | { 
+      type: 'LOG_ERROR';
+      error: Error;
+      errorType: 'DECK_EMPTY' | 'NETWORK_ERROR' | 'PLAYER_ERROR' | 'GENERAL_ERROR';
+      playerId?: PlayerId;
     };
 
 const getPlayerNameForLog = (playerId: string, context: GameContext): string => {
@@ -214,6 +230,15 @@ export const gameMachine = setup({
     isNotLocked: ({ context, event }) => {
       assertEvent(event, PlayerActionType.CALL_CHECK);
       return !context.players[event.playerId]?.isLocked;
+    },
+    canRetry: ({ context }) => {
+      return context.errorState !== null && context.errorState.retryCount < MAX_RETRIES;
+    },
+    isDeckEmpty: ({ context }) => {
+      return context.deck.length === 0;
+    },
+    hasRecoveryState: ({ context }) => {
+      return context.errorState !== null && context.errorState.recoveryState !== undefined;
     },
   },
   actions: {
@@ -341,15 +366,7 @@ export const gameMachine = setup({
         }
       }
 
-      const newDiscardPile = [...context.discardPile];
-      let topCard = newDeck.pop();
-      while (topCard && specialRanks.has(topCard.rank)) {
-        newDeck.splice(Math.floor(newDeck.length / 2), 0, topCard);
-        topCard = newDeck.pop();
-      }
-      if (topCard) newDiscardPile.push(topCard);
-
-      return { players: newPlayers, deck: newDeck, discardPile: newDiscardPile };
+      return { players: newPlayers, deck: newDeck };
     }),
     initializePlayState: assign({
       currentPlayerId: ({ context }) => context.turnOrder[0]!,
@@ -623,6 +640,113 @@ export const gameMachine = setup({
 
         return {};
     }),
+    logError: emit(({ context, event }) => {
+      let errorType: 'DECK_EMPTY' | 'NETWORK_ERROR' | 'PLAYER_ERROR' | 'GENERAL_ERROR' = 'GENERAL_ERROR';
+      let playerId: PlayerId | undefined = undefined;
+      let error: Error;
+      
+      if (event.type === 'PLAYER_DISCONNECTED') {
+        errorType = 'NETWORK_ERROR';
+        playerId = event.playerId;
+        error = new Error(`Player ${getPlayerNameForLog(event.playerId, context)} disconnected`);
+      } else {
+        error = new Error('Game error occurred');
+      }
+      
+      return {
+        type: 'LOG_ERROR' as const,
+        error,
+        errorType,
+        playerId
+      };
+    }),
+    setErrorState: assign({
+      errorState: ({ context, event }) => {
+        let errorType: 'DECK_EMPTY' | 'NETWORK_ERROR' | 'PLAYER_ERROR' | 'GENERAL_ERROR' = 'GENERAL_ERROR';
+        let message = 'An error occurred in the game';
+        let playerId: PlayerId | undefined = undefined;
+        
+        if (event.type === 'PLAYER_DISCONNECTED') {
+          errorType = 'NETWORK_ERROR';
+          playerId = event.playerId;
+          message = `Player ${context.players[event.playerId]?.name || 'Unknown'} disconnected`;
+        } else if (context.deck.length === 0) {
+          errorType = 'DECK_EMPTY';
+          message = 'The deck is empty';
+        }
+        
+        return {
+          message,
+          retryCount: 0,
+          errorType,
+          affectedPlayerId: playerId,
+          recoveryState: context.currentTurnSegment ? {
+            activeState: context.currentTurnSegment,
+            currentPlayerId: context.currentPlayerId
+          } : undefined
+        };
+      }
+    }),
+    incrementRetryCount: assign({
+      errorState: ({ context }) => {
+        if (!context.errorState) return null;
+        return {
+          ...context.errorState,
+          retryCount: context.errorState.retryCount + 1
+        };
+      }
+    }),
+    clearErrorState: assign({
+      errorState: null
+    }),
+    addErrorLog: assign({
+      log: ({ context }) => {
+        if (!context.errorState) return context.log;
+        
+        const logEntry = createLogEntry(context, {
+          message: `Error: ${context.errorState.message}. ${
+            context.errorState.retryCount < MAX_RETRIES 
+              ? `Attempting recovery (try ${context.errorState.retryCount + 1}/${MAX_RETRIES})` 
+              : 'Recovery failed'
+          }`,
+          type: 'public',
+          tags: ['system-message', 'error']
+        });
+        
+        return [...context.log, logEntry];
+      }
+    }),
+    reshuffleDeckIfEmpty: assign(({ context }) => {
+      if (context.deck.length > 0) return {};
+      
+      // Create a new deck using the discard pile
+      const newDiscardPile: Card[] = [];
+      const cardsToReshuffle = [...context.discardPile];
+      const topCard = cardsToReshuffle.pop();
+      
+      if (topCard) newDiscardPile.push(topCard);
+      
+      return {
+        deck: shuffleDeck(cardsToReshuffle),
+        discardPile: newDiscardPile,
+        errorState: null
+      };
+    }),
+    logClientError: assign({
+      log: ({ context, event }) => {
+        assertEvent(event, 'CLIENT_ERROR_REPORT');
+        const { playerId, errorType, message, context: errorContext } = event;
+        const playerName = getPlayerNameForLog(playerId, context);
+        
+        const logEntry = createLogEntry(context, {
+          message: `Client error from ${playerName}: [${errorType}] ${message}${errorContext ? ` (${JSON.stringify(errorContext)})` : ''}`,
+          type: 'private',
+          tags: ['system-message', 'error']
+        });
+        
+        return [...context.log, logEntry];
+      }
+    }),
   },
   actors: {
     peekTimerActor: fromPromise(async () => {
@@ -631,6 +755,10 @@ export const gameMachine = setup({
     }),
     matchingTimerActor: fromPromise(async () => {
       await new Promise((resolve) => setTimeout(resolve, MATCHING_STAGE_DURATION_MS));
+      return {};
+    }),
+    reconnectTimerActor: fromPromise(async ({ input }) => {
+      await new Promise((resolve) => setTimeout(resolve, RECONNECT_TIMEOUT_MS));
       return {};
     }),
   },
@@ -654,6 +782,7 @@ export const gameMachine = setup({
     log: [],
     chat: [],
     discardPileIsSealed: false,
+    errorState: null,
   }),
   on: {
     PLAYER_RECONNECTED: {
@@ -664,8 +793,21 @@ export const gameMachine = setup({
         'broadcastGameState',
       ],
     },
-    PLAYER_DISCONNECTED: {
-      actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
+    PLAYER_DISCONNECTED: [
+      {
+        target: '.error',
+        actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'setErrorState', 'broadcastGameState', 'logError'],
+        guard: ({ context, event }) => {
+          // Only transition to error if the disconnected player is the current player
+          return event.playerId === context.currentPlayerId;
+        }
+      },
+      {
+        actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
+      }
+    ],
+    CLIENT_ERROR_REPORT: {
+      actions: ['logClientError', 'broadcastGameState']
     },
   },
   states: {
@@ -738,6 +880,11 @@ export const gameMachine = setup({
                 [PlayerActionType.DRAW_FROM_DECK]: { guard: 'isPlayerTurn', actions: 'drawFromDeck', target: 'DISCARD' },
                 [PlayerActionType.DRAW_FROM_DISCARD]: { guard: and(['isPlayerTurn', 'canDrawFromDiscard']), actions: 'drawFromDiscard', target: 'DISCARD' },
               },
+              always: {
+                target: '#game.error',
+                guard: 'isDeckEmpty',
+                actions: 'setErrorState'
+              }
             },
             DISCARD: {
               entry: 'broadcastGameState',
@@ -888,6 +1035,53 @@ export const gameMachine = setup({
           target: GameStage.DEALING,
         },
       },
+    },
+    error: {
+      entry: ['addErrorLog', 'broadcastGameState'],
+      on: {
+        PLAYER_RECONNECTED: {
+          target: 'recovering',
+          actions: ['setPlayerConnected', 'emitPlayerReconnectSuccessful', 'addPlayerReconnectedLog', 'clearErrorState'],
+          guard: ({ context, event }) => context.errorState?.affectedPlayerId === event.playerId
+        }
+      },
+      after: {
+        [RECONNECT_TIMEOUT_MS]: [
+          {
+            target: 'recovering',
+            guard: 'canRetry',
+            actions: 'incrementRetryCount'
+          },
+          {
+            target: 'failedRecovery'
+          }
+        ]
+      }
+    },
+    recovering: {
+      entry: 'broadcastGameState',
+      always: [
+        {
+          target: GameStage.PLAYING,
+          guard: ({ context }) => {
+            return context.errorState === null || 
+              (context.errorState.errorType === 'DECK_EMPTY' && context.discardPile.length > 1);
+          },
+          actions: 'reshuffleDeckIfEmpty'
+        },
+        {
+          target: 'failedRecovery'
+        }
+      ]
+    },
+    failedRecovery: {
+      entry: ['addErrorLog', 'broadcastGameState'],
+      on: {
+        [PlayerActionType.PLAY_AGAIN]: {
+          actions: ['resetForNextRound', 'clearErrorState', 'broadcastGameState'],
+          target: GameStage.DEALING,
+        }
+      }
     },
   },
 });

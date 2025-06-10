@@ -2,10 +2,11 @@
 
 import React from 'react';
 import { HandGrid } from './HandGrid';
-import { type Player, type PlayerId } from 'shared-types';
+import { type Player, type PlayerId, Card, GameStage } from 'shared-types';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { ShieldCheck } from 'lucide-react';
+import { useUI } from '@/components/providers/UIMachineProvider';
 
 interface PlayerHandProps {
   player: Player;
@@ -24,7 +25,33 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   selectedCardIndex,
   className
 }) => {
+  const [state] = useUI();
+  const { visibleCards, currentGameState } = state.context;
   const isLocalPlayer = player.id === localPlayerId;
+  
+  // Get visible cards for this player that the local player can see
+  const visibleCardIndices = visibleCards
+    .filter(vc => vc.playerId === player.id && (
+      // We can see our own peeked cards
+      player.id === localPlayerId ||
+      // Or cards that were revealed by our ability
+      vc.source === 'ability'
+    ))
+    .map(vc => vc.cardIndex);
+  
+  // Create a copy of the hand that we can modify to show visible cards
+  let displayHand = [...player.hand];
+  
+  // For the local player, we want to display any cards that are currently visible
+  if (visibleCardIndices.length > 0) {
+    visibleCards
+      .filter(vc => visibleCardIndices.includes(vc.cardIndex))
+      .forEach(vc => {
+        if (displayHand[vc.cardIndex]) {
+          displayHand[vc.cardIndex] = vc.card;
+        }
+      });
+  }
   
   return (
     <div className={cn("flex flex-col items-center justify-center", className)}>
@@ -58,7 +85,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
       {/* Cards */}
       <HandGrid
         ownerId={player.id}
-        hand={player.hand}
+        hand={displayHand}
         isOpponent={!isLocalPlayer}
         canInteract={canInteract && isLocalPlayer}
         selectedIndex={selectedCardIndex}
@@ -67,6 +94,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             onCardClick(index);
           }
         }}
+        visibleCardIndices={visibleCardIndices}
       />
     </div>
   );

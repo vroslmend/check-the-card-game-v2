@@ -186,7 +186,7 @@ const CustomCursor = () => {
   }
 
   return (
-    <div key={resolvedTheme} className="fixed inset-0 pointer-events-none z-50">
+    <div key={resolvedTheme} className="fixed inset-0 pointer-events-none z-[9999]">
       <motion.div
         variants={cursorVariants}
         animate={isPointerInViewport && !isIdle ? variant : 'hidden'}

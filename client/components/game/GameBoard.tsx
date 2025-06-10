@@ -14,9 +14,9 @@ import { GameStage } from 'shared-types';
 
 function InitialPeekView() {
   const [state, send] = useUI();
-  const { localPlayerId, currentGameState, initialPeekCards } = state.context;
+  const { localPlayerId, currentGameState } = state.context;
 
-  if (!localPlayerId || !currentGameState || !initialPeekCards) return null;
+  if (!localPlayerId || !currentGameState) return null;
 
   const localPlayer = currentGameState.players[localPlayerId];
   if (!localPlayer) return null;
@@ -26,30 +26,29 @@ function InitialPeekView() {
   };
 
   return (
-    <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="text-center p-8"
-      >
-        <h2 className="text-4xl font-light mb-4">Initial Peek</h2>
-        <p className="text-lg text-stone-300 mb-8">Take a look at your first two cards.</p>
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-end pb-16">
+      <div className="mb-20 text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8 p-4 bg-stone-800/80 backdrop-blur-sm rounded-lg text-white max-w-md"
+        >
+          <h2 className="text-xl font-medium mb-2">Initial Peek</h2>
+          <p className="text-sm text-stone-300">
+            Memorize your bottom two cards before they're turned face-down again.
+          </p>
+        </motion.div>
         
-        <div className="flex gap-4 mb-8">
-          {initialPeekCards[0] && <PlayingCard card={initialPeekCards[0]} />}
-          {initialPeekCards[1] && <PlayingCard card={initialPeekCards[1]} />}
-        </div>
-
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={handleReady}
-          className="px-8 py-3 bg-green-600 hover:bg-green-700 rounded-lg text-lg font-semibold"
+          className="px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-semibold"
         >
           {localPlayer.isReady ? "Waiting for others..." : "I'm Ready"}
         </motion.button>
-      </motion.div>
+      </div>
     </div>
   );
 }

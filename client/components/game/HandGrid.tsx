@@ -14,6 +14,7 @@ export interface HandGridProps {
   selectedIndex?: number | null
   maxCards?: number
   className?: string
+  visibleCardIndices?: number[]
 }
 
 export const HandGrid = ({
@@ -25,6 +26,7 @@ export const HandGrid = ({
   selectedIndex,
   maxCards = 7,
   className,
+  visibleCardIndices = [],
 }: HandGridProps) => {
   // Calculate fan angle and overlap based on number of cards
   const cardCount = hand.length;
@@ -44,6 +46,8 @@ export const HandGrid = ({
       <AnimatePresence>
         {hand.map((card, index) => {
           const isSelected = selectedIndex === index;
+          const isVisible = visibleCardIndices.includes(index);
+          
           // Calculate fan position
           const xPos = startX + index * (cardWidth - maxOverlap);
           
@@ -76,8 +80,9 @@ export const HandGrid = ({
             >
               <PlayingCard
                 card={'suit' in card ? card : undefined}
-                isFaceDown={!('suit' in card)}
+                isFaceDown={!('suit' in card) && !isVisible}
                 isSelected={isSelected}
+                isPeeked={isVisible}
                 canInteract={canInteract}
                 position={index + 1}
                 size={isOpponent ? "sm" : "md"}

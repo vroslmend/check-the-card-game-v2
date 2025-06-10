@@ -82,6 +82,10 @@ check-the-card-game-v2/
 *   **XState for All Client-Side State**: The `client/` uses a single, root XState machine (`uiMachine.ts`) to manage all client-side state. This includes complex UI interaction sequences (e.g., multi-step abilities), orchestrating game actions, and holding the `ClientCheckGameState` received from the server. This provides a robust and centralized state management solution.
 *   **Framer Motion for All Animations**: All visual animations, especially card movements (using `layoutId`), transitions, and UI effects, are handled by Framer Motion, driven by states from the `uiMachine`.
 *   **shadcn/ui for Core UI Components**: Base UI elements (buttons, modals, inputs) are built using shadcn/ui for speed, consistency, and accessibility, styled with Tailwind CSS.
+*   **Robust Error Recovery Mechanism**: Both client and server implement sophisticated error recovery mechanisms using XState's error handling capabilities:
+    *   **Server-side**: Handles edge cases like empty deck, disconnections, and other errors with automatic retry and recovery strategies.
+    *   **Client-side**: Implements automatic reconnection attempts with configurable parameters and clear user feedback.
+    *   **Bidirectional Error Communication**: Errors on either side are properly communicated and logged for debugging.
 
 ## ⚙️ Setup and Installation
 
@@ -154,6 +158,8 @@ Create `.env` files in the `server` and `client` directories for local developme
 
 *   **Client (`client/.env.local`):**
     *   `NEXT_PUBLIC_WEBSOCKET_URL`: Full URL of the backend Socket.IO server. (Defaults to `http://localhost:8000` for local development).
+    *   `NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS`: Maximum number of client-side reconnection attempts (default: `3`).
+    *   `NEXT_PUBLIC_RECONNECT_INTERVAL_MS`: Interval between client-side reconnection attempts in milliseconds (default: `5000`).
 
 *   **Server (`server/.env`):**
     *   `PORT`: Port for the backend server (default: `8000`).
@@ -162,12 +168,57 @@ Create `.env` files in the `server` and `client` directories for local developme
     *   `CARDS_PER_PLAYER`: The number of cards dealt to each player (default: `4`).
     *   `PEEK_DURATION_MS`: Duration of the initial card peek phase in milliseconds (default: `10000`).
     *   `MATCHING_STAGE_DURATION_MS`: Duration of the matching stage in milliseconds (default: `5000`).
+    *   `RECONNECT_TIMEOUT_MS`: Timeout for player reconnection attempts in milliseconds (default: `30000`).
+    *   `MAX_RETRIES`: Maximum number of retries for server-side error recovery (default: `3`).
+
+### Example Environment Files
+
+**Client `.env.local` Example:**
+```
+# The full URL of your deployed Node.js backend server.
+# For local development, this points to your local server.
+NEXT_PUBLIC_WEBSOCKET_URL=http://localhost:8000
+
+# --- Error Recovery Configuration ---
+# Maximum number of client-side reconnection attempts
+NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS=3
+# Interval between client-side reconnection attempts (milliseconds)
+NEXT_PUBLIC_RECONNECT_INTERVAL_MS=5000
+```
+
+**Server `.env` Example:**
+```
+# The URL of the client application for Cross-Origin Resource Sharing
+CORS_ORIGIN=http://localhost:3000
+
+# The port the server will run on (Render sets this automatically in production)
+PORT=8000
+
+# --- Game Rules & Configuration ---
+# The maximum number of players allowed in a game.
+MAX_PLAYERS=4
+# The number of cards dealt to each player at the start of a round.
+CARDS_PER_PLAYER=4
+
+# --- Game Pacing (in Milliseconds) ---
+# Duration of the initial card peek phase.
+PEEK_DURATION_MS=10000
+# Duration of the matching stage after a card is discarded.
+MATCHING_STAGE_DURATION_MS=5000
+
+# --- Error Recovery Configuration ---
+# Timeout for player reconnection attempts (milliseconds)
+RECONNECT_TIMEOUT_MS=30000
+# Maximum number of retries for server-side recovery
+MAX_RETRIES=3
+```
 
 ## 📝 Current Development Status
 
 *   **Backend Refactor (Completed):** The backend uses XState (`game-machine.ts`) for all authoritative game logic.
 *   **Frontend Architecture (Completed):** The frontend has been architected using Next.js, TypeScript, and a single root XState machine (`uiMachine.ts`) for all client-side state orchestration.
 *   **Core UI Components (In Progress):** Development is focused on refining UI components, animations, and ensuring all game phases are fully represented in the UI.
+*   **Error Recovery (Completed):** Both client and server implement robust error handling and recovery mechanisms using XState's error states and transitions.
 
 ---
 Happy Gaming and Coding!

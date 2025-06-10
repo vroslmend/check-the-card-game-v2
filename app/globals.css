@@ -1,0 +1,5 @@
+/* Add this somewhere appropriate in the file */
+.backface-hidden {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+} 

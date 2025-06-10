@@ -153,7 +153,6 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
                         className="rounded-xl border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 h-12 px-4"
                         onKeyDown={onKeyDown}
                         autoComplete="off"
-                        autoFocus
                       />
                     </div>
                   </motion.div>
@@ -180,7 +179,6 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
                         className="rounded-xl border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 h-12 px-4 font-mono"
                         onKeyDown={onKeyDown}
                         autoComplete="off"
-                        autoFocus
                       />
                       <p className="text-xs text-stone-500 dark:text-stone-500 mt-2">
                         <Shield className="h-3 w-3 inline mr-1" />
