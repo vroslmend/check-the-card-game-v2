@@ -3,17 +3,17 @@
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { useState, useRef } from "react"
-import { CheckCircle, Circle, Eye, Shuffle, Ban, X, Search, GitCommitHorizontal } from "lucide-react"
+import { CheckCircle, Circle, Eye, Shuffle, Ban, X, GitCommitHorizontal, SkipForward, Search } from "lucide-react"
 import { useUI } from "@/components/providers/UIMachineProvider"
-import { type UIMachineEvent } from "@/machines/uiMachine"
+import { type UIMachineEvents } from "@/machines/uiMachine"
 import Magnetic from "../ui/Magnetic";
-import { CardRank, GameStage, TurnPhase } from "shared-types"
+import { GameStage, TurnPhase, CardRank, PlayerActionType } from "shared-types"
 
 type ActionButton = {
   id: string;
   label: string; 
   icon: React.ElementType; 
-  event: UIMachineEvent;
+  event: UIMachineEvents;
   holdToConfirm?: boolean; 
   variant?: 'ghost' | 'default' | 'destructive' | 'outline' | 'secondary' | 'link';
   disabled?: boolean;
@@ -21,27 +21,24 @@ type ActionButton = {
 
 export function GameActionControls() {
   const [state, send] = useUI();
+  const { localPlayerId, currentGameState, abilityContext } = state.context;
 
-  const {
-    localPlayerId,
-    currentGameState,
-    abilityContext,
-  } = state.context;
-
-  // Comprehensive guard to prevent crashes on initial render
-  if (!currentGameState || !currentGameState.players) {
-    return null; // Or a loading spinner, but null is safest for now
+  if (!currentGameState || !currentGameState.players || !localPlayerId) {
+    return null;
   }
 
-  const localPlayer = localPlayerId ? currentGameState.players[localPlayerId] : null;
+  const localPlayer = currentGameState.players[localPlayerId];
+  if (!localPlayer) return null;
+
   const isMyTurn = currentGameState.currentPlayerId === localPlayerId;
+  const isAbilityPlayer = abilityContext?.playerId === localPlayerId;
 
   const [holdingAction, setHoldingAction] = useState<string | null>(null);
   const [holdProgress, setHoldProgress] = useState(0);
   const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleAction = (event: UIMachineEvent) => {
+  const handleAction = (event: UIMachineEvents) => {
     send(event);
   };
 
@@ -64,7 +61,7 @@ export function GameActionControls() {
     holdTimeoutRef.current = setTimeout(() => completeHold(button.event), 1000);
   };
 
-  const completeHold = (event: UIMachineEvent) => {
+  const completeHold = (event: UIMachineEvents) => {
     clearHold();
     handleAction(event);
   };
@@ -77,108 +74,116 @@ export function GameActionControls() {
   };
 
   const getAvailableActions = (): ActionButton[] => {
-    if (!currentGameState || !localPlayer || !localPlayerId) return [];
-
     const actions: ActionButton[] = [];
-    
-    if (state.matches({ inGame: { connected: { ability: 'collectingInput' } } }) || state.matches({ inGame: { connected: { ability: 'confirming' } } })) {
-      if (abilityContext?.type === 'peek') {
-        const { payload } = abilityContext;
-        const requiredCount = 1;
-        const selectedCount = payload.targetPlayerId ? 1 : 0;
+
+    // --- Ability Actions ---
+    if (state.matches({ inGame: { playing: 'ability' } }) && isAbilityPlayer && abilityContext) {
+      if (abilityContext.stage === 'peeking') {
+        const requiredCount = abilityContext.maxPeekTargets;
+        const selectedCount = abilityContext.selectedPeekTargets.length;
         actions.push({
           id: 'confirm-peek',
           label: `Confirm Peek (${selectedCount}/${requiredCount})`,
           icon: CheckCircle,
-          event: { type: 'ABILITY_CONFIRM_ACTION' },
+          event: { type: 'CONFIRM_ABILITY_ACTION' },
           disabled: selectedCount !== requiredCount,
         });
-      } else if (abilityContext?.type === 'swap') {
-        const { payload } = abilityContext;
-        const selectedCount = ('sourcePlayerId' in payload ? 1 : 0) + ('targetPlayerId' in payload ? 1 : 0);
+        if (abilityContext.type === 'king' || abilityContext.type === 'peek') {
+            actions.push({ id: 'skip-peek', label: 'Skip Peek', icon: SkipForward, event: { type: 'SKIP_ABILITY_STAGE' } });
+        }
+      } else if (abilityContext.stage === 'swapping') {
+        const requiredCount = 2;
+        const selectedCount = abilityContext.selectedSwapTargets.length;
         actions.push({
           id: 'confirm-swap',
-          label: `Confirm Swap (${selectedCount}/2)`,
+          label: `Confirm Swap (${selectedCount}/${requiredCount})`,
           icon: Shuffle,
-          event: { type: 'ABILITY_CONFIRM_ACTION' },
-          disabled: selectedCount !== 2,
+          event: { type: 'CONFIRM_ABILITY_ACTION' },
+          disabled: selectedCount !== requiredCount,
         });
+        actions.push({ id: 'skip-swap', label: 'Skip Swap', icon: SkipForward, event: { type: 'SKIP_ABILITY_STAGE' } });
       }
-      actions.push({ id: 'cancel-ability', label: 'Cancel', icon: Ban, event: { type: 'ABILITY_CANCEL_ACTION' } });
-      return actions.map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled || !state.can(action.event) }));
+
+      actions.push({ id: 'cancel-ability', label: 'Cancel', icon: Ban, event: { type: 'CANCEL_ABILITY' } });
+      return actions.map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled }));
     }
 
-    if (currentGameState.gameStage === GameStage.DEALING && !localPlayer.isReady) {
-      actions.push({ id: 'ready-peek', label: 'Ready', icon: Eye, event: { type: 'DECLARE_READY_FOR_PEEK_CLICKED' } });
+    // --- Lobby Actions ---
+    if (currentGameState.gameStage === GameStage.WAITING_FOR_PLAYERS && !localPlayer.isReady) {
+      actions.push({ id: 'player-ready', label: 'Declare Ready', icon: CheckCircle, event: { type: 'PLAYER_READY' } });
+    }
+    if (currentGameState.gameStage === GameStage.WAITING_FOR_PLAYERS && currentGameState.gameMasterId === localPlayerId) {
+      const allPlayersReady = Object.values(currentGameState.players).every(p => p.isReady);
+      actions.push({ id: 'start-game', label: 'Start Game', icon: CheckCircle, event: { type: 'START_GAME' }, disabled: !allPlayersReady });
     }
     
+    // --- Initial Peek Action ---
+    if (currentGameState.gameStage === GameStage.INITIAL_PEEK && !localPlayer.isReady) {
+      actions.push({ id: 'ready-peek', label: 'Done Peeking', icon: Eye, event: { type: 'DECLARE_READY_FOR_PEEK_CLICKED' } });
+    }
+
+    // --- Turn-based Actions ---
     if (isMyTurn && currentGameState.turnPhase) {
       const turnPhase = currentGameState.turnPhase;
       if (turnPhase === TurnPhase.DRAW) {
-        actions.push({ id: 'draw-deck', label: 'Draw from Deck', icon: Circle, event: { type: 'DRAW_FROM_DECK_CLICKED' } });
+        actions.push({ id: 'draw-deck', label: 'Draw from Deck', icon: Circle, event: { type: 'DRAW_CARD' } });
         
         const topOfDiscard = currentGameState.discardPile[currentGameState.discardPile.length - 1];
         const isDiscardDrawable = topOfDiscard && !new Set([CardRank.King, CardRank.Queen, CardRank.Jack]).has(topOfDiscard.rank);
-        actions.push({ id: 'draw-discard', label: 'Draw from Discard', icon: Eye, event: { type: 'DRAW_FROM_DISCARD_CLICKED' }, disabled: !isDiscardDrawable });
+        actions.push({
+          id: 'draw-discard',
+          label: 'Draw from Discard',
+          icon: Eye,
+          event: { type: 'PLAYER_ACTION', payload: { type: PlayerActionType.DRAW_FROM_DISCARD, payload: { playerId: localPlayerId } } },
+          disabled: !isDiscardDrawable
+        });
 
-        actions.push({ id: 'call-check', label: 'Call Check!', icon: CheckCircle, event: { type: 'CALL_CHECK_CLICKED' }, holdToConfirm: true });
-      } else if (turnPhase === TurnPhase.DISCARD) {
-        actions.push({ id: 'discard-drawn', label: 'Discard Drawn Card', icon: X, event: { type: 'CONFIRM_DISCARD_PENDING_DRAWN_CARD' } });
-        if (state.context.selectedHandCardIndex !== null) {
-          actions.push({ id: 'swap-card', label: 'Swap with Selected', icon: Shuffle, event: { type: 'CONFIRM_SWAP_PENDING_CARD_WITH_HAND', handCardIndex: state.context.selectedHandCardIndex } });
-        }
-      } else if (turnPhase === TurnPhase.ACTION) {
         actions.push({
-          id: 'use-peek',
-          label: 'Peek (King)',
-          icon: Search,
-          event: { type: 'START_ABILITY', abilityType: 'peek', payload: { type: 'peek' } },
+            id: 'call-check',
+            label: 'Call Check!',
+            icon: CheckCircle,
+            event: { type: 'PLAYER_ACTION', payload: { type: PlayerActionType.CALL_CHECK, payload: { playerId: localPlayerId } } },
+            holdToConfirm: true
         });
+      } else if (turnPhase === TurnPhase.DISCARD && localPlayer.pendingDrawnCard) {
         actions.push({
-          id: 'use-swap',
-          label: 'Swap (Queen)',
-          icon: GitCommitHorizontal,
-          event: { type: 'START_ABILITY', abilityType: 'swap', payload: { type: 'swap' } },
-        });
-        actions.push({
-          id: 'end-turn',
-          label: 'End Turn',
-          icon: CheckCircle,
-          event: { type: 'CONFIRM_DISCARD_PENDING_DRAWN_CARD' }
+            id: 'discard-drawn',
+            label: 'Discard Drawn Card',
+            icon: X,
+            event: { type: 'PLAYER_ACTION', payload: { type: PlayerActionType.DISCARD_DRAWN_CARD, payload: { playerId: localPlayerId } } }
         });
       }
     }
 
-    return actions.map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled || !state.can(action.event) }));
+    return actions.map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled }));
   }
 
   const getInstructionText = () => {
-    if (!currentGameState || !localPlayer || !currentGameState.players) return "Loading...";
-
-    if (state.matches({ inGame: { connected: { ability: 'collectingInput' } } })) {
-      if (abilityContext?.type === 'peek') {
-        return `You played a King. Select one card from any player to peek at.`;
+    if (state.matches({ inGame: { playing: 'ability' } }) && isAbilityPlayer && abilityContext) {
+       if (abilityContext.stage === 'peeking') {
+        return `You used a ${abilityContext.type}. Select ${abilityContext.maxPeekTargets} card(s) to peek at.`;
       }
-      if (abilityContext?.type === 'swap') {
-        const selected = ('sourcePlayerId' in abilityContext.payload ? 1 : 0) + ('targetPlayerId' in abilityContext.payload ? 1 : 0);
-        if (selected === 0) return `You played a Queen. Select the first card to swap.`;
-        if (selected === 1) return `First card selected. Now select the second card to swap.`;
+      if (abilityContext.stage === 'swapping') {
+        const selectedCount = abilityContext.selectedSwapTargets.length;
+        if (selectedCount === 0) return `You used a ${abilityContext.type}. Select the first card to swap.`;
+        if (selectedCount === 1) return `First card selected. Now select the second card to swap.`;
       }
     }
 
-    if (currentGameState.gameStage === GameStage.DEALING && !localPlayer.isReady) {
-      return "The dealer is dealing. Click when you're ready to peek at your cards.";
+    if (currentGameState.gameStage === GameStage.WAITING_FOR_PLAYERS) {
+      return "Waiting for players to ready up...";
     }
-    if (currentGameState.gameStage === GameStage.DEALING && localPlayer.isReady) {
-      return "Waiting for other players to be ready for the peek...";
+    if (currentGameState.gameStage === GameStage.INITIAL_PEEK) {
+      if (!localPlayer.isReady) return "Memorize your bottom two cards.";
+      return "Waiting for other players to finish peeking...";
     }
-    if (isMyTurn) {
-        if (currentGameState.turnPhase === TurnPhase.DRAW) {
-            return "It's your turn. Draw a card, or call Check.";
-        } else if (currentGameState.turnPhase === TurnPhase.DISCARD) {
-            return "You've drawn a card. Discard it, or select a card from your hand to swap with.";
-        } else if (currentGameState.turnPhase === TurnPhase.ACTION) {
-            return "You discarded a special card. Choose an ability to use, or end your turn.";
+    if (currentGameState.gameStage === GameStage.PLAYING) {
+        if (isMyTurn) {
+            if (currentGameState.turnPhase === TurnPhase.DRAW) {
+                return "It's your turn. Draw a card, or call Check.";
+            } else if (currentGameState.turnPhase === TurnPhase.DISCARD) {
+                return "You've drawn a card. Discard it, or select a card from your hand to swap with it.";
+            }
         }
     }
     const currentPlayerId = currentGameState.currentPlayerId;
@@ -253,7 +258,7 @@ export function GameActionControls() {
                         className="min-w-[140px] text-sm font-light"
                         onClick={() => handleAction(action.event)}
                       >
-                        <ActionIcon className="mr-2 h-3 w-3" />
+                         <ActionIcon className="h-3 w-3 mr-2" />
                         {action.label}
                       </Button>
                     )}

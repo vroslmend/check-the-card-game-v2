@@ -8,7 +8,51 @@ import { TableArea } from './TableArea';
 import { OpponentArea } from './OpponentArea';
 import { GameActionControls } from './GameActionControls';
 import { LocalPlayerArea } from './LocalPlayerArea';
+import { PlayingCard } from '../cards/PlayingCard';
 import { toast } from 'sonner';
+import { GameStage } from 'shared-types';
+
+function InitialPeekView() {
+  const [state, send] = useUI();
+  const { localPlayerId, currentGameState, initialPeekCards } = state.context;
+
+  if (!localPlayerId || !currentGameState || !initialPeekCards) return null;
+
+  const localPlayer = currentGameState.players[localPlayerId];
+  if (!localPlayer) return null;
+
+  const handleReady = () => {
+    send({ type: 'DECLARE_READY_FOR_PEEK_CLICKED' });
+  };
+
+  return (
+    <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="text-center p-8"
+      >
+        <h2 className="text-4xl font-light mb-4">Initial Peek</h2>
+        <p className="text-lg text-stone-300 mb-8">Take a look at your first two cards.</p>
+        
+        <div className="flex gap-4 mb-8">
+          {initialPeekCards[0] && <PlayingCard card={initialPeekCards[0]} />}
+          {initialPeekCards[1] && <PlayingCard card={initialPeekCards[1]} />}
+        </div>
+
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleReady}
+          className="px-8 py-3 bg-green-600 hover:bg-green-700 rounded-lg text-lg font-semibold"
+        >
+          {localPlayer.isReady ? "Waiting for others..." : "I'm Ready"}
+        </motion.button>
+      </motion.div>
+    </div>
+  );
+}
 
 export function GameBoard() {
   const [state] = useUI();
@@ -27,6 +71,15 @@ export function GameBoard() {
           <Loader className="h-8 w-8 animate-spin mb-4" />
           <p>Loading game data...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Show Initial Peek view if in that stage
+  if (gameState.gameStage === GameStage.INITIAL_PEEK) {
+    return (
+      <div className="relative min-h-screen flex flex-col bg-stone-100 dark:bg-stone-900">
+        <InitialPeekView />
       </div>
     );
   }

@@ -41,42 +41,51 @@ interface GameContext {
   gameMasterId: PlayerId | null;
   currentPlayerId: PlayerId | null;
   currentTurnSegment: TurnPhase | null;
+  matchingOpportunity: {
+    cardToMatch: Card;
+    originalPlayerID: PlayerId;
+    remainingPlayerIDs: PlayerId[];
+  } | null;
   activeAbility: ActiveAbility | null;
+  checkDetails: {
+    callerId: PlayerId;
+    playersYetToPlay: PlayerId[];
+  } | null;
+  gameover: {
+    winnerId: PlayerId | null;
+    loserId: PlayerId | null;
+    playerScores: Record<PlayerId, number>;
+  } | null;
+  lastRoundLoserId: PlayerId | null;
   log: RichGameLogMessage[];
-  chat: ChatMessage[]; // Assuming chat is handled elsewhere but part of the type.
-  [key: string]: any; // Allow other properties
+  chat: ChatMessage[];
+  discardPileIsSealed: boolean;
 }
 
 
 /**
  * Generates a player-specific view of the game state, redacting sensitive information.
- * @param fullGameContext The complete, authoritative game context from the server's machine.
+ * @param snapshot The full snapshot from the server's machine.
  * @param viewingPlayerId The ID of the player for whom this view is being generated.
  * @returns A redacted game state object suitable for sending to the client.
  */
 export const generatePlayerView = (
-  fullGameContext: GameContext,
+  snapshot: { context: GameContext, value: unknown },
   viewingPlayerId: string
 ): ClientCheckGameState => {
+  const fullGameContext = snapshot.context;
   const clientPlayers: Record<PlayerId, Player> = {};
 
   for (const pId in fullGameContext.players) {
     const serverPlayer = fullGameContext.players[pId];
     const isViewingPlayer = pId === viewingPlayerId;
-    const isDealingStage = fullGameContext.gameStage === GameStage.DEALING;
 
     let clientHand: (Card | { facedown: true })[];
 
     if (isViewingPlayer) {
-      if (isDealingStage) {
-        // Rule: During the DEALING stage, players can only peek at their bottom two cards (indices 2 and 3).
-        clientHand = serverPlayer.hand.map((card, index) => {
-          return (index === 2 || index === 3) ? card : { facedown: true as const };
-        });
-      } else {
-        // Outside of dealing, the player can see their whole hand.
-        clientHand = serverPlayer.hand;
-      }
+      // The player can always see their own hand.
+      // Specific peeking logic is handled by events, not general state updates.
+      clientHand = serverPlayer.hand;
     } else {
       // Other players' hands are always facedown.
       clientHand = serverPlayer.hand.map(() => ({ facedown: true as const }));
@@ -112,10 +121,11 @@ export const generatePlayerView = (
     deckSize: fullGameContext.deck.length,
     discardPile: fullGameContext.discardPile,
     turnOrder: fullGameContext.turnOrder,
-    gameStage: fullGameContext.gameStage ?? GameStage.WAITING_FOR_PLAYERS,
+    gameStage: snapshot.value as GameStage,
     currentPlayerId: fullGameContext.currentPlayerId,
     turnPhase: fullGameContext.currentTurnSegment,
     activeAbility: fullGameContext.activeAbility,
+    matchingOpportunity: fullGameContext.matchingOpportunity,
     checkDetails: fullGameContext.checkDetails,
     gameover: fullGameContext.gameover,
     lastRoundLoserId: fullGameContext.lastRoundLoserId,

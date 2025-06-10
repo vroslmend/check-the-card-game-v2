@@ -10,9 +10,10 @@ import { HandGrid } from './HandGrid';
 
 const OpponentPlayer = ({ player, isCurrent }: { player: Player; isCurrent: boolean }) => {
   const [state, send] = useUI();
-  const { abilityContext } = state.context;
+  const { abilityContext, localPlayerId } = state.context;
 
-  const isAbilityActive = state.matches({ inGame: { playing: { ability: 'selecting' } } });
+  const isAbilityPlayer = abilityContext?.playerId === localPlayerId;
+  const isAbilityActive = state.matches({ inGame: { playing: 'ability' } }) && isAbilityPlayer;
 
   const handleCardClick = (card: Card | { facedown: true }, index: number) => {
     if (isAbilityActive) {
@@ -24,28 +25,25 @@ const OpponentPlayer = ({ player, isCurrent }: { player: Player; isCurrent: bool
     }
   };
   
-  // Determine if the player's hand is interactive
   const canInteract = isAbilityActive;
   
-  // Determine which card might be selected for an ability
-  let selectedIndex: number | null = null;
-  if (abilityContext?.payload) {
-    const { type, payload } = abilityContext;
-    if (type === 'peek') {
-      const peekPayload = payload as Partial<import('shared-types').PeekAbilityPayload>;
-      if (peekPayload.targetPlayerId === player.id) {
-        selectedIndex = peekPayload.cardIndex ?? null;
-      }
-    } else if (type === 'swap') {
-      const swapPayload = payload as Partial<import('shared-types').SwapAbilityPayload>;
-      if (swapPayload.sourcePlayerId === player.id) {
-        selectedIndex = swapPayload.sourceCardIndex ?? null;
-      } else if (swapPayload.targetPlayerId === player.id) {
-        selectedIndex = swapPayload.targetCardIndex ?? null;
-      }
+  const getSelectedIndex = () => {
+    if (!abilityContext) return null;
+
+    const { stage, selectedPeekTargets, selectedSwapTargets } = abilityContext;
+
+    if (stage === 'peeking') {
+        const target = selectedPeekTargets.find(t => t.playerId === player.id);
+        return target ? target.cardIndex : null;
     }
+    if (stage === 'swapping') {
+        const target = selectedSwapTargets.find(t => t.playerId === player.id);
+        return target ? target.cardIndex : null;
+    }
+    return null;
   }
 
+  const selectedIndex = getSelectedIndex();
 
   return (
     <motion.div 
@@ -70,6 +68,8 @@ const OpponentPlayer = ({ player, isCurrent }: { player: Player; isCurrent: bool
           hand={player.hand}
           canInteract={canInteract}
           isOpponent
+          onCardClick={handleCardClick}
+          selectedIndex={selectedIndex}
         />
       </div>
 

@@ -102,8 +102,9 @@ type GameEvent =
   | { type: 'endTurn' };
 
 type EmittedEvent =
-  | { type: 'BROADCAST_GAME_STATE'; gameId: string }
-  | { type: 'EMIT_LOG_PUBLIC'; gameId: string; publicLogData: RichGameLogMessage }
+  | { type: 'BROADCAST_GAME_STATE' }
+  | { type: 'PLAYER_JOIN_SUCCESSFUL'; playerId: PlayerId }
+  | { type: 'PLAYER_RECONNECT_SUCCESSFUL'; playerId: PlayerId }
   | {
       type: 'SEND_EVENT_TO_PLAYER';
       payload: {
@@ -173,11 +174,21 @@ export const gameMachine = setup({
       assertEvent(event, [PlayerActionType.SWAP_AND_DISCARD, PlayerActionType.DISCARD_DRAWN_CARD]);
       return !!context.players[event.playerId]?.pendingDrawnCard;
     },
+    wasDrawnFromDeck: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.DISCARD_DRAWN_CARD);
+      const drawnInfo = context.players[event.playerId]?.pendingDrawnCard;
+      return drawnInfo?.source === 'deck';
+    },
     canDrawFromDiscard: ({ context }) => {
       if (context.discardPileIsSealed) return false;
       const topOfDiscard = context.discardPile[context.discardPile.length - 1];
       if (!topOfDiscard) return false;
       return !specialRanks.has(topOfDiscard.rank);
+    },
+    matchWillEmptyHand: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
+        // Auto-check if player's hand will be empty after matching.
+        return context.players[event.playerId]!.hand.length === 1;
     },
     isAbilityCardDiscarded: ({ context }) => {
       const topCard = context.discardPile[context.discardPile.length - 1];
@@ -209,10 +220,17 @@ export const gameMachine = setup({
   },
   actions: {
     // Communication
-    broadcastGameState: emit(({ context }) => ({
+    broadcastGameState: emit({
       type: 'BROADCAST_GAME_STATE' as const,
-      gameId: context.gameId,
-    })),
+    }),
+    emitPlayerJoinSuccessful: emit(({ event }) => {
+      assertEvent(event, 'PLAYER_JOIN_REQUEST');
+      return { type: 'PLAYER_JOIN_SUCCESSFUL' as const, playerId: event.playerId };
+    }),
+    emitPlayerReconnectSuccessful: emit(({ event }) => {
+      assertEvent(event, 'PLAYER_RECONNECTED');
+      return { type: 'PLAYER_RECONNECT_SUCCESSFUL' as const, playerId: event.playerId };
+    }),
     
     // Player Management
     createPlayer: assign({
@@ -411,28 +429,33 @@ export const gameMachine = setup({
         assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
         const { playerId, payload: { handCardIndex } } = event;
         const matchingPlayer = context.players[playerId]!;
-        const originalPlayer = context.players[context.matchingOpportunity!.originalPlayerID]!;
 
-        const cardToSwap = matchingPlayer.hand[handCardIndex]!;
-        const cardToTake = context.matchingOpportunity!.cardToMatch;
+        const cardToPlaceOnPile = matchingPlayer.hand[handCardIndex]!;
         
         const newPlayers = { ...context.players };
-        // Give matched card to original player
-        newPlayers[originalPlayer.id]!.hand.push(cardToTake);
-        // Swap card from matching player's hand to discard
         const newMatchingPlayerHand = [...matchingPlayer.hand];
         newMatchingPlayerHand.splice(handCardIndex, 1);
         newPlayers[matchingPlayer.id]!.hand = newMatchingPlayerHand;
         
-        const newDiscardPile = [...context.discardPile];
-        newDiscardPile[newDiscardPile.length-1] = cardToSwap;
+        const newDiscardPile = [...context.discardPile, cardToPlaceOnPile];
 
         // If matching player empties hand, they call Check automatically
-        const checkDetails = newMatchingPlayerHand.length === 0 
-          ? { callerId: playerId, playersYetToPlay: context.turnOrder.filter(id => id !== playerId) } 
+        const handIsEmpty = newMatchingPlayerHand.length === 0;
+        const checkDetails = handIsEmpty
+          ? { callerId: playerId, playersYetToPlay: [] } // playersYetToPlay set on CHECK entry
           : context.checkDetails;
+        
+        if (handIsEmpty) {
+          newPlayers[playerId]!.isLocked = true;
+        }
 
-        return { players: newPlayers, discardPile: newDiscardPile, matchingOpportunity: null, checkDetails };
+        return { 
+          players: newPlayers, 
+          discardPile: newDiscardPile, 
+          matchingOpportunity: null, 
+          checkDetails,
+          discardPileIsSealed: true // Rule 8: seal the pile on a match
+        };
     }),
     handlePlayerPassedOnMatch: assign({
       matchingOpportunity: ({ context, event }) => {
@@ -466,6 +489,11 @@ export const gameMachine = setup({
         // Create a list of players for the final round, starting from the player after the caller
         const playersInOrder = [...context.turnOrder.slice(callerIndex + 1), ...context.turnOrder.slice(0, callerIndex)];
         return { callerId, playersYetToPlay: playersInOrder };
+      }
+    }),
+    setNextCheckPlayer: assign({
+      currentPlayerId: ({ context }) => {
+        return context.checkDetails?.playersYetToPlay[0] ?? null;
       }
     }),
     advanceCheckRound: assign({
@@ -518,7 +546,7 @@ export const gameMachine = setup({
           payload: {
             playerId,
             eventName: SocketEventName.INITIAL_PEEK_INFO,
-            eventData: { hand: [player.hand[0], player.hand[1]] },
+            eventData: { hand: [player.hand[2], player.hand[3]] },
           },
         });
       });
@@ -528,25 +556,90 @@ export const gameMachine = setup({
     activateAbility: assign({
         activeAbility: ({ context }) => {
             const card = context.discardPile[context.discardPile.length - 1]!;
-            const type: AbilityType = card.rank === CardRank.King ? 'king' : (card.rank === CardRank.Queen ? 'peek' : 'swap');
+            const type: AbilityType = card.rank === CardRank.King ? 'king'
+              : (card.rank === CardRank.Queen ? 'peek' : 'swap');
             const newAbility: ActiveAbility = {
                 type,
-                stage: 'peeking', // All abilities start with a potential peek
+                // For Jack (swap), there is no peek stage.
+                stage: type === 'swap' ? 'swapping' : 'peeking',
                 playerId: context.currentPlayerId!,
             };
             return newAbility;
         },
         currentTurnSegment: TurnPhase.ABILITY,
     }),
-    clearActiveAbility: assign({ activeAbility: null }),
+    sendPeekResults: enqueueActions(({ context, event, enqueue }) => {
+      assertEvent(event, PlayerActionType.USE_ABILITY);
+      const { payload, playerId } = event;
+      if (payload.action !== 'peek') return;
+    
+      payload.targets.forEach(target => {
+        const targetPlayer = context.players[target.playerId];
+        const card = targetPlayer?.hand[target.cardIndex];
+        if (card) {
+          enqueue.emit({
+            type: 'SEND_EVENT_TO_PLAYER',
+            payload: {
+              playerId: playerId,
+              eventName: SocketEventName.ABILITY_PEEK_RESULT,
+              eventData: { card, playerId: target.playerId, cardIndex: target.cardIndex },
+            }
+          });
+        }
+      });
+    }),
     performAbilityAction: assign((
       { context, event }) => {
         assertEvent(event, PlayerActionType.USE_ABILITY);
-        // Example: if skipping, just clear ability
-        if (event.payload.action === 'skip') {
-          return { activeAbility: null };
+        const { payload, playerId } = event;
+        const { activeAbility } = context;
+
+        if (!activeAbility || activeAbility.playerId !== playerId) return {};
+
+        const newPlayers = { ...context.players };
+        let newActiveAbility = { ...activeAbility };
+
+        if (payload.action === 'skip') {
+            // For King/Queen, skipping peek moves to swap. For Jack, or skipping swap, it ends.
+            if ((newActiveAbility.type === 'king' || newActiveAbility.type === 'peek') && newActiveAbility.stage === 'peeking') {
+                newActiveAbility.stage = 'swapping';
+                return { activeAbility: newActiveAbility };
+            }
+            return { activeAbility: null }; // End ability
         }
-        return {}; // Return mutated context
+
+        if (payload.action === 'peek' && newActiveAbility.stage === 'peeking') {
+            // After peeking, always advance to the swap stage for King/Queen.
+            newActiveAbility.stage = 'swapping';
+            return { activeAbility: newActiveAbility };
+        }
+
+        if (payload.action === 'swap' && newActiveAbility.stage === 'swapping') {
+            const { source, target } = payload;
+            const sourcePlayer = newPlayers[source.playerId];
+            const targetPlayer = newPlayers[target.playerId];
+
+            if (!sourcePlayer || !targetPlayer) return {};
+
+            const sourceCard = sourcePlayer.hand[source.cardIndex];
+            const targetCard = targetPlayer.hand[target.cardIndex];
+
+            if (!sourceCard || !targetCard) return {};
+
+            const newSourceHand = [...sourcePlayer.hand];
+            const newTargetHand = [...targetPlayer.hand];
+
+            // Perform the swap
+            newSourceHand[source.cardIndex] = targetCard;
+            newTargetHand[target.cardIndex] = sourceCard;
+
+            newPlayers[source.playerId]!.hand = newSourceHand;
+            newPlayers[target.playerId]!.hand = newTargetHand;
+            
+            return { players: newPlayers, activeAbility: null }; // Ability is complete
+        }
+
+        return {}; // No change if action is invalid for current state
     }),
   },
   actors: {
@@ -585,10 +678,20 @@ export const gameMachine = setup({
       on: {
         PLAYER_JOIN_REQUEST: {
           guard: 'canJoinGame',
-          actions: ['createPlayer', 'addPlayerJoinedLog', 'broadcastGameState'],
+          actions: [
+            'createPlayer',
+            'emitPlayerJoinSuccessful',
+            'addPlayerJoinedLog',
+            'broadcastGameState',
+          ],
         },
         PLAYER_RECONNECTED: {
-          actions: ['setPlayerConnected', 'addPlayerReconnectedLog', 'broadcastGameState'],
+          actions: [
+            'setPlayerConnected',
+            'emitPlayerReconnectSuccessful',
+            'addPlayerReconnectedLog',
+            'broadcastGameState',
+          ],
         },
         PLAYER_DISCONNECTED: {
           actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
@@ -654,22 +757,30 @@ export const gameMachine = setup({
               entry: 'broadcastGameState',
               on: {
                 [PlayerActionType.SWAP_AND_DISCARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard']), actions: 'swapAndDiscard', target: 'action' },
-                [PlayerActionType.DISCARD_DRAWN_CARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard']), actions: 'discardDrawnCard', target: 'action' },
+                [PlayerActionType.DISCARD_DRAWN_CARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard', 'wasDrawnFromDeck']), actions: 'discardDrawnCard', target: 'action' },
               },
             },
             action: {
               always: [
-                { guard: 'isAbilityCardDiscarded', target: 'ABILITY' },
+                {
+                  guard: ({ context }) => !!context.activeAbility,
+                  target: 'ABILITY'
+                },
+                {
+                  guard: 'isAbilityCardDiscarded',
+                  target: 'ABILITY',
+                  actions: 'activateAbility',
+                },
                 { target: 'MATCHING' },
               ],
             },
             ABILITY: {
-              entry: ['activateAbility', 'broadcastGameState'],
+              entry: ['broadcastGameState'],
               on: {
                 [PlayerActionType.USE_ABILITY]: {
                   guard: 'isValidAbilityAction',
-                  actions: ['performAbilityAction', 'clearActiveAbility', 'broadcastGameState'],
-                  target: 'endOfTurn',
+                  actions: ['performAbilityAction', 'sendPeekResults', 'broadcastGameState'],
+                  target: 'action',
                 }
               }
             },
@@ -681,17 +792,23 @@ export const gameMachine = setup({
                 onDone: { target: 'endOfTurn', actions: 'clearMatchingOpportunity' },
               },
               on: {
-                [PlayerActionType.ATTEMPT_MATCH]: {
-                    guard: 'canAttemptMatch',
-                    actions: 'handleSuccessfulMatch',
-                    target: 'endOfTurn' // Or check for auto-check
-                },
+                [PlayerActionType.ATTEMPT_MATCH]: [
+                    {
+                        guard: and(['canAttemptMatch', 'matchWillEmptyHand']),
+                        actions: 'handleSuccessfulMatch',
+                        target: `#game.${GameStage.CHECK}`
+                    },
+                    {
+                        guard: 'canAttemptMatch',
+                        actions: 'handleSuccessfulMatch',
+                        target: 'endOfTurn'
+                    }
+                ],
                 [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
-                    actions: 'handlePlayerPassedOnMatch',
+                    actions: ['handlePlayerPassedOnMatch', 'broadcastGameState'],
                 }
               },
               always: {
-                // If all players passed
                 guard: ({ context }) => context.matchingOpportunity?.remainingPlayerIDs.length === 0,
                 target: 'endOfTurn',
                 actions: 'clearMatchingOpportunity',
@@ -706,16 +823,89 @@ export const gameMachine = setup({
       },
     },
     [GameStage.CHECK]: {
-      entry: ['setupCheckRound', 'broadcastGameState'],
+      initial: 'turn',
+      entry: ['setupCheckRound', 'setNextCheckPlayer', 'broadcastGameState'],
       always: {
-        // If the round is over immediately
-        guard: ({ context }) => context.checkDetails!.playersYetToPlay.length === 0,
+        guard: ({ context }) => !context.currentPlayerId,
         target: GameStage.GAMEOVER,
       },
-      // Turn logic is largely the same as PLAYING, but simpler and needs to be implemented.
-      on: {
-        // Events for drawing, discarding etc. would go here.
-        // After each player's turn in check, we would need an event to advance the check round.
+      states: {
+        turn: {
+            initial: 'DRAW',
+            states: {
+              DRAW: {
+                entry: ['broadcastGameState'],
+                on: {
+                  [PlayerActionType.DRAW_FROM_DECK]: { guard: 'isPlayerTurn', actions: 'drawFromDeck', target: 'DISCARD' },
+                  [PlayerActionType.DRAW_FROM_DISCARD]: { guard: and(['isPlayerTurn', 'canDrawFromDiscard']), actions: 'drawFromDiscard', target: 'DISCARD' },
+                },
+              },
+              DISCARD: {
+                entry: 'broadcastGameState',
+                on: {
+                  [PlayerActionType.SWAP_AND_DISCARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard']), actions: 'swapAndDiscard', target: 'action' },
+                  [PlayerActionType.DISCARD_DRAWN_CARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard', 'wasDrawnFromDeck']), actions: 'discardDrawnCard', target: 'action' },
+                },
+              },
+              action: {
+                always: [
+                  {
+                    guard: ({ context }) => !!context.activeAbility,
+                    target: 'ABILITY'
+                  },
+                  {
+                    guard: 'isAbilityCardDiscarded',
+                    target: 'ABILITY',
+                    actions: 'activateAbility',
+                  },
+                  { target: 'MATCHING' },
+                ],
+              },
+              ABILITY: {
+                entry: ['broadcastGameState'],
+                on: {
+                  [PlayerActionType.USE_ABILITY]: {
+                    guard: 'isValidAbilityAction',
+                    actions: ['performAbilityAction', 'sendPeekResults', 'broadcastGameState'],
+                    target: 'action',
+                  }
+                }
+              },
+              MATCHING: {
+                entry: ['setupMatchingOpportunity', 'broadcastGameState'],
+                invoke: {
+                  id: 'matchingTimer',
+                  src: 'matchingTimerActor',
+                  onDone: { target: 'endOfTurn', actions: 'clearMatchingOpportunity' },
+                },
+                on: {
+                  [PlayerActionType.ATTEMPT_MATCH]: {
+                      guard: 'canAttemptMatch',
+                      actions: 'handleSuccessfulMatch',
+                      target: 'endOfTurn'
+                  },
+                  [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
+                      actions: 'handlePlayerPassedOnMatch',
+                  }
+                },
+                always: {
+                  guard: ({ context }) => context.matchingOpportunity?.remainingPlayerIDs.length === 0,
+                  target: 'endOfTurn',
+                  actions: 'clearMatchingOpportunity',
+                }
+              },
+              endOfTurn: {
+                  entry: ['advanceCheckRound', 'setNextCheckPlayer', 'broadcastGameState'],
+                  always: [
+                    {
+                      guard: ({ context }) => !context.currentPlayerId,
+                      target: `#game.${GameStage.GAMEOVER}`
+                    },
+                    { target: 'DRAW' }
+                  ]
+              }
+            },
+          },
       },
     },
     [GameStage.GAMEOVER]: {
@@ -726,6 +916,22 @@ export const gameMachine = setup({
           target: GameStage.DEALING,
         },
       },
+    },
+  },
+  on: {
+    PLAYER_RECONNECTED: {
+      actions: [
+        'setPlayerConnected',
+        'emitPlayerReconnectSuccessful',
+        'addPlayerReconnectedLog',
+        'broadcastGameState',
+      ],
+    },
+    PLAYER_DISCONNECTED: {
+      actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
+    },
+    [PlayerActionType.SEND_CHAT_MESSAGE]: {
+      actions: ['addChatMessage', 'broadcastGameState'],
     },
   },
 });

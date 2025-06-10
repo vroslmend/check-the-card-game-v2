@@ -29,11 +29,6 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
   const router = useRouter();
 
   const handleCreateGame = async () => {
-    if (!socket.connected) {
-      socket.connect();
-      toast.info('Connecting to server... please try again in a moment.');
-      return;
-    }
     if (!playerName.trim()) {
       toast.error('Please enter your name.');
       return;

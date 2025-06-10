@@ -30,12 +30,6 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
   const router = useRouter();
 
   const handleJoinGame = async () => {
-    if (!socket.connected) {
-      // The provider should handle this, but as a fallback:
-      socket.connect();
-      toast.info('Connecting to server... please try again in a moment.');
-      return;
-    }
     if (!gameId.trim() || !playerName.trim()) {
       toast.error('Please enter a game ID and your name.');
       return;

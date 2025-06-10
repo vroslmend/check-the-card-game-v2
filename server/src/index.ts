@@ -27,6 +27,7 @@ console.log('Server starting with Socket.IO...');
 
 const activeGameMachines = new Map<GameId, GameMachineActorRef>();
 const socketSessionMap = new Map<string, { gameId: GameId; playerId: PlayerId }>();
+const pendingCallbacks = new Map<string, (response: CreateGameResponse | JoinGameResponse) => void>();
 
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
 console.log(`[Server] CORS origin set to: ${CORS_ORIGIN}`);
@@ -50,14 +51,15 @@ io.on('connection', (socket: Socket) => {
     return socketSessionMap.get(socket.id);
   };
   
-  const broadcastGameState = (gameId: GameId, fullGameState: GameContext) => {
+  const broadcastGameState = (gameId: GameId, gameActor: GameMachineActorRef) => {
+    const snapshot = gameActor.getSnapshot();
     const socketsInRoom = io.sockets.adapter.rooms.get(gameId);
     if (!socketsInRoom) return;
 
     socketsInRoom.forEach(socketId => {
       const session = socketSessionMap.get(socketId);
       if (session?.playerId) {
-        const playerSpecificView = generatePlayerView(fullGameState, session.playerId);
+        const playerSpecificView = generatePlayerView(snapshot, session.playerId);
         io.to(socketId).emit(SocketEventName.GAME_STATE_UPDATE, playerSpecificView);
       }
     });
@@ -71,38 +73,27 @@ io.on('connection', (socket: Socket) => {
 
       const gameActor = createActor(gameMachine, { input: { gameId } });
 
-      let createGameCallbackCalled = false;
-
+      const joinSubscription = gameActor.on('PLAYER_JOIN_SUCCESSFUL', (event) => {
+        if (event.playerId === playerId) {
+          const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
+          callback({ success: true, gameId, playerId, gameState: playerSpecificView });
+          
+          // Once we've sent the initial state, we can stop listening for this specific event
+          joinSubscription.unsubscribe();
+        }
+      });
+      
+      const broadcastSubscription = gameActor.on('BROADCAST_GAME_STATE', () => {
+        broadcastGameState(gameId, gameActor);
+      });
+      
       gameActor.subscribe({
-        next: (snapshot) => {
-          if (!snapshot) return;
-
-          for (const emitted of (snapshot as any).emitted || []) {
-            switch (emitted.type) {
-              case 'BROADCAST_GAME_STATE':
-                broadcastGameState(gameId, snapshot.context);
-                break;
-              
-              case 'SEND_EVENT_TO_PLAYER':
-                const targetSocketId = Object.values(snapshot.context.players).find(p => p.id === emitted.payload.playerId)?.socketId;
-                if(targetSocketId) {
-                    io.to(targetSocketId).emit(emitted.payload.eventName, emitted.payload.eventData);
-                }
-                break;
-            }
-          }
-
-          if (callback && !createGameCallbackCalled && snapshot.context.players[playerId]) {
-            const clientState = generatePlayerView(snapshot.context, playerId);
-            callback({ success: true, gameId, playerId, gameState: clientState });
-            createGameCallbackCalled = true;
-            console.log(`[Server] Player ${playerSetupData.name} created game ${gameId}. Initial state sent.`);
-          }
-        },
         error: (err) => console.error(`[GameMachineError] Game ${gameId}:`, err),
         complete: () => {
           console.log(`[Server] Game machine for ${gameId} has completed.`);
           activeGameMachines.delete(gameId);
+          broadcastSubscription.unsubscribe();
+          joinSubscription.unsubscribe();
         }
       });
       
@@ -110,8 +101,9 @@ io.on('connection', (socket: Socket) => {
       activeGameMachines.set(gameId, gameActor);
       socket.join(gameId);
       registerSocketSession(gameId, playerId);
-      gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData });
       
+      gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
+
     } catch (e: any) {
       console.error(`[Server-CreateGame] Error: ${e.message}`, e);
       if (callback) callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
@@ -142,24 +134,18 @@ io.on('connection', (socket: Socket) => {
       const playerId = nanoid();
       const finalPlayerSetupData = { ...playerSetupData, id: playerId, socketId: socket.id };
 
-      let callbackHasBeenCalled = false;
-      const tempSubscription = gameActor.subscribe((snapshot) => {
-        // The machine's context has been updated with the new player.
-        // We can now safely send the updated state to the joining player.
-        if (snapshot.context.players[playerId] && !callbackHasBeenCalled) {
-          const playerSpecificView = generatePlayerView(snapshot.context, playerId);
-          if (callback) {
-            callback({ success: true, gameId, playerId, gameState: playerSpecificView });
-          }
-          callbackHasBeenCalled = true;
-          // The subscription has served its purpose, so we remove it.
-          tempSubscription.unsubscribe();
+      const joinSubscription = gameActor.on('PLAYER_JOIN_SUCCESSFUL', (event) => {
+        if (event.playerId === playerId) {
+          const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
+          callback({ success: true, gameId, playerId, gameState: playerSpecificView });
+          joinSubscription.unsubscribe();
         }
       });
 
       socket.join(gameId);
       registerSocketSession(gameId, playerId);
-      gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData });
+
+      gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
   });
 
   socket.on(SocketEventName.ATTEMPT_REJOIN, (data: { gameId: GameId, playerId: PlayerId }) => {
@@ -168,17 +154,19 @@ io.on('connection', (socket: Socket) => {
 
     if (gameActor) {
       console.log(`[Server] Player ${playerId} attempting to rejoin game ${gameId} with new socket ${socket.id}`);
+      
+      const reconnectSubscription = gameActor.on('PLAYER_RECONNECT_SUCCESSFUL', (event) => {
+        if(event.playerId === playerId) {
+          const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
+          socket.emit(SocketEventName.GAME_STATE_UPDATE, playerSpecificView);
+          reconnectSubscription.unsubscribe();
+        }
+      });
+
       socket.join(gameId);
       registerSocketSession(gameId, playerId);
+      
       gameActor.send({ type: 'PLAYER_RECONNECTED', playerId, newSocketId: socket.id });
-
-      // After a short delay, send the latest state to the rejoining player
-      setTimeout(() => {
-        const latestState = gameActor.getSnapshot().context;
-        const playerSpecificView = generatePlayerView(latestState, playerId);
-        socket.emit(SocketEventName.GAME_STATE_UPDATE, playerSpecificView);
-        console.log(`[Server] Sent latest game state to rejoining player ${playerId}`);
-      }, 250);
 
     } else {
       console.warn(`[Server] Attempted rejoin for non-existent game: ${gameId}`);
@@ -191,7 +179,9 @@ io.on('connection', (socket: Socket) => {
     if (!session) return;
     const gameActor = activeGameMachines.get(session.gameId);
     if (gameActor) {
-        gameActor.send({ ...action, playerId: session.playerId });
+        // We trust the client to send a valid action shape. The machine will validate it.
+        // Using `as any` here to bridge the client-side action with the machine's specific event types.
+        gameActor.send({ ...action, playerId: session.playerId } as any);
     }
   });
 

@@ -206,6 +206,9 @@ export enum PlayerActionType {
 
   // Ability Resolution
   USE_ABILITY = 'USE_ABILITY',
+
+  // Misc
+  SEND_CHAT_MESSAGE = 'SEND_CHAT_MESSAGE',
 }
 
 // ================================================================================================

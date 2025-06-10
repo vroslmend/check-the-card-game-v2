@@ -33,47 +33,51 @@ export const UIMachineProvider = ({
   localPlayerId: string;
   initialGameState?: ClientCheckGameState;
 }) => {
-  const getPersistedState = () => {
-    // If we've been given a fresh initial state, don't try to load a stale one.
+  const getInitialState = () => {
+    // If we've been given a fresh initial state from server props, use it.
     if (initialGameState) {
-      return undefined;
+      return { state: undefined, source: 'prop' };
     }
 
+    // Otherwise, try to get it from sessionStorage, which is where the
+    // create/join modals will place it.
     try {
-      const persistedStateJSON = sessionStorage.getItem('ui-machine-persisted-state');
+      const persistedStateJSON = sessionStorage.getItem('initialGameState');
       if (persistedStateJSON) {
-        const persistedState = JSON.parse(persistedStateJSON);
+        const state = JSON.parse(persistedStateJSON);
         // Basic validation: ensure it's for the right game.
-        if (persistedState.context.gameId === gameId) {
+        if (state.gameId === gameId) {
           // Clear the state so it's only used once for initialization
-          sessionStorage.removeItem('ui-machine-persisted-state');
-          return persistedState;
+          sessionStorage.removeItem('initialGameState');
+          return { state, source: 'sessionStorage' };
         }
       }
     } catch (e) {
-      console.error("Failed to read persisted state from sessionStorage", e);
+      console.error('Failed to read persisted state from sessionStorage', e);
     }
-    return undefined;
+
+    // If no state is found, we'll need to reconnect.
+    return { state: undefined, source: 'none' };
   };
 
-  const persistedState = getPersistedState();
+  const { state: hydratedState, source } = getInitialState();
 
   const actorRef = useActorRef(uiMachine, {
-    snapshot: persistedState,
     input: {
       gameId,
       localPlayerId,
-      initialGameState,
+      // Pass the state we found, whether from props or sessionStorage
+      initialGameState: initialGameState ?? hydratedState,
     },
   });
 
   useEffect(() => {
-    // If we didn't restore from a persisted state, we need to initialize.
-    // This is the flow for a player joining a game, or rejoining after a refresh.
-    if (!persistedState) {
+    // We only need to explicitly reconnect if we didn't get state from any source.
+    // This typically happens on a page refresh.
+    if (source === 'none') {
       actorRef.send({ type: 'RECONNECT' });
     }
-  }, [actorRef, persistedState]);
+  }, [actorRef, source]);
 
   useEffect(() => {
     const onGameStateUpdate = (gameState: ClientCheckGameState) => {
@@ -112,7 +116,11 @@ export const UIMachineProvider = ({
   // This is the preferred, type-safe way to handle emitted events from an actor.
   useEffect(() => {
     const subscription = actorRef.on('EMIT_TO_SOCKET', (event) => {
-      socket.emit(event.eventName, event.payload);
+      if (event.ack) {
+        socket.emit(event.eventName, event.payload, event.ack);
+      } else {
+        socket.emit(event.eventName, event.payload);
+      }
     });
 
     return () => {

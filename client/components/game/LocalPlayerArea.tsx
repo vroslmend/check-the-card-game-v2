@@ -8,8 +8,8 @@ import { TurnPhase } from "shared-types"
 import type { Card } from "shared-types"
 
 export function LocalPlayerArea() {
-  const [state] = useUI()
-  const { currentGameState: gameState, localPlayerId } = state.context;
+  const [state, send] = useUI()
+  const { currentGameState: gameState, localPlayerId, abilityContext } = state.context;
 
   if (!gameState || !localPlayerId || !gameState.players) return null;
 
@@ -20,9 +20,28 @@ export function LocalPlayerArea() {
   const pendingCard = localPlayer.pendingDrawnCard;
   const hasPendingCard = !!pendingCard && !('facedown' in pendingCard);
 
-  // Determine if the local player can interact with their hand
-  const isAbilityActive = state.matches({ inGame: { connected: { ability: 'collectingInput' } } });
-  const canInteract = (isMyTurn && gameState.turnPhase === TurnPhase.DISCARD) || isAbilityActive;
+  const isAbilityPlayer = abilityContext?.playerId === localPlayerId;
+  const isAbilityActive = state.matches({ inGame: { playing: 'ability' } }) && isAbilityPlayer;
+  const canInteractWithHand = (isMyTurn && gameState.turnPhase === TurnPhase.DISCARD) || isAbilityActive;
+
+  const handleCardClick = (card: Card | { facedown: true }, index: number) => {
+    if (isAbilityActive) {
+      send({ type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY', playerId: localPlayerId, cardIndex: index });
+    } else if (isMyTurn && gameState.turnPhase === TurnPhase.DISCARD) {
+      send({ type: 'PLAY_CARD', cardIndex: index });
+    }
+  };
+
+  const getSelectedIndex = () => {
+    if (!abilityContext) return null;
+    if (abilityContext.stage === 'swapping') {
+      const target = abilityContext.selectedSwapTargets.find(t => t.playerId === localPlayerId);
+      return target ? target.cardIndex : null;
+    }
+    return null;
+  }
+  
+  const selectedIndex = getSelectedIndex();
 
   return (
     <div className="relative w-full">
@@ -39,7 +58,9 @@ export function LocalPlayerArea() {
       <HandGrid
         ownerId={localPlayerId}
         hand={localPlayer.hand}
-        canInteract={canInteract}
+        canInteract={canInteractWithHand}
+        onCardClick={handleCardClick}
+        selectedIndex={selectedIndex}
       />
 
       <div className="mt-4 flex justify-center">

@@ -5,28 +5,31 @@ import { Card, CardContent } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { useUI } from '@/components/providers/UIMachineProvider';
 import { DeckCard } from '@/components/cards/DeckCard';
-import { TurnPhase } from 'shared-types';
+import { TurnPhase, CardRank, PlayerActionType } from 'shared-types';
 
 export const TableArea = () => {
   const [state, send] = useUI();
 
-  const { currentGameState } = state.context;
+  const { currentGameState, localPlayerId } = state.context;
   const { deckSize = 0, discardPile = [], turnPhase, currentPlayerId, players } = currentGameState ?? {};
 
   const topDiscardCard = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
+  const isMyTurn = currentPlayerId === localPlayerId;
 
-  const canDrawFromDeck = state.can({ type: 'DRAW_FROM_DECK_CLICKED' });
-  const canDrawFromDiscard = state.can({ type: 'DRAW_FROM_DISCARD_CLICKED' });
+  const canDrawFromDeck = isMyTurn && turnPhase === TurnPhase.DRAW;
+  
+  const isDiscardDrawable = topDiscardCard && !new Set([CardRank.King, CardRank.Queen, CardRank.Jack]).has(topDiscardCard.rank);
+  const canDrawFromDiscard = isMyTurn && turnPhase === TurnPhase.DRAW && isDiscardDrawable;
 
   const handleDeckClick = () => {
     if (canDrawFromDeck) {
-      send({ type: 'DRAW_FROM_DECK_CLICKED' });
+      send({ type: 'DRAW_CARD' });
     }
   };
 
   const handleDiscardClick = () => {
-    if (canDrawFromDiscard) {
-      send({ type: 'DRAW_FROM_DISCARD_CLICKED' });
+    if (canDrawFromDiscard && localPlayerId) {
+      send({ type: 'PLAYER_ACTION', payload: { type: PlayerActionType.DRAW_FROM_DISCARD, payload: { playerId: localPlayerId } } });
     }
   };
 
