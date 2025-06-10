@@ -55,7 +55,6 @@ check-the-card-game-v2/
 │   ├── lib/                # Client-side utility functions, constants
 │   ├── machines/           # XState machines for UI logic
 │   ├── public/             # Static assets
-│   ├── store/              # Zustand global state store
 │   ├── next.config.ts      # Next.js configuration
 │   ├── tsconfig.json       # TypeScript configuration
 │   └── package.json        # Dependencies and scripts

@@ -36,7 +36,7 @@ The project is structured as a monorepo using npm workspaces, comprising three m
         *   `client/machines/uiMachine.ts`: Defines the client-side XState machine (`uiMachine`) that orchestrates all client-side logic **while in an active game**. It manages the socket connection state, the `ClientCheckGameState`, user interaction flows, and temporary UI-specific state. It triggers server communication by emitting `EMIT_TO_SOCKET` events.
         *   `client/components/providers/uiMachineProvider.tsx`: A "smart" provider that acts as the bridge between the React component tree, the `uiMachine` actor, and the Socket.IO connection **for a specific game session**. Its responsibilities are:
             *   Spawning and providing the `uiMachine` actor instance to the component tree.
-            *   Registering listeners for all relevant incoming Socket.IO events (e.g., `GAME_STATE_UPDATE`, `SERVER_LOG_ENTRY`) and forwarding them as events to the `uiMachine` actor.
+            *   Registering listeners for all relevant incoming Socket.IO events (e.g., `GAME_STATE_UPDATE`, `ABILITY_PEEK_RESULT`) and forwarding them as events to the `uiMachine` actor.
             *   Subscribing to `EMIT_TO_SOCKET` events from its `uiMachine` actor and sending the corresponding event and payload to the server via the socket.
             *   Managing the raw socket connection lifecycle (`connect`, `disconnect`) and syncing this status with the `uiMachine`.
         *   `client/lib/socket.ts`: Exports a singleton `socket` instance, configured for client-side use.
@@ -72,19 +72,15 @@ The project is structured as a monorepo using npm workspaces, comprising three m
     *   **Responsibilities:** Provides a single source of truth for all data structures, type definitions (interfaces), enumerations (`SocketEventName`, `PlayerActionType`, `GamePhase`, `Rank`, `Suit`, etc.), and communication contracts used by both the `client` and `server`. This is crucial for type safety and consistent data handling across the monorepo.
     *   **Key Files/Modules:**
         *   `shared-types/src/index.ts`: Contains all shared type definitions. This includes:
-            *   Core game elements: `PlayerId`, `Card` (with `id`), `Suit`, `Rank`, `cardValues`.
-            *   Player state: `PlayerState` (server-side full state), `ClientPlayerState` (client-side redacted view), `HiddenCard`, `ClientCard`.
-            *   Game state: `ServerCheckGameState` (full state on server, used as base for `GameMachineContext`), `ClientCheckGameState` (redacted state for client).
-            *   Game phases and segments: `GamePhase`, `TurnSegment`, `PlayerActivityStatus`.
+            *   Core game elements: `PlayerId`, `Card` (with `id`), `Suit`, `Rank`.
+            *   Player state and game state structures (`ClientCheckGameState`, `GameMachineContext`, etc.).
+            *   Game phases and segments (`GameStage`, `TurnPhase`).
             *   Communication contracts: `SocketEventName`, `PlayerActionType`, `InitialPlayerSetupData`.
-            *   Ability-related types: `SpecialAbilityInfo`, `AbilityArgs`, `PendingSpecialAbility`.
-            *   Game outcome: `GameOverData`, `ClientGameOverData`, `MatchResolvedDetails`.
+            *   Ability-related types.
             *   Logging & Chat: `RichGameLogMessage`, `ChatMessage`.
-            *   XState machine specific types: `GameMachineContext` (the machine's internal state), `GameMachineInput` (for machine creation), `GameMachineEvent` (all events the machine can process, forming its input contract), `GameMachineEmittedEvents` (all events the machine can emit, forming its output contract).
-            *   Payloads for specific socket events: `RequestCardDetailsPayload`, `RespondCardDetailsPayload`.
+            *   XState machine specific types for context, input, and events (`GameMachineContext`, `GameMachineEvent`, etc.).
     *   **Game State Broadcasting & Utilities (`server/src/state-redactor.ts`):**
         *   **Player View Generation:** Its most critical current function is `generatePlayerView`. When `server/src/index.ts` receives a `BROADCAST_GAME_STATE` emission from a `gameMachine`, it calls `generatePlayerView(machine.getContext(), viewingPlayerId)`. This function takes the full server-side game state and a specific player's ID, returning a `ClientCheckGameState` tailored for that player (e.g., redacting other players' hidden cards, showing only deck size instead of full deck). This ensures players only see what they're supposed to.
-        *   **Legacy Logic:** This file previously contained more logic, but its role has been correctly focused on state redaction. The XState `gameMachine` (`server/src/game-machine.ts`) now encapsulates all game mechanics directly.
 
 ## 3. High-Level System Flow and Interaction
 
@@ -173,8 +169,8 @@ This interconnected system ensures that the server remains the authority on game
     5.  **Server Broadcast (`server/src/index.ts`):**
         *   Receives the new snapshot from its subscription to the actor.
         *   It iterates through the `snapshot.emitted` array.
-        *   For log events, it sends `SERVER_LOG_ENTRY` to the relevant clients.
-        *   For `BROADCAST_GAME_STATE`, it calls `generatePlayerView` for each player and sends them their tailored `GAME_STATE_UPDATE`.
+        *   If it finds a `BROADCAST_GAME_STATE` event, it calls `generatePlayerView` for each player and sends them their tailored `GAME_STATE_UPDATE`.
+        *   If it finds other events (like `SEND_EVENT_TO_PLAYER` or `EMIT_ERROR_TO_CLIENT`), it sends the corresponding socket event to the specified client(s).
     6.  **Client Receives Update:**
         *   The `UIMachineProvider`'s socket listener for `GAME_STATE_UPDATE` receives the data and sends a `CLIENT_GAME_STATE_UPDATED` event to the `uiMachine`.
         *   The `uiMachine` updates its context.

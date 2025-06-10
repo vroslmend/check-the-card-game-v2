@@ -57,21 +57,6 @@ These are events that the client emits to the server.
 
 ---
 
-### `REQUEST_CARD_DETAILS_FOR_ABILITY`
-
-*   **Event Name:** `SocketEventName.REQUEST_CARD_DETAILS_FOR_ABILITY`
-*   **Payload:** `RequestCardDetailsPayload`
-    ```typescript
-    interface RequestCardDetailsPayload {
-      targetPlayerId: PlayerId;
-      cardIndex: number;
-      gameId: string;
-    }
-    ```
-*   **Description:** Used during a special ability (like a King or Queen's peek). The client sends this to request the details of a specific face-down card that belongs to another player. The server responds directly to the requesting socket with the `RESPOND_CARD_DETAILS_FOR_ABILITY` event and also uses a callback for immediate acknowledgment.
-
----
-
 ### `SEND_CHAT_MESSAGE`
 
 *   **Event Name:** `SocketEventName.SEND_CHAT_MESSAGE`
@@ -85,7 +70,7 @@ These are events that the client emits to the server.
       message: string;
     }
     ```
-*   **Description:** Sends a chat message from a client to the server. The server's game machine will add it to the game's chat history and the updated chat log will be sent to all players in the next `GAME_STATE_UPDATE`. This event does not have a callback.
+*   **Description:** Sends a chat message from a client to the server. The server's game machine will add it to the game's chat history and the updated chat log will be sent to all players in the next `GAME_STATE_UPDATE`.
 
 ## Server-to-Client Events
 
@@ -98,14 +83,6 @@ These are events that the server emits to clients.
 *   **Event Name:** `SocketEventName.GAME_STATE_UPDATE`
 *   **Payload:** `ClientCheckGameState`
 *   **Description:** The primary event for broadcasting the game state. The server sends this to all players in a game whenever the state changes. The payload is a redacted version of the full server state, tailored for each receiving player to hide sensitive information (like other players' cards). This event is also sent directly to a player who successfully rejoins a game.
-
----
-
-### `SERVER_LOG_ENTRY`
-
-*   **Event Name:** `SocketEventName.SERVER_LOG_ENTRY`
-*   **Payload:** `RichGameLogMessage`
-*   **Description:** Sends a structured log message to clients to be displayed in the game log. This is used to inform players about key game events (e.g., "Player X drew a card," "Player Y called Check!"). This is an older method of communication; most log entries are now delivered as part of the `GAME_STATE_UPDATE`.
 
 ---
 
