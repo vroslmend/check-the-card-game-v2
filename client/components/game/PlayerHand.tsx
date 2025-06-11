@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { HandGrid } from './HandGrid';
-import { type Player, type PlayerId, Card, GameStage } from 'shared-types';
+import { type Player, type PlayerId, type Card, GameStage, TurnPhase } from 'shared-types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { ShieldCheck, Eye } from 'lucide-react';
@@ -10,53 +10,38 @@ import { useUI } from '@/components/providers/UIMachineProvider';
 
 interface PlayerHandProps {
   player: Player;
-  localPlayerId: PlayerId;
-  canInteract: boolean;
-  onCardClick?: (cardIndex: number) => void;
-  selectedCardIndex?: number | null;
+  isLocalPlayer: boolean;
+  onCardClick: (cardIndex: number) => void;
   className?: string;
 }
 
 const PlayerHand: React.FC<PlayerHandProps> = ({ 
   player, 
-  localPlayerId,
-  canInteract, 
+  isLocalPlayer,
   onCardClick,
-  selectedCardIndex,
   className
 }) => {
   const [state] = useUI();
-  const { visibleCards, currentGameState } = state.context;
-  const isLocalPlayer = player.id === localPlayerId;
-  const isInitialPeek = currentGameState?.gameStage === GameStage.INITIAL_PEEK;
+  const { visibleCards, currentGameState, abilityContext, localPlayerId } = state.context;
   
-  // Get visible cards for this player that the local player can see
-  const visibleCardIndices = visibleCards
-    .filter(vc => vc.playerId === player.id && (
-      // We can see our own peeked cards
-      player.id === localPlayerId ||
-      // Or cards that were revealed by our ability
-      vc.source === 'ability'
-    ))
-    .map(vc => vc.cardIndex);
+  const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
+  const isMatchingPhase = currentGameState?.turnPhase === TurnPhase.MATCHING;
+  const isMyDiscardPhase = isMyTurn && currentGameState?.turnPhase === TurnPhase.DISCARD;
+  const inAbilityState = !!abilityContext;
   
-  // Create a copy of the hand that we can modify to show visible cards
-  let displayHand = [...player.hand];
-  
-  // For the local player, we want to display any cards that are currently visible
-  if (visibleCardIndices.length > 0) {
-    visibleCards
-      .filter(vc => visibleCardIndices.includes(vc.cardIndex))
-      .forEach(vc => {
-        if (displayHand[vc.cardIndex]) {
-          displayHand[vc.cardIndex] = vc.card;
-        }
-      });
-  }
-  
-  // For initial peek, highlight the bottom two cards
-  const initialPeekIndices = isInitialPeek && isLocalPlayer ? [2, 3] : [];
-  
+  const canInteract = inAbilityState || isMatchingPhase || isMyDiscardPhase;
+
+  const getCardForDisplay = (index: number): Card | { facedown: true } => {
+    const isVisible = visibleCards.some(vc => vc.playerId === player.id && vc.cardIndex === index);
+    if (isVisible) {
+      const visibleCard = visibleCards.find(vc => vc.playerId === player.id && vc.cardIndex === index);
+      return visibleCard!.card;
+    }
+    return player.hand[index];
+  };
+
+  const handToDisplay = player.hand.map((_, index) => getCardForDisplay(index));
+
   return (
     <div className={cn("flex flex-col items-center justify-center", className)}>
       {/* Player name tag */}
@@ -94,7 +79,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
       <div className="relative">
         {/* Initial Peek Highlight */}
         <AnimatePresence>
-          {isInitialPeek && isLocalPlayer && (
+          {currentGameState?.gameStage === GameStage.INITIAL_PEEK && isLocalPlayer && (
             <motion.div 
               className="absolute inset-0 -m-2 rounded-2xl border-2 border-dashed border-yellow-400 dark:border-yellow-500 z-0"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -112,23 +97,15 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
         
         <HandGrid
           ownerId={player.id}
-          hand={displayHand}
+          hand={handToDisplay}
           isOpponent={!isLocalPlayer}
-          canInteract={canInteract && isLocalPlayer}
-          selectedIndex={selectedCardIndex}
-          onCardClick={(_, index) => {
-            if (onCardClick) {
-              onCardClick(index);
-            }
-          }}
-          visibleCardIndices={[...visibleCardIndices, ...initialPeekIndices]}
-          highlightIndices={initialPeekIndices}
-          isInitialPeek={isInitialPeek && isLocalPlayer}
+          canInteract={canInteract}
+          onCardClick={(_, index) => onCardClick(index)}
         />
         
         {/* Initial Peek Label */}
         <AnimatePresence>
-          {isInitialPeek && isLocalPlayer && initialPeekIndices.length > 0 && (
+          {currentGameState?.gameStage === GameStage.INITIAL_PEEK && isLocalPlayer && (
             <motion.div
               className="absolute bottom-0 -right-6 bg-yellow-500 text-white text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1 shadow-lg"
               initial={{ opacity: 0, scale: 0.8 }}

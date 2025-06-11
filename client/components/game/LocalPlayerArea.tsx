@@ -7,141 +7,53 @@ import { GameStage, TurnPhase, PlayerActionType } from 'shared-types';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { DeckCard } from '@/components/cards/DeckCard';
+import PlayerHand from './PlayerHand';
 
 export const LocalPlayerArea = () => {
   const [state, send] = useUI();
-  const { currentGameState, localPlayerId, visibleCards } = state.context;
-  const isInitialPeek = currentGameState?.gameStage === GameStage.INITIAL_PEEK;
+  const { currentGameState, localPlayerId, abilityContext } = state.context;
   
   if (!currentGameState || !localPlayerId) {
     return null;
   }
   
   const localPlayer = currentGameState.players[localPlayerId];
-  const { name, isReady, hand = [] } = localPlayer || {};
-  const isCurrentTurn = currentGameState.currentPlayerId === localPlayerId;
-  const isDiscardPhase = currentGameState.turnPhase === TurnPhase.DISCARD;
-  const isActionPhase = currentGameState.turnPhase === TurnPhase.ACTION;
+  
+  if (!localPlayer) {
+    return null;
+  }
 
-  const canInteractWithCard = (cardIndex: number) => {
-    // During initial peek, only the bottom two cards are interactive
-    if (isInitialPeek) {
-      return cardIndex >= hand.length - 2;
-    }
-    
-    // During normal play
-    if (isCurrentTurn && isActionPhase) {
-      return true; // All cards are interactive during action phase
-    }
-    
-    if (isCurrentTurn && isDiscardPhase) {
-      return true; // Can select a card to discard
-    }
-    
-    return false;
-  };
+  const { name, isReady, hand = [] } = localPlayer;
+  const isCurrentTurn = currentGameState.currentPlayerId === localPlayerId;
 
   const handleCardClick = (cardIndex: number) => {
-    if (!canInteractWithCard(cardIndex)) return;
-    
-    if (isInitialPeek) {
-      // For initial peek, we use the ready declaration since there's no peek action
-      if (!isReady) {
-        send({ 
-          type: 'PLAYER_ACTION', 
-          payload: { 
-            type: PlayerActionType.DECLARE_READY_FOR_PEEK,
-            payload: { playerId: localPlayerId }
-          } 
-        });
-      }
+    if (abilityContext) {
+      send({ type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY', playerId: localPlayerId, cardIndex });
       return;
     }
-    
-    // During normal play
-    if (isCurrentTurn && (isActionPhase || isDiscardPhase)) {
-      // Select the card using an existing event
-      send({ type: 'PLAY_CARD', cardIndex });
+
+    if (currentGameState.turnPhase === TurnPhase.MATCHING) {
+      send({ type: 'ATTEMPT_MATCH', handCardIndex: cardIndex });
+      return;
+    }
+
+    if (isCurrentTurn && currentGameState.turnPhase === TurnPhase.DISCARD) {
+      send({ type: 'SWAP_AND_DISCARD', cardIndex });
+      return;
     }
   };
-
-  const isCardHighlighted = (cardIndex: number) => {
-    // Check if this card is in the current ability context selection
-    if (state.context.abilityContext) {
-      const target = state.context.abilityContext.selectedSwapTargets?.find(
-        t => t.playerId === localPlayerId && t.cardIndex === cardIndex
-      );
-      return !!target;
-    }
-    return false;
-  };
-
-  const isCardPeeking = (cardIndex: number) => {
-    // Check if this card is currently being peeked at
-    return visibleCards.some(
-      vc => vc.playerId === localPlayerId && vc.cardIndex === cardIndex
-    );
-  };
-
-  // Determine if this card should have a special highlight during initial peek phase
-  const shouldHighlightForInitialPeek = (cardIndex: number) => {
-    return isInitialPeek && cardIndex >= hand.length - 2;
-  };
-
+  
   return (
     <div className="w-full max-w-3xl px-4">
       <div className="relative flex flex-col items-center">
         {/* Card area */}
         <div className="w-full relative">
           <div className="mx-auto flex items-center justify-center">
-            <motion.div 
-              className="flex justify-center"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-            >
-              {hand.map((card, index) => (
-                <div 
-                  key={`${index}-${isCardPeeking(index) ? 'peek' : 'normal'}`} 
-                  className="relative"
-                  style={{ 
-                    marginLeft: index === 0 ? 0 : '-2.5rem',
-                    zIndex: isCardHighlighted(index) ? 10 : hand.length - index
-                  }}
-                >
-                  <DeckCard 
-                    card={card}
-                    isInteractive={canInteractWithCard(index)}
-                    onClick={() => handleCardClick(index)}
-                    className={cn(
-                      shouldHighlightForInitialPeek(index) && "ring-4 ring-yellow-400/50 dark:ring-yellow-500/30",
-                      shouldHighlightForInitialPeek(index) && isCardPeeking(index) && "ring-yellow-400 dark:ring-yellow-500"
-                    )}
-                  />
-                  {/* Indicator for bottom two cards during initial peek */}
-                  {shouldHighlightForInitialPeek(index) && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ 
-                        opacity: 1, 
-                        scale: [0.9, 1.1, 1],
-                        y: [0, -5, 0]
-                      }}
-                      transition={{ 
-                        duration: 2,
-                        repeat: Infinity,
-                        repeatType: "reverse" 
-                      }}
-                      className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-xs font-medium text-yellow-500 dark:text-yellow-400 
-                                bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 rounded-full backdrop-blur-sm
-                                border border-yellow-200 dark:border-yellow-800/50 shadow-sm"
-                    >
-                      Peek me
-                    </motion.div>
-                  )}
-                </div>
-              ))}
-            </motion.div>
+            <PlayerHand 
+              player={localPlayer}
+              isLocalPlayer={true}
+              onCardClick={handleCardClick}
+            />
           </div>
         </div>
 

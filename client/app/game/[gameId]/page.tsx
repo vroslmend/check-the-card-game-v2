@@ -8,12 +8,14 @@ import LoadingOrError from '@/components/layout/LoadingOrError';
 import { Toaster } from '@/components/ui/sonner';
 import { GameStage } from 'shared-types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { JoinGamePrompt } from '@/components/game/JoinGamePrompt';
 
 function GameView() {
   const [state] = useUI();
   
   // Check state using state.matches for robustness with nested states
   const isDisconnected = state.tags.has('disconnected');
+  const outOfGame = state.matches('outOfGame');
   const inLobby = state.matches({ inGame: 'lobby' });
   const inGame = state.matches({ inGame: 'playing' });
   const gameStage = state.context.currentGameState?.gameStage;
@@ -21,6 +23,7 @@ function GameView() {
   // Generate a unique key for the AnimatePresence
   const getContentKey = () => {
     if (isDisconnected) return 'disconnected';
+    if (outOfGame) return 'join-prompt';
     if (inLobby) return 'lobby';
     if (inGame) return `game-${gameStage}`;
     return 'loading';
@@ -47,7 +50,9 @@ function GameView() {
             transition={{ duration: 0.3 }}
             className="w-full h-full"
           >
-            {inLobby ? (
+            {outOfGame ? (
+              <JoinGamePrompt />
+            ) : inLobby ? (
               <GameLobby />
             ) : inGame ? (
               <GameBoard />

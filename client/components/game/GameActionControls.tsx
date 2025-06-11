@@ -84,10 +84,11 @@ export function GameActionControls() {
 
     // --- Ability Actions ---
     if (inAbilityState && isAbilityPlayer && abilityContext) {
+      const abilityActions: ActionButton[] = [];
       if (abilityContext.stage === 'peeking') {
         const requiredCount = abilityContext.maxPeekTargets;
         const selectedCount = abilityContext.selectedPeekTargets.length;
-        actions.push({
+        abilityActions.push({
           id: 'confirm-peek',
           label: `Confirm Peek (${selectedCount}/${requiredCount})`,
           icon: CheckCircle,
@@ -95,32 +96,44 @@ export function GameActionControls() {
           disabled: selectedCount !== requiredCount,
         });
         if (abilityContext.type === 'king' || abilityContext.type === 'peek') {
-            actions.push({ id: 'skip-peek', label: 'Skip Peek', icon: SkipForward, event: { type: 'SKIP_ABILITY_STAGE' } });
+            abilityActions.push({ id: 'skip-peek', label: 'Skip Peek', icon: SkipForward, event: { type: 'SKIP_ABILITY_STAGE' } });
         }
       } else if (abilityContext.stage === 'swapping') {
         const requiredCount = 2;
         const selectedCount = abilityContext.selectedSwapTargets.length;
-        actions.push({
+        abilityActions.push({
           id: 'confirm-swap',
           label: `Confirm Swap (${selectedCount}/${requiredCount})`,
           icon: Shuffle,
           event: { type: 'CONFIRM_ABILITY_ACTION' },
           disabled: selectedCount !== requiredCount,
         });
-        actions.push({ id: 'skip-swap', label: 'Skip Swap', icon: SkipForward, event: { type: 'SKIP_ABILITY_STAGE' } });
+        abilityActions.push({ id: 'skip-swap', label: 'Skip Swap', icon: SkipForward, event: { type: 'SKIP_ABILITY_STAGE' } });
       }
 
-      actions.push({ id: 'cancel-ability', label: 'Cancel', icon: Ban, event: { type: 'CANCEL_ABILITY' } });
-      return actions.map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled }));
+      abilityActions.push({ id: 'cancel-ability', label: 'Cancel', icon: Ban, event: { type: 'CANCEL_ABILITY' } });
+      return abilityActions;
+    }
+
+    // --- Matching Phase Actions ---
+    if (currentGameState.turnPhase === TurnPhase.MATCHING) {
+      actions.push({
+        id: 'pass-on-match',
+        label: 'Pass',
+        icon: Ban,
+        event: { type: 'PASS_ON_MATCH' },
+      });
     }
 
     // --- Lobby Actions ---
-    if (currentGameState.gameStage === GameStage.WAITING_FOR_PLAYERS && !localPlayer.isReady) {
-      actions.push({ id: 'player-ready', label: 'Declare Ready', icon: CheckCircle, event: { type: 'PLAYER_READY' } });
-    }
-    if (currentGameState.gameStage === GameStage.WAITING_FOR_PLAYERS && currentGameState.gameMasterId === localPlayerId) {
-      const allPlayersReady = Object.values(currentGameState.players).every(p => p.isReady);
-      actions.push({ id: 'start-game', label: 'Start Game', icon: CheckCircle, event: { type: 'START_GAME' }, disabled: !allPlayersReady });
+    if (currentGameState.gameStage === GameStage.WAITING_FOR_PLAYERS) {
+      if (!localPlayer.isReady) {
+        actions.push({ id: 'player-ready', label: 'Declare Ready', icon: CheckCircle, event: { type: 'PLAYER_READY' } });
+      }
+      if (currentGameState.gameMasterId === localPlayerId) {
+        const allPlayersReady = Object.values(currentGameState.players).every(p => p.isReady);
+        actions.push({ id: 'start-game', label: 'Start Game', icon: CheckCircle, event: { type: 'START_GAME' }, disabled: !allPlayersReady });
+      }
     }
     
     // --- Initial Peek Action ---
@@ -161,22 +174,22 @@ export function GameActionControls() {
       }
     }
 
-    return actions.map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled }));
+    return actions;
   }
 
-  const getInstructionText = () => {
-    // Check for ability state using the current state value
+  const getInstructionText = (): string => {
     const stateValue = state.value as any;
     const inAbilityState = stateValue?.inGame?.playing === 'ability';
 
     if (inAbilityState && isAbilityPlayer && abilityContext) {
-       if (abilityContext.stage === 'peeking') {
+      if (abilityContext.stage === 'peeking') {
         return `You used a ${abilityContext.type}. Select ${abilityContext.maxPeekTargets} card(s) to peek at.`;
       }
       if (abilityContext.stage === 'swapping') {
         const selectedCount = abilityContext.selectedSwapTargets.length;
         if (selectedCount === 0) return `You used a ${abilityContext.type}. Select the first card to swap.`;
         if (selectedCount === 1) return `First card selected. Now select the second card to swap.`;
+        return `Confirm or cancel your swap.`;
       }
     }
 
@@ -188,14 +201,20 @@ export function GameActionControls() {
       return "Waiting for other players to finish peeking...";
     }
     if (currentGameState.gameStage === GameStage.PLAYING) {
-        if (isMyTurn) {
-            if (currentGameState.turnPhase === TurnPhase.DRAW) {
-                return "It's your turn. Draw a card, or call Check.";
-            } else if (currentGameState.turnPhase === TurnPhase.DISCARD) {
-                return "You've drawn a card. Discard it, or select a card from your hand to swap with it.";
-            }
+      if (currentGameState.turnPhase === TurnPhase.MATCHING) {
+        const cardToMatch = currentGameState.matchingOpportunity?.cardToMatch;
+        return `Matching opportunity on a ${cardToMatch?.rank}. Click a card to match, or pass.`;
+      }
+      if (isMyTurn) {
+        if (currentGameState.turnPhase === TurnPhase.DRAW) {
+          return "It's your turn. Draw a card, or call Check.";
         }
+        if (currentGameState.turnPhase === TurnPhase.DISCARD) {
+          return "You've drawn a card. Discard it, or click a card from your hand to swap with it.";
+        }
+      }
     }
+    
     const currentPlayerId = currentGameState.currentPlayerId;
     if (!currentPlayerId) return "Waiting for game to start...";
     
@@ -203,7 +222,7 @@ export function GameActionControls() {
     return `Waiting for ${currentPlayerName}...`;
   }
 
-  const actions = getAvailableActions();
+  const actions = getAvailableActions().map(action => ({ ...action, variant: 'ghost' as const, disabled: action.disabled }));
   const instructionText = getInstructionText();
 
   const handleCallCheck = () => {

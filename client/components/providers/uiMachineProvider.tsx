@@ -72,14 +72,6 @@ export const UIMachineProvider = ({
   });
 
   useEffect(() => {
-    // We only need to explicitly reconnect if we didn't get state from any source.
-    // This typically happens on a page refresh.
-    if (source === 'none') {
-      actorRef.send({ type: 'RECONNECT' });
-    }
-  }, [actorRef, source]);
-
-  useEffect(() => {
     const onGameStateUpdate = (gameState: ClientCheckGameState) => {
       actorRef.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState });
     };

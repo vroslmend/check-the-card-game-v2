@@ -26,13 +26,13 @@ export const TableArea = () => {
 
   const handleDeckClick = () => {
     if (canDrawFromDeck) {
-      send({ type: 'DRAW_CARD' });
+      send({ type: 'DRAW_FROM_DECK' });
     }
   };
 
   const handleDiscardClick = () => {
-    if (canDrawFromDiscard && localPlayerId) {
-      send({ type: 'PLAYER_ACTION', payload: { type: PlayerActionType.DRAW_FROM_DISCARD, payload: { playerId: localPlayerId } } });
+    if (canDrawFromDiscard) {
+      send({ type: 'DRAW_FROM_DISCARD' });
     }
   };
 

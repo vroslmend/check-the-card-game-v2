@@ -572,7 +572,7 @@ export const uiMachine = setup({
     },
     inGame: {
       id: 'inGame',
-      initial: 'lobby',
+      initial: 'routing',
       on: {
         DISCONNECT: {
           target: '.disconnected',
@@ -583,6 +583,7 @@ export const uiMachine = setup({
         LEAVE_GAME: { target: '.leaving' },
         TOGGLE_SIDE_PANEL: { actions: 'toggleSidePanel' },
         CLIENT_GAME_STATE_UPDATED: {
+          target: '.routing',
           actions: ['setCurrentGameState', 'syncAbilityContext'],
         },
         INITIAL_PEEK_INFO: {
@@ -603,20 +604,24 @@ export const uiMachine = setup({
         DECLARE_READY_FOR_PEEK_CLICKED: { actions: 'emitDeclareReadyForPeek' },
       },
       states: {
+        routing: {
+          always: [
+            {
+              target: 'lobby',
+              guard: ({ context }) => context.currentGameState?.gameStage === GameStage.WAITING_FOR_PLAYERS,
+            },
+            {
+              target: 'playing',
+              guard: ({ context }) => !!context.currentGameState && context.currentGameState.gameStage !== GameStage.WAITING_FOR_PLAYERS,
+            },
+            // Fallback if there's no game state for some reason, prevents getting stuck
+            { target: '#outOfGame' }
+          ]
+        },
         lobby: {
           on: {
             START_GAME: { actions: 'emitStartGame' },
             PLAYER_READY: { actions: 'emitPlayerReady' },
-            CLIENT_GAME_STATE_UPDATED: [
-              {
-                target: 'playing',
-                guard: ({ event }) => event.gameState.gameStage !== GameStage.WAITING_FOR_PLAYERS,
-                actions: ['setCurrentGameState', 'clearTemporaryCardStates', 'syncAbilityContext'],
-              },
-              {
-                actions: ['setCurrentGameState', 'syncAbilityContext'],
-              },
-            ],
           },
         },
         playing: {
