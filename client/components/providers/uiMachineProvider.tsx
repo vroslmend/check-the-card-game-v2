@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useEffect, useContext } from 'react';
-import { useActorRef, useSelector } from '@xstate/react';
+import { useActorRef } from '@xstate/react';
 import { socket } from '@/lib/socket';
 import {
   uiMachine,
@@ -17,11 +17,27 @@ import {
 } from 'shared-types';
 import logger from '@/lib/logger';
 
+// These are the events the client is allowed to send to the server.
+const clientToServerEvents = [
+  SocketEventName.CREATE_GAME,
+  SocketEventName.JOIN_GAME,
+  SocketEventName.PLAYER_ACTION,
+  SocketEventName.ATTEMPT_REJOIN,
+  SocketEventName.SEND_CHAT_MESSAGE, // Added this as it's a client->server event
+];
+type ClientToServerEventName = typeof clientToServerEvents[number];
+
+function isClientToServerEvent(eventName: string): eventName is ClientToServerEventName {
+  return (clientToServerEvents as string[]).includes(eventName);
+}
+
 type UIContextType = {
   actorRef: UIMachineActorRef;
 };
 
 export const UIContext = createContext<UIContextType | undefined>(undefined);
+
+export type { UIMachineSnapshot };
 
 export const UIMachineProvider = ({
   children,
@@ -34,44 +50,34 @@ export const UIMachineProvider = ({
   localPlayerId: string | null;
   initialGameState?: ClientCheckGameState;
 }) => {
-  const getInitialState = () => {
-    // If we've been given a fresh initial state from server props, use it.
-    if (initialGameState) {
-      logger.info({ gameId, source: 'prop' }, 'Hydrating UI machine from server props.');
-      return { state: undefined, source: 'prop' };
-    }
-
-    // Otherwise, try to get it from sessionStorage, which is where the
-    // create/join modals will place it.
+  const getSessionInfo = () => {
     try {
-      const persistedStateJSON = sessionStorage.getItem('initialGameState');
-      if (persistedStateJSON) {
-        const state = JSON.parse(persistedStateJSON);
+      const persistedSessionJSON = sessionStorage.getItem('playerSession');
+      if (persistedSessionJSON) {
+        const session = JSON.parse(persistedSessionJSON);
         // Basic validation: ensure it's for the right game.
-        if (state.gameId === gameId) {
-          logger.info({ gameId, source: 'sessionStorage' }, 'Hydrating UI machine from sessionStorage.');
-          // Clear the state so it's only used once for initialization
-          sessionStorage.removeItem('initialGameState');
-          return { state, source: 'sessionStorage' };
+        if (session.gameId === gameId) {
+          logger.info({ gameId, playerId: session.playerId, source: 'sessionStorage' }, 'Hydrating UI machine from session storage.');
+          return { playerId: session.playerId };
         }
       }
     } catch (e) {
-      logger.error({ error: e }, 'Failed to read persisted state from sessionStorage');
+      logger.error({ error: e }, 'Failed to read persisted session from sessionStorage');
     }
 
     // If no state is found, we'll need to reconnect.
-    logger.info({ gameId }, 'No initial state found. Machine will start fresh and connect.');
-    return { state: undefined, source: 'none' };
+    logger.info({ gameId }, 'No session found. Machine will start fresh.');
+    return { playerId: null };
   };
 
-  const { state: hydratedState, source } = getInitialState();
+  const { playerId: sessionPlayerId } = getSessionInfo();
 
   const actorRef = useActorRef(uiMachine, {
     input: {
       gameId,
-      localPlayerId: localPlayerId ?? undefined,
-      // Pass the state we found, whether from props or sessionStorage
-      initialGameState: initialGameState ?? hydratedState,
+      // If we have a player ID from the server (first load) or from the session, use it.
+      localPlayerId: localPlayerId ?? sessionPlayerId ?? undefined,
+      initialGameState: initialGameState,
     },
   });
 
@@ -124,10 +130,28 @@ export const UIMachineProvider = ({
   useEffect(() => {
     const subscription = actorRef.on('EMIT_TO_SOCKET', (event) => {
       logger.debug({ event }, `Socket OUT: ${event.eventName}`);
-      if (event.ack) {
-        socket.emit(event.eventName, event.payload, event.ack);
-      } else {
-        socket.emit(event.eventName, event.payload);
+
+      // Using a switch statement allows TypeScript to correctly narrow the event type
+      // and ensure the payload/ack match the specific event being emitted.
+      switch (event.eventName) {
+        case SocketEventName.CREATE_GAME:
+          socket.emit(event.eventName, event.payload, event.ack);
+          break;
+        case SocketEventName.JOIN_GAME:
+          socket.emit(event.eventName, ...event.payload, event.ack);
+          break;
+        case SocketEventName.ATTEMPT_REJOIN:
+          socket.emit(event.eventName, event.payload, event.ack);
+          break;
+        case SocketEventName.PLAYER_ACTION:
+          socket.emit(event.eventName, event.payload);
+          break;
+        case SocketEventName.SEND_CHAT_MESSAGE:
+          socket.emit(event.eventName, event.payload);
+          break;
+        default:
+          // This should be unreachable due to the machine's strict typing
+          logger.error({ event }, 'Attempted to emit an unhandled event to socket');
       }
     });
 
@@ -137,13 +161,4 @@ export const UIMachineProvider = ({
   }, [actorRef]);
 
   return <UIContext.Provider value={{ actorRef }}>{children}</UIContext.Provider>;
-};
-
-export const useUI = (): [UIMachineSnapshot, UIMachineActorRef['send']] => {
-  const context = useContext(UIContext);
-  if (context === undefined) {
-    throw new Error('useUI must be used within a UIMachineProvider');
-  }
-  const state = useSelector(context.actorRef, (s) => s);
-  return [state, context.actorRef.send];
 };

@@ -10,7 +10,9 @@ import {
   type RichGameLogMessage,
   type Card,
   type PlayerId,
-  type AttemptRejoinResponse
+  type AttemptRejoinResponse,
+  type ServerToClientEvents,
+  type ClientToServerEvents
 } from 'shared-types';
 import logger from './logger';
 
@@ -21,25 +23,8 @@ export interface PlayerAction {
   [key: string]: any;
 }
 
-// Define the event signatures for type-safe sockets
-interface ServerToClientEvents {
-  [SocketEventName.GAME_STATE_UPDATE]: (gameState: ClientCheckGameState) => void;
-  [SocketEventName.SERVER_LOG_ENTRY]: (logMessage: RichGameLogMessage) => void;
-  [SocketEventName.INITIAL_PEEK_INFO]: (data: { hand: Card[] }) => void;
-  [SocketEventName.ABILITY_PEEK_RESULT]: (payload: { card: Card; playerId: PlayerId; cardIndex: number }) => void;
-  [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
-  [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;
-}
-
-interface ClientToServerEvents {
-  [SocketEventName.CREATE_GAME]: (payload: InitialPlayerSetupData, callback: (response: CreateGameResponse) => void) => void;
-  [SocketEventName.JOIN_GAME]: (payload: { gameId: string; name: string }, callback: (response: JoinGameResponse) => void) => void;
-  [SocketEventName.ATTEMPT_REJOIN]: (payload: { gameId: string; playerId: string }, callback: (response: AttemptRejoinResponse) => void) => void;
-  [SocketEventName.PLAYER_ACTION]: (payload: PlayerAction) => void;
-}
-
 // The URL should be an environment variable, but we'll default it for convenience.
-const URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:8000';
+const URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8000';
 
 // This is a more robust way to create a socket singleton in a Next.js/hot-reloading environment.
 // We store the socket instance on the global object in development to prevent it from being

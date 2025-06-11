@@ -1,23 +1,30 @@
 "use client"
 
-import React from 'react';
+import React, { useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { PanelLeftClose, PanelLeftOpen, Info, Copy, Check, ChevronLeft } from 'lucide-react';
-import { useUI } from '@/components/providers/UIMachineProvider';
+import { useSelector } from '@xstate/react';
+import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import Magnetic from '@/components/ui/Magnetic';
 
+const selectGameHeaderProps = (state: UIMachineSnapshot) => {
+  return {
+    gameId: state.context.gameId,
+    isSidePanelOpen: state.context.isSidePanelOpen,
+  };
+};
+
 export const GameHeader = () => {
-  const [state, send] = useUI();
+  const { actorRef } = useContext(UIContext)!;
+  const { gameId, isSidePanelOpen } = useSelector(actorRef, selectGameHeaderProps);
   const [copied, setCopied] = React.useState(false);
 
-  const { gameId, isSidePanelOpen } = state.context;
-
   const toggleSidePanel = () => {
-    send({ type: 'TOGGLE_SIDE_PANEL' });
+    actorRef.send({ type: 'TOGGLE_SIDE_PANEL' });
   };
 
   const handleCopyGameId = () => {

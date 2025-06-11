@@ -1,43 +1,86 @@
 'use client';
 
-import React from 'react';
+import React, { useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUI } from '@/components/providers/UIMachineProvider';
+import { useSelector } from '@xstate/react';
+import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
 import { DeckCard } from '@/components/cards/DeckCard';
-import { TurnPhase, CardRank, PlayerActionType, GameStage } from 'shared-types';
+import { TurnPhase, CardRank, GameStage } from 'shared-types';
 import { Layers, ArrowDown, Clock, Users, Eye, Trophy } from 'lucide-react';
 
-export const TableArea = () => {
-  const [state, send] = useUI();
-
+const selectTableAreaProps = (state: UIMachineSnapshot) => {
   const { currentGameState, localPlayerId } = state.context;
-  const { deckSize = 0, discardPile = [], turnPhase, currentPlayerId, players, gameStage } = currentGameState ?? {};
+  const {
+    deckSize = 0,
+    discardPile = [],
+    turnPhase,
+    currentPlayerId,
+    players,
+    gameStage,
+    discardPileIsSealed,
+  } = currentGameState ?? {};
 
-  const topDiscardCard = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
+  const topDiscardCard =
+    discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
   const isMyTurn = currentPlayerId === localPlayerId;
 
   const canDrawFromDeck = isMyTurn && turnPhase === TurnPhase.DRAW;
-  
-  // Check if the discard pile is drawable - face cards cannot be picked up
-  const isDiscardDrawable = Boolean(
-    topDiscardCard && !new Set([CardRank.King, CardRank.Queen, CardRank.Jack]).has(topDiscardCard.rank)
+
+  const isDiscardCardDrawable = Boolean(
+    topDiscardCard &&
+      !new Set([CardRank.King, CardRank.Queen, CardRank.Jack]).has(
+        topDiscardCard.rank
+      )
   );
-  const canDrawFromDiscard = isMyTurn && turnPhase === TurnPhase.DRAW && isDiscardDrawable;
+  
+  const canDrawFromDiscard =
+    isMyTurn && turnPhase === TurnPhase.DRAW && isDiscardCardDrawable && !discardPileIsSealed;
+
+  const currentPlayerName =
+    players && currentPlayerId ? players[currentPlayerId]?.name : '...';
+
+  return {
+    deckSize,
+    discardPile,
+    topDiscardCard,
+    turnPhase,
+    gameStage,
+    canDrawFromDeck,
+    canDrawFromDiscard,
+    currentPlayerName,
+    isLocalPlayerTurn: isMyTurn,
+    players,
+    currentPlayerId,
+  };
+};
+
+export const TableArea = () => {
+  const { actorRef } = useContext(UIContext)!;
+  const {
+    deckSize,
+    discardPile,
+    topDiscardCard,
+    turnPhase,
+    gameStage,
+    canDrawFromDeck,
+    canDrawFromDiscard,
+    currentPlayerName,
+    isLocalPlayerTurn,
+    players,
+    currentPlayerId,
+  } = useSelector(actorRef, selectTableAreaProps);
 
   const handleDeckClick = () => {
     if (canDrawFromDeck) {
-      send({ type: 'DRAW_FROM_DECK' });
+      actorRef.send({ type: 'DRAW_FROM_DECK' });
     }
   };
 
   const handleDiscardClick = () => {
     if (canDrawFromDiscard) {
-      send({ type: 'DRAW_FROM_DISCARD' });
+      actorRef.send({ type: 'DRAW_FROM_DISCARD' });
     }
   };
-
-  const currentPlayerName = players && currentPlayerId ? players[currentPlayerId]?.name : '...';
-  const isLocalPlayerTurn = currentPlayerId === localPlayerId;
 
   const getGameStageIcon = () => {
     switch (gameStage) {
@@ -67,7 +110,7 @@ export const TableArea = () => {
       case TurnPhase.DRAW: return 'Draw Phase';
       case TurnPhase.ACTION: return 'Action Phase';
       case TurnPhase.DISCARD: return 'Discard Phase';
-      default: return 'Loading...';
+      default: 'Loading...';
     }
   }
 

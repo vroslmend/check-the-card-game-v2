@@ -1,224 +1,146 @@
 "use client"
 
-import { cn } from "@/lib/utils"
-
-import { motion } from "framer-motion"
-import { CardBack } from "../ui/CardBack"
-import { Crown, Clock, CheckCircle, XCircle, Pause, User, Trophy } from "lucide-react"
-import { Player, PlayerStatus } from "shared-types"
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, ShieldCheck, CheckCircle, WifiOff, Clock } from 'lucide-react';
+import { type Player, TurnPhase } from 'shared-types';
+import { cn } from '@/lib/utils';
+import PlayerHand from './PlayerHand';
+import { GameActionControls } from './GameActionControls';
+import React from 'react';
 
 interface PlayerPodProps {
   player: Player;
-  playerId: string;
-  isCurrentPlayer: boolean;
-  position: number;
+  isLocalPlayer: boolean;
+  isCurrentTurn: boolean;
+  onCardClick: (cardIndex: number) => void;
+  isChoosingSwapTarget: boolean;
 }
 
-export function PlayerPod({ player, playerId, isCurrentPlayer, position }: PlayerPodProps) {
-  const statusConfig = {
-    [PlayerStatus.WAITING]: {
-      color: "text-stone-600 dark:text-stone-400",
-      label: "Waiting",
-      icon: Pause,
-      bgColor: "bg-stone-100/20 dark:bg-stone-900/20",
-    },
-    [PlayerStatus.PLAYING]: {
-      color: "text-stone-900 dark:text-stone-100",
-      label: "Playing",
-      icon: Clock,
-      bgColor: "bg-stone-50 dark:bg-stone-900",
-    },
-    [PlayerStatus.CALLED_CHECK]: {
-      color: "text-stone-900 dark:text-stone-100",
-      label: "Check!",
-      icon: CheckCircle,
-      bgColor: "bg-stone-900/10 dark:bg-stone-100/10",
-    },
-    [PlayerStatus.WINNER]: {
-        color: "text-amber-500",
-        label: "Winner!",
-        icon: Trophy,
-        bgColor: "bg-amber-500/10",
-    },
-    [PlayerStatus.LOSER]: {
-      color: "text-red-600 dark:text-red-500",
-      label: "Loser",
-      icon: XCircle,
-      bgColor: "bg-red-500/10",
-    },
+const StatusIndicator = ({ icon: Icon, text, colorClass }: { icon: React.ElementType, text: string, colorClass: string }) => (
+    <div className={cn("flex items-center gap-1.5 text-xs font-light", colorClass)}>
+      <Icon className="h-3 w-3" />
+      <p>{text}</p>
+    </div>
+);
+
+export const PlayerPod = ({
+  player,
+  isLocalPlayer,
+  isCurrentTurn,
+  onCardClick,
+  isChoosingSwapTarget,
+}: PlayerPodProps) => {
+
+  const getStatus = () => {
+    if (player.hasCalledCheck) return <StatusIndicator icon={ShieldCheck} text="Check Called" colorClass="text-blue-500" />
+    if (!player.isConnected) return <StatusIndicator icon={WifiOff} text="Disconnected" colorClass="text-red-500" />;
+    if (player.isReady) return <StatusIndicator icon={CheckCircle} text="Ready" colorClass="text-emerald-500" />;
+    return <StatusIndicator icon={Clock} text="Waiting" colorClass="text-stone-500 dark:text-stone-400" />;
+  };
+
+  const podVariants = {
+    hidden: { opacity: 0, y: 50 },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100, damping: 15 } },
+    exit: { opacity: 0, y: 50 },
+  };
+
+  if (isLocalPlayer) {
+    return (
+      <motion.div
+        variants={podVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="w-full max-w-5xl mx-auto flex flex-col items-center gap-4"
+      >
+        <div className="w-full h-[150px] flex items-center justify-center">
+          <PlayerHand
+            player={player}
+            isLocalPlayer={true}
+            onCardClick={onCardClick}
+            isChoosingSwapTarget={isChoosingSwapTarget}
+          />
+        </div>
+        <motion.div
+          className={cn(
+            "relative w-full max-w-3xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-lg rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 shadow-xl transition-all duration-500",
+            isCurrentTurn && "shadow-emerald-500/20"
+          )}
+          animate={{ scale: isCurrentTurn ? 1.02 : 1 }}
+          transition={{ type: "spring", stiffness: 100, damping: 15 }}
+        >
+          <AnimatePresence>
+            {isCurrentTurn && (
+              <motion.div
+                className="absolute inset-0 rounded-[2.5rem] border-2 border-emerald-500 pointer-events-none"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0, 0.7, 0] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
+            )}
+          </AnimatePresence>
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                <User className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="font-serif text-xl text-stone-900 dark:text-stone-100">{player.name}</span>
+                {isCurrentTurn ?
+                    <p className="text-sm font-light text-emerald-600 dark:text-emerald-400">It's your turn!</p>
+                    : <p className="text-sm font-light text-stone-500 dark:text-stone-400">Waiting for turn...</p>
+                }
+              </div>
+            </div>
+            <div className="flex-grow flex items-center justify-center">
+              <GameActionControls />
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
   }
 
-  const status = player.status || PlayerStatus.WAITING;
-  const config = statusConfig[status];
-  const StatusIcon = config.icon
-
+  // Opponent Pod
   return (
     <motion.div
-      className="relative"
-      whileHover={{ scale: 1.02, y: -2 }}
-      initial={{ opacity: 0, y: -20, scale: 0.9 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{
-        duration: 0.5,
-        delay: position * 0.1,
-        type: "spring",
-        stiffness: 150,
+      variants={podVariants}
+      initial="hidden"
+      animate={{
+        ...podVariants.visible,
+        scale: isCurrentTurn ? 1.05 : 1,
+        y: isCurrentTurn ? -5 : 0
       }}
+      exit="exit"
+      className={cn(
+        "relative flex flex-col items-center gap-2 p-3 rounded-3xl bg-white/60 dark:bg-zinc-900/60 border transition-all duration-300",
+        isCurrentTurn ? 'border-emerald-500/50 shadow-lg' : 'border-stone-200 dark:border-zinc-800'
+      )}
+      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
     >
-      <div
-        className={cn(
-          "flex min-w-[140px] flex-col items-center space-y-3 rounded-lg border border-stone-200/50 p-4 transition-all duration-300 dark:border-stone-800/50",
-          config.bgColor,
-          isCurrentPlayer && "ring-2 ring-stone-900/30 dark:ring-stone-100/30",
-        )}
-      >
-        {/* Player Name & Status */}
-        <div className="space-y-1 text-center">
-          <div className="flex items-center justify-center gap-2">
-            {isCurrentPlayer && (
-              <motion.div
-                animate={{
-                  rotate: [0, 10, -10, 0],
-                  scale: [1, 1.1, 1],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Number.POSITIVE_INFINITY,
-                  ease: "easeInOut",
-                }}
-              >
-                <Crown className="h-4 w-4 text-stone-900 dark:text-stone-100" />
-              </motion.div>
-            )}
-            <span className="font-serif text-sm font-light">{player.name}</span>
-          </div>
-
-          <div className="flex items-center justify-center gap-1">
-            <motion.div
-              animate={
-                status === PlayerStatus.PLAYING
-                  ? {
-                      rotate: 360,
-                      scale: [1, 1.2, 1],
-                    }
-                  : status === PlayerStatus.CALLED_CHECK
-                    ? {
-                        scale: [1, 1.3, 1],
-                      }
-                    : {}
-              }
-              transition={{
-                duration: status === PlayerStatus.PLAYING ? 2 : 1,
-                repeat: status === PlayerStatus.PLAYING || status === PlayerStatus.CALLED_CHECK ? Number.POSITIVE_INFINITY : 0,
-              }}
-            >
-              <StatusIcon className={`h-3 w-3 ${config.color}`} />
-            </motion.div>
-            <span className={`text-xs font-light ${config.color}`}>{config.label}</span>
-          </div>
-        </div>
-
-        {/* Hand Cards */}
-        <div className="relative">
-          <motion.div
-            className="flex gap-1"
-            initial="hidden"
-            animate="visible"
-            variants={{
-              hidden: { opacity: 0 },
-              visible: {
-                opacity: 1,
-                transition: {
-                  staggerChildren: 0.05,
-                },
-              },
-            }}
-          >
-            {Array.from({ length: Math.min(player.hand.length, 5) }, (_, i) => (
-              <motion.div
-                key={i}
-                variants={{
-                  hidden: { opacity: 0, scale: 0.8, rotate: -20 },
-                  visible: {
-                    opacity: 1,
-                    scale: 1,
-                    rotate: (i - 2) * 4,
-                    x: i * -3,
-                  },
-                }}
-                transition={{
-                  duration: 0.4,
-                  type: "spring",
-                  stiffness: 150,
-                  damping: 12,
-                }}
-                whileHover={{
-                  scale: 1.1,
-                  rotate: 0,
-                  x: 0,
-                  zIndex: 10,
-                  transition: { duration: 0.2 },
-                }}
-              >
-                <CardBack size="sm" />
-              </motion.div>
-            ))}
-          </motion.div>
-
-          {/* Card Count Indicator */}
-          {player.hand.length > 5 && (
-            <motion.span
-              className="absolute -right-2 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-stone-100 text-xs text-stone-600 dark:bg-stone-800 dark:text-stone-400"
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              +{player.hand.length - 5}
-            </motion.span>
-          )}
-        </div>
-
-        {/* Current Player Pulse */}
-        {isCurrentPlayer && (
-          <motion.div
-            className="absolute -right-2 -top-2"
-            animate={{
-              scale: [1, 1.3, 1],
-              opacity: [0.7, 1, 0.7],
-            }}
-            transition={{
-              duration: 1.5,
-              repeat: Number.POSITIVE_INFINITY,
-              ease: "easeInOut",
-            }}
-          >
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-900 text-stone-100 shadow-lg dark:bg-stone-100 dark:text-stone-900">
-              <Clock className="h-3 w-3" />
+      <div className="flex flex-col items-center">
+        <div className="flex items-center gap-2">
+            <div className={cn(
+                "relative flex h-8 w-8 items-center justify-center rounded-full",
+                isCurrentTurn ? "bg-emerald-100 dark:bg-emerald-900/50" : "bg-stone-100 dark:bg-zinc-800"
+            )}>
+                 <User className={cn("h-4 w-4", isCurrentTurn ? "text-emerald-600 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400")} />
             </div>
-          </motion.div>
-        )}
-
-        {/* Status Glow */}
-        {(status === PlayerStatus.CALLED_CHECK || status === PlayerStatus.PLAYING) && (
-          <motion.div
-            className={cn(
-              "absolute -z-10 inset-0 rounded-lg blur-xl",
-              status === PlayerStatus.CALLED_CHECK
-                ? "bg-stone-900/20 dark:bg-stone-100/20"
-                : "bg-stone-900/10 dark:bg-stone-100/10",
-            )}
-            animate={{
-              opacity: [0.3, 0.6, 0.3],
-              scale: [1, 1.05, 1],
-            }}
-            transition={{
-              duration: 2,
-              repeat: Number.POSITIVE_INFINITY,
-              ease: "easeInOut",
-            }}
-          />
-        )}
+            <span className="font-serif text-base text-stone-800 dark:text-stone-200">{player.name}</span>
+        </div>
+        <div className="mt-2 h-4">
+            {getStatus()}
+        </div>
+      </div>
+      <div className="mt-1 w-full">
+        <PlayerHand
+          player={player}
+          isLocalPlayer={false}
+          onCardClick={onCardClick}
+          isChoosingSwapTarget={false} // Opponents can't be choosing a swap target
+        />
       </div>
     </motion.div>
-  )
-} 
+  );
+}; 

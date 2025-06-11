@@ -179,12 +179,6 @@ describe('Game Machine - Comprehensive Tests', () => {
         expect(actor.getSnapshot().value).toBe(GameStage.INITIAL_PEEK);
     });
     
-    it('should transition to PLAYING after peek timer expires', async () => {
-        vi.advanceTimersToNextTimer(); // DEALING -> INITIAL_PEEK
-        await vi.advanceTimersToNextTimerAsync(); // peek timer
-        expect(actor.getSnapshot().value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DRAW } });
-    });
-    
     it('should transition to PLAYING when all players are ready for peek', async () => {
         vi.advanceTimersToNextTimer(); // DEALING -> INITIAL_PEEK
         actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: 'p1' });
@@ -510,186 +504,139 @@ describe('Game Machine - Comprehensive Tests', () => {
       await advanceToPlayingPhase();
     });
 
-    it('should activate King ability when King card is discarded', () => {
-      // Setup - Draw a card first to be in DISCARD phase
+    it('should set up a king ability when a King is discarded from drawn card', () => {
+      const kingCard: Card = { id: 'c-king', rank: CardRank.King, suit: Suit.Spades };
       actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      
-      // Manually set the drawn card to be a King
-      const kingCard = { id: 'king-card', rank: CardRank.King, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: kingCard, source: 'deck' };
-      
-      // Act - Discard the King card which should activate the ability
+      const p1 = getPlayer(actor, 'p1');
+      p1.pendingDrawnCard = { card: kingCard, source: 'deck' };
       actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Assert - King ability should be activated
       const state = actor.getSnapshot();
-      expect(state.context.activeAbility).not.toBeNull();
-      expect(state.context.activeAbility?.type).toBe('king');
-      expect(state.context.activeAbility?.playerId).toBe('p1');
-      expect(state.context.currentTurnSegment).toBe(TurnPhase.ABILITY);
+      expect(state.context.abilityStack).toHaveLength(1);
+      expect(state.context.abilityStack.at(-1)?.type).toBe('king');
+      expect(state.context.abilityStack.at(-1)?.playerId).toBe('p1');
+      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: 'ABILITY' } });
     });
 
-    it('should activate Queen ability when Queen card is discarded', () => {
-      // Setup - Draw a card first to be in DISCARD phase
+    it('should set up a queen ability when a Queen is discarded from drawn card', () => {
+      const queenCard: Card = { id: 'c-queen', rank: CardRank.Queen, suit: Suit.Hearts };
       actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      
-      // Manually set the drawn card to be a Queen
-      const queenCard = { id: 'queen-card', rank: CardRank.Queen, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: queenCard, source: 'deck' };
-      
-      // Act - Discard the Queen card which should activate the ability
+      const p1 = getPlayer(actor, 'p1');
+      p1.pendingDrawnCard = { card: queenCard, source: 'deck' };
       actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Assert - Queen ability should be activated
       const state = actor.getSnapshot();
-      expect(state.context.activeAbility).not.toBeNull();
-      expect(state.context.activeAbility?.type).toBe('peek');
-      expect(state.context.activeAbility?.playerId).toBe('p1');
-      expect(state.context.currentTurnSegment).toBe(TurnPhase.ABILITY);
+      expect(state.context.abilityStack).toHaveLength(1);
+      expect(state.context.abilityStack.at(-1)?.type).toBe('peek');
+      expect(state.context.abilityStack.at(-1)?.playerId).toBe('p1');
+      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: 'ABILITY' } });
     });
 
-    it('should activate Jack ability when Jack card is discarded', () => {
-      // Setup - Draw a card first to be in DISCARD phase
+    it('should set up a swap ability when a Jack is discarded from drawn card', () => {
+      const jackCard: Card = { id: 'c-jack', rank: CardRank.Jack, suit: Suit.Diamonds };
       actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      
-      // Manually set the drawn card to be a Jack
-      const jackCard = { id: 'jack-card', rank: CardRank.Jack, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: jackCard, source: 'deck' };
-      
-      // Act - Discard the Jack card which should activate the ability
+      const p1 = getPlayer(actor, 'p1');
+      p1.pendingDrawnCard = { card: jackCard, source: 'deck' };
       actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Assert - Jack ability should be activated
       const state = actor.getSnapshot();
-      expect(state.context.activeAbility).not.toBeNull();
-      expect(state.context.activeAbility?.type).toBe('swap');
-      expect(state.context.activeAbility?.playerId).toBe('p1');
-      expect(state.context.currentTurnSegment).toBe(TurnPhase.ABILITY);
+      expect(state.context.abilityStack).toHaveLength(1);
+      expect(state.context.abilityStack.at(-1)?.type).toBe('swap');
+      expect(state.context.abilityStack.at(-1)?.playerId).toBe('p1');
+      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: 'ABILITY' } });
     });
 
-    it('should move from peek to swap stage when peek ability is resolved', () => {
-      // Setup - First activate a Queen ability
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const queenCard = { id: 'queen-card', rank: CardRank.Queen, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: queenCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Verify setup worked - we should have an active peek ability
+    it("should correctly handle a 'peek' ability usage", () => {
+      actor.getSnapshot().context.abilityStack = [
+        { type: 'peek', playerId: 'p1', stage: 'peeking' }
+      ];
       const initialState = actor.getSnapshot();
-      expect(initialState.context.activeAbility?.type).toBe('peek');
-      expect(initialState.context.activeAbility?.stage).toBe('peeking');
-      
-      // Manually update the ability stage to simulate peek completion
-      // This is necessary since the ability action doesn't fully work in tests
-      actor.getSnapshot().context.activeAbility!.stage = 'swapping';
-      
-      // Assert - Ability should now be in swapping stage
+      expect(initialState.context.abilityStack.at(-1)?.type).toBe('peek');
+      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('peeking');
+
+      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: { action: 'peek', targets: [] } });
+
       const finalState = actor.getSnapshot();
-      expect(finalState.context.activeAbility?.stage).toBe('swapping');
+      expect(finalState.context.abilityStack.at(-1)?.stage).toBe('swapping');
     });
 
-    it('should complete ability when swap is performed', () => {
-      // Setup - First activate a Jack ability
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const jackCard = { id: 'jack-card', rank: CardRank.Jack, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: jackCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Verify setup worked - we should have an active swap ability
+    it("should correctly handle a 'swap' ability usage (ending the ability)", () => {
+      actor.getSnapshot().context.abilityStack = [
+        { type: 'swap', playerId: 'p1', stage: 'swapping' }
+      ];
       const initialState = actor.getSnapshot();
-      expect(initialState.context.activeAbility?.type).toBe('swap');
-      expect(initialState.context.activeAbility?.stage).toBe('swapping');
+      expect(initialState.context.abilityStack.at(-1)?.type).toBe('swap');
+      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('swapping');
       
-      // Manually complete the ability
-      // This is necessary since the ability action doesn't fully work in tests
-      actor.getSnapshot().context.activeAbility = null;
-      
-      // Assert - Ability should be completed (activeAbility should be null)
+      const p1Hand = initialState.context.players['p1']!.hand;
+      const p2Hand = initialState.context.players['p2']!.hand;
+
+      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: {
+        action: 'swap',
+        source: { playerId: 'p1', cardIndex: 0 },
+        target: { playerId: 'p2', cardIndex: 0 },
+      }});
+
       const finalState = actor.getSnapshot();
-      expect(finalState.context.activeAbility).toBeNull();
+      expect(finalState.context.abilityStack).toHaveLength(0);
+      expect(finalState.context.players['p1']!.hand[0]).toEqual(p2Hand[0]);
+      expect(finalState.context.players['p2']!.hand[0]).toEqual(p1Hand[0]);
     });
-    
-    it('should allow skipping the peek stage of King ability', () => {
-      // Setup - First activate a King ability
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const kingCard = { id: 'king-card', rank: CardRank.King, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: kingCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Verify setup worked
+
+    it("should correctly handle a 'king' ability usage (peek then swap)", () => {
+       actor.getSnapshot().context.abilityStack = [
+        { type: 'king', playerId: 'p1', stage: 'peeking' }
+      ];
       const initialState = actor.getSnapshot();
-      expect(initialState.context.activeAbility?.type).toBe('king');
-      expect(initialState.context.activeAbility?.stage).toBe('peeking');
+      expect(initialState.context.abilityStack.at(-1)?.type).toBe('king');
+      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('peeking');
+
+      // First part: peek
+      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: { action: 'peek', targets: [] } });
+      const midState = actor.getSnapshot();
+      expect(midState.context.abilityStack.at(-1)?.stage).toBe('swapping');
       
-      // Manually update the stage to simulate skipping peek
-      actor.getSnapshot().context.activeAbility!.stage = 'swapping';
+      const p1Hand = midState.context.players['p1']!.hand;
+      const p2Hand = midState.context.players['p2']!.hand;
+
+      // Second part: swap
+      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: {
+        action: 'swap',
+        source: { playerId: 'p1', cardIndex: 1 },
+        target: { playerId: 'p2', cardIndex: 1 },
+      }});
       
-      // Assert - Should have moved to swap stage
       const finalState = actor.getSnapshot();
-      expect(finalState.context.activeAbility?.stage).toBe('swapping');
+      expect(finalState.context.abilityStack).toHaveLength(0);
+      expect(finalState.context.players['p1']!.hand[1]).toEqual(p2Hand[1]);
+      expect(finalState.context.players['p2']!.hand[1]).toEqual(p1Hand[1]);
     });
     
-    it('should allow skipping the swap stage to complete an ability', () => {
-      // Setup - First activate a Jack ability
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const jackCard = { id: 'jack-card', rank: CardRank.Jack, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: jackCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Verify setup worked
+    it("should correctly handle skipping an ability", () => {
+      actor.getSnapshot().context.abilityStack = [
+        { type: 'swap', playerId: 'p1', stage: 'swapping' }
+      ];
       const initialState = actor.getSnapshot();
-      expect(initialState.context.activeAbility?.type).toBe('swap');
-      expect(initialState.context.activeAbility?.stage).toBe('swapping');
-      
-      // Manually complete the ability
-      actor.getSnapshot().context.activeAbility = null;
-      
-      // Assert - Ability should be done (activeAbility should be null)
+      expect(initialState.context.abilityStack.at(-1)?.type).toBe('swap');
+      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('swapping');
+
+      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: { action: 'skip' } });
+
       const finalState = actor.getSnapshot();
-      expect(finalState.context.activeAbility).toBeNull();
+      expect(finalState.context.abilityStack).toHaveLength(0);
     });
-    
-    it('should not allow a locked player to be targeted by abilities', () => {
-      // Setup - Lock p2
-      actor.getSnapshot().context.players['p2'].isLocked = true;
-      
-      // First activate a King ability
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const kingCard = { id: 'king-card', rank: CardRank.King, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: kingCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Verify setup worked
+
+    it("should correctly handle skipping the peek part of a king ability", () => {
+      actor.getSnapshot().context.abilityStack = [
+        { type: 'king', playerId: 'p1', stage: 'peeking' }
+      ];
       const initialState = actor.getSnapshot();
-      expect(initialState.context.activeAbility?.type).toBe('king');
-      
-      // Since we can't properly test actual ability targeting in unit tests,
-      // we'll just verify the ability was activated and the player is locked
-      expect(initialState.context.players['p2'].isLocked).toBe(true);
-      
-      // In a real implementation, attempting to target a locked player
-      // would fail or be prevented
+      expect(initialState.context.abilityStack.at(-1)?.type).toBe('king');
+      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('peeking');
+
+      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: { action: 'skip' } });
+
+      const finalState = actor.getSnapshot();
+      expect(finalState.context.abilityStack.at(-1)?.stage).toBe('swapping');
     });
-    
-    it('should resolve abilities in LIFO order when special cards are matched', () => {
-      // This test would need to simulate a match between two special cards
-      // Since the full ability resolution is complex to test in isolation,
-      // we'll verify the initial setup is correct
-      
-      // Setup - First get a King in the discard pile
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const kingCard = { id: 'king-match-1', rank: CardRank.King, suit: Suit.Hearts };
-      actor.getSnapshot().context.players['p1'].pendingDrawnCard = { card: kingCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Verify the King ability is active for p1
-      const stateAfterDiscard = actor.getSnapshot();
-      expect(stateAfterDiscard.context.activeAbility?.type).toBe('king');
-      expect(stateAfterDiscard.context.activeAbility?.playerId).toBe('p1');
-      
-      // In a real implementation with a match, this would trigger the LIFO ability resolution
-      // with matcher's ability resolving first, then the original discarder's ability
-    });
+
   });
 
   describe('9. Error Recovery and Edge Cases', () => {

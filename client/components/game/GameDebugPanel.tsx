@@ -1,12 +1,15 @@
 'use client';
 
-import { useUI } from '@/components/providers/UIMachineProvider';
+import { useContext } from 'react';
+import { useSelector } from '@xstate/react';
+import { UIContext } from '@/components/providers/UIMachineProvider';
 import { socket } from '@/lib/socket';
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
 import { GameStage } from "shared-types";
 
 const GameDebugPanel = () => {
-  const [uiState] = useUI();
+  const { actorRef } = useContext(UIContext)!;
+  const uiState = useSelector(actorRef, (s) => s);
 
   const debugInfo = {
     socket: {

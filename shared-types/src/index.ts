@@ -93,7 +93,7 @@ export interface ClientCheckGameState {
   gameStage: GameStage;
   currentPlayerId: PlayerId | null;
   turnPhase: TurnPhase | null;
-  activeAbility: ActiveAbility | null;
+  abilityStack: ActiveAbility[];
   matchingOpportunity: {
     cardToMatch: Card;
     originalPlayerID: PlayerId;
@@ -109,12 +109,32 @@ export interface ClientCheckGameState {
   lastRoundLoserId: PlayerId | null;
   log: RichGameLogMessage[];
   chat: ChatMessage[];
+  discardPileIsSealed: boolean;
 }
 
 
 // ================================================================================================
 //                                    SOCKETS & COMMS
 // ================================================================================================
+
+export interface ServerToClientEvents {
+  [SocketEventName.GAME_STATE_UPDATE]: (gameState: ClientCheckGameState) => void;
+  [SocketEventName.SERVER_LOG_ENTRY]: (logMessage: RichGameLogMessage) => void;
+  [SocketEventName.INITIAL_PEEK_INFO]: (data: { hand: Card[] }) => void;
+  [SocketEventName.ABILITY_PEEK_RESULT]: (payload: { card: Card; playerId: PlayerId; cardIndex: number }) => void;
+  [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
+  [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;
+}
+
+export interface ClientToServerEvents {
+  [SocketEventName.CREATE_GAME]: (payload: InitialPlayerSetupData, callback: (response: CreateGameResponse) => void) => void;
+  [SocketEventName.JOIN_GAME]: (gameId: string, playerSetupData: InitialPlayerSetupData, callback: (response: JoinGameResponse) => void) => void;
+  [SocketEventName.ATTEMPT_REJOIN]: (payload: { gameId: string; playerId: string }, callback: (response: AttemptRejoinResponse) => void) => void;
+  [SocketEventName.PLAYER_ACTION]: (payload: { type: PlayerActionType; payload?: any }) => void;
+  [SocketEventName.SEND_CHAT_MESSAGE]: (payload: { message: string; senderId: string; senderName: string; gameId: string; }) => void;
+}
+
+export type ServerToClientEventName = keyof ServerToClientEvents;
 
 export enum SocketEventName {
   CREATE_GAME = 'CREATE_GAME',
@@ -151,6 +171,7 @@ export interface AttemptRejoinResponse extends BasicResponse {
   gameId?: GameId;
   playerId?: PlayerId;
   gameState?: ClientCheckGameState;
+  logs?: RichGameLogMessage[];
 }
 
 export interface InitialPlayerSetupData {

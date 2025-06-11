@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
-import { useUI } from '@/components/providers/UIMachineProvider';
+import React, { useContext } from 'react';
+import { useSelector } from '@xstate/react';
+import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
 import { GameBoard } from '@/components/game/GameBoard';
 import { GameLobby } from '@/components/game/GameLobby';
 import LoadingOrError from '@/components/layout/LoadingOrError';
@@ -9,17 +10,56 @@ import { Toaster } from '@/components/ui/sonner';
 import { GameStage } from 'shared-types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JoinGamePrompt } from '@/components/game/JoinGamePrompt';
+import GameClient from './GameClient';
+import { DrawnCardArea } from '@/components/game/DrawnCardArea';
 
-function GameView() {
-  const [state] = useUI();
-  
-  // Check state using state.matches for robustness with nested states
+const selectGameViewProps = (state: UIMachineSnapshot) => {
+  const { currentGameState: gs, localPlayerId } = state.context;
   const isDisconnected = state.tags.has('disconnected');
   const outOfGame = state.matches('outOfGame');
   const inLobby = state.matches({ inGame: 'lobby' });
   const inGame = state.matches({ inGame: 'playing' });
-  const gameStage = state.context.currentGameState?.gameStage;
+  const gameStage = gs?.gameStage;
 
+  const localPlayer = localPlayerId ? gs?.players[localPlayerId] : null;
+  const pendingDrawnCard = localPlayer?.pendingDrawnCard;
+  
+  // The card to show is the card object itself. The server redacts it for other players.
+  const cardToShow = pendingDrawnCard && 'suit' in pendingDrawnCard ? pendingDrawnCard : null;
+  // We can only discard a card that was drawn from the deck, not the discard pile
+  const wasDrawnFromDeck = pendingDrawnCard && 'source' in pendingDrawnCard && pendingDrawnCard.source === 'deck';
+  
+  return {
+    isDisconnected,
+    outOfGame,
+    inLobby,
+    inGame,
+    gameStage,
+    cardToShow,
+    wasDrawnFromDeck,
+  };
+};
+
+function GameView() {
+  const { actorRef } = useContext(UIContext)!;
+  const { 
+    isDisconnected, 
+    outOfGame, 
+    inLobby, 
+    inGame, 
+    gameStage,
+    cardToShow,
+    wasDrawnFromDeck 
+  } = useSelector(actorRef, selectGameViewProps);
+  
+  const handleSwap = () => {
+    actorRef.send({ type: 'CHOOSE_SWAP_TARGET' });
+  };
+
+  const handleDiscard = () => {
+    actorRef.send({ type: 'DISCARD_DRAWN_CARD' });
+  };
+  
   // Generate a unique key for the AnimatePresence
   const getContentKey = () => {
     if (isDisconnected) return 'disconnected';
@@ -60,6 +100,16 @@ function GameView() {
               <LoadingOrError message="Initializing..." />
             )}
           </motion.div>
+        </AnimatePresence>
+        <AnimatePresence>
+          {cardToShow && (
+            <DrawnCardArea 
+              card={cardToShow}
+              onSwap={handleSwap}
+              onDiscard={handleDiscard}
+              canDiscard={!!wasDrawnFromDeck}
+            />
+          )}
         </AnimatePresence>
       </main>
       <Toaster richColors position="top-center" />

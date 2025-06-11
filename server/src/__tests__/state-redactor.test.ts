@@ -68,7 +68,8 @@ describe('State Redactor', () => {
           gameover: null,
           lastRoundLoserId: null,
           log: [],
-          chat: []
+          chat: [],
+          abilityStack: [],
         },
         value: GameStage.PLAYING
       };
@@ -132,7 +133,8 @@ describe('State Redactor', () => {
           gameover: null,
           lastRoundLoserId: null,
           log: [],
-          chat: []
+          chat: [],
+          abilityStack: [],
         },
         value: GameStage.WAITING_FOR_PLAYERS
       };
@@ -195,7 +197,8 @@ describe('State Redactor', () => {
           gameover: null,
           lastRoundLoserId: null,
           log: [],
-          chat: []
+          chat: [],
+          abilityStack: [],
         },
         value: GameStage.PLAYING
       };

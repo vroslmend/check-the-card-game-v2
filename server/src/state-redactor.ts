@@ -39,9 +39,10 @@ export const generatePlayerView = (
     let clientHand: (Card | { facedown: true })[];
 
     if (isViewingPlayer) {
-      // The player can always see their own hand.
-      // Specific peeking logic is handled by events, not general state updates.
-      clientHand = serverPlayer.hand;
+      // The player can always see their own hand. We explicitly map to ensure 
+      // the type is correctly inferred as (Card | { facedown: true })[]
+      // even though for the local player it will only ever contain Cards.
+      clientHand = serverPlayer.hand.map(card => ({ id: card.id, suit: card.suit, rank: card.rank }));
     } else {
       // Other players' hands are always facedown.
       clientHand = serverPlayer.hand.map(() => ({ facedown: true as const }));
@@ -92,13 +93,14 @@ export const generatePlayerView = (
     gameStage: gameStageValue,
     currentPlayerId: fullGameContext.currentPlayerId,
     turnPhase: fullGameContext.currentTurnSegment,
-    activeAbility: fullGameContext.activeAbility,
+    abilityStack: fullGameContext.abilityStack,
     matchingOpportunity: fullGameContext.matchingOpportunity,
     checkDetails: fullGameContext.checkDetails,
     gameover: fullGameContext.gameover,
     lastRoundLoserId: fullGameContext.lastRoundLoserId,
     log: fullGameContext.log,
     chat: fullGameContext.chat ?? [],
+    discardPileIsSealed: fullGameContext.discardPileIsSealed,
   };
 
   logger.debug({ gameId: fullGameContext.gameId, viewingPlayerId, stage: clientGameState.gameStage, turnPhase: clientGameState.turnPhase }, 'Finished generating player view');

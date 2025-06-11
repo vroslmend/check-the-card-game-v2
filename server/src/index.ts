@@ -19,6 +19,10 @@ import {
   GameId,
   GameStage,
   ChatMessage,
+  ClientToServerEvents,
+  ServerToClientEvents,
+  ServerToClientEventName,
+  AttemptRejoinResponse,
 } from 'shared-types';
 
 // These types are defined in the game machine file. We are aliasing them here
@@ -35,7 +39,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
 logger.info({ corsOrigin: CORS_ORIGIN }, `CORS origin set`);
 
 const httpServer = http.createServer();
-const io = new SocketIOServer(httpServer, {
+const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
     origin: CORS_ORIGIN,
     methods: ["GET", "POST"]
@@ -102,7 +106,7 @@ io.on('connection', (socket: Socket) => {
           const { playerId: targetPlayerId, eventName, eventData } = event.payload;
           const targetPlayer = gameActor.getSnapshot().context.players[targetPlayerId];
           if (targetPlayer?.socketId && targetPlayer.isConnected) {
-              io.to(targetPlayer.socketId).emit(eventName, eventData);
+              io.to(targetPlayer.socketId).emit(eventName as ServerToClientEventName, eventData as any);
           }
       });
 
@@ -132,9 +136,20 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
-  socket.on(SocketEventName.JOIN_GAME, (data: { gameId: string, playerSetupData: InitialPlayerSetupData }, callback: (response: JoinGameResponse) => void) => {
-      const { gameId, playerSetupData } = data;
+  socket.on(
+    SocketEventName.JOIN_GAME,
+    (
+      gameId: string,
+      playerSetupData: InitialPlayerSetupData,
+      callback: (response: JoinGameResponse) => void
+    ) => {
       const gameActor = activeGameMachines.get(gameId);
+
+      if (!playerSetupData) {
+        logger.error({ gameId, socketId: socket.id }, 'Join failed: playerSetupData is missing.');
+        if (callback) callback({ success: false, message: 'Player data is missing.' });
+        return;
+      }
 
       logger.info({ gameId, playerName: playerSetupData.name, socketId: socket.id }, 'Player attempting to join game');
 
@@ -175,7 +190,7 @@ io.on('connection', (socket: Socket) => {
       gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
   });
 
-  socket.on(SocketEventName.ATTEMPT_REJOIN, (data: { gameId: GameId, playerId: PlayerId }) => {
+  socket.on(SocketEventName.ATTEMPT_REJOIN, (data: { gameId: GameId, playerId: PlayerId }, callback: (r: AttemptRejoinResponse) => void) => {
     const { gameId, playerId } = data;
     const gameActor = activeGameMachines.get(gameId);
 
@@ -184,8 +199,9 @@ io.on('connection', (socket: Socket) => {
       
       const reconnectSubscription = gameActor.on('PLAYER_RECONNECT_SUCCESSFUL', (event) => {
         if(event.playerId === playerId) {
-          const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
-          socket.emit(SocketEventName.GAME_STATE_UPDATE, playerSpecificView);
+          const snapshot = gameActor.getSnapshot();
+          const playerSpecificView = generatePlayerView(snapshot, playerId);
+          callback({ success: true, gameState: playerSpecificView, logs: snapshot.context.log });
           reconnectSubscription.unsubscribe();
         }
       });
@@ -197,7 +213,7 @@ io.on('connection', (socket: Socket) => {
 
     } else {
       logger.warn({ gameId, playerId }, 'Attempted rejoin for non-existent game');
-      // TODO: Maybe emit an error event back to the client?
+      callback({ success: false, message: 'Game not found.' });
     }
   });
 

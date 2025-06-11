@@ -1,103 +1,104 @@
-"use client"
+'use client';
 
-import { motion } from "framer-motion"
-import { Clock, Eye, Zap, Trophy, Users, CheckCircle } from "lucide-react"
-
-type GamePhase = 
-  | 'initialSetup'
-  | 'playerAction'
-  | 'waitingForServer'
-  | 'gameOver';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '../ui/button';
+import { GameStage } from 'shared-types';
+import { useSelector } from '@xstate/react';
+import { useContext } from 'react';
+import { UIContext, UIMachineSnapshot } from '../providers/UIMachineProvider';
+import { Check } from 'lucide-react';
+import logger from '@/lib/logger';
 
 interface GamePhaseIndicatorProps {
-  phase: GamePhase;
-  isPlayerTurn: boolean;
-  pendingAbility?: any; // This will be more specific later
+  stage: GameStage;
+  localPlayerId: string | null | undefined;
 }
 
-const phaseConfig = {
-  initialSetup: {
-    icon: Eye,
-    label: "Initial Peek",
-    description: "Look at your bottom 2 cards",
-    color: "text-stone-900 dark:text-stone-100",
-  },
-  playerAction: {
-    icon: Clock,
-    label: "Play Phase",
-    description: "Draw and discard cards",
-    color: "text-stone-900 dark:text-stone-100",
-  },
-  waitingForServer: {
-    icon: Users,
-    label: "Waiting",
-    description: "Waiting for other players",
-    color: "text-stone-600 dark:text-stone-400",
-  },
-  gameOver: {
-    icon: Trophy,
-    label: "Scoring",
-    description: "Calculating results",
-    color: "text-stone-900 dark:text-stone-100",
-  },
+const selectIsLocalPlayerReady = (state: UIMachineSnapshot) => {
+  if (!state.context.localPlayerId || !state.context.currentGameState) {
+    return false;
+  }
+  return state.context.currentGameState.players[state.context.localPlayerId]?.isReady ?? false;
 };
 
-export function GamePhaseIndicator({ phase, isPlayerTurn, pendingAbility }: GamePhaseIndicatorProps) {
-  const config = phaseConfig[phase] || phaseConfig.playerAction;
-  const Icon = config.icon
+export function GamePhaseIndicator({ stage, localPlayerId }: GamePhaseIndicatorProps) {
+  const { actorRef } = useContext(UIContext)!;
+  const isLocalPlayerReady = useSelector(actorRef, selectIsLocalPlayerReady);
+
+  const handleReadyClick = () => {
+    if (stage === GameStage.INITIAL_PEEK) {
+      logger.info('Player clicked ready for peek');
+      actorRef.send({ type: 'DECLARE_READY_FOR_PEEK_CLICKED' });
+    }
+  };
+
+  const getStageContent = () => {
+    switch (stage) {
+      case GameStage.INITIAL_PEEK:
+        return {
+          title: 'Initial Peek',
+          description: "Memorize your bottom two cards. They will be hidden shortly.",
+          actionText: "I'm Ready",
+          waitingText: "Waiting for other players...",
+          showButton: true,
+        };
+      case GameStage.DEALING:
+        return {
+          title: 'Dealing Cards',
+          description: 'The dealer is shuffling and dealing the cards.',
+          showButton: false,
+        };
+      case GameStage.GAMEOVER:
+        return {
+            title: 'Game Over',
+            description: 'The round has ended. Scores are being calculated.',
+            showButton: false,
+        }
+      default:
+        return null;
+    }
+  };
+
+  const content = getStageContent();
+
+  if (!content) {
+    return null;
+  }
 
   return (
-    <div className="text-right">
+    <AnimatePresence>
       <motion.div
-        className="flex items-center justify-end gap-2"
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3 }}
+        initial={{ opacity: 0, y: 50, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 50, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+        className="fixed bottom-0 left-1/2 -translate-x-1/2 z-30 w-full max-w-md p-4"
       >
-        <div className="text-right">
-          <p className="text-xs font-light text-stone-600 dark:text-stone-400">Phase:</p>
-          <p className={`text-sm font-light ${config.color}`}>{config.label}</p>
+        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-lg rounded-2xl shadow-2xl p-6 text-center border border-stone-200 dark:border-zinc-800">
+          <h2 className="text-2xl font-serif text-stone-900 dark:text-stone-100 mb-2">{content.title}</h2>
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-6">
+            {content.description}
+          </p>
+          {content.showButton && (
+            <Button
+              size="lg"
+              className="w-full rounded-full font-semibold"
+              onClick={handleReadyClick}
+              disabled={isLocalPlayerReady}
+              variant={isLocalPlayerReady ? 'secondary' : 'default'}
+            >
+              {isLocalPlayerReady ? (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  {content.waitingText}
+                </>
+              ) : (
+                content.actionText
+              )}
+            </Button>
+          )}
         </div>
-        <motion.div
-          animate={
-            phase === "playerAction"
-              ? {
-                  rotate: [0, 10, -10, 0],
-                  scale: [1, 1.1, 1],
-                }
-              : {}
-          }
-          transition={{
-            duration: 2,
-            repeat: phase === "playerAction" ? Number.POSITIVE_INFINITY : 0,
-          }}
-        >
-          <Icon className={`h-4 w-4 ${config.color}`} />
-        </motion.div>
       </motion.div>
-
-      <motion.p
-        className={`mt-1 text-xs font-light ${
-          isPlayerTurn ? "text-stone-900 dark:text-stone-100" : "text-stone-600 dark:text-stone-400"
-        }`}
-        animate={isPlayerTurn ? { opacity: [0.7, 1, 0.7] } : {}}
-        transition={{ duration: 2, repeat: isPlayerTurn ? Number.POSITIVE_INFINITY : 0 }}
-      >
-        {isPlayerTurn ? "Your Turn" : "Waiting"}
-      </motion.p>
-
-      {pendingAbility && (
-        <motion.p
-          className="mt-1 text-xs font-light text-stone-900 dark:text-stone-100"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: "spring", stiffness: 200 }}
-        >
-          {pendingAbility.type} Pending
-        </motion.p>
-      )}
-
-      <p className="mt-1 text-xs font-light text-stone-600 dark:text-stone-400">{config.description}</p>
-    </div>
-  )
+    </AnimatePresence>
+  );
 } 

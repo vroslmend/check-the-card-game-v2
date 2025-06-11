@@ -1,46 +1,60 @@
 'use client';
 
-import React from 'react';
+import React, { useContext } from 'react';
+import { useSelector } from '@xstate/react';
+import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
 import { HandGrid } from './HandGrid';
-import { type Player, type PlayerId, type Card, GameStage, TurnPhase } from 'shared-types';
+import { type Player, TurnPhase, GameStage } from 'shared-types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { ShieldCheck, Eye } from 'lucide-react';
-import { useUI } from '@/components/providers/UIMachineProvider';
 
 interface PlayerHandProps {
   player: Player;
   isLocalPlayer: boolean;
   onCardClick: (cardIndex: number) => void;
   className?: string;
+  isChoosingSwapTarget?: boolean;
 }
+
+const selectPlayerHandProps = (state: UIMachineSnapshot) => {
+  const { currentGameState, currentAbilityContext, localPlayerId, visibleCards } = state.context;
+  const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
+  const isMatchingPhase = currentGameState?.turnPhase === TurnPhase.MATCHING;
+  const isMyDiscardPhase = isMyTurn && currentGameState?.turnPhase === TurnPhase.DISCARD;
+  const inAbilityState = !!currentAbilityContext;
+  
+  const canInteract = inAbilityState || isMatchingPhase || isMyDiscardPhase;
+
+  return {
+    canInteract,
+    gameStage: currentGameState?.gameStage,
+    visibleCards,
+  }
+};
 
 const PlayerHand: React.FC<PlayerHandProps> = ({ 
   player, 
   isLocalPlayer,
   onCardClick,
-  className
+  className,
+  isChoosingSwapTarget = false
 }) => {
-  const [state] = useUI();
-  const { visibleCards, currentGameState, abilityContext, localPlayerId } = state.context;
+  const { actorRef } = useContext(UIContext)!;
+  const { canInteract: baseCanInteract, gameStage, visibleCards } = useSelector(actorRef, selectPlayerHandProps);
   
-  const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
-  const isMatchingPhase = currentGameState?.turnPhase === TurnPhase.MATCHING;
-  const isMyDiscardPhase = isMyTurn && currentGameState?.turnPhase === TurnPhase.DISCARD;
-  const inAbilityState = !!abilityContext;
+  const canInteract = baseCanInteract || isChoosingSwapTarget;
   
-  const canInteract = inAbilityState || isMatchingPhase || isMyDiscardPhase;
-
-  const getCardForDisplay = (index: number): Card | { facedown: true } => {
-    const isVisible = visibleCards.some(vc => vc.playerId === player.id && vc.cardIndex === index);
-    if (isVisible) {
-      const visibleCard = visibleCards.find(vc => vc.playerId === player.id && vc.cardIndex === index);
-      return visibleCard!.card;
-    }
-    return player.hand[index];
-  };
-
-  const handToDisplay = player.hand.map((_, index) => getCardForDisplay(index));
+  // The server sends the full hand for the local player. We need to decide
+  // whether to show the card face or back based on the `visibleCards` context.
+  const handToDisplay = isLocalPlayer
+    ? player.hand.map((card, index) => {
+        const visibleCard = visibleCards.find(
+          vc => vc.playerId === player.id && vc.cardIndex === index
+        );
+        return visibleCard ? visibleCard.card : ({ facedown: true } as const);
+      })
+    : player.hand;
 
   return (
     <div className={cn("flex flex-col items-center justify-center", className)}>
@@ -79,7 +93,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
       <div className="relative">
         {/* Initial Peek Highlight */}
         <AnimatePresence>
-          {currentGameState?.gameStage === GameStage.INITIAL_PEEK && isLocalPlayer && (
+          {gameStage === GameStage.INITIAL_PEEK && isLocalPlayer && (
             <motion.div 
               className="absolute inset-0 -m-2 rounded-2xl border-2 border-dashed border-yellow-400 dark:border-yellow-500 z-0"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -105,7 +119,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
         
         {/* Initial Peek Label */}
         <AnimatePresence>
-          {currentGameState?.gameStage === GameStage.INITIAL_PEEK && isLocalPlayer && (
+          {gameStage === GameStage.INITIAL_PEEK && isLocalPlayer && (
             <motion.div
               className="absolute bottom-0 -right-6 bg-yellow-500 text-white text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1 shadow-lg"
               initial={{ opacity: 0, scale: 0.8 }}

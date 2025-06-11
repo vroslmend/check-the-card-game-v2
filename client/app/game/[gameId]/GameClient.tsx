@@ -9,49 +9,34 @@ import { RejoinModal } from '@/components/modals/RejoinModal'
 import { ClientCheckGameState } from 'shared-types';
 
 export default function GameClient({
-  children,
   gameId,
+  initialGameState,
 }: {
-  children: React.ReactNode;
   gameId: string;
+  initialGameState?: ClientCheckGameState;
 }) {
-  const [localPlayerId] = useLocalStorage<string | null>(
-    "localPlayerId",
-    null,
-    {
-      serializer: v => (v === null ? "%%NULL%%" : v),
-      deserializer: v => (v === "%%NULL%%" ? null : v),
-    },
-  );
-  const [initialGameState, setInitialGameState] = useState<ClientCheckGameState | undefined>(undefined);
+  const [localPlayerId, setLocalPlayerId] = useLocalStorage<string | null>(`player-id-${gameId}`, null);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
-    const savedStateJSON = sessionStorage.getItem('initialGameState');
-    if (savedStateJSON) {
-      const savedState = JSON.parse(savedStateJSON);
-      setInitialGameState(savedState);
-      // Clean up the session storage after using it for initialization.
-      sessionStorage.removeItem('initialGameState');
+    // Attempt to retrieve localPlayerId from localStorage when the component mounts on the client
+    const storedPlayerId = localStorage.getItem(`player-id-${gameId}`);
+    if (storedPlayerId) {
+      setLocalPlayerId(JSON.parse(storedPlayerId));
     }
   }, []);
 
   if (!isClient) {
-    // Render a placeholder on the server and during the initial client-side render
-    // to prevent a hydration mismatch.
-    return (
-      <main className="relative flex min-h-screen flex-col items-center justify-center p-4 overflow-hidden">
-        <LoadingOrError message="Initializing..." />
-      </main>
-    );
+    // Render a loading state or nothing on the server
+    return <LoadingOrError message="Initializing game..." />;
   }
 
   return (
     <>
       <UIMachineProvider gameId={gameId} localPlayerId={localPlayerId} initialGameState={initialGameState}>
-        {children}
         <RejoinModal />
+        {/* GameView will be the main component consuming the context */}
       </UIMachineProvider>
       <Toaster />
     </>

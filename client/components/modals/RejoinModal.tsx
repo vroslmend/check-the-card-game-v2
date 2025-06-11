@@ -1,23 +1,30 @@
-import { useState } from "react"
+import { useState, useContext } from "react"
 import { useLocalStorage } from "usehooks-ts"
 import { motion } from "framer-motion"
+import { useSelector } from "@xstate/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Modal } from "@/components/ui/Modal"
 import { Loader } from "lucide-react"
-import { useUI } from "@/components/providers/UIMachineProvider"
+import { UIContext, type UIMachineSnapshot } from "@/components/providers/UIMachineProvider"
+
+const selectRejoinModalProps = (state: UIMachineSnapshot) => {
+  return {
+    gameId: state.context.gameId,
+    modalInfo: state.context.modal,
+    isLoading: state.hasTag('loading'),
+  }
+}
 
 export function RejoinModal() {
-  const [state, send] = useUI()
-  const [isLoading, setIsLoading] = useState(false);
+  const { actorRef } = useContext(UIContext)!;
+  const { gameId, modalInfo, isLoading } = useSelector(actorRef, selectRejoinModalProps);
+  
   const [playerName, setPlayerName] = useLocalStorage("playerName", "", {
     serializer: v => v,
     deserializer: v => v,
   });
-
-  const gameId = state.context.gameId;
-  const modalInfo = state.context.modal;
 
   if (modalInfo?.type !== 'rejoin') {
     return null;
@@ -25,8 +32,7 @@ export function RejoinModal() {
 
   const handleJoinGame = () => {
     if (playerName.trim() && gameId) {
-      setIsLoading(true); // Visually indicate loading, though machine handles the logic
-      send({
+      actorRef.send({
         type: 'JOIN_GAME_REQUESTED',
         playerName: playerName.trim(),
         gameId,
@@ -42,8 +48,8 @@ export function RejoinModal() {
 
   return (
     <Modal
-      isOpen={state.context.modal?.type === 'rejoin'}
-      onClose={() => send({ type: 'DISMISS_MODAL' })}
+      isOpen={modalInfo?.type === 'rejoin'}
+      onClose={() => actorRef.send({ type: 'DISMISS_MODAL' })}
       title={modalInfo.title}
       description={modalInfo.message}
     >
@@ -68,10 +74,10 @@ export function RejoinModal() {
           <Button
             size="lg"
             onClick={handleJoinGame}
-            disabled={state.hasTag('loading') || !playerName.trim()}
+            disabled={isLoading || !playerName.trim()}
             className="w-full sm:w-auto"
           >
-            {state.hasTag('loading') ? (
+            {isLoading ? (
               <>
                 <Loader className="mr-2 h-4 w-4 animate-spin" />
                 Joining...
