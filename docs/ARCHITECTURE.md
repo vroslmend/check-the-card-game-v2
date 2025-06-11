@@ -217,7 +217,7 @@ The project is a monorepo managed with npm workspaces. Key scripts are defined i
 *   **More Sophisticated Server-Side Dev Watch Mode.**
 *   **Granular Error Reporting and User Feedback:** Enhancing how specific errors are categorized and presented to the user.
 *   **Refined Client-Side Optimism/Rollback:** For certain actions, explore client-side optimistic updates with server reconciliation for a snappier feel, though this adds complexity.
-*   **Test Coverage:** Comprehensive unit and integration tests for both client and server state machines and communication.
+*   **Expanded Test Coverage:** While comprehensive tests exist for the game-machine, expanding test coverage to client-side state machines and communication would further strengthen the project.
 
 ## 10. Development Guidelines & Conventions
 
@@ -244,4 +244,31 @@ This section provides actionable rules and conventions to ensure consistency and
     *   **Components:** `PascalCase` (e.g., `PlayerHand.tsx`).
     *   **Hooks:** `useCamelCase` (e.g., `useSocketManager.ts`).
     *   **Types/Interfaces:** `PascalCase` (e.g., `interface GameBoardProps`).
-    *   **Directory Structure:** Adhere to the established structure (`/components`, `/hooks`, `/lib`, `/machines`, etc.). New components or utilities should be placed in the appropriate directory. 
+    *   **Directory Structure:** Adhere to the established structure (`/components`, `/hooks`, `/lib`, `/machines`, etc.). New components or utilities should be placed in the appropriate directory.
+
+## 11. Testing Strategy
+
+The project employs a robust testing strategy, particularly for the core game logic in `server/src/game-machine.ts`:
+
+*   **Behavior-Driven Testing:** Tests are designed to verify expected behavior according to game rules, not implementation details. When discrepancies are found, the implementation is adjusted to match the expected behavior, not vice versa.
+
+*   **XState-Specific Testing Approach:**
+    *   Tests follow the Arrange-Act-Assert pattern:
+        *   **Arrange:** Set up the actor with specific initial conditions
+        *   **Act:** Send events to the actor to trigger state transitions
+        *   **Assert:** Verify the resulting state and context
+
+*   **Key Testing Areas:**
+    *   **Core Game Flow:** Player setup, dealing, turns, and game end conditions
+    *   **Special Card Abilities:** King, Queen, Jack abilities with proper stage transitions
+    *   **Error Recovery:** Empty deck handling, reshuffling, player disconnection
+    *   **Edge Cases:** LIFO ability resolution, locked players, match timing
+
+*   **Error Recovery Verification:** Tests ensure the game-machine properly handles error states:
+    *   Automatically transitioning from empty deck errors by reshuffling the discard pile
+    *   Properly handling player disconnection and reconnection
+    *   Managing ability interruptions and resumptions
+
+*   **Independent Verification:** Tests are written against the specification in GAME_RULES.md, providing an independent verification mechanism against implementation bugs.
+
+This approach ensures the game logic remains robust, consistent, and aligned with the documented rules as the codebase evolves. 

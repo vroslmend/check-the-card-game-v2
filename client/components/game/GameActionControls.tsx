@@ -132,7 +132,7 @@ export function GameActionControls() {
     if (isMyTurn && currentGameState.turnPhase) {
       const turnPhase = currentGameState.turnPhase;
       if (turnPhase === TurnPhase.DRAW) {
-        actions.push({ id: 'draw-deck', label: 'Draw from Deck', icon: Circle, event: { type: 'DRAW_CARD' } });
+        actions.push({ id: 'draw-deck', label: 'Draw from Deck', icon: Circle, event: { type: 'DRAW_FROM_DECK' } });
         
         const topOfDiscard = currentGameState.discardPile[currentGameState.discardPile.length - 1];
         const isDiscardDrawable = topOfDiscard && !new Set([CardRank.King, CardRank.Queen, CardRank.Jack]).has(topOfDiscard.rank);
@@ -140,7 +140,7 @@ export function GameActionControls() {
           id: 'draw-discard',
           label: 'Draw from Discard',
           icon: Eye,
-          event: { type: 'PLAYER_ACTION', payload: { type: PlayerActionType.DRAW_FROM_DISCARD, payload: { playerId: localPlayerId } } },
+          event: { type: 'DRAW_FROM_DISCARD' },
           disabled: !isDiscardDrawable
         });
 
@@ -148,7 +148,7 @@ export function GameActionControls() {
             id: 'call-check',
             label: 'Call Check!',
             icon: CheckCircle,
-            event: { type: 'PLAYER_ACTION', payload: { type: PlayerActionType.CALL_CHECK, payload: { playerId: localPlayerId } } },
+            event: { type: 'CALL_CHECK' },
             holdToConfirm: true
         });
       } else if (turnPhase === TurnPhase.DISCARD && localPlayer.pendingDrawnCard) {
@@ -156,7 +156,7 @@ export function GameActionControls() {
             id: 'discard-drawn',
             label: 'Discard Drawn Card',
             icon: X,
-            event: { type: 'PLAYER_ACTION', payload: { type: PlayerActionType.DISCARD_DRAWN_CARD, payload: { playerId: localPlayerId } } }
+            event: { type: 'DISCARD_DRAWN_CARD' }
         });
       }
     }
@@ -209,13 +209,7 @@ export function GameActionControls() {
   const handleCallCheck = () => {
     if (!localPlayerId) return;
     
-    send({ 
-      type: 'PLAYER_ACTION', 
-      payload: { 
-        type: PlayerActionType.CALL_CHECK, 
-        payload: { playerId: localPlayerId } 
-      } 
-    });
+    send({ type: 'CALL_CHECK' });
   };
   
   const handleShowRules = () => {

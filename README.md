@@ -219,6 +219,21 @@ MAX_RETRIES=3
 *   **Frontend Architecture (Completed):** The frontend has been architected using Next.js, TypeScript, and a single root XState machine (`uiMachine.ts`) for all client-side state orchestration.
 *   **Core UI Components (In Progress):** Development is focused on refining UI components, animations, and ensuring all game phases are fully represented in the UI.
 *   **Error Recovery (Completed):** Both client and server implement robust error handling and recovery mechanisms using XState's error states and transitions.
+*   **Game Logic Testing (Completed):** Comprehensive test suite for the game-machine.ts implementation, verifying behavior against game rules for all core mechanics, special abilities, and error recovery paths. Tests follow XState best practices and behavior-driven development principles.
+
+## 🧪 Testing Approach
+
+This project follows a behavior-driven testing approach:
+
+*   **Test-First Philosophy:** Tests are written against the specification in GAME_RULES.md, not the implementation.
+*   **XState Actor Testing:** Tests use XState's actor model to verify state transitions and context updates.
+*   **Key Test Areas:** Core game flow, special abilities (K/Q/J), error recovery, edge cases.
+*   **Independent Verification:** When discrepancies are found between tests and implementation, the implementation is adjusted to match the expected behavior defined in the tests.
+
+Run the test suite with:
+```bash
+npm run test
+```
 
 ---
 Happy Gaming and Coding!

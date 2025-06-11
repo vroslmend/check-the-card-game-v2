@@ -12,11 +12,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 function GameView() {
   const [state] = useUI();
   
-  // Check state using state.value and tags instead of matches
+  // Check state using state.matches for robustness with nested states
   const isDisconnected = state.tags.has('disconnected');
-  const currentState = state.value as any;
-  const inLobby = currentState?.inGame === 'lobby';
-  const inGame = currentState?.inGame === 'playing';
+  const inLobby = state.matches({ inGame: 'lobby' });
+  const inGame = state.matches({ inGame: 'playing' });
   const gameStage = state.context.currentGameState?.gameStage;
 
   // Generate a unique key for the AnimatePresence

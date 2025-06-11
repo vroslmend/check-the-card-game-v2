@@ -135,9 +135,12 @@ export type UIMachineEvents =
   | { type: 'CONFIRM_ABILITY_ACTION' }
   | { type: 'SKIP_ABILITY_STAGE' }
   | { type: 'CANCEL_ABILITY' }
-  | { type: 'PLAY_CARD'; cardIndex: number }
-  | { type: 'DRAW_CARD' }
-  | { type: 'PLAYER_ACTION'; payload: { type: PlayerActionType; payload?: any } }
+  | { type: 'SWAP_AND_DISCARD'; cardIndex: number }
+  | { type: 'DISCARD_DRAWN_CARD' }
+  | { type: 'DRAW_FROM_DECK' }
+  | { type: 'DRAW_FROM_DISCARD' }
+  | { type: 'ATTEMPT_MATCH'; handCardIndex: number }
+  | { type: 'PASS_ON_MATCH' }
   | { type: 'TOGGLE_SIDE_PANEL' }
   | { type: 'DECLARE_READY_FOR_PEEK_CLICKED' }
   | { type: 'CONNECTION_ERROR'; message: string }
@@ -145,7 +148,9 @@ export type UIMachineEvents =
   | { type: 'RETRY_RECONNECTION' }
   | { type: 'RECOVERY_FAILED' }
   | { type: 'DISMISS_MODAL' }
-  | { type: 'CLEANUP_EXPIRED_CARDS' };
+  | { type: 'CLEANUP_EXPIRED_CARDS' }
+  | { type: 'CALL_CHECK' }
+  | { type: 'PLAYER_ACTION'; payload: { type: PlayerActionType; payload?: any } };
 
 // #endregion
 
@@ -287,17 +292,6 @@ export const uiMachine = setup({
       eventName: SocketEventName.PLAYER_ACTION,
       payload: { type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: context.localPlayerId },
     })),
-    emitPlayerAction: emit(({ context, event }) => {
-      assertEvent(event, 'PLAYER_ACTION');
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.PLAYER_ACTION,
-        payload: {
-          ...event.payload,
-          playerId: context.localPlayerId,
-        },
-      };
-    }),
     emitSendMessage: emit(({ event }) => {
       assertEvent(event, 'SUBMIT_CHAT_MESSAGE');
       const { message, senderId, senderName, gameId } = event;
@@ -607,7 +601,6 @@ export const uiMachine = setup({
           actions: ['addChatMessage', 'emitSendMessage'],
         },
         DECLARE_READY_FOR_PEEK_CLICKED: { actions: 'emitDeclareReadyForPeek' },
-        PLAYER_ACTION: { actions: 'emitPlayerAction' },
       },
       states: {
         lobby: {
@@ -629,47 +622,111 @@ export const uiMachine = setup({
         playing: {
             initial: 'active',
             on: {
-                PLAY_CARD: {
-                  actions: {
-                    type: 'emitPlayerAction',
-                    params: ({ event }: { event: { type: 'PLAY_CARD', cardIndex: number }}) => ({
+                SWAP_AND_DISCARD: {
+                  actions: emit(({ context, event }) => ({
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
                       type: PlayerActionType.SWAP_AND_DISCARD,
                       payload: { handCardIndex: event.cardIndex },
-                    }),
-                  },
+                      playerId: context.localPlayerId,
+                    }
+                  })),
                 },
-                DRAW_CARD: {
-                  actions: {
-                    type: 'emitPlayerAction',
-                    params: { type: PlayerActionType.DRAW_FROM_DECK },
-                  },
+                DISCARD_DRAWN_CARD: {
+                  actions: emit(({ context }) => ({
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
+                      type: PlayerActionType.DISCARD_DRAWN_CARD,
+                      playerId: context.localPlayerId,
+                    }
+                  })),
+                },
+                DRAW_FROM_DECK: {
+                  actions: emit(({ context }) => ({
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
+                      type: PlayerActionType.DRAW_FROM_DECK,
+                      playerId: context.localPlayerId,
+                    }
+                  })),
+                },
+                DRAW_FROM_DISCARD: {
+                  actions: emit(({ context }) => ({
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
+                      type: PlayerActionType.DRAW_FROM_DISCARD,
+                      playerId: context.localPlayerId,
+                    }
+                  })),
+                },
+                ATTEMPT_MATCH: {
+                  actions: emit(({ context, event }) => ({
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
+                      type: PlayerActionType.ATTEMPT_MATCH,
+                      payload: { handCardIndex: event.handCardIndex },
+                      playerId: context.localPlayerId,
+                    }
+                  })),
+                },
+                PASS_ON_MATCH: {
+                  actions: emit(({ context }) => ({
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
+                      type: PlayerActionType.PASS_ON_MATCH_ATTEMPT,
+                      playerId: context.localPlayerId,
+                    }
+                  })),
+                },
+                CALL_CHECK: {
+                  actions: emit(({ context }) => ({
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
+                      type: PlayerActionType.CALL_CHECK,
+                      playerId: context.localPlayerId,
+                    }
+                  })),
                 },
                 CONFIRM_ABILITY_ACTION: {
                   guard: 'isAbilityActionComplete',
-                  actions: {
-                    type: 'emitPlayerAction',
-                    params: ({ context }: { context: UIMachineContext }) => {
-                        const { abilityContext } = context;
-                        if (!abilityContext) throw new Error('Ability context missing');
-                        
-                        let payload: AbilityActionPayload;
-                        if (abilityContext.stage === 'peeking') {
-                          payload = { action: 'peek', targets: abilityContext.selectedPeekTargets };
-                        } else {
-                          payload = { action: 'swap', source: abilityContext.selectedSwapTargets[0]!, target: abilityContext.selectedSwapTargets[1]! };
+                  actions: emit(({ context }) => {
+                      const { abilityContext } = context;
+                      if (!abilityContext) throw new Error('Ability context missing');
+                      
+                      let payload: AbilityActionPayload;
+                      if (abilityContext.stage === 'peeking') {
+                        payload = { action: 'peek', targets: abilityContext.selectedPeekTargets };
+                      } else {
+                        payload = { action: 'swap', source: abilityContext.selectedSwapTargets[0]!, target: abilityContext.selectedSwapTargets[1]! };
+                      }
+                      return {
+                        type: 'EMIT_TO_SOCKET',
+                        eventName: SocketEventName.PLAYER_ACTION,
+                        payload: {
+                          type: PlayerActionType.USE_ABILITY,
+                          payload,
+                          playerId: context.localPlayerId,
                         }
-                        return { type: PlayerActionType.USE_ABILITY, payload };
-                    },
-                  },
+                      };
+                  }),
                 },
                 SKIP_ABILITY_STAGE: {
-                  actions: {
-                    type: 'emitPlayerAction',
-                    params: {
+                  actions: emit(({ context }) => ({
+                    type: 'EMIT_TO_SOCKET',
+                    eventName: SocketEventName.PLAYER_ACTION,
+                    payload: {
                       type: PlayerActionType.USE_ABILITY,
                       payload: { action: 'skip' } satisfies SkipAbilityPayload,
+                      playerId: context.localPlayerId,
                     }
-                  }
+                  })),
                 },
             },
             states: {

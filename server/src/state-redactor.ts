@@ -66,6 +66,17 @@ export const generatePlayerView = (
     };
   }
 
+  let gameStageValue: GameStage;
+  if (typeof snapshot.value === 'string') {
+    gameStageValue = snapshot.value as GameStage;
+  } else if (typeof snapshot.value === 'object' && snapshot.value !== null) {
+    // For nested states, the value is an object like { PLAYING: 'turn' }. We want the top-level key.
+    gameStageValue = Object.keys(snapshot.value)[0] as GameStage;
+  } else {
+    // Fallback in case of an unexpected state value
+    gameStageValue = GameStage.WAITING_FOR_PLAYERS;
+  }
+  
   const clientGameState: ClientCheckGameState = {
     gameId: fullGameContext.gameId,
     viewingPlayerId,
@@ -74,7 +85,7 @@ export const generatePlayerView = (
     deckSize: fullGameContext.deck.length,
     discardPile: fullGameContext.discardPile,
     turnOrder: fullGameContext.turnOrder,
-    gameStage: snapshot.value as GameStage,
+    gameStage: gameStageValue,
     currentPlayerId: fullGameContext.currentPlayerId,
     turnPhase: fullGameContext.currentTurnSegment,
     activeAbility: fullGameContext.activeAbility,

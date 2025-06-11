@@ -86,6 +86,9 @@ export const UIMachineProvider = ({
     const onNewLog = (logMessage: RichGameLogMessage) => {
       actorRef.send({ type: 'NEW_GAME_LOG', logMessage });
     };
+    const onInitialPeek = (data: { hand: Card[] }) => {
+      actorRef.send({ type: 'INITIAL_PEEK_INFO', hand: data.hand });
+    };
     const onCardDetails = (payload: { card: Card; playerId: PlayerId; cardIndex: number }) => {
       actorRef.send({ type: 'ABILITY_PEEK_RESULT', ...payload });
     };
@@ -98,6 +101,7 @@ export const UIMachineProvider = ({
 
     socket.on(SocketEventName.GAME_STATE_UPDATE, onGameStateUpdate);
     socket.on(SocketEventName.SERVER_LOG_ENTRY, onNewLog);
+    socket.on(SocketEventName.INITIAL_PEEK_INFO, onInitialPeek);
     socket.on(SocketEventName.ABILITY_PEEK_RESULT, onCardDetails);
     socket.on(SocketEventName.ERROR_MESSAGE, onError);
     socket.on(SocketEventName.INITIAL_LOGS, onInitialLogs);
@@ -106,6 +110,7 @@ export const UIMachineProvider = ({
     return () => {
       socket.off(SocketEventName.GAME_STATE_UPDATE, onGameStateUpdate);
       socket.off(SocketEventName.SERVER_LOG_ENTRY, onNewLog);
+      socket.off(SocketEventName.INITIAL_PEEK_INFO, onInitialPeek);
       socket.off(SocketEventName.ABILITY_PEEK_RESULT, onCardDetails);
       socket.off(SocketEventName.ERROR_MESSAGE, onError);
       socket.off(SocketEventName.INITIAL_LOGS, onInitialLogs);
