@@ -15,6 +15,7 @@ import {
   type Card,
   type PlayerId,
 } from 'shared-types';
+import logger from '@/lib/logger';
 
 type UIContextType = {
   actorRef: UIMachineActorRef;
@@ -30,12 +31,13 @@ export const UIMachineProvider = ({
 }: {
   children: React.ReactNode;
   gameId: string;
-  localPlayerId: string;
+  localPlayerId: string | null;
   initialGameState?: ClientCheckGameState;
 }) => {
   const getInitialState = () => {
     // If we've been given a fresh initial state from server props, use it.
     if (initialGameState) {
+      logger.info({ gameId, source: 'prop' }, 'Hydrating UI machine from server props.');
       return { state: undefined, source: 'prop' };
     }
 
@@ -47,16 +49,18 @@ export const UIMachineProvider = ({
         const state = JSON.parse(persistedStateJSON);
         // Basic validation: ensure it's for the right game.
         if (state.gameId === gameId) {
+          logger.info({ gameId, source: 'sessionStorage' }, 'Hydrating UI machine from sessionStorage.');
           // Clear the state so it's only used once for initialization
           sessionStorage.removeItem('initialGameState');
           return { state, source: 'sessionStorage' };
         }
       }
     } catch (e) {
-      console.error('Failed to read persisted state from sessionStorage', e);
+      logger.error({ error: e }, 'Failed to read persisted state from sessionStorage');
     }
 
     // If no state is found, we'll need to reconnect.
+    logger.info({ gameId }, 'No initial state found. Machine will start fresh and connect.');
     return { state: undefined, source: 'none' };
   };
 
@@ -65,7 +69,7 @@ export const UIMachineProvider = ({
   const actorRef = useActorRef(uiMachine, {
     input: {
       gameId,
-      localPlayerId,
+      localPlayerId: localPlayerId ?? undefined,
       // Pass the state we found, whether from props or sessionStorage
       initialGameState: initialGameState ?? hydratedState,
     },
@@ -73,21 +77,27 @@ export const UIMachineProvider = ({
 
   useEffect(() => {
     const onGameStateUpdate = (gameState: ClientCheckGameState) => {
+      logger.debug({ gameState }, `Socket IN: ${SocketEventName.GAME_STATE_UPDATE}`);
       actorRef.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState });
     };
     const onNewLog = (logMessage: RichGameLogMessage) => {
+      logger.debug({ logMessage }, `Socket IN: ${SocketEventName.SERVER_LOG_ENTRY}`);
       actorRef.send({ type: 'NEW_GAME_LOG', logMessage });
     };
     const onInitialPeek = (data: { hand: Card[] }) => {
+      logger.debug({ hand: data.hand }, `Socket IN: ${SocketEventName.INITIAL_PEEK_INFO}`);
       actorRef.send({ type: 'INITIAL_PEEK_INFO', hand: data.hand });
     };
     const onCardDetails = (payload: { card: Card; playerId: PlayerId; cardIndex: number }) => {
+      logger.debug({ payload }, `Socket IN: ${SocketEventName.ABILITY_PEEK_RESULT}`);
       actorRef.send({ type: 'ABILITY_PEEK_RESULT', ...payload });
     };
     const onError = (error: { message: string }) => {
+      logger.error({ error }, `Socket IN: ${SocketEventName.ERROR_MESSAGE}`);
       actorRef.send({ type: 'ERROR_RECEIVED', error: error.message });
     };
     const onInitialLogs = (logs: RichGameLogMessage[]) => {
+      logger.debug({ logCount: logs.length }, `Socket IN: ${SocketEventName.INITIAL_LOGS}`);
       actorRef.send({ type: 'INITIAL_LOGS_RECEIVED', logs });
     };
 
@@ -113,6 +123,7 @@ export const UIMachineProvider = ({
   // This is the preferred, type-safe way to handle emitted events from an actor.
   useEffect(() => {
     const subscription = actorRef.on('EMIT_TO_SOCKET', (event) => {
+      logger.debug({ event }, `Socket OUT: ${event.eventName}`);
       if (event.ack) {
         socket.emit(event.eventName, event.payload, event.ack);
       } else {

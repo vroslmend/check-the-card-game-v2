@@ -10,6 +10,7 @@ import { type UIMachineEvents } from "@/machines/uiMachine"
 import Magnetic from "../ui/Magnetic";
 import { GameStage, TurnPhase, CardRank, PlayerActionType } from "shared-types"
 import { toast } from 'sonner';
+import logger from '@/lib/logger';
 
 type ActionButton = {
   id: string;
@@ -41,11 +42,13 @@ export function GameActionControls() {
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleAction = (event: UIMachineEvents) => {
+    logger.debug({ event }, 'Game action sent');
     send(event);
   };
 
   const startHold = (button: ActionButton) => {
     if (button.disabled) return;
+    logger.debug({ buttonId: button.id }, 'Hold action started');
     setHoldingAction(button.id);
     setHoldProgress(0);
 
@@ -227,7 +230,7 @@ export function GameActionControls() {
 
   const handleCallCheck = () => {
     if (!localPlayerId) return;
-    
+    logger.debug('Call Check button clicked');
     send({ type: 'CALL_CHECK' });
   };
   

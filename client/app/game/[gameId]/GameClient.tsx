@@ -47,14 +47,6 @@ export default function GameClient({
     );
   }
 
-  if (!gameId || !localPlayerId) {
-    return (
-      <main className="relative flex min-h-screen flex-col items-center justify-center p-4 overflow-hidden">
-        <LoadingOrError message="Loading game session..." />
-      </main>
-    );
-  }
-
   return (
     <>
       <UIMachineProvider gameId={gameId} localPlayerId={localPlayerId} initialGameState={initialGameState}>

@@ -22,6 +22,7 @@ import {
   type SwapTarget,
 } from 'shared-types';
 import { toast } from 'sonner';
+import logger from '@/lib/logger';
 
 // Constants for error handling
 const MAX_RECONNECT_ATTEMPTS = parseInt(process.env.NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS || '3', 10);
@@ -176,18 +177,21 @@ export const uiMachine = setup({
     setCurrentGameState: assign({
       currentGameState: ({ event }) => {
         assertEvent(event, 'CLIENT_GAME_STATE_UPDATED');
+        logger.debug({ gameState: event.gameState }, 'Action: setCurrentGameState');
         return event.gameState;
       },
     }),
     addGameLog: assign({
       gameLog: ({ context, event }) => {
         assertEvent(event, 'NEW_GAME_LOG');
+        logger.debug('Action: addGameLog');
         return [...context.gameLog, event.logMessage];
       }
     }),
     setInitialLogs: assign({
       gameLog: ({ event }) => {
         assertEvent(event, 'INITIAL_LOGS_RECEIVED');
+        logger.debug({ logCount: event.logs.length }, 'Action: setInitialLogs');
         return event.logs;
       }
     }),
@@ -201,22 +205,26 @@ export const uiMachine = setup({
           senderName: event.senderName,
           timestamp: new Date().toISOString(),
         };
+        logger.debug({ chatMessage: newChatMessage }, 'Action: addChatMessage');
         return [...context.chatMessages, newChatMessage];
       },
     }),
     setGameIdAndPlayerId: assign({
       gameId: ({ event }) => {
         assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
+        logger.info({ gameId: event.response.gameId }, 'Action: setGameId');
         return event.response.gameId!;
       },
       localPlayerId: ({ event }) => {
         assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
+        logger.info({ playerId: event.response.playerId }, 'Action: setPlayerId');
         return event.response.playerId!;
       },
     }),
     setInitialGameState: assign({
       currentGameState: ({ event }) => {
         assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
+        logger.info('Action: setInitialGameState');
         return event.response.gameState!;
       },
     }),
@@ -306,33 +314,40 @@ export const uiMachine = setup({
     // #region ----- UI Actions -----
     showErrorToast: ({ event }) => {
         assertEvent(event, 'ERROR_RECEIVED');
+        logger.error({ error: event.error }, 'Action: showErrorToast');
         toast.error(event.error);
     },
     toggleSidePanel: assign({
-        isSidePanelOpen: ({ context }) => !context.isSidePanelOpen,
+        isSidePanelOpen: ({ context }) => {
+            logger.debug({ wasOpen: context.isSidePanelOpen }, 'Action: toggleSidePanel');
+            return !context.isSidePanelOpen;
+        }
     }),
     dismissModal: assign({
-        modal: undefined,
+        modal: () => {
+          logger.debug('Action: dismissModal');
+          return undefined;
+        }
     }),
     addPeekedCardToContext: assign({
       visibleCards: ({ context, event }) => {
         assertEvent(event, 'ABILITY_PEEK_RESULT');
-        return [
-          ...context.visibleCards,
-          {
-            playerId: event.playerId,
-            cardIndex: event.cardIndex,
-            card: event.card,
-            source: 'ability' as const,
-            // Set an expiration time, e.g., 5 seconds from now
-            expireAt: Date.now() + 5000
-          }
-        ];
+        const newCard: PeekedCardInfo = {
+          playerId: event.playerId,
+          cardIndex: event.cardIndex,
+          card: event.card,
+          source: 'ability' as const,
+          // Set an expiration time, e.g., 5 seconds from now
+          expireAt: Date.now() + 5000
+        };
+        logger.debug({ peekedCard: newCard }, 'Action: addPeekedCardToContext');
+        return [ ...context.visibleCards, newCard ];
       },
     }),
     setInitialPeekCards: assign({
       visibleCards: ({ context, event }) => {
         assertEvent(event, 'INITIAL_PEEK_INFO');
+        logger.debug('Action: setInitialPeekCards');
         // Get the indices of the bottom two cards in a 2x2 grid
         const bottomCards = [2, 3]; 
         return event.hand.map((card, idx) => ({
@@ -344,7 +359,10 @@ export const uiMachine = setup({
       },
     }),
     clearTemporaryCardStates: assign({
-      visibleCards: [],
+      visibleCards: () => {
+        logger.debug('Action: clearTemporaryCardStates');
+        return [];
+      }
     }),
     // #endregion
 
@@ -355,10 +373,12 @@ export const uiMachine = setup({
         const clientAbility = context.abilityContext;
 
         if (!serverAbility || serverAbility.playerId !== context.localPlayerId) {
+          if (clientAbility) logger.debug('Action: syncAbilityContext (clearing)');
           return undefined;
         }
 
         if (!clientAbility || clientAbility.type !== serverAbility.type) {
+          logger.debug({ serverAbility }, 'Action: syncAbilityContext (initializing new)');
           const { type, stage, playerId } = serverAbility;
           let maxPeekTargets = 0;
           if (type === 'king') maxPeekTargets = 2;
@@ -377,6 +397,7 @@ export const uiMachine = setup({
         }
 
         if (clientAbility.stage !== serverAbility.stage) {
+          logger.debug({ oldStage: clientAbility.stage, newStage: serverAbility.stage }, 'Action: syncAbilityContext (stage changed)');
           return {
             ...clientAbility,
             stage: serverAbility.stage,
@@ -392,6 +413,7 @@ export const uiMachine = setup({
         assertEvent(event, 'PLAYER_SLOT_CLICKED_FOR_ABILITY');
         const { abilityContext } = context;
         if (!abilityContext) return undefined;
+        logger.debug({ event, abilityContext }, 'Action: updateAbilityContext');
 
         const { playerId, cardIndex } = event;
         const newTarget = { playerId, cardIndex: cardIndex! };
@@ -425,51 +447,72 @@ export const uiMachine = setup({
       },
     }),
     clearAbilityContext: assign({
-      abilityContext: undefined,
+      abilityContext: () => {
+        logger.debug('Action: clearAbilityContext');
+        return undefined;
+      }
     }),
     // #endregion
 
     // #region ----- Error Handling -----
     showConnectionErrorToast: ({ event }) => {
       assertEvent(event, 'CONNECTION_ERROR');
+      logger.warn({ message: event.message }, 'Action: showConnectionErrorToast');
       toast.error(`Connection error: ${event.message}. Attempting to reconnect...`);
     },
     
     showServerErrorToast: ({ event }) => {
       assertEvent(event, 'SERVER_ERROR');
+      logger.error({ event }, 'Action: showServerErrorToast');
       toast.error(`Server error: ${event.message}`);
     },
     
     addConnectionError: assign({
       connectionErrors: ({ context, event }) => {
         assertEvent(event, 'CONNECTION_ERROR');
-        return [...context.connectionErrors, {
+        const newError = {
           message: event.message,
           timestamp: new Date().toISOString()
-        }];
+        };
+        logger.warn(newError, 'Action: addConnectionError');
+        return [...context.connectionErrors, newError];
       }
     }),
     
     clearErrors: assign({
-      error: null,
+      error: () => {
+        logger.debug('Action: clearErrors');
+        return null;
+      },
       connectionErrors: []
     }),
     
     incrementReconnectionAttempts: assign({
-      reconnectionAttempts: ({ context }) => context.reconnectionAttempts + 1
+      reconnectionAttempts: ({ context }) => {
+        const newCount = context.reconnectionAttempts + 1;
+        logger.warn({ attempt: newCount }, 'Action: incrementReconnectionAttempts');
+        return newCount;
+      }
     }),
     
     resetReconnectionAttempts: assign({
-      reconnectionAttempts: 0
+      reconnectionAttempts: () => {
+        logger.info('Action: resetReconnectionAttempts');
+        return 0;
+      }
     }),
     
     reportErrorToServer: emit(({ event }) => {
       assertEvent(event, ['ERROR_RECEIVED', 'CONNECTION_ERROR', 'SERVER_ERROR']);
-      return {
-        type: 'REPORT_ERROR_TO_SERVER' as const,
+      const errorPayload = {
         errorType: event.type,
         message: 'error' in event ? event.error : event.message,
         context: 'details' in event ? event.details : undefined
+      };
+      logger.debug(errorPayload, 'Action: reportErrorToServer');
+      return {
+        type: 'REPORT_ERROR_TO_SERVER' as const,
+        ...errorPayload
       };
     }),
     // #endregion
@@ -477,7 +520,12 @@ export const uiMachine = setup({
     cleanupExpiredVisibleCards: assign({
       visibleCards: ({ context }) => {
         const now = Date.now();
-        return context.visibleCards.filter(vc => !vc.expireAt || vc.expireAt > now);
+        const initialCount = context.visibleCards.length;
+        const remainingCards = context.visibleCards.filter(vc => !vc.expireAt || vc.expireAt > now);
+        if (initialCount > remainingCards.length) {
+            logger.trace({ removed: initialCount - remainingCards.length }, 'Action: cleanupExpiredVisibleCards');
+        }
+        return remainingCards;
       }
     }),
   },
@@ -485,15 +533,21 @@ export const uiMachine = setup({
     isAbilityActionComplete: ({ context }) => {
         const { abilityContext } = context;
         if (!abilityContext) return false;
+        let result = false;
         if (abilityContext.stage === 'peeking') {
-            return abilityContext.selectedPeekTargets.length === abilityContext.maxPeekTargets;
+            result = abilityContext.selectedPeekTargets.length === abilityContext.maxPeekTargets;
         }
         if (abilityContext.stage === 'swapping') {
-            return abilityContext.selectedSwapTargets.length === 2;
+            result = abilityContext.selectedSwapTargets.length === 2;
         }
-        return false;
+        logger.debug({ result, abilityContext }, 'Guard: isAbilityActionComplete');
+        return result;
       },
-    canAttemptReconnection: ({ context }) => context.reconnectionAttempts < MAX_RECONNECT_ATTEMPTS,
+    canAttemptReconnection: ({ context }) => {
+      const result = context.reconnectionAttempts < MAX_RECONNECT_ATTEMPTS;
+      logger.debug({ result, attempts: context.reconnectionAttempts }, 'Guard: canAttemptReconnection');
+      return result;
+    },
   },
 }).createMachine({
   id: 'ui',
@@ -525,7 +579,10 @@ export const uiMachine = setup({
   }),
   initial: 'initializing',
   on: {
-    RECONNECT: '#ui.inGame.reconnecting',
+    RECONNECT: {
+      target: '#ui.inGame.reconnecting',
+      actions: () => logger.info('Event: RECONNECT'),
+    },
     ERROR_RECEIVED: { 
       actions: ['showErrorToast', 'reportErrorToServer'] 
     },
@@ -541,10 +598,15 @@ export const uiMachine = setup({
   },
   states: {
     initializing: {
+      entry: () => logger.info('State: initializing'),
       always: [
         {
           target: 'inGame',
-          guard: ({ context }) => !!context.currentGameState,
+          guard: ({ context }) => {
+            const hasState = !!context.currentGameState;
+            logger.debug({ hasState }, 'Guard: hasInitialGameState');
+            return hasState;
+          },
         },
         {
           target: 'outOfGame',
@@ -553,32 +615,37 @@ export const uiMachine = setup({
     },
     outOfGame: {
       id: 'outOfGame',
+      entry: () => logger.info('State: outOfGame'),
       on: {
         CREATE_GAME_REQUESTED: {
-          actions: 'emitCreateGame',
+          actions: ['emitCreateGame', () => logger.info('Event: CREATE_GAME_REQUESTED')],
         },
         JOIN_GAME_REQUESTED: {
-          actions: 'emitJoinGame',
+          actions: ['emitJoinGame', () => logger.info('Event: JOIN_GAME_REQUESTED')],
         },
         GAME_CREATED_SUCCESSFULLY: {
           target: 'inGame',
-          actions: ['setGameIdAndPlayerId', 'setInitialGameState'],
+          actions: ['setGameIdAndPlayerId', 'setInitialGameState', () => logger.info('Event: GAME_CREATED_SUCCESSFULLY')],
         },
         GAME_JOINED_SUCCESSFULLY: {
           target: 'inGame',
-          actions: ['setGameIdAndPlayerId', 'setInitialGameState'],
+          actions: ['setGameIdAndPlayerId', 'setInitialGameState', () => logger.info('Event: GAME_JOINED_SUCCESSFULLY')],
         },
       },
     },
     inGame: {
       id: 'inGame',
+      entry: () => logger.info('State: inGame'),
       initial: 'routing',
       on: {
         DISCONNECT: {
           target: '.disconnected',
-          actions: assign({
-            error: { message: 'You have been disconnected from the game server' }
-          })
+          actions: [
+            () => logger.warn('Event: DISCONNECT'),
+            assign({
+              error: { message: 'You have been disconnected from the game server' }
+            })
+          ]
         },
         LEAVE_GAME: { target: '.leaving' },
         TOGGLE_SIDE_PANEL: { actions: 'toggleSidePanel' },
@@ -605,6 +672,7 @@ export const uiMachine = setup({
       },
       states: {
         routing: {
+          entry: () => logger.info('State: inGame.routing'),
           always: [
             {
               target: 'lobby',
@@ -615,16 +683,21 @@ export const uiMachine = setup({
               guard: ({ context }) => !!context.currentGameState && context.currentGameState.gameStage !== GameStage.WAITING_FOR_PLAYERS,
             },
             // Fallback if there's no game state for some reason, prevents getting stuck
-            { target: '#outOfGame' }
+            { 
+              target: '#outOfGame',
+              actions: () => logger.warn('Routing fallback: no game state, returning to outOfGame.'),
+            }
           ]
         },
         lobby: {
+          entry: () => logger.info('State: inGame.lobby'),
           on: {
             START_GAME: { actions: 'emitStartGame' },
             PLAYER_READY: { actions: 'emitPlayerReady' },
           },
         },
         playing: {
+            entry: () => logger.info('State: inGame.playing'),
             initial: 'active',
             on: {
                 SWAP_AND_DISCARD: {
@@ -736,6 +809,7 @@ export const uiMachine = setup({
             },
             states: {
                 active: {
+                  entry: () => logger.debug('State: inGame.playing.active'),
                   invoke: {
                     src: 'cardVisibilityCleanup',
                   },
@@ -758,6 +832,7 @@ export const uiMachine = setup({
                     },
                 },
                 ability: {
+                    entry: () => logger.debug('State: inGame.playing.ability'),
                     always: [
                       {
                         target: 'active',
@@ -775,11 +850,11 @@ export const uiMachine = setup({
             },
         },
         leaving: {
-          entry: ['emitLeaveGame', 'resetGameContext'],
+          entry: ['emitLeaveGame', 'resetGameContext', () => logger.warn('State: inGame.leaving')],
           always: '#outOfGame',
         },
         disconnected: {
-          entry: 'incrementReconnectionAttempts',
+          entry: ['incrementReconnectionAttempts', () => logger.warn('State: inGame.disconnected')],
           on: { 
             CONNECT: 'reconnecting',
             RETRY_RECONNECTION: {
@@ -804,7 +879,7 @@ export const uiMachine = setup({
         },
         reconnecting: {
           tags: ['loading'],
-          entry: ['emitRejoinGame'],
+          entry: ['emitRejoinGame', () => logger.info('State: inGame.reconnecting')],
           on: {
             CLIENT_GAME_STATE_UPDATED: {
               target: 'playing',
@@ -817,9 +892,12 @@ export const uiMachine = setup({
           }
         },
         recoveryFailed: {
-          entry: ({ context }) => {
-            toast.error(`Failed to reconnect after ${context.reconnectionAttempts} attempts. Please refresh the page and try again.`);
-          },
+          entry: [
+            () => logger.fatal('State: inGame.recoveryFailed'),
+            ({ context }) => {
+              toast.error(`Failed to reconnect after ${context.reconnectionAttempts} attempts. Please refresh the page and try again.`);
+            },
+          ],
           on: {
             CONNECT: 'reconnecting',
           }

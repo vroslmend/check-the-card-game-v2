@@ -8,17 +8,22 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { DeckCard } from '@/components/cards/DeckCard';
 import PlayerHand from './PlayerHand';
+import logger from '@/lib/logger';
 
 export const LocalPlayerArea = () => {
   const [state, send] = useUI();
   const { currentGameState, localPlayerId, abilityContext } = state.context;
   
+  // Defensive check: If we don't have game state or a local player ID yet,
+  // we are likely in a state where this component should not be rendered (e.g., joining).
+  // Returning null prevents downstream errors from trying to access non-existent player data.
   if (!currentGameState || !localPlayerId) {
     return null;
   }
   
   const localPlayer = currentGameState.players[localPlayerId];
   
+  // Defensive check: The player ID might exist but their data hasn't arrived in the game state yet.
   if (!localPlayer) {
     return null;
   }
@@ -28,19 +33,24 @@ export const LocalPlayerArea = () => {
 
   const handleCardClick = (cardIndex: number) => {
     if (abilityContext) {
+      logger.debug({ cardIndex, abilityContext }, 'Card clicked for ability');
       send({ type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY', playerId: localPlayerId, cardIndex });
       return;
     }
 
     if (currentGameState.turnPhase === TurnPhase.MATCHING) {
+      logger.debug({ cardIndex }, 'Card clicked for match attempt');
       send({ type: 'ATTEMPT_MATCH', handCardIndex: cardIndex });
       return;
     }
 
     if (isCurrentTurn && currentGameState.turnPhase === TurnPhase.DISCARD) {
+      logger.debug({ cardIndex }, 'Card clicked for swap and discard');
       send({ type: 'SWAP_AND_DISCARD', cardIndex });
       return;
     }
+
+    logger.warn({ cardIndex, turnPhase: currentGameState.turnPhase, isMyTurn: isCurrentTurn }, 'Card click had no effect');
   };
   
   return (

@@ -1,9 +1,80 @@
+"use client";
 import { io, Socket } from 'socket.io-client';
+import { 
+  SocketEventName,
+  type PlayerActionType,
+  type InitialPlayerSetupData,
+  type CreateGameResponse,
+  type JoinGameResponse,
+  type ClientCheckGameState,
+  type RichGameLogMessage,
+  type Card,
+  type PlayerId,
+  type AttemptRejoinResponse
+} from 'shared-types';
+import logger from './logger';
 
-const URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8000';
+// Base interface for any action sent to the server.
+// The server will use the 'type' property to discriminate the union.
+export interface PlayerAction {
+  type: PlayerActionType;
+  [key: string]: any;
+}
 
-// Create a single, shared socket instance.
-// Components and services can import this directly.
-export const socket: Socket = io(URL, {
-  autoConnect: false, // We will connect manually when needed.
-}); 
+// Define the event signatures for type-safe sockets
+interface ServerToClientEvents {
+  [SocketEventName.GAME_STATE_UPDATE]: (gameState: ClientCheckGameState) => void;
+  [SocketEventName.SERVER_LOG_ENTRY]: (logMessage: RichGameLogMessage) => void;
+  [SocketEventName.INITIAL_PEEK_INFO]: (data: { hand: Card[] }) => void;
+  [SocketEventName.ABILITY_PEEK_RESULT]: (payload: { card: Card; playerId: PlayerId; cardIndex: number }) => void;
+  [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
+  [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;
+}
+
+interface ClientToServerEvents {
+  [SocketEventName.CREATE_GAME]: (payload: InitialPlayerSetupData, callback: (response: CreateGameResponse) => void) => void;
+  [SocketEventName.JOIN_GAME]: (payload: { gameId: string; name: string }, callback: (response: JoinGameResponse) => void) => void;
+  [SocketEventName.ATTEMPT_REJOIN]: (payload: { gameId: string; playerId: string }, callback: (response: AttemptRejoinResponse) => void) => void;
+  [SocketEventName.PLAYER_ACTION]: (payload: PlayerAction) => void;
+}
+
+// The URL should be an environment variable, but we'll default it for convenience.
+const URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:8000';
+
+// This is a more robust way to create a socket singleton in a Next.js/hot-reloading environment.
+// We store the socket instance on the global object in development to prevent it from being
+// re-created every time the module is hot-reloaded.
+declare global {
+  var socket: Socket<ServerToClientEvents, ClientToServerEvents> | undefined;
+}
+
+const createSocket = (): Socket<ServerToClientEvents, ClientToServerEvents> => {
+  logger.info({ url: URL }, "Creating new socket connection.");
+  const newSocket: Socket<ServerToClientEvents, ClientToServerEvents> = io(URL, {
+    autoConnect: true,
+    reconnection: true,
+    reconnectionAttempts: 5,
+  });
+
+  newSocket.on('connect', () => {
+    logger.info({ socketId: newSocket.id }, "Socket connected");
+  });
+
+  newSocket.on('disconnect', (reason) => {
+    logger.warn({ reason }, "Socket disconnected");
+  });
+
+  newSocket.on('connect_error', (err) => {
+    logger.error({ error: err.message }, "Socket connection error");
+  });
+
+  return newSocket;
+};
+
+// In production, we always create a new socket.
+// In development, we use the global object to ensure a single instance.
+const socket = process.env.NODE_ENV === 'production' 
+  ? createSocket() 
+  : (global.socket || (global.socket = createSocket()));
+
+export { socket }; 
