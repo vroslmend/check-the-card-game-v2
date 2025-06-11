@@ -210,6 +210,8 @@ export enum PlayerActionType {
   // Lobby
   START_GAME = 'START_GAME',
   DECLARE_LOBBY_READY = 'DECLARE_LOBBY_READY',
+  LEAVE_GAME = 'LEAVE_GAME',
+  REMOVE_PLAYER = 'REMOVE_PLAYER',
   
   // Turn Actions
   DRAW_FROM_DECK = 'DRAW_FROM_DECK',

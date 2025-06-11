@@ -43,30 +43,26 @@ export const UIMachineProvider = ({
   children,
   gameId,
   localPlayerId,
-  initialGameState,
+  initialGameState: explicitInitialGameState,
 }: {
   children: React.ReactNode;
-  gameId: string;
-  localPlayerId: string | null;
+  gameId?: string;
+  localPlayerId?: string | null;
   initialGameState?: ClientCheckGameState;
 }) => {
   const getSessionInfo = () => {
     try {
-      const persistedSessionJSON = sessionStorage.getItem('playerSession');
-      if (persistedSessionJSON) {
-        const session = JSON.parse(persistedSessionJSON);
-        // Basic validation: ensure it's for the right game.
+      const persistedPlayerSessionJSON = sessionStorage.getItem('playerSession');
+      if (persistedPlayerSessionJSON) {
+        const session = JSON.parse(persistedPlayerSessionJSON);
         if (session.gameId === gameId) {
-          logger.info({ gameId, playerId: session.playerId, source: 'sessionStorage' }, 'Hydrating UI machine from session storage.');
+          logger.info({ gameId, playerId: session.playerId, source: 'sessionStorage' }, 'Hydrating player info from session storage.');
           return { playerId: session.playerId };
         }
       }
     } catch (e) {
       logger.error({ error: e }, 'Failed to read persisted session from sessionStorage');
     }
-
-    // If no state is found, we'll need to reconnect.
-    logger.info({ gameId }, 'No session found. Machine will start fresh.');
     return { playerId: null };
   };
 
@@ -75,11 +71,73 @@ export const UIMachineProvider = ({
   const actorRef = useActorRef(uiMachine, {
     input: {
       gameId,
-      // If we have a player ID from the server (first load) or from the session, use it.
       localPlayerId: localPlayerId ?? sessionPlayerId ?? undefined,
-      initialGameState: initialGameState,
+      initialGameState: explicitInitialGameState,
     },
   });
+
+  useEffect(() => {
+    // This effect runs once on mount to handle one-time hydration from session storage.
+    // This is more robust against React StrictMode re-renders than doing it during initialization.
+    const persistedGameStateJSON = sessionStorage.getItem('initialGameState');
+    
+    // If we have game state from props, log it and use it
+    if (explicitInitialGameState) {
+      logger.info({ gameId, source: 'props' }, 'Using provided initialGameState directly from props');
+      // Make sure this state also gets properly hydrated into the machine
+      actorRef.send({ type: 'HYDRATE_GAME_STATE', gameState: explicitInitialGameState });
+    }
+    // Otherwise try to get from session storage
+    else if (persistedGameStateJSON) {
+      try {
+        const gameState = JSON.parse(persistedGameStateJSON);
+        logger.info({ gameId, source: 'sessionStorage' }, 'Sending HYDRATE_GAME_STATE event from session storage.');
+        actorRef.send({ type: 'HYDRATE_GAME_STATE', gameState });
+        // We can remove this now since it's been processed
+        sessionStorage.removeItem('initialGameState');
+      } catch (e) {
+        logger.error({ error: e }, 'Failed to parse persisted game state from sessionStorage');
+      }
+    }
+  }, [actorRef, gameId, explicitInitialGameState]);
+
+  // Monitor socket connection state and sync with state machine
+  useEffect(() => {
+    const handleConnect = () => {
+      logger.info('Socket connected, notifying state machine');
+      // Send CONNECT event to state machine when socket connects
+      actorRef.send({ type: 'CONNECT' });
+    };
+
+    const handleDisconnect = (reason: string) => {
+      logger.warn({ reason }, 'Socket disconnected, notifying state machine');
+      // Send DISCONNECT event to state machine when socket disconnects
+      actorRef.send({ type: 'DISCONNECT' });
+    };
+
+    const handleConnectError = (error: Error) => {
+      logger.error({ error: error.message }, 'Socket connection error');
+      // Send CONNECTION_ERROR event to state machine
+      actorRef.send({ type: 'CONNECTION_ERROR', message: error.message });
+    };
+
+    // Set up listeners for connection events
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+
+    // If socket is already connected when component mounts, notify state machine
+    if (socket.connected) {
+      logger.info('Socket already connected on mount, notifying state machine');
+      actorRef.send({ type: 'CONNECT' });
+    }
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+    };
+  }, [actorRef]);
 
   useEffect(() => {
     const onGameStateUpdate = (gameState: ClientCheckGameState) => {
@@ -114,7 +172,6 @@ export const UIMachineProvider = ({
     socket.on(SocketEventName.ERROR_MESSAGE, onError);
     socket.on(SocketEventName.INITIAL_LOGS, onInitialLogs);
 
-
     return () => {
       socket.off(SocketEventName.GAME_STATE_UPDATE, onGameStateUpdate);
       socket.off(SocketEventName.SERVER_LOG_ENTRY, onNewLog);
@@ -129,18 +186,21 @@ export const UIMachineProvider = ({
   // This is the preferred, type-safe way to handle emitted events from an actor.
   useEffect(() => {
     const subscription = actorRef.on('EMIT_TO_SOCKET', (event) => {
-      logger.debug({ event }, `Socket OUT: ${event.eventName}`);
+      logger.debug({ eventName: event.eventName, payload: event.payload }, `Socket OUT: ${event.eventName}`);
 
       // Using a switch statement allows TypeScript to correctly narrow the event type
       // and ensure the payload/ack match the specific event being emitted.
       switch (event.eventName) {
         case SocketEventName.CREATE_GAME:
+          logger.info({ payload: event.payload }, 'Emitting CREATE_GAME to socket');
           socket.emit(event.eventName, event.payload, event.ack);
           break;
         case SocketEventName.JOIN_GAME:
+          logger.info({ payload: event.payload }, 'Emitting JOIN_GAME to socket');
           socket.emit(event.eventName, ...event.payload, event.ack);
           break;
         case SocketEventName.ATTEMPT_REJOIN:
+          logger.info({ payload: event.payload }, 'Emitting ATTEMPT_REJOIN to socket');
           socket.emit(event.eventName, event.payload, event.ack);
           break;
         case SocketEventName.PLAYER_ACTION:

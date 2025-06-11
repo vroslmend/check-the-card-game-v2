@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ChevronDown, Spade, Heart, Diamond, Users, ArrowRight } from "lucide-react"
 import { FaGithub, FaSpotify, FaDiscord } from "react-icons/fa"
-import dynamic from "next/dynamic"
 import { OptimizedShapes } from "@/components/ui/OptimizedShapes"
 import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements"
 import { PrincipleCard } from "@/components/ui/PrincipleCard"
@@ -19,9 +18,8 @@ import { Signature } from "@/components/ui/Signature"
 import { Scrollytelling } from "@/components/ui/Scrollytelling"
 // import { MainNav } from "@/components/layout/MainNav" // This line is commented out as the file does not exist
 import { socket } from "@/lib/socket"
-
-const NewGameModal = dynamic(() => import('@/components/modals/NewGameModal').then(mod => mod.NewGameModal), { ssr: false });
-const JoinGameModal = dynamic(() => import('@/components/modals/JoinGameModal').then(mod => mod.JoinGameModal), { ssr: false });
+import { useRouter } from "next/navigation"
+import { UIMachineProvider } from "@/components/providers/UIMachineProvider"
 
 const textContainerVariants = {
   hover: {
@@ -90,7 +88,7 @@ function FeatureItem({
   )
 }
 
-export default function Home() {
+function HomePage() {
   const [showNewGame, setShowNewGame] = useState(false)
   const [showJoinGame, setShowJoinGame] = useState(false)
   const [isCheckHovered, setIsCheckHovered] = useState(false)
@@ -100,6 +98,7 @@ export default function Home() {
   const [isPrecisionHovered, setIsPrecisionHovered] = useState(false)
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const router = useRouter()
 
   const containerRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLDivElement>(null)
@@ -201,6 +200,14 @@ export default function Home() {
       window.removeEventListener('mousemove', handleMouseMove);
     };
   }, [handleMouseMove]);
+
+  const handleCreateGame = () => {
+    router.push("/game/start?mode=create")
+  }
+
+  const handleJoinGame = () => {
+    router.push("/game/start?mode=join")
+  }
 
   return (
     <div
@@ -412,7 +419,7 @@ export default function Home() {
                       >
                         <Button
                           size="lg"
-                          onClick={() => setShowNewGame(true)}
+                          onClick={handleCreateGame}
                           data-cursor-link
                           className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
                         >
@@ -448,7 +455,7 @@ export default function Home() {
                         <Button
                           variant="outline"
                           size="lg"
-                          onClick={() => setShowJoinGame(true)}
+                          onClick={handleJoinGame}
                           data-cursor-link
                           className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100 dark:hover:bg-stone-900/80"
                         >
@@ -513,7 +520,7 @@ export default function Home() {
                 >
                   <Button
                     size="lg"
-                    onClick={() => setShowNewGame(true)}
+                    onClick={handleCreateGame}
                     className="rounded-full bg-stone-900 px-12 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
                     data-cursor-link
                   >
@@ -528,7 +535,7 @@ export default function Home() {
                   <Button
                     variant="outline"
                     size="lg"
-                    onClick={() => setShowJoinGame(true)}
+                    onClick={handleJoinGame}
                     className="rounded-full border-2 border-stone-200 bg-white/60 px-12 py-4 text-lg font-light backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:hover:bg-stone-900/80"
                     data-cursor-link
                   >
@@ -655,9 +662,10 @@ export default function Home() {
           </div>
         </div>
       </motion.footer>
-
-      <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
-      <JoinGameModal isModalOpen={showJoinGame} setIsModalOpen={setShowJoinGame} />
     </div>
   )
+}
+
+export default function Home() {
+  return <HomePage />
 }

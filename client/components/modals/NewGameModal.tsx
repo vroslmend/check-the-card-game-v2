@@ -1,12 +1,11 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { socket } from '@/lib/socket';
-import { createGame } from '@/lib/api';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { PlusCircle, Sparkles, ArrowRight } from 'lucide-react';
+import { useSelector } from '@xstate/react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Magnetic from '@/components/ui/Magnetic';
+import { UIContext } from '../providers/UIMachineProvider';
 
 interface NewGameModalProps {
   isModalOpen: boolean;
@@ -35,26 +35,34 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
   });
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const uiContext = useContext(UIContext);
+
+  const actorRef = uiContext?.actorRef;
+  const isInGame = useSelector(actorRef!, (state) => state.matches('inGame'));
+
+  useEffect(() => {
+    if (actorRef && isInGame) {
+      const { gameId, currentGameState } = actorRef.getSnapshot().context;
+      if (gameId && currentGameState) {
+        toast.success(`Created game ${gameId}`);
+        router.push(`/game/${gameId}`);
+        setIsLoading(false);
+      }
+    }
+  }, [isInGame, router, actorRef]);
 
   const handleCreateGame = async () => {
     if (!playerName.trim()) {
       toast.error('Please enter your name.');
       return;
     }
-
-    setIsLoading(true);
-    const response = await createGame(socket, playerName);
-
-    if (response.success && response.playerId && response.gameId && response.gameState) {
-      localStorage.setItem('localPlayerId', response.playerId);
-      localStorage.setItem('localPlayerName', playerName);
-      sessionStorage.setItem('initialGameState', JSON.stringify(response.gameState));
-      toast.success(`Created game ${response.gameId}`);
-      router.push(`/game/${response.gameId}`);
-    } else {
-      toast.error(`Failed to create game: ${response.message ?? 'Unknown error'}`);
-      setIsLoading(false);
+    if (!actorRef) {
+      toast.error('UI service not available. Please refresh the page.');
+      return;
     }
+    setIsLoading(true);
+    localStorage.setItem('localPlayerName', playerName);
+    actorRef.send({ type: 'CREATE_GAME_REQUESTED', playerName });
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -143,7 +151,7 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
               <Magnetic>
                 <Button 
                   onClick={handleCreateGame} 
-                  disabled={isLoading}
+                  disabled={isLoading || !actorRef}
                   className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 relative overflow-hidden group"
                   data-cursor-link
                 >

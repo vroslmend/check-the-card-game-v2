@@ -1,6 +1,15 @@
 'use client';
 
-import { motion } from 'framer-motion';
+// CSS animation for loading spinner
+const spinnerStyle = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .loading-spinner {
+    animation: spin 1s linear infinite;
+  }
+`;
 
 interface LoadingOrErrorProps {
   message: string;
@@ -10,13 +19,12 @@ interface LoadingOrErrorProps {
 const LoadingOrError = ({ message, isError = false }: LoadingOrErrorProps) => {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[200px] bg-background text-foreground p-4">
-      <motion.div
-        className="mb-4"
-        animate={{ rotate: 360 }}
-        transition={{ loop: Infinity, ease: "linear", duration: 1 }}
-      >
-        <div className={`w-12 h-12 rounded-full border-4 ${isError ? 'border-destructive' : 'border-primary'} border-t-transparent`} />
-      </motion.div>
+      <>
+        <style>{spinnerStyle}</style>
+        <div className="mb-4">
+          <div className={`w-12 h-12 rounded-full border-4 ${isError ? 'border-destructive' : 'border-primary'} border-t-transparent loading-spinner`} />
+        </div>
+      </>
       <h2 className={`text-xl font-semibold ${isError ? 'text-destructive' : ''}`}>
         {isError ? 'An Error Occurred' : 'Loading'}
       </h2>

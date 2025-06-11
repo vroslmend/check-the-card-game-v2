@@ -100,7 +100,9 @@ type PlayerActionEvents =
   | { type: PlayerActionType.DECLARE_READY_FOR_PEEK; playerId: PlayerId }
   | { type: PlayerActionType.PLAY_AGAIN; playerId: PlayerId }
   | { type: PlayerActionType.USE_ABILITY; playerId: PlayerId; payload: AbilityActionPayload }
-  | { type: PlayerActionType.SEND_CHAT_MESSAGE, payload: Omit<ChatMessage, 'id' | 'timestamp'> };
+  | { type: PlayerActionType.SEND_CHAT_MESSAGE, payload: Omit<ChatMessage, 'id' | 'timestamp'> }
+  | { type: PlayerActionType.LEAVE_GAME; playerId: PlayerId }
+  | { type: PlayerActionType.REMOVE_PLAYER; playerId: PlayerId; payload: { playerId: PlayerId } };
 
 
 type GameEvent =
@@ -416,6 +418,46 @@ export const gameMachine = setup({
         };
         return [...context.chat, newChatMessage];
       }
+    }),
+    removePlayer: assign({
+      players: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.REMOVE_PLAYER);
+        const { playerId } = event.payload;
+        logger.info({ gameId: context.gameId, playerId, removedBy: event.playerId }, 'Action: removePlayer');
+        
+        // Only remove player if we're in the lobby
+        if (context.currentTurnSegment !== null) {
+          logger.warn({ gameId: context.gameId, playerId }, 'Cannot remove player after game has started');
+          return context.players;
+        }
+        
+        // Only game master can remove players
+        if (event.playerId !== context.gameMasterId) {
+          logger.warn({ gameId: context.gameId, playerId, attemptedBy: event.playerId }, 'Only game master can remove players');
+          return context.players;
+        }
+        
+        const newPlayers = { ...context.players };
+        if (newPlayers[playerId]) {
+          delete newPlayers[playerId];
+        }
+        return newPlayers;
+      },
+      turnOrder: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.REMOVE_PLAYER);
+        const { playerId } = event.payload;
+        return context.turnOrder.filter(id => id !== playerId);
+      },
+      log: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.REMOVE_PLAYER);
+        const { playerId } = event.payload;
+        const playerName = context.players[playerId]?.name || 'Unknown player';
+        return [...context.log, createLogEntry(context, { 
+          message: `${playerName} was removed from the game.`, 
+          type: 'public', 
+          tags: ['system-message'] 
+        })];
+      },
     }),
     dealCards: assign(({ context }) => {
       logger.info({ gameId: context.gameId, players: context.turnOrder }, 'Action: dealCards');
@@ -1109,7 +1151,7 @@ export const gameMachine = setup({
     },
     PLAYER_DISCONNECTED: [
       {
-        target: '.error',
+        target: '#game.error',
         actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'setErrorState', 'broadcastGameState', 'logError'],
         guard: ({ context, event }) => {
           logger.warn({ gameId: context.gameId, playerId: event.playerId, currentPlayerId: context.currentPlayerId }, 'Player disconnected');
@@ -1148,6 +1190,15 @@ export const gameMachine = setup({
         [PlayerActionType.SEND_CHAT_MESSAGE]: {
           actions: ['addChatMessage', 'broadcastGameState'],
         },
+        [PlayerActionType.REMOVE_PLAYER]: {
+          actions: ['removePlayer', 'broadcastGameState'],
+        },
+        PLAYER_DISCONNECTED: {
+          actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'],
+        },
+        PLAYER_RECONNECTED: {
+          actions: ['setPlayerConnected', 'addPlayerReconnectedLog', 'broadcastGameState'],
+        },
       },
     },
     [GameStage.DEALING]: {
@@ -1173,7 +1224,7 @@ export const gameMachine = setup({
       entry: ['initializePlayState', 'broadcastGameState', ({context}) => logger.info({gameId: context.gameId, currentPlayerId: context.currentPlayerId}, 'State: PLAYING')],
       on: {
         PLAYER_DISCONNECTED: {
-          target: '.error',
+          target: '#game.error',
           actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'setErrorState', 'broadcastGameState', 'logError'],
         },
         [PlayerActionType.CALL_CHECK]: {
@@ -1287,7 +1338,7 @@ export const gameMachine = setup({
       entry: ['setupCheckRound', 'setNextCheckPlayer', 'broadcastGameState', ({context}) => logger.info({gameId: context.gameId, checkDetails: context.checkDetails}, 'State: CHECK')],
       on: {
         PLAYER_DISCONNECTED: {
-          target: '.error',
+          target: '#game.error',
           actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'setErrorState', 'broadcastGameState', 'logError'],
         },
       },

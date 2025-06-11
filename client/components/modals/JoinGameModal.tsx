@@ -1,12 +1,11 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { socket } from '@/lib/socket';
-import { joinGame } from '@/lib/api';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, Users, Shield, ArrowRight } from 'lucide-react';
+import { useSelector } from '@xstate/react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Magnetic from '@/components/ui/Magnetic';
+import { UIContext } from '../providers/UIMachineProvider';
 
 interface JoinGameModalProps {
   isModalOpen: boolean;
@@ -37,26 +37,35 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
   const router = useRouter();
+  const uiContext = useContext(UIContext);
+
+  const actorRef = uiContext?.actorRef;
+  const isInGame = useSelector(actorRef!, (state) => state.matches('inGame'));
+
+  useEffect(() => {
+    if (actorRef && isInGame) {
+      const { gameId: joinedGameId } = actorRef.getSnapshot().context;
+      if (joinedGameId) {
+        toast.success(`Joined game ${joinedGameId}`);
+        router.push(`/game/${joinedGameId}`);
+        setIsLoading(false);
+      }
+    }
+  }, [isInGame, router, actorRef]);
 
   const handleJoinGame = async () => {
     if (!gameId.trim() || !playerName.trim()) {
       toast.error('Please enter a game ID and your name.');
       return;
     }
+    if (!actorRef) {
+      toast.error('UI service not available. Please refresh the page.');
+      return;
+    }
 
     setIsLoading(true);
-    const response = await joinGame(socket, gameId, playerName);
-
-    if (response.success && response.playerId && response.gameId && response.gameState) {
-      localStorage.setItem('localPlayerId', response.playerId);
-      localStorage.setItem('localPlayerName', playerName);
-      sessionStorage.setItem('initialGameState', JSON.stringify(response.gameState));
-      toast.success(`Joined game ${gameId}`);
-      router.push(`/game/${response.gameId}`);
-    } else {
-      toast.error(`Failed to join game: ${response.message ?? 'Unknown error'}`);
-      setIsLoading(false);
-    }
+    localStorage.setItem('localPlayerName', playerName);
+    actorRef.send({ type: 'JOIN_GAME_REQUESTED', gameId, playerName });
   };
 
   const handleNextStep = () => {

@@ -1,7 +1,9 @@
+'use client';
+
 import React, { use } from 'react';
 import GameClient from './GameClient'; // Create a new client component
 
-export default function GameLayout({
+export default function GameIdLayout({
   children,
   params,
 }: {

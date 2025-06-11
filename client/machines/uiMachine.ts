@@ -27,7 +27,7 @@ import logger from '@/lib/logger';
 
 // Constants for error handling
 const MAX_RECONNECT_ATTEMPTS = parseInt(process.env.NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS || '3', 10);
-const RECONNECT_INTERVAL_MS = parseInt(process.env.NEXT_PUBLIC_RECONNECT_INTERVAL_MS || '5000', 10);
+const RECONNECT_INTERVAL_MS = parseInt(process.env.NEXT_PUBLIC_RECONNECT_INTERVAL_MS || '3000', 10);
 
 // #region ----- TYPE DEFINITIONS -----
 
@@ -171,6 +171,7 @@ export type UIMachineEvents =
   | { type: 'START_GAME' }
   | { type: 'PLAYER_READY' }
   | { type: 'LEAVE_GAME' }
+  | { type: 'REMOVE_PLAYER'; playerId: string }
   | { type: 'SUBMIT_CHAT_MESSAGE'; message: string; senderId: string; senderName: string; gameId: string }
   | { type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY'; playerId: PlayerId; cardIndex: number }
   | { type: 'CONFIRM_ABILITY_ACTION' }
@@ -192,6 +193,7 @@ export type UIMachineEvents =
   | { type: 'DISMISS_MODAL' }
   | { type: 'CLEANUP_EXPIRED_CARDS' }
   | { type: 'CALL_CHECK' }
+  | { type: 'HYDRATE_GAME_STATE'; gameState: ClientCheckGameState }
   | { type: 'PLAYER_ACTION'; payload: { type: PlayerActionType; payload?: any } };
 
 // #endregion
@@ -285,12 +287,19 @@ export const uiMachine = setup({
     persistSession: ({ event }) => {
       assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
       try {
-        const session = {
+        if (!event.response.success || !event.response.gameId || !event.response.playerId || !event.response.gameState) {
+          logger.error({ response: event.response }, 'Cannot persist session, success response is missing critical data.');
+          return;
+        }
+
+        const playerSession = {
           gameId: event.response.gameId,
           playerId: event.response.playerId,
         };
-        sessionStorage.setItem('playerSession', JSON.stringify(session));
-        logger.info({ session }, 'Action: persistSession');
+        sessionStorage.setItem('playerSession', JSON.stringify(playerSession));
+        sessionStorage.setItem('initialGameState', JSON.stringify(event.response.gameState));
+        
+        logger.info({ session: playerSession }, 'Action: persistSession');
       } catch (e) {
         logger.error({ error: e }, 'Failed to persist session to sessionStorage');
       }
@@ -308,12 +317,21 @@ export const uiMachine = setup({
     // #region ----- Socket Emitters -----
     emitCreateGame: emit(({ self, event }) => {
       assertEvent(event, 'CREATE_GAME_REQUESTED');
+      logger.info({ playerName: event.playerName }, 'Action: emitCreateGame');
       return {
         type: 'EMIT_TO_SOCKET' as const,
         eventName: SocketEventName.CREATE_GAME as const,
         payload: { name: event.playerName },
         ack: (response: CreateGameResponse) => {
-          self.send({ type: 'GAME_CREATED_SUCCESSFULLY', response });
+          logger.info({ success: response.success, gameId: response.gameId }, 'Create game response received');
+          if (response.success) {
+            logger.info({ gameId: response.gameId }, 'Sending GAME_CREATED_SUCCESSFULLY event');
+            self.send({ type: 'GAME_CREATED_SUCCESSFULLY', response });
+          } else {
+            logger.error({ message: response.message }, 'Failed to create game');
+            toast.error('Failed to create game', { description: response.message });
+            self.send({ type: 'SERVER_ERROR', message: 'Failed to create game', details: response.message });
+          }
         },
       };
     }),
@@ -428,6 +446,17 @@ export const uiMachine = setup({
       eventName: SocketEventName.PLAYER_ACTION as const,
       payload: { type: PlayerActionType.CALL_CHECK },
     }),
+    emitRemovePlayer: emit(({ context, event }) => {
+      assertEvent(event, 'REMOVE_PLAYER');
+      return {
+        type: 'EMIT_TO_SOCKET' as const,
+        eventName: SocketEventName.PLAYER_ACTION as const,
+        payload: {
+          type: PlayerActionType.REMOVE_PLAYER,
+          payload: { playerId: event.playerId }
+        }
+      };
+    }),
     // #endregion
 
     // #region ----- UI Actions -----
@@ -443,10 +472,7 @@ export const uiMachine = setup({
         }
     }),
     dismissModal: assign({
-        modal: () => {
-          logger.debug('Action: dismissModal');
-          return undefined;
-        }
+        modal: undefined,
     }),
     addPeekedCardToContext: assign({
       visibleCards: ({ context, event }) => {
@@ -656,6 +682,13 @@ export const uiMachine = setup({
         return remainingCards;
       }
     }),
+
+    // Add this action to redirect to the home page
+    redirectToHome: () => {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
+    },
   },
   guards: {
     isAbilityActionComplete: ({ context }) => {
@@ -711,40 +744,64 @@ export const uiMachine = setup({
       target: '#ui.inGame.reconnecting',
       actions: () => logger.info('Event: RECONNECT'),
     },
-    ERROR_RECEIVED: { 
-      actions: ['showErrorToast', 'reportErrorToServer'] 
+    ERROR_RECEIVED: {
+      actions: ['showErrorToast', 'reportErrorToServer'],
     },
-    CONNECTION_ERROR: { 
-      actions: ['showConnectionErrorToast', 'addConnectionError', 'reportErrorToServer'] 
+    CONNECTION_ERROR: {
+      actions: ['showConnectionErrorToast', 'addConnectionError', 'reportErrorToServer'],
     },
-    SERVER_ERROR: { 
+    SERVER_ERROR: {
       actions: ['showServerErrorToast', 'reportErrorToServer'],
     },
     DISMISS_MODAL: {
-      actions: 'dismissModal'
-    }
+      actions: 'dismissModal',
+    },
   },
   states: {
     initializing: {
       entry: () => logger.info('State: initializing'),
       always: [
         {
-          target: 'inGame.reconnecting',
-          guard: ({ context }) => !!context.localPlayerId && !context.currentGameState,
-          description: 'Has player ID from session, but no game state. Must reconnect.',
-        },
-        {
           target: 'inGame',
           guard: ({ context }) => {
             const hasState = !!context.currentGameState;
-            logger.debug({ hasState }, 'Guard: hasInitialGameState');
+            logger.info({ 
+              hasState, 
+              gameId: context.gameId,
+              hasPlayerId: !!context.localPlayerId
+            }, 'Guard: hasInitialGameState');
             return hasState;
           },
+          description:
+            'Game state was provided during initialization (e.g., from SSR or test setup). No need to reconnect.',
+        },
+        {
+          target: 'inGame.reconnecting',
+          guard: ({ context }) => {
+            const shouldReconnect = !!context.localPlayerId && !context.currentGameState;
+            logger.info({ 
+              shouldReconnect, 
+              hasPlayerId: !!context.localPlayerId,
+              hasGameState: !!context.currentGameState,
+              gameId: context.gameId
+            }, 'Guard: shouldReconnect');
+            return shouldReconnect;
+          },
+          description: 'Has player ID from session, but no game state. Must reconnect.',
         },
         {
           target: 'outOfGame',
+          description: 'No session and no initial state. Start fresh.',
         },
       ],
+      on: {
+        HYDRATE_GAME_STATE: {
+          target: 'inGame',
+          actions: assign({
+            currentGameState: ({ event }) => event.gameState,
+          }),
+        },
+      },
     },
     outOfGame: {
       id: 'outOfGame',
@@ -802,6 +859,7 @@ export const uiMachine = setup({
           actions: ['addChatMessage', 'emitChatMessage'],
         },
         DECLARE_READY_FOR_PEEK_CLICKED: { actions: 'emitDeclareReadyForPeek' },
+        REMOVE_PLAYER: { actions: 'emitRemovePlayer' },
       },
       states: {
         routing: {
@@ -827,6 +885,7 @@ export const uiMachine = setup({
           on: {
             START_GAME: { actions: 'emitStartGame' },
             PLAYER_READY: { actions: 'emitPlayerReady' },
+            REMOVE_PLAYER: { actions: 'emitRemovePlayer' },
           },
         },
         playing: {
@@ -921,8 +980,7 @@ export const uiMachine = setup({
             },
         },
         leaving: {
-          entry: ['resetGameContext', 'clearSession', () => logger.warn('State: inGame.leaving')],
-          always: '#outOfGame',
+          entry: ['resetGameContext', 'clearSession', 'redirectToHome', () => logger.warn('State: inGame.leaving')],
         },
         disconnected: {
           entry: ['incrementReconnectionAttempts', () => logger.warn('State: inGame.disconnected')],
@@ -953,7 +1011,7 @@ export const uiMachine = setup({
           entry: ['emitAttemptRejoin', () => logger.info('State: inGame.reconnecting')],
           on: {
             CLIENT_GAME_STATE_UPDATED: {
-              target: 'playing',
+              target: 'routing',
               actions: ['setCurrentGameState', 'syncAbilityContext', 'resetReconnectionAttempts', 'clearErrors'],
             },
             CONNECTION_ERROR: 'disconnected'
