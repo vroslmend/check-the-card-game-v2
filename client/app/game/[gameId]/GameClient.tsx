@@ -11,9 +11,11 @@ import { ClientCheckGameState } from 'shared-types';
 export default function GameClient({
   gameId,
   initialGameState,
+  children,
 }: {
   gameId: string;
   initialGameState?: ClientCheckGameState;
+  children: React.ReactNode;
 }) {
   const [localPlayerId, setLocalPlayerId] = useLocalStorage<string | null>(`player-id-${gameId}`, null);
   const [isClient, setIsClient] = useState(false);
@@ -36,7 +38,7 @@ export default function GameClient({
     <>
       <UIMachineProvider gameId={gameId} localPlayerId={localPlayerId} initialGameState={initialGameState}>
         <RejoinModal />
-        {/* GameView will be the main component consuming the context */}
+        {children}
       </UIMachineProvider>
       <Toaster />
     </>
