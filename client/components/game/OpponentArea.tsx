@@ -13,7 +13,10 @@ const OpponentPlayer = ({ player, isCurrent }: { player: Player; isCurrent: bool
   const { abilityContext, localPlayerId } = state.context;
 
   const isAbilityPlayer = abilityContext?.playerId === localPlayerId;
-  const isAbilityActive = state.matches({ inGame: { playing: 'ability' } }) && isAbilityPlayer;
+  
+  // Check state using a direct value check
+  const currentState = state.value as any;
+  const isAbilityActive = Boolean(currentState?.inGame?.playing === 'ability' && isAbilityPlayer);
 
   const handleCardClick = (card: Card | { facedown: true }, index: number) => {
     if (isAbilityActive) {

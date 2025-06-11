@@ -29,6 +29,18 @@ const RECONNECT_INTERVAL_MS = parseInt(process.env.NEXT_PUBLIC_RECONNECT_INTERVA
 
 // #region ----- TYPE DEFINITIONS -----
 
+// Define missing types
+type AbilityAction = {
+  type: AbilityType;
+  targets?: any[];
+};
+
+type LogEntry = {
+  id: string;
+  text: string;
+  timestamp: string;
+};
+
 type EmittedEvent = {
   type: 'EMIT_TO_SOCKET';
   eventName: SocketEventName;
@@ -55,11 +67,32 @@ export type PeekedCardInfo = {
   source: 'ability' | 'initial-peek'; // Source of the peek
 };
 
-export type UIMachineContext = {
-  localPlayerId: PlayerId | null;
-  gameId: GameId | null;
-  currentGameState: ClientCheckGameState | null;
-  abilityContext: ClientAbilityContext | null;
+export interface UIMachineContext {
+  gameId?: string;
+  currentGameState?: ClientCheckGameState;
+  localPlayerId?: string;
+  playerName?: string;
+  pendingAbilityAction?: AbilityAction;
+  abilityContext?: ClientAbilityContext;
+  logEntries: LogEntry[];
+  selectedCardIndices: number[];
+  highlightedCardIndices: number[];
+  peekedCardIndices: number[];
+  visibleCardAnimations: Record<string, boolean>;
+  modals: {
+    createGame: {
+      isOpen: boolean;
+    };
+    joinGame: {
+      isOpen: boolean;
+    };
+    rules: {
+      isOpen: boolean;
+    };
+    gameSettings: {
+      isOpen: boolean;
+    };
+  };
   visibleCards: PeekedCardInfo[];
   chatMessages: ChatMessage[];
   gameLog: RichGameLogMessage[];
@@ -78,7 +111,7 @@ export type UIMachineContext = {
     title: string;
     message: string;
   } | null;
-};
+}
 
 export type UIMachineEvents =
   | { type: 'CREATE_GAME_REQUESTED'; playerName: string }
@@ -183,17 +216,17 @@ export const uiMachine = setup({
       },
     }),
     resetGameContext: assign({
-        localPlayerId: null,
-        gameId: null,
-        currentGameState: null,
-        abilityContext: null,
+        localPlayerId: undefined,
+        gameId: undefined,
+        currentGameState: undefined,
+        abilityContext: undefined,
         visibleCards: [],
         chatMessages: [],
         gameLog: [],
         error: null,
         reconnectionAttempts: 0,
         connectionErrors: [],
-        modal: null,
+        modal: undefined,
     }),
     // #endregion
 
@@ -285,7 +318,7 @@ export const uiMachine = setup({
         isSidePanelOpen: ({ context }) => !context.isSidePanelOpen,
     }),
     dismissModal: assign({
-        modal: null,
+        modal: undefined,
     }),
     addPeekedCardToContext: assign({
       visibleCards: ({ context, event }) => {
@@ -309,7 +342,7 @@ export const uiMachine = setup({
         // Get the indices of the bottom two cards in a 2x2 grid
         const bottomCards = [2, 3]; 
         return event.hand.map((card, idx) => ({
-          playerId: context.localPlayerId,
+          playerId: context.localPlayerId ?? null,
           cardIndex: bottomCards[idx],
           card,
           source: 'initial-peek' as const,
@@ -328,7 +361,7 @@ export const uiMachine = setup({
         const clientAbility = context.abilityContext;
 
         if (!serverAbility || serverAbility.playerId !== context.localPlayerId) {
-          return null;
+          return undefined;
         }
 
         if (!clientAbility || clientAbility.type !== serverAbility.type) {
@@ -364,7 +397,7 @@ export const uiMachine = setup({
       abilityContext: ({ context, event }) => {
         assertEvent(event, 'PLAYER_SLOT_CLICKED_FOR_ABILITY');
         const { abilityContext } = context;
-        if (!abilityContext) return null;
+        if (!abilityContext) return undefined;
 
         const { playerId, cardIndex } = event;
         const newTarget = { playerId, cardIndex: cardIndex! };
@@ -398,7 +431,7 @@ export const uiMachine = setup({
       },
     }),
     clearAbilityContext: assign({
-      abilityContext: null,
+      abilityContext: undefined,
     }),
     // #endregion
 
@@ -471,10 +504,10 @@ export const uiMachine = setup({
 }).createMachine({
   id: 'ui',
   context: ({ input }) => ({
-    localPlayerId: input.localPlayerId ?? null,
-    gameId: input.gameId ?? null,
-    currentGameState: input.initialGameState ?? null,
-    abilityContext: null,
+    localPlayerId: input.localPlayerId ?? undefined,
+    gameId: input.gameId ?? undefined,
+    currentGameState: input.initialGameState ?? undefined,
+    abilityContext: undefined,
     visibleCards: [],
     chatMessages: input.initialGameState?.chat ?? [],
     gameLog: input.initialGameState?.log ?? [],
@@ -482,7 +515,19 @@ export const uiMachine = setup({
     error: null,
     reconnectionAttempts: 0,
     connectionErrors: [],
-    modal: null,
+    modal: undefined,
+    // Add missing required properties
+    logEntries: [],
+    selectedCardIndices: [],
+    highlightedCardIndices: [],
+    peekedCardIndices: [],
+    visibleCardAnimations: {},
+    modals: {
+      createGame: { isOpen: false },
+      joinGame: { isOpen: false },
+      rules: { isOpen: false },
+      gameSettings: { isOpen: false },
+    },
   }),
   initial: 'initializing',
   on: {

@@ -380,12 +380,34 @@ export const gameMachine = setup({
     }),
     drawFromDeck: assign(({ context, event }) => {
       assertEvent(event, PlayerActionType.DRAW_FROM_DECK);
-      const newDeck = [...context.deck];
-      const drawnCard = newDeck.pop();
-      if (!drawnCard) return {}; 
+      const { playerId } = event;
+      
+      // If deck is empty, just set the error state
+      if (context.deck.length === 0) {
+        return {
+          errorState: {
+            message: 'The deck is empty. Reshuffling discard pile...',
+            retryCount: 0,
+            errorType: 'DECK_EMPTY' as const,
+            affectedPlayerId: playerId,
+            recoveryState: {
+              activeState: context.currentTurnSegment,
+              currentPlayerId: context.currentPlayerId
+            }
+          }
+        };
+      }
+      
+      // Proceed with drawing if deck has cards
+      const [drawnCard, ...remainingDeck] = context.deck;
       const newPlayers = { ...context.players };
-      newPlayers[event.playerId]!.pendingDrawnCard = { card: drawnCard, source: 'deck' };
-      return { deck: newDeck, players: newPlayers, currentTurnSegment: TurnPhase.DISCARD };
+      newPlayers[playerId]!.pendingDrawnCard = { card: drawnCard, source: 'deck' };
+      
+      return { 
+        players: newPlayers, 
+        deck: remainingDeck,
+        currentTurnSegment: TurnPhase.DISCARD
+      };
     }),
     drawFromDiscard: assign(({ context, event }) => {
       assertEvent(event, PlayerActionType.DRAW_FROM_DISCARD);
@@ -402,18 +424,41 @@ export const gameMachine = setup({
       const player = context.players[playerId]!;
       const drawn = player.pendingDrawnCard;
       if (!drawn) return {};
-
-      const newHand = [...player.hand];
-      const cardToDiscard = newHand[handCardIndex]!;
-      newHand[handCardIndex] = drawn.card;
       
       const newPlayers = { ...context.players };
+      
+      // Card being swapped out (going to discard)
+      const cardToDiscard = player.hand[handCardIndex]!;
+      
+      // Update player's hand with drawn card
+      const newHand = [...player.hand];
+      newHand[handCardIndex] = drawn.card;
       newPlayers[playerId]!.hand = newHand;
       newPlayers[playerId]!.pendingDrawnCard = null;
-
+      
       const newDiscardPile = [...context.discardPile, cardToDiscard];
       
-      return { players: newPlayers, discardPile: newDiscardPile };
+      // Check if discarded card is special
+      const isSpecialCard = specialRanks.has(cardToDiscard.rank);
+      let activeAbility = null;
+      
+      if (isSpecialCard) {
+        const type: AbilityType = cardToDiscard.rank === CardRank.King ? 'king' 
+          : (cardToDiscard.rank === CardRank.Queen ? 'peek' : 'swap');
+        
+        activeAbility = {
+          type,
+          stage: type === 'swap' ? 'swapping' : 'peeking' as 'swapping' | 'peeking',
+          playerId,
+        };
+      }
+      
+      return { 
+        players: newPlayers, 
+        discardPile: newDiscardPile,
+        activeAbility,
+        currentTurnSegment: isSpecialCard ? TurnPhase.ABILITY : context.currentTurnSegment
+      };
     }),
     discardDrawnCard: assign(({ context, event }) => {
       assertEvent(event, PlayerActionType.DISCARD_DRAWN_CARD);
@@ -425,7 +470,27 @@ export const gameMachine = setup({
       newPlayers[event.playerId]!.pendingDrawnCard = null;
       const newDiscardPile = [...context.discardPile, drawn.card];
       
-      return { players: newPlayers, discardPile: newDiscardPile };
+      // If it's a special card (King, Queen, Jack), set up the active ability
+      const isSpecialCard = specialRanks.has(drawn.card.rank);
+      let activeAbility = null;
+      
+      if (isSpecialCard) {
+        const type: AbilityType = drawn.card.rank === CardRank.King ? 'king' 
+          : (drawn.card.rank === CardRank.Queen ? 'peek' : 'swap');
+        
+        activeAbility = {
+          type,
+          stage: type === 'swap' ? 'swapping' : 'peeking' as 'swapping' | 'peeking',
+          playerId: event.playerId
+        };
+      }
+      
+      return { 
+        players: newPlayers, 
+        discardPile: newDiscardPile,
+        activeAbility,
+        currentTurnSegment: isSpecialCard ? TurnPhase.ABILITY : context.currentTurnSegment
+      };
     }),
     setupMatchingOpportunity: assign({
       matchingOpportunity: ({ context }) => {
@@ -448,17 +513,28 @@ export const gameMachine = setup({
         const newPlayers = { ...context.players };
         const newMatchingPlayerHand = [...matchingPlayer.hand];
         newMatchingPlayerHand.splice(handCardIndex, 1);
-        newPlayers[matchingPlayer.id]!.hand = newMatchingPlayerHand;
+        newPlayers[playerId]!.hand = newMatchingPlayerHand;
         
         const newDiscardPile = [...context.discardPile, cardToPlaceOnPile];
 
         const handIsEmpty = newMatchingPlayerHand.length === 0;
-        const checkDetails = handIsEmpty
-          ? { callerId: playerId, playersYetToPlay: [] } 
-          : context.checkDetails;
+        let checkDetails = context.checkDetails;
         
         if (handIsEmpty) {
+          // Player emptied their hand through matching, automatically call check
           newPlayers[playerId]!.isLocked = true;
+          newPlayers[playerId]!.hasCalledCheck = true;
+          
+          // Set up check details with this player as the caller
+          checkDetails = { callerId: playerId, playersYetToPlay: [] };
+          
+          // Set up the check round with remaining players
+          const callerIndex = context.turnOrder.indexOf(playerId);
+          const playersInOrder = [
+            ...context.turnOrder.slice(callerIndex + 1),
+            ...context.turnOrder.slice(0, callerIndex)
+          ];
+          checkDetails.playersYetToPlay = playersInOrder;
         }
 
         return { 
@@ -514,35 +590,57 @@ export const gameMachine = setup({
     }),
     calculateScoresAndEndRound: assign({
       gameover: ({ context }) => {
+        let winnerId: PlayerId | null = null;
         let loserId: PlayerId | null = null;
         let minScore = Infinity;
+        let maxScore = -1;
         
         const playerScores = Object.fromEntries(
           Object.entries(context.players).map(([id, player]) => {
             const score = player.hand.reduce((acc, card) => acc + cardScoreValues[card.rank], 0);
             if (score < minScore) {
               minScore = score;
-              loserId = id;
+              winnerId = id;
+            }
+            if (score > maxScore) {
+                maxScore = score;
+                loserId = id;
             }
             return [id, score];
           })
         );
-        return { winnerId: null, loserId, playerScores };
+        return { winnerId, loserId, playerScores };
       }
     }),
-    resetForNextRound: assign(({ context }) => ({
-        deck: shuffleDeck(createDeck()),
-        discardPile: [],
-        players: Object.fromEntries(
-            Object.entries(context.players).map(([id, player]) => [id, { ...player, hand: [], isReady: false, isLocked: false, hasCalledCheck: false, pendingDrawnCard: null }])
-        ),
-        currentPlayerId: null,
-        currentTurnSegment: null,
-        checkDetails: null,
-        gameover: null,
-        lastRoundLoserId: context.gameover?.loserId ?? null,
-        turnOrder: context.lastRoundLoserId ? [context.lastRoundLoserId, ...context.turnOrder.filter(id => id !== context.lastRoundLoserId)] : context.turnOrder,
-    })),
+    resetForNextRound: assign(({ context }) => {
+        const lastRoundLoserId = context.gameover?.loserId;
+        const newTurnOrder = lastRoundLoserId ? [lastRoundLoserId, ...context.turnOrder.filter(id => id !== lastRoundLoserId)] : context.turnOrder;
+        const newDealerId = newTurnOrder[0];
+
+        const newPlayers = Object.fromEntries(
+            Object.entries(context.players).map(([id, player]) => [id, { 
+                ...player,
+                hand: [],
+                isReady: false,
+                isLocked: false,
+                hasCalledCheck: false,
+                pendingDrawnCard: null,
+                isDealer: id === newDealerId,
+            }])
+        );
+        
+        return {
+            deck: shuffleDeck(createDeck()),
+            discardPile: [],
+            players: newPlayers,
+            currentPlayerId: null,
+            currentTurnSegment: null,
+            checkDetails: null,
+            gameover: null,
+            lastRoundLoserId: lastRoundLoserId ?? null,
+            turnOrder: newTurnOrder,
+        };
+    }),
     sendPeekInfoToAllPlayers: enqueueActions(({ context, enqueue }) => {
       context.turnOrder.forEach((playerId) => {
         const player = context.players[playerId]!;
@@ -672,7 +770,7 @@ export const gameMachine = setup({
           message = `Player ${context.players[event.playerId]?.name || 'Unknown'} disconnected`;
         } else if (context.deck.length === 0) {
           errorType = 'DECK_EMPTY';
-          message = 'The deck is empty';
+          message = 'The deck is empty. Reshuffling discard pile...';
         }
         
         return {
@@ -746,6 +844,19 @@ export const gameMachine = setup({
         
         return [...context.log, logEntry];
       }
+    }),
+    reshuffleDiscardIntoDeck: assign({
+      deck: ({ context }) => {
+        // Keep the top card of discard pile
+        const discardPileWithoutTop = [...context.discardPile.slice(0, -1)];
+        return shuffleDeck(discardPileWithoutTop);
+      },
+      discardPile: ({ context }) => {
+        // Keep only the top card
+        const topCard = context.discardPile[context.discardPile.length - 1];
+        return topCard ? [topCard] : [];
+      },
+      errorState: null
     }),
   },
   actors: {
@@ -877,14 +988,24 @@ export const gameMachine = setup({
             DRAW: {
               entry: ['broadcastGameState'],
               on: {
-                [PlayerActionType.DRAW_FROM_DECK]: { guard: 'isPlayerTurn', actions: 'drawFromDeck', target: 'DISCARD' },
-                [PlayerActionType.DRAW_FROM_DISCARD]: { guard: and(['isPlayerTurn', 'canDrawFromDiscard']), actions: 'drawFromDiscard', target: 'DISCARD' },
+                [PlayerActionType.DRAW_FROM_DECK]: [
+                  {
+                    guard: 'isDeckEmpty',
+                    target: '#game.error',
+                    actions: 'drawFromDeck'
+                  },
+                  {
+                    guard: 'isPlayerTurn',
+                    target: 'DISCARD',
+                    actions: 'drawFromDeck'
+                  }
+                ],
+                [PlayerActionType.DRAW_FROM_DISCARD]: { 
+                  guard: and(['isPlayerTurn', 'canDrawFromDiscard']), 
+                  actions: 'drawFromDiscard', 
+                  target: 'DISCARD' 
+                },
               },
-              always: {
-                target: '#game.error',
-                guard: 'isDeckEmpty',
-                actions: 'setErrorState'
-              }
             },
             DISCARD: {
               entry: 'broadcastGameState',
@@ -896,7 +1017,6 @@ export const gameMachine = setup({
             action: {
               always: [
                 { guard: ({ context }) => !!context.activeAbility, target: 'ABILITY' },
-                { guard: 'isAbilityCardDiscarded', target: 'ABILITY', actions: 'activateAbility' },
                 { target: 'MATCHING' },
               ],
             },
@@ -922,7 +1042,7 @@ export const gameMachine = setup({
                     {
                         guard: and(['canAttemptMatch', 'matchWillEmptyHand']),
                         actions: 'handleSuccessfulMatch',
-                        target: `#game.${GameStage.CHECK}`
+                        target: '#game.CHECK'
                     },
                     {
                         guard: 'canAttemptMatch',
@@ -951,10 +1071,6 @@ export const gameMachine = setup({
     [GameStage.CHECK]: {
       initial: 'turn',
       entry: ['setupCheckRound', 'setNextCheckPlayer', 'broadcastGameState'],
-      always: {
-        guard: ({ context }) => !context.currentPlayerId,
-        target: GameStage.GAMEOVER,
-      },
       states: {
         turn: {
           initial: 'DRAW',
@@ -962,8 +1078,23 @@ export const gameMachine = setup({
             DRAW: {
               entry: ['broadcastGameState'],
               on: {
-                [PlayerActionType.DRAW_FROM_DECK]: { guard: 'isPlayerTurn', actions: 'drawFromDeck', target: 'DISCARD' },
-                [PlayerActionType.DRAW_FROM_DISCARD]: { guard: and(['isPlayerTurn', 'canDrawFromDiscard']), actions: 'drawFromDiscard', target: 'DISCARD' },
+                [PlayerActionType.DRAW_FROM_DECK]: [
+                  {
+                    guard: ({ context }) => context.errorState?.errorType === 'DECK_EMPTY',
+                    target: '#game.error',
+                    actions: 'drawFromDeck'
+                  },
+                  {
+                    guard: 'isPlayerTurn',
+                    target: 'DISCARD',
+                    actions: 'drawFromDeck'
+                  }
+                ],
+                [PlayerActionType.DRAW_FROM_DISCARD]: { 
+                  guard: and(['isPlayerTurn', 'canDrawFromDiscard']), 
+                  actions: 'drawFromDiscard', 
+                  target: 'DISCARD' 
+                },
               },
             },
             DISCARD: {
@@ -976,7 +1107,6 @@ export const gameMachine = setup({
             action: {
               always: [
                 { guard: ({ context }) => !!context.activeAbility, target: 'ABILITY' },
-                { guard: 'isAbilityCardDiscarded', target: 'ABILITY', actions: 'activateAbility' },
                 { target: 'MATCHING' },
               ],
             },
@@ -1067,7 +1197,7 @@ export const gameMachine = setup({
             return context.errorState === null || 
               (context.errorState.errorType === 'DECK_EMPTY' && context.discardPile.length > 1);
           },
-          actions: 'reshuffleDeckIfEmpty'
+          actions: ['reshuffleDiscardIntoDeck', 'broadcastGameState']
         },
         {
           target: 'failedRecovery'

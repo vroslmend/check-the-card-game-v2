@@ -7,26 +7,24 @@ import { GameLobby } from '@/components/game/GameLobby';
 import LoadingOrError from '@/components/layout/LoadingOrError';
 import { Toaster } from '@/components/ui/sonner';
 import { GameStage } from 'shared-types';
+import { motion, AnimatePresence } from 'framer-motion';
 
 function GameView() {
   const [state] = useUI();
   
-  const isDisconnected = state.matches({ inGame: 'disconnected' });
-  const inLobby = state.matches({ inGame: 'lobby' });
-  const inGame = state.matches({ inGame: 'playing' });
+  // Check state using state.value and tags instead of matches
+  const isDisconnected = state.tags.has('disconnected');
+  const currentState = state.value as any;
+  const inLobby = currentState?.inGame === 'lobby';
+  const inGame = currentState?.inGame === 'playing';
+  const gameStage = state.context.currentGameState?.gameStage;
 
-  const content = () => {
-    if (inLobby) {
-      return <GameLobby />;
-    }
-    
-    if (inGame) {
-      return <GameBoard />;
-    }
-
-    // Default to a loading state if not in a specific, known UI state.
-    // This covers initial loading, re-connections, etc.
-    return <LoadingOrError message="Initializing..." />;
+  // Generate a unique key for the AnimatePresence
+  const getContentKey = () => {
+    if (isDisconnected) return 'disconnected';
+    if (inLobby) return 'lobby';
+    if (inGame) return `game-${gameStage}`;
+    return 'loading';
   };
 
   if (isDisconnected) {
@@ -40,10 +38,27 @@ function GameView() {
 
   return (
     <>
-      <main className="relative flex min-h-screen flex-col items-center justify-center p-4 overflow-hidden">
-        {content()}
+      <main className="fixed inset-0 overflow-hidden bg-stone-100 dark:bg-stone-900">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={getContentKey()}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="w-full h-full"
+          >
+            {inLobby ? (
+              <GameLobby />
+            ) : inGame ? (
+              <GameBoard />
+            ) : (
+              <LoadingOrError message="Initializing..." />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
-      <Toaster richColors />
+      <Toaster richColors position="top-center" />
     </>
   );
 }

@@ -57,6 +57,7 @@ interface PlayingCardProps {
   isSelected?: boolean;
   isTarget?: boolean;
   isPeeked?: boolean;
+  isHighlighted?: boolean;
   onClick?: () => void;
   canInteract?: boolean;
   layoutId?: string;
@@ -71,6 +72,7 @@ export function PlayingCard({
   isSelected,
   isTarget,
   isPeeked,
+  isHighlighted,
   onClick,
   canInteract = true,
   layoutId,
@@ -151,10 +153,15 @@ export function PlayingCard({
             y: -5,
             boxShadow: "0 15px 20px rgba(0,0,0,0.12)"
           }
-        : {
-            y: 0,
-            boxShadow: "0 5px 15px rgba(0,0,0,0.08)"
-          };
+        : isHighlighted
+          ? {
+              y: -4,
+              boxShadow: "0 12px 18px rgba(0,0,0,0.1)"
+            }
+          : {
+              y: 0,
+              boxShadow: "0 5px 15px rgba(0,0,0,0.08)"
+            };
 
   const sizeClasses = {
     sm: "w-12 h-16",
@@ -179,6 +186,7 @@ export function PlayingCard({
         isSelected && "ring-2 ring-blue-500/50",
         isTarget && "ring-2 ring-amber-500/50",
         isPeeked && "ring-2 ring-green-500/50",
+        isHighlighted && "ring-2 ring-yellow-500/50",
         !canInteract && "cursor-not-allowed opacity-70",
         sizeClasses[size],
         className

@@ -1,13 +1,15 @@
 "use client"
 
+import React from 'react';
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { useState, useRef } from "react"
-import { CheckCircle, Circle, Eye, Shuffle, Ban, X, GitCommitHorizontal, SkipForward, Search } from "lucide-react"
+import { CheckCircle, Circle, Eye, Shuffle, Ban, X, GitCommitHorizontal, SkipForward, Search, Flag, Check, HelpCircle, AlertTriangle } from "lucide-react"
 import { useUI } from "@/components/providers/UIMachineProvider"
 import { type UIMachineEvents } from "@/machines/uiMachine"
 import Magnetic from "../ui/Magnetic";
 import { GameStage, TurnPhase, CardRank, PlayerActionType } from "shared-types"
+import { toast } from 'sonner';
 
 type ActionButton = {
   id: string;
@@ -76,8 +78,12 @@ export function GameActionControls() {
   const getAvailableActions = (): ActionButton[] => {
     const actions: ActionButton[] = [];
 
+    // Check for ability state using the current state value
+    const stateValue = state.value as any;
+    const inAbilityState = stateValue?.inGame?.playing === 'ability';
+
     // --- Ability Actions ---
-    if (state.matches({ inGame: { playing: 'ability' } }) && isAbilityPlayer && abilityContext) {
+    if (inAbilityState && isAbilityPlayer && abilityContext) {
       if (abilityContext.stage === 'peeking') {
         const requiredCount = abilityContext.maxPeekTargets;
         const selectedCount = abilityContext.selectedPeekTargets.length;
@@ -159,7 +165,11 @@ export function GameActionControls() {
   }
 
   const getInstructionText = () => {
-    if (state.matches({ inGame: { playing: 'ability' } }) && isAbilityPlayer && abilityContext) {
+    // Check for ability state using the current state value
+    const stateValue = state.value as any;
+    const inAbilityState = stateValue?.inGame?.playing === 'ability';
+
+    if (inAbilityState && isAbilityPlayer && abilityContext) {
        if (abilityContext.stage === 'peeking') {
         return `You used a ${abilityContext.type}. Select ${abilityContext.maxPeekTargets} card(s) to peek at.`;
       }
@@ -195,6 +205,22 @@ export function GameActionControls() {
 
   const actions = getAvailableActions();
   const instructionText = getInstructionText();
+
+  const handleCallCheck = () => {
+    if (!localPlayerId) return;
+    
+    send({ 
+      type: 'PLAYER_ACTION', 
+      payload: { 
+        type: PlayerActionType.CALL_CHECK, 
+        payload: { playerId: localPlayerId } 
+      } 
+    });
+  };
+  
+  const handleShowRules = () => {
+    send({ type: 'TOGGLE_SIDE_PANEL' });
+  };
 
   return (
     <motion.div className="space-y-4" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -268,6 +294,42 @@ export function GameActionControls() {
             })}
           </AnimatePresence>
         </div>
+      </div>
+
+      <div className="flex justify-center w-full">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`controls-${currentGameState.gameStage}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="flex gap-3">
+              {!isMyTurn && currentGameState.gameStage === GameStage.PLAYING && (
+                <Button 
+                  variant="outline" 
+                  size="lg"
+                  className="flex items-center gap-1.5 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/50" 
+                  onClick={handleCallCheck}
+                >
+                  <Flag className="h-4 w-4" />
+                  <span>Call Check!</span>
+                </Button>
+              )}
+              
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="flex items-center gap-1.5" 
+                onClick={handleShowRules}
+              >
+                <HelpCircle className="h-4 w-4" />
+                <span>Rules</span>
+              </Button>
+            </div>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </motion.div>
   );

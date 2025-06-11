@@ -4,14 +4,14 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUI } from '@/components/providers/UIMachineProvider';
 import { DeckCard } from '@/components/cards/DeckCard';
-import { TurnPhase, CardRank, PlayerActionType } from 'shared-types';
-import { Layers, ArrowDown, Clock } from 'lucide-react';
+import { TurnPhase, CardRank, PlayerActionType, GameStage } from 'shared-types';
+import { Layers, ArrowDown, Clock, Users, Eye, Trophy } from 'lucide-react';
 
 export const TableArea = () => {
   const [state, send] = useUI();
 
   const { currentGameState, localPlayerId } = state.context;
-  const { deckSize = 0, discardPile = [], turnPhase, currentPlayerId, players } = currentGameState ?? {};
+  const { deckSize = 0, discardPile = [], turnPhase, currentPlayerId, players, gameStage } = currentGameState ?? {};
 
   const topDiscardCard = discardPile.length > 0 ? discardPile[discardPile.length - 1] : null;
   const isMyTurn = currentPlayerId === localPlayerId;
@@ -39,6 +39,28 @@ export const TableArea = () => {
   const currentPlayerName = players && currentPlayerId ? players[currentPlayerId]?.name : '...';
   const isLocalPlayerTurn = currentPlayerId === localPlayerId;
 
+  const getGameStageIcon = () => {
+    switch (gameStage) {
+      case GameStage.WAITING_FOR_PLAYERS: return <Users className="h-5 w-5" />;
+      case GameStage.INITIAL_PEEK: return <Eye className="h-5 w-5" />;
+      case GameStage.PLAYING: return <Layers className="h-5 w-5" />;
+      case GameStage.CHECK: return <Clock className="h-5 w-5" />;
+      case GameStage.GAMEOVER: return <Trophy className="h-5 w-5" />;
+      default: return <Clock className="h-5 w-5" />;
+    }
+  };
+
+  const getGameStageName = () => {
+    switch (gameStage) {
+      case GameStage.WAITING_FOR_PLAYERS: return "Waiting for Players";
+      case GameStage.INITIAL_PEEK: return "Initial Peek";
+      case GameStage.PLAYING: return "Game in Progress";
+      case GameStage.CHECK: return "Check Called!";
+      case GameStage.GAMEOVER: return "Game Over";
+      default: return "Loading...";
+    }
+  };
+
   const getPhaseText = () => {
     if (!turnPhase || !players) return 'Waiting...';
     switch (turnPhase) {
@@ -60,7 +82,26 @@ export const TableArea = () => {
   }
 
   return (
-    <div className="relative h-full">
+    <div className="relative h-full w-full flex flex-col">
+      {/* Game Stage Indicator */}
+      <motion.div 
+        className="absolute top-0 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 dark:bg-black/30 backdrop-blur-sm shadow-md"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.4 }}
+      >
+        <div className={`
+          w-8 h-8 rounded-full flex items-center justify-center
+          ${gameStage === GameStage.PLAYING ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' :
+            gameStage === GameStage.CHECK ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' :
+            gameStage === GameStage.GAMEOVER ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' :
+            'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400'}
+        `}>
+          {getGameStageIcon()}
+        </div>
+        <span className="font-medium text-stone-800 dark:text-stone-200">{getGameStageName()}</span>
+      </motion.div>
+
       {/* Background */}
       <motion.div 
         className="absolute inset-0 rounded-3xl bg-gradient-to-b from-stone-100/80 to-white/50 dark:from-zinc-900/80 dark:to-zinc-950/50 backdrop-blur-sm border border-stone-200/60 dark:border-zinc-800/60"
@@ -70,55 +111,65 @@ export const TableArea = () => {
       />
 
       {/* Main content */}
-      <div className="relative flex h-full items-center justify-center gap-20 p-4">
-        {/* Deck */}
-        <motion.div
-          whileHover={canDrawFromDeck ? { scale: 1.03 } : {}}
-          className="relative"
-        >
-          <DeckCard 
-            count={deckSize} 
-            isInteractive={canDrawFromDeck}
-            onClick={handleDeckClick}
-            label="Draw Pile"
-          />
-          {canDrawFromDeck && (
+      <div className="relative flex-1 flex flex-col items-center justify-center">
+        <div className="flex items-center justify-center space-x-32 md:space-x-40 lg:space-x-48">
+          {/* Deck */}
+          <div className="flex flex-col items-center">
             <motion.div
-              className="absolute -top-4 left-1/2 -translate-x-1/2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3 py-1 rounded-full text-xs font-medium"
-              initial={{ y: -10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -10, opacity: 0 }}
+              whileHover={canDrawFromDeck ? { scale: 1.03 } : {}}
+              className="relative"
             >
-              Draw
+              <DeckCard 
+                count={deckSize} 
+                isInteractive={canDrawFromDeck}
+                onClick={handleDeckClick}
+                label="Draw Pile"
+              />
+              <AnimatePresence>
+                {canDrawFromDeck && (
+                  <motion.div
+                    className="absolute -top-4 left-1/2 -translate-x-1/2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3 py-1 rounded-full text-xs font-medium"
+                    initial={{ y: -10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -10, opacity: 0 }}
+                  >
+                    Draw
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
-          )}
-        </motion.div>
+            <span className="mt-2 text-sm text-stone-600 dark:text-stone-400">Draw Pile</span>
+          </div>
 
-        {/* Discard Pile */}
-        <motion.div
-          whileHover={canDrawFromDiscard ? { scale: 1.03 } : {}}
-          className="relative"
-        >
-          <DeckCard 
-            card={topDiscardCard} 
-            count={discardPile.length}
-            isInteractive={canDrawFromDiscard}
-            onClick={handleDiscardClick}
-            label="Discard Pile"
-          />
-          <AnimatePresence>
-            {canDrawFromDiscard && (
-              <motion.div
-                className="absolute -top-4 left-1/2 -translate-x-1/2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3 py-1 rounded-full text-xs font-medium"
-                initial={{ y: -10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -10, opacity: 0 }}
-              >
-                Pick Up
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+          {/* Discard Pile */}
+          <div className="flex flex-col items-center">
+            <motion.div
+              whileHover={canDrawFromDiscard ? { scale: 1.03 } : {}}
+              className="relative"
+            >
+              <DeckCard 
+                card={topDiscardCard} 
+                count={discardPile.length}
+                isInteractive={canDrawFromDiscard}
+                onClick={handleDiscardClick}
+                label="Discard Pile"
+              />
+              <AnimatePresence>
+                {canDrawFromDiscard && (
+                  <motion.div
+                    className="absolute -top-4 left-1/2 -translate-x-1/2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3 py-1 rounded-full text-xs font-medium"
+                    initial={{ y: -10, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -10, opacity: 0 }}
+                  >
+                    Pick Up
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+            <span className="mt-2 text-sm text-stone-600 dark:text-stone-400">Discard Pile</span>
+          </div>
+        </div>
 
         {/* Game Phase / Status Indicator */}
         <AnimatePresence mode="wait">
@@ -129,7 +180,7 @@ export const TableArea = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="absolute bottom-6 left-1/2 -translate-x-1/2"
+            className="absolute bottom-0"
           >
             <motion.div 
               className="rounded-xl overflow-hidden border border-stone-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-sm px-6 py-3 text-center shadow-xl"
