@@ -11,6 +11,7 @@ import {
   ActiveAbility,
 } from 'shared-types';
 import type { GameContext, ServerPlayer } from './game-machine.js';
+import logger from './lib/logger.js';
 
 // The server-side context now comes from the game machine itself.
 // These types are defined locally in the machine file.
@@ -26,7 +27,9 @@ export const generatePlayerView = (
   snapshot: { context: GameContext, value: unknown },
   viewingPlayerId: string
 ): ClientCheckGameState => {
-  const fullGameContext = snapshot.context;
+  const { context: fullGameContext, value: snapshotValue } = snapshot;
+  logger.debug({ gameId: fullGameContext.gameId, viewingPlayerId }, 'Generating player view');
+
   const clientPlayers: Record<PlayerId, Player> = {};
 
   for (const pId in fullGameContext.players) {
@@ -74,6 +77,7 @@ export const generatePlayerView = (
     gameStageValue = Object.keys(snapshot.value)[0] as GameStage;
   } else {
     // Fallback in case of an unexpected state value
+    logger.warn({ value: snapshot.value, gameId: fullGameContext.gameId }, 'Unexpected snapshot value type, defaulting game stage.');
     gameStageValue = GameStage.WAITING_FOR_PLAYERS;
   }
   
@@ -97,5 +101,6 @@ export const generatePlayerView = (
     chat: fullGameContext.chat ?? [],
   };
 
+  logger.debug({ gameId: fullGameContext.gameId, viewingPlayerId, stage: clientGameState.gameStage, turnPhase: clientGameState.turnPhase }, 'Finished generating player view');
   return clientGameState;
 };

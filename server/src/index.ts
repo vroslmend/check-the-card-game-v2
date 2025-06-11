@@ -8,6 +8,7 @@ dotenv.config();
 
 import { gameMachine, GameContext } from './game-machine.js';
 import { generatePlayerView } from './state-redactor.js';
+import logger from './lib/logger.js';
 import {
   InitialPlayerSetupData,
   PlayerActionType,
@@ -24,14 +25,14 @@ import {
 // for use within this file. This avoids circular dependencies.
 type GameMachineActorRef = ActorRefFrom<typeof gameMachine>;
 
-console.log('Server starting with Socket.IO...');
+logger.info('Server starting with Socket.IO...');
 
 const activeGameMachines = new Map<GameId, GameMachineActorRef>();
 const socketSessionMap = new Map<string, { gameId: GameId; playerId: PlayerId }>();
 const pendingCallbacks = new Map<string, (response: CreateGameResponse | JoinGameResponse) => void>();
 
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
-console.log(`[Server] CORS origin set to: ${CORS_ORIGIN}`);
+logger.info({ corsOrigin: CORS_ORIGIN }, `CORS origin set`);
 
 const httpServer = http.createServer();
 const io = new SocketIOServer(httpServer, {
@@ -42,7 +43,7 @@ const io = new SocketIOServer(httpServer, {
 });
 
 io.on('connection', (socket: Socket) => {
-  console.log(`[Server] New connection: ${socket.id}`);
+  logger.info({ socketId: socket.id }, 'New connection');
 
   const registerSocketSession = (gameId: GameId, playerId: PlayerId) => {
     socketSessionMap.set(socket.id, { gameId, playerId });
@@ -55,7 +56,12 @@ io.on('connection', (socket: Socket) => {
   const broadcastGameState = (gameId: GameId, gameActor: GameMachineActorRef) => {
     const snapshot = gameActor.getSnapshot();
     const socketsInRoom = io.sockets.adapter.rooms.get(gameId);
-    if (!socketsInRoom) return;
+    if (!socketsInRoom) {
+      logger.warn({ gameId }, 'Broadcast state failed: room does not exist or is empty.');
+      return;
+    }
+
+    logger.debug({ gameId, players: Array.from(socketsInRoom) }, 'Broadcasting game state');
 
     socketsInRoom.forEach(socketId => {
       const session = socketSessionMap.get(socketId);
@@ -71,6 +77,8 @@ io.on('connection', (socket: Socket) => {
       const gameId = nanoid(6);
       const playerId = nanoid();
       const finalPlayerSetupData = { ...playerSetupData, id: playerId, socketId: socket.id };
+
+      logger.info({ gameId, playerId, playerName: playerSetupData.name }, 'Creating game');
 
       const gameActor = createActor(gameMachine, { input: { gameId } });
 
@@ -100,9 +108,9 @@ io.on('connection', (socket: Socket) => {
 
       // General subscriber for cleanup
       const actorSubscription = gameActor.subscribe({
-          error: (err) => console.error(`[GameMachineError] Game ${gameId}:`, err),
+          error: (err) => logger.error({ err, gameId }, 'Game machine error'),
           complete: () => {
-              console.log(`[Server] Game machine for ${gameId} has completed.`);
+              logger.info({ gameId }, 'Game machine has completed.');
               activeGameMachines.delete(gameId);
               // Clean up all subscriptions for this actor
               broadcastSubscription.unsubscribe();
@@ -119,7 +127,7 @@ io.on('connection', (socket: Socket) => {
       gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
 
     } catch (e: any) {
-      console.error(`[Server-CreateGame] Error: ${e.message}`, e);
+      logger.error({ err: e }, `[Server-CreateGame] Error`);
       if (callback) callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
     }
   });
@@ -128,19 +136,24 @@ io.on('connection', (socket: Socket) => {
       const { gameId, playerSetupData } = data;
       const gameActor = activeGameMachines.get(gameId);
 
+      logger.info({ gameId, playerName: playerSetupData.name, socketId: socket.id }, 'Player attempting to join game');
+
       if (!gameActor) {
+          logger.warn({ gameId }, 'Join failed: game not found.');
           if (callback) callback({ success: false, message: 'Game not found.' });
           return;
       }
 
       const currentState = gameActor.getSnapshot();
       if (currentState.value !== GameStage.WAITING_FOR_PLAYERS) {
+        logger.warn({ gameId, currentState: currentState.value }, 'Join failed: game has already started.');
         if (callback) callback({ success: false, message: 'Game has already started.' });
         return;
       }
       
       const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || '4', 10);
       if (Object.keys(currentState.context.players).length >= MAX_PLAYERS) {
+        logger.warn({ gameId, playerCount: Object.keys(currentState.context.players).length }, 'Join failed: game is full.');
         if (callback) callback({ success: false, message: 'Game is full.' });
         return;
       }
@@ -167,7 +180,7 @@ io.on('connection', (socket: Socket) => {
     const gameActor = activeGameMachines.get(gameId);
 
     if (gameActor) {
-      console.log(`[Server] Player ${playerId} attempting to rejoin game ${gameId} with new socket ${socket.id}`);
+      logger.info({ playerId, gameId, newSocketId: socket.id }, 'Player attempting to rejoin game');
       
       const reconnectSubscription = gameActor.on('PLAYER_RECONNECT_SUCCESSFUL', (event) => {
         if(event.playerId === playerId) {
@@ -183,16 +196,20 @@ io.on('connection', (socket: Socket) => {
       gameActor.send({ type: 'PLAYER_RECONNECTED', playerId, newSocketId: socket.id });
 
     } else {
-      console.warn(`[Server] Attempted rejoin for non-existent game: ${gameId}`);
+      logger.warn({ gameId, playerId }, 'Attempted rejoin for non-existent game');
       // TODO: Maybe emit an error event back to the client?
     }
   });
 
   socket.on(SocketEventName.PLAYER_ACTION, (action: { type: PlayerActionType, playerId: PlayerId, payload?: any }) => {
     const session = getSocketSession();
-    if (!session) return;
+    if (!session) {
+      logger.warn({ action, socketId: socket.id }, 'Player action received from socket without a session.');
+      return;
+    }
     const gameActor = activeGameMachines.get(session.gameId);
     if (gameActor) {
+        logger.debug({ action, gameId: session.gameId, playerId: session.playerId }, 'Player action received');
         // We trust the client to send a valid action shape. The machine will validate it.
         // Using `as any` here to bridge the client-side action with the machine's specific event types.
         gameActor.send({ ...action, playerId: session.playerId } as any);
@@ -201,9 +218,13 @@ io.on('connection', (socket: Socket) => {
 
   socket.on(SocketEventName.SEND_CHAT_MESSAGE, (payload: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const session = getSocketSession();
-    if (!session) return;
+    if (!session) {
+      logger.warn({ payload, socketId: socket.id }, 'Chat message received from socket without a session.');
+      return;
+    }
     const gameActor = activeGameMachines.get(session.gameId);
     if (gameActor) {
+        logger.debug({ payload, gameId: session.gameId, playerId: session.playerId }, 'Chat message received');
         gameActor.send({
             type: PlayerActionType.SEND_CHAT_MESSAGE,
             payload,
@@ -212,8 +233,8 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log(`[Server] Connection disconnected: ${socket.id}`);
     const session = getSocketSession();
+    logger.info({ socketId: socket.id, session }, 'Connection disconnected');
     if (session) {
       const gameActor = activeGameMachines.get(session.gameId);
       if (gameActor) {
@@ -227,5 +248,5 @@ io.on('connection', (socket: Socket) => {
 
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
-  console.log(`[Server] Listening on port ${PORT}`);
+  logger.info({ port: PORT }, 'Server listening');
 });

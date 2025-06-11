@@ -16,6 +16,7 @@ import {
   PlayerStatus,
 } from 'shared-types';
 import { createDeck, shuffleDeck } from './lib/deck-utils.js';
+import logger from './lib/logger.js';
 import 'xstate/guards';
 
 // #region Constants & Server-Side Types
@@ -163,18 +164,31 @@ export const gameMachine = setup({
     input: {} as GameInput,
   },
   guards: {
-    canJoinGame: ({ context }) => Object.keys(context.players).length < MAX_PLAYERS,
+    canJoinGame: ({ context }) => {
+      const result = Object.keys(context.players).length < MAX_PLAYERS;
+      logger.debug({ gameId: context.gameId, result }, 'Guard: canJoinGame');
+      return result;
+    },
     isGameMaster: ({ context, event }) => {
       assertEvent(event, PlayerActionType.START_GAME);
-      return event.playerId === context.gameMasterId;
+      const result = event.playerId === context.gameMasterId;
+      logger.debug({ gameId: context.gameId, playerId: event.playerId, gameMasterId: context.gameMasterId, result }, 'Guard: isGameMaster');
+      return result;
     },
     areAllPlayersReady: ({ context }) => {
       const connectedPlayers = Object.values(context.players).filter((p) => p.isConnected);
-      if (connectedPlayers.length < 2) return false;
-      return connectedPlayers.every((p) => p.isReady);
+      if (connectedPlayers.length < 2) {
+        logger.debug({ gameId: context.gameId, connectedPlayerCount: connectedPlayers.length }, 'Guard: areAllPlayersReady (fail: not enough players)');
+        return false;
+      }
+      const result = connectedPlayers.every((p) => p.isReady);
+      logger.debug({ gameId: context.gameId, result, players: connectedPlayers.map(p=>({id: p.id, isReady: p.isReady})) }, 'Guard: areAllPlayersReady');
+      return result;
     },
     allPlayersReadyForPeek: ({ context }) => {
-      return context.turnOrder.every((id) => context.players[id]?.isReady);
+      const result = context.turnOrder.every((id) => context.players[id]?.isReady);
+      logger.debug({ gameId: context.gameId, result }, 'Guard: allPlayersReadyForPeek');
+      return result;
     },
     isPlayerTurn: ({ context, event }) => {
       assertEvent(event, [
@@ -184,61 +198,99 @@ export const gameMachine = setup({
         PlayerActionType.DISCARD_DRAWN_CARD,
         PlayerActionType.CALL_CHECK,
       ]);
-      return event.playerId === context.currentPlayerId;
+      const result = event.playerId === context.currentPlayerId;
+      if (!result) {
+        logger.warn({ gameId: context.gameId, event: event.type, playerId: event.playerId, currentPlayerId: context.currentPlayerId }, 'Guard: isPlayerTurn (fail)');
+      }
+      return result;
     },
     hasDrawnCard: ({ context, event }) => {
       assertEvent(event, [PlayerActionType.SWAP_AND_DISCARD, PlayerActionType.DISCARD_DRAWN_CARD]);
-      return !!context.players[event.playerId]?.pendingDrawnCard;
+      const result = !!context.players[event.playerId]?.pendingDrawnCard;
+      logger.debug({ gameId: context.gameId, playerId: event.playerId, result }, 'Guard: hasDrawnCard');
+      return result;
     },
     wasDrawnFromDeck: ({ context, event }) => {
       assertEvent(event, PlayerActionType.DISCARD_DRAWN_CARD);
       const drawnInfo = context.players[event.playerId]?.pendingDrawnCard;
-      return drawnInfo?.source === 'deck';
+      const result = drawnInfo?.source === 'deck';
+      logger.debug({ gameId: context.gameId, playerId: event.playerId, result, source: drawnInfo?.source }, 'Guard: wasDrawnFromDeck');
+      return result;
     },
     canDrawFromDiscard: ({ context }) => {
-      if (context.discardPileIsSealed) return false;
+      if (context.discardPileIsSealed) {
+        logger.debug({ gameId: context.gameId }, 'Guard: canDrawFromDiscard (fail: sealed)');
+        return false;
+      }
       const topOfDiscard = context.discardPile[context.discardPile.length - 1];
-      if (!topOfDiscard) return false;
-      return !specialRanks.has(topOfDiscard.rank);
+      if (!topOfDiscard) {
+        logger.debug({ gameId: context.gameId }, 'Guard: canDrawFromDiscard (fail: empty)');
+        return false;
+      }
+      const result = !specialRanks.has(topOfDiscard.rank);
+      logger.debug({ gameId: context.gameId, result, topCard: topOfDiscard.rank }, 'Guard: canDrawFromDiscard');
+      return result;
     },
     matchWillEmptyHand: ({ context, event }) => {
         assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
-        return context.players[event.playerId]!.hand.length === 1;
+        const result = context.players[event.playerId]!.hand.length === 1;
+        logger.debug({ gameId: context.gameId, playerId: event.playerId, result }, 'Guard: matchWillEmptyHand');
+        return result;
     },
     isAbilityCardDiscarded: ({ context }) => {
       const topCard = context.discardPile[context.discardPile.length - 1];
       if (!topCard) return false;
-      return abilityRanks.has(topCard.rank);
+      const result = abilityRanks.has(topCard.rank);
+      logger.debug({ gameId: context.gameId, result, topCard: topCard.rank }, 'Guard: isAbilityCardDiscarded');
+      return result;
     },
     canAttemptMatch: ({ context, event }) => {
       assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
       const { playerId, payload } = event;
       const { matchingOpportunity } = context;
-      if (!matchingOpportunity) return false;
+      if (!matchingOpportunity) {
+        logger.debug({ gameId: context.gameId, playerId }, 'Guard: canAttemptMatch (fail: no opportunity)');
+        return false;
+      }
 
       const player = context.players[playerId];
       const cardInHand = player?.hand[payload.handCardIndex];
-      return !!cardInHand && cardInHand.rank === matchingOpportunity.cardToMatch.rank;
+      const result = !!cardInHand && cardInHand.rank === matchingOpportunity.cardToMatch.rank;
+      logger.debug({ gameId: context.gameId, playerId, result, cardInHand: cardInHand?.rank, cardToMatch: matchingOpportunity.cardToMatch.rank }, 'Guard: canAttemptMatch');
+      return result;
     },
     isValidAbilityAction: ({ context, event }) => {
       assertEvent(event, PlayerActionType.USE_ABILITY);
       const { playerId } = event;
       const { activeAbility } = context;
-      if (!activeAbility || activeAbility.playerId !== playerId) return false;
+      if (!activeAbility || activeAbility.playerId !== playerId) {
+        logger.warn({ gameId: context.gameId, playerId, activeAbility }, 'Guard: isValidAbilityAction (fail)');
+        return false;
+      }
       return true;
     },
     isNotLocked: ({ context, event }) => {
       assertEvent(event, PlayerActionType.CALL_CHECK);
-      return !context.players[event.playerId]?.isLocked;
+      const result = !context.players[event.playerId]?.isLocked;
+      logger.debug({ gameId: context.gameId, playerId: event.playerId, result }, 'Guard: isNotLocked');
+      return result;
     },
     canRetry: ({ context }) => {
-      return context.errorState !== null && context.errorState.retryCount < MAX_RETRIES;
+      const result = context.errorState !== null && context.errorState.retryCount < MAX_RETRIES;
+      logger.debug({ gameId: context.gameId, result, errorState: context.errorState }, 'Guard: canRetry');
+      return result;
     },
     isDeckEmpty: ({ context }) => {
-      return context.deck.length === 0;
+      const result = context.deck.length === 0;
+      if (result) {
+        logger.warn({ gameId: context.gameId }, 'Guard: isDeckEmpty');
+      }
+      return result;
     },
     hasRecoveryState: ({ context }) => {
-      return context.errorState !== null && context.errorState.recoveryState !== undefined;
+      const result = context.errorState !== null && context.errorState.recoveryState !== undefined;
+      logger.debug({ gameId: context.gameId, result, errorState: context.errorState }, 'Guard: hasRecoveryState');
+      return result;
     },
   },
   actions: {
@@ -249,11 +301,13 @@ export const gameMachine = setup({
     }),
     emitPlayerReconnectSuccessful: emit(({ event }) => {
       assertEvent(event, 'PLAYER_RECONNECTED');
+      logger.info({ event }, 'Action: emitPlayerReconnectSuccessful');
       return { type: 'PLAYER_RECONNECT_SUCCESSFUL' as const, playerId: event.playerId };
     }),
     createPlayer: assign({
       players: ({ context, event }) => {
         assertEvent(event, 'PLAYER_JOIN_REQUEST');
+        logger.info({ gameId: context.gameId, playerId: event.playerId, playerName: event.playerSetupData.name }, 'Action: createPlayer');
         const { playerSetupData } = event;
         const newPlayers = { ...context.players };
         newPlayers[playerSetupData.id!] = {
@@ -278,6 +332,7 @@ export const gameMachine = setup({
         assertEvent(event, 'PLAYER_RECONNECTED');
         const newPlayers = { ...context.players };
         if (newPlayers[event.playerId]) {
+          logger.info({ gameId: context.gameId, playerId: event.playerId, newSocketId: event.newSocketId }, 'Action: setPlayerConnected');
           newPlayers[event.playerId]!.isConnected = true;
           newPlayers[event.playerId]!.socketId = event.newSocketId;
         }
@@ -288,7 +343,10 @@ export const gameMachine = setup({
       players: ({ context, event }) => {
         assertEvent(event, 'PLAYER_DISCONNECTED');
         const newPlayers = { ...context.players };
-        if (newPlayers[event.playerId]) newPlayers[event.playerId]!.isConnected = false;
+        if (newPlayers[event.playerId]) {
+          logger.info({ gameId: context.gameId, playerId: event.playerId }, 'Action: setPlayerDisconnected');
+          newPlayers[event.playerId]!.isConnected = false;
+        }
         return newPlayers;
       },
     }),
@@ -296,7 +354,10 @@ export const gameMachine = setup({
       players: ({ context, event }) => {
         assertEvent(event, PlayerActionType.DECLARE_LOBBY_READY);
         const newPlayers = { ...context.players };
-        if (newPlayers[event.playerId]) newPlayers[event.playerId]!.isReady = true;
+        if (newPlayers[event.playerId]) {
+          logger.info({ gameId: context.gameId, playerId: event.playerId }, 'Action: setPlayerReady');
+          newPlayers[event.playerId]!.isReady = true;
+        }
         return newPlayers;
       },
     }),
@@ -341,6 +402,7 @@ export const gameMachine = setup({
     addPlayerDisconnectedLog: assign({
         log: ({ context, event }) => {
           assertEvent(event, 'PLAYER_DISCONNECTED');
+          logger.warn({ gameId: context.gameId, event }, 'Game Log: Player disconnected');
           return [...context.log, createLogEntry(context, { message: `${getPlayerNameForLog(event.playerId, context)} disconnected.`, type: 'public', tags: ['system-message'] })];
         }
     }),
@@ -356,6 +418,7 @@ export const gameMachine = setup({
       }
     }),
     dealCards: assign(({ context }) => {
+      logger.info({ gameId: context.gameId, players: context.turnOrder }, 'Action: dealCards');
       const newPlayers: Record<PlayerId, ServerPlayer> = JSON.parse(JSON.stringify(context.players));
       const newDeck = [...context.deck];
 
@@ -369,21 +432,28 @@ export const gameMachine = setup({
       return { players: newPlayers, deck: newDeck };
     }),
     initializePlayState: assign({
-      currentPlayerId: ({ context }) => context.turnOrder[0]!,
+      currentPlayerId: ({ context }) => {
+        logger.info({ gameId: context.gameId, turnOrder: context.turnOrder }, 'Action: initializePlayState');
+        return context.turnOrder[0]!;
+      },
       currentTurnSegment: TurnPhase.DRAW,
     }),
     setNextPlayer: assign(({ context }) => {
         const { currentPlayerId, turnOrder } = context;
         const currentIndex = turnOrder.indexOf(currentPlayerId!);
         const nextIndex = (currentIndex + 1) % turnOrder.length;
-        return { currentPlayerId: turnOrder[nextIndex]! };
+        const nextPlayerId = turnOrder[nextIndex]!;
+        logger.info({ gameId: context.gameId, currentPlayerId, nextPlayerId }, 'Action: setNextPlayer');
+        return { currentPlayerId: nextPlayerId };
     }),
     drawFromDeck: assign(({ context, event }) => {
       assertEvent(event, PlayerActionType.DRAW_FROM_DECK);
       const { playerId } = event;
+      logger.info({ gameId: context.gameId, playerId }, 'Action: drawFromDeck');
       
       // If deck is empty, just set the error state
       if (context.deck.length === 0) {
+        logger.error({ gameId: context.gameId, playerId }, 'Action: drawFromDeck (DECK EMPTY)');
         return {
           errorState: {
             message: 'The deck is empty. Reshuffling discard pile...',
@@ -413,6 +483,7 @@ export const gameMachine = setup({
       assertEvent(event, PlayerActionType.DRAW_FROM_DISCARD);
       const newDiscard = [...context.discardPile];
       const drawnCard = newDiscard.pop();
+      logger.info({ gameId: context.gameId, playerId: event.playerId, drawnCard }, 'Action: drawFromDiscard');
       if (!drawnCard) return {};
       const newPlayers = { ...context.players };
       newPlayers[event.playerId]!.pendingDrawnCard = { card: drawnCard, source: 'discard' };
@@ -423,6 +494,7 @@ export const gameMachine = setup({
       const { playerId, payload: { handCardIndex } } = event;
       const player = context.players[playerId]!;
       const drawn = player.pendingDrawnCard;
+      logger.info({ gameId: context.gameId, playerId, handCardIndex, drawnCard: drawn?.card }, 'Action: swapAndDiscard');
       if (!drawn) return {};
       
       const newPlayers = { ...context.players };
@@ -464,6 +536,7 @@ export const gameMachine = setup({
       assertEvent(event, PlayerActionType.DISCARD_DRAWN_CARD);
       const player = context.players[event.playerId]!;
       const drawn = player.pendingDrawnCard;
+      logger.info({ gameId: context.gameId, playerId: event.playerId, drawnCard: drawn?.card }, 'Action: discardDrawnCard');
       if (!drawn) return {};
       
       const newPlayers = { ...context.players };
@@ -495,6 +568,7 @@ export const gameMachine = setup({
     setupMatchingOpportunity: assign({
       matchingOpportunity: ({ context }) => {
         const cardToMatch = context.discardPile[context.discardPile.length - 1];
+        logger.info({ gameId: context.gameId, cardToMatch, currentPlayerId: context.currentPlayerId }, 'Action: setupMatchingOpportunity');
         if (!cardToMatch || specialRanks.has(cardToMatch.rank)) return null;
         
         const originalPlayerID = context.currentPlayerId!;
@@ -506,6 +580,7 @@ export const gameMachine = setup({
     handleSuccessfulMatch: assign(({ context, event }) => {
         assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
         const { playerId, payload: { handCardIndex } } = event;
+        logger.info({ gameId: context.gameId, playerId, handCardIndex }, 'Action: handleSuccessfulMatch');
         const matchingPlayer = context.players[playerId]!;
 
         const cardToPlaceOnPile = matchingPlayer.hand[handCardIndex]!;
@@ -524,6 +599,7 @@ export const gameMachine = setup({
           // Player emptied their hand through matching, automatically call check
           newPlayers[playerId]!.isLocked = true;
           newPlayers[playerId]!.hasCalledCheck = true;
+          logger.info({ gameId: context.gameId, playerId }, 'Player emptied hand on match, calling check automatically.');
           
           // Set up check details with this player as the caller
           checkDetails = { callerId: playerId, playersYetToPlay: [] };
@@ -548,15 +624,22 @@ export const gameMachine = setup({
     handlePlayerPassedOnMatch: assign({
       matchingOpportunity: ({ context, event }) => {
         assertEvent(event, PlayerActionType.PASS_ON_MATCH_ATTEMPT);
+        logger.info({ gameId: context.gameId, playerId: event.playerId }, 'Action: handlePlayerPassedOnMatch');
         const newOpp = { ...context.matchingOpportunity! };
         newOpp.remainingPlayerIDs = newOpp.remainingPlayerIDs.filter(id => id !== event.playerId);
         return newOpp;
       }
     }),
-    clearMatchingOpportunity: assign({ matchingOpportunity: null }),
+    clearMatchingOpportunity: assign({ 
+      matchingOpportunity: ({context}) => {
+        logger.info({gameId: context.gameId}, 'Action: clearMatchingOpportunity');
+        return null;
+      }
+    }),
     setCheckCaller: assign({
-      checkDetails: ({ event }) => {
+      checkDetails: ({ event, context }) => {
         assertEvent(event, PlayerActionType.CALL_CHECK);
+        logger.info({ gameId: context.gameId, playerId: event.playerId }, 'Action: setCheckCaller');
         return { callerId: event.playerId, playersYetToPlay: [] };
       },
     }),
@@ -573,6 +656,7 @@ export const gameMachine = setup({
         const { callerId } = context.checkDetails!;
         const callerIndex = context.turnOrder.indexOf(callerId);
         const playersInOrder = [...context.turnOrder.slice(callerIndex + 1), ...context.turnOrder.slice(0, callerIndex)];
+        logger.info({ gameId: context.gameId, callerId, playersInOrder }, 'Action: setupCheckRound');
         return { callerId, playersYetToPlay: playersInOrder };
       }
     }),
@@ -590,6 +674,7 @@ export const gameMachine = setup({
     }),
     calculateScoresAndEndRound: assign({
       gameover: ({ context }) => {
+        logger.info({ gameId: context.gameId }, 'Action: calculateScoresAndEndRound');
         let winnerId: PlayerId | null = null;
         let loserId: PlayerId | null = null;
         let minScore = Infinity;
@@ -609,10 +694,12 @@ export const gameMachine = setup({
             return [id, score];
           })
         );
+        logger.info({ gameId: context.gameId, playerScores, winnerId, loserId }, 'Game over scores calculated.');
         return { winnerId, loserId, playerScores };
       }
     }),
     resetForNextRound: assign(({ context }) => {
+        logger.info({ gameId: context.gameId }, 'Action: resetForNextRound');
         const lastRoundLoserId = context.gameover?.loserId;
         const newTurnOrder = lastRoundLoserId ? [lastRoundLoserId, ...context.turnOrder.filter(id => id !== lastRoundLoserId)] : context.turnOrder;
         const newDealerId = newTurnOrder[0];
@@ -693,6 +780,7 @@ export const gameMachine = setup({
         assertEvent(event, PlayerActionType.USE_ABILITY);
         const { payload, playerId } = event;
         const { activeAbility } = context;
+        logger.info({ gameId: context.gameId, playerId, payload, activeAbility }, 'Action: performAbilityAction');
 
         if (!activeAbility || activeAbility.playerId !== playerId) return {};
 
@@ -751,6 +839,8 @@ export const gameMachine = setup({
         error = new Error('Game error occurred');
       }
       
+      logger.error({ err: error, gameId: context.gameId, event, errorType, playerId }, 'Action: logError');
+      
       return {
         type: 'LOG_ERROR' as const,
         error,
@@ -773,6 +863,7 @@ export const gameMachine = setup({
           message = 'The deck is empty. Reshuffling discard pile...';
         }
         
+        logger.warn({ gameId: context.gameId, errorType, message, playerId }, 'Action: setErrorState');
         return {
           message,
           retryCount: 0,
@@ -788,6 +879,7 @@ export const gameMachine = setup({
     incrementRetryCount: assign({
       errorState: ({ context }) => {
         if (!context.errorState) return null;
+        logger.warn({ gameId: context.gameId, retryCount: context.errorState.retryCount + 1 }, 'Action: incrementRetryCount');
         return {
           ...context.errorState,
           retryCount: context.errorState.retryCount + 1
@@ -795,7 +887,10 @@ export const gameMachine = setup({
       }
     }),
     clearErrorState: assign({
-      errorState: null
+      errorState: ({context}) => {
+        logger.info({ gameId: context.gameId }, 'Action: clearErrorState');
+        return null;
+      }
     }),
     addErrorLog: assign({
       log: ({ context }) => {
@@ -817,6 +912,7 @@ export const gameMachine = setup({
     reshuffleDeckIfEmpty: assign(({ context }) => {
       if (context.deck.length > 0) return {};
       
+      logger.info({ gameId: context.gameId }, 'Action: reshuffleDeckIfEmpty');
       // Create a new deck using the discard pile
       const newDiscardPile: Card[] = [];
       const cardsToReshuffle = [...context.discardPile];
@@ -836,6 +932,8 @@ export const gameMachine = setup({
         const { playerId, errorType, message, context: errorContext } = event;
         const playerName = getPlayerNameForLog(playerId, context);
         
+        logger.warn({ gameId: context.gameId, playerId, errorType, message, errorContext }, 'Action: logClientError');
+
         const logEntry = createLogEntry(context, {
           message: `Client error from ${playerName}: [${errorType}] ${message}${errorContext ? ` (${JSON.stringify(errorContext)})` : ''}`,
           type: 'private',
@@ -848,6 +946,7 @@ export const gameMachine = setup({
     reshuffleDiscardIntoDeck: assign({
       deck: ({ context }) => {
         // Keep the top card of discard pile
+        logger.info({ gameId: context.gameId, discardCount: context.discardPile.length }, 'Action: reshuffleDiscardIntoDeck');
         const discardPileWithoutTop = [...context.discardPile.slice(0, -1)];
         return shuffleDeck(discardPileWithoutTop);
       },
@@ -895,6 +994,7 @@ export const gameMachine = setup({
     discardPileIsSealed: false,
     errorState: null,
   }),
+  entry: ({ context }) => logger.info({ gameId: context.gameId }, 'Game machine initialized'),
   on: {
     PLAYER_RECONNECTED: {
       actions: [
@@ -909,6 +1009,7 @@ export const gameMachine = setup({
         target: '.error',
         actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'setErrorState', 'broadcastGameState', 'logError'],
         guard: ({ context, event }) => {
+          logger.warn({ gameId: context.gameId, playerId: event.playerId, currentPlayerId: context.currentPlayerId }, 'Player disconnected');
           // Only transition to error if the disconnected player is the current player
           return event.playerId === context.currentPlayerId;
         }
@@ -923,6 +1024,7 @@ export const gameMachine = setup({
   },
   states: {
     [GameStage.WAITING_FOR_PLAYERS]: {
+      entry: ({context}) => logger.info({gameId: context.gameId}, 'State: WAITING_FOR_PLAYERS'),
       on: {
         PLAYER_JOIN_REQUEST: {
           guard: 'canJoinGame',
@@ -946,13 +1048,13 @@ export const gameMachine = setup({
       },
     },
     [GameStage.DEALING]: {
-      entry: [ 'dealCards', 'setAllPlayersToPlaying', 'broadcastGameState' ],
+      entry: [ 'dealCards', 'setAllPlayersToPlaying', 'broadcastGameState', ({context}) => logger.info({gameId: context.gameId}, 'State: DEALING') ],
       after: {
         100: { target: GameStage.INITIAL_PEEK },
       },
     },
     [GameStage.INITIAL_PEEK]: {
-      entry: ['resetPlayersReadyStatus', 'sendPeekInfoToAllPlayers', 'broadcastGameState'],
+      entry: ['resetPlayersReadyStatus', 'sendPeekInfoToAllPlayers', 'broadcastGameState', ({context}) => logger.info({gameId: context.gameId}, 'State: INITIAL_PEEK')],
       invoke: {
         id: 'peekTimer',
         src: 'peekTimerActor',
@@ -970,7 +1072,7 @@ export const gameMachine = setup({
     },
     [GameStage.PLAYING]: {
       initial: 'turn',
-      entry: ['initializePlayState', 'broadcastGameState'],
+      entry: ['initializePlayState', 'broadcastGameState', ({context}) => logger.info({gameId: context.gameId, currentPlayerId: context.currentPlayerId}, 'State: PLAYING')],
       on: {
         [PlayerActionType.CALL_CHECK]: {
           guard: and(['isPlayerTurn', 'isNotLocked']),
@@ -986,7 +1088,7 @@ export const gameMachine = setup({
           initial: 'DRAW',
           states: {
             DRAW: {
-              entry: ['broadcastGameState'],
+              entry: ['broadcastGameState', ({context}) => logger.info({gameId: context.gameId, currentPlayerId: context.currentPlayerId}, 'State: PLAYING.turn.DRAW')],
               on: {
                 [PlayerActionType.DRAW_FROM_DECK]: [
                   {
@@ -1021,7 +1123,7 @@ export const gameMachine = setup({
               ],
             },
             ABILITY: {
-              entry: ['broadcastGameState'],
+              entry: ['broadcastGameState', ({context}) => logger.info({gameId: context.gameId, activeAbility: context.activeAbility}, 'State: PLAYING.turn.ABILITY')],
               on: {
                 [PlayerActionType.USE_ABILITY]: {
                   guard: 'isValidAbilityAction',
@@ -1031,7 +1133,7 @@ export const gameMachine = setup({
               }
             },
             MATCHING: {
-              entry: ['setupMatchingOpportunity', 'broadcastGameState'],
+              entry: ['setupMatchingOpportunity', 'broadcastGameState', ({context}) => logger.info({gameId: context.gameId, matchingOpportunity: context.matchingOpportunity}, 'State: PLAYING.turn.MATCHING')],
               invoke: {
                 id: 'matchingTimer',
                 src: 'matchingTimerActor',
@@ -1070,7 +1172,7 @@ export const gameMachine = setup({
     },
     [GameStage.CHECK]: {
       initial: 'turn',
-      entry: ['setupCheckRound', 'setNextCheckPlayer', 'broadcastGameState'],
+      entry: ['setupCheckRound', 'setNextCheckPlayer', 'broadcastGameState', ({context}) => logger.info({gameId: context.gameId, checkDetails: context.checkDetails}, 'State: CHECK')],
       states: {
         turn: {
           initial: 'DRAW',
@@ -1158,7 +1260,7 @@ export const gameMachine = setup({
       },
     },
     [GameStage.GAMEOVER]: {
-      entry: ['calculateScoresAndEndRound', 'broadcastGameState'],
+      entry: ['calculateScoresAndEndRound', 'broadcastGameState', ({context}) => logger.info({gameId: context.gameId}, 'State: GAMEOVER')],
       on: {
         [PlayerActionType.PLAY_AGAIN]: {
           actions: ['resetForNextRound', 'broadcastGameState'],
@@ -1167,7 +1269,7 @@ export const gameMachine = setup({
       },
     },
     error: {
-      entry: ['addErrorLog', 'broadcastGameState'],
+      entry: ['addErrorLog', 'broadcastGameState', ({context}) => logger.error({gameId: context.gameId, errorState: context.errorState}, 'State: error')],
       on: {
         PLAYER_RECONNECTED: {
           target: 'recovering',
@@ -1189,7 +1291,7 @@ export const gameMachine = setup({
       }
     },
     recovering: {
-      entry: 'broadcastGameState',
+      entry: ['broadcastGameState', ({context}) => logger.info({gameId: context.gameId, errorState: context.errorState}, 'State: recovering')],
       always: [
         {
           target: GameStage.PLAYING,
@@ -1205,7 +1307,7 @@ export const gameMachine = setup({
       ]
     },
     failedRecovery: {
-      entry: ['addErrorLog', 'broadcastGameState'],
+      entry: ['addErrorLog', 'broadcastGameState', ({context}) => logger.fatal({gameId: context.gameId, errorState: context.errorState}, 'State: failedRecovery')],
       on: {
         [PlayerActionType.PLAY_AGAIN]: {
           actions: ['resetForNextRound', 'clearErrorState', 'broadcastGameState'],
