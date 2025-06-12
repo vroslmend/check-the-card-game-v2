@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useContext } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSelector } from '@xstate/react';
-import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
+import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { type Card, TurnPhase, PlayerActionType } from 'shared-types';
 import { DrawnCardArea } from './DrawnCardArea';
 import { VisualCardStack } from '../cards/VisualCardStack';
@@ -29,7 +28,7 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
 };
 
 export const TableArea = ({ drawnCard }: TableAreaProps) => {
-  const { actorRef } = useContext(UIContext)!;
+  const { send } = GameUIContext.useActorRef();
   const {
     deckSize,
     discardPile,
@@ -37,19 +36,19 @@ export const TableArea = ({ drawnCard }: TableAreaProps) => {
     discardPileIsSealed,
     canDrawFromDeck,
     canDrawFromDiscard,
-  } = useSelector(actorRef, selectTableAreaProps);
+  } = GameUIContext.useSelector(selectTableAreaProps);
   
   const handleDeckClick = () => {
     if (canDrawFromDeck) {
       logger.info('Player is drawing from deck');
-      actorRef.send({ type: PlayerActionType.DRAW_FROM_DECK });
+      send({ type: PlayerActionType.DRAW_FROM_DECK });
     }
   }
 
   const handleDiscardClick = () => {
     if (canDrawFromDiscard) {
       logger.info('Player is drawing from discard');
-      actorRef.send({ type: PlayerActionType.DRAW_FROM_DISCARD });
+      send({ type: PlayerActionType.DRAW_FROM_DISCARD });
     }
   }
 

@@ -1,11 +1,10 @@
 "use client"
 
-import React, { useContext } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { PanelLeftClose, PanelLeftOpen, Info, Copy, Check, ChevronLeft } from 'lucide-react';
-import { useSelector } from '@xstate/react';
-import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
+import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -19,12 +18,12 @@ const selectGameHeaderProps = (state: UIMachineSnapshot) => {
 };
 
 export const GameHeader = () => {
-  const { actorRef } = useContext(UIContext)!;
-  const { gameId, isSidePanelOpen } = useSelector(actorRef, selectGameHeaderProps);
+  const { send } = GameUIContext.useActorRef();
+  const { gameId, isSidePanelOpen } = GameUIContext.useSelector(selectGameHeaderProps);
   const [copied, setCopied] = React.useState(false);
 
   const toggleSidePanel = () => {
-    actorRef.send({ type: 'TOGGLE_SIDE_PANEL' });
+    send({ type: 'TOGGLE_SIDE_PANEL' });
   };
 
   const handleCopyGameId = () => {

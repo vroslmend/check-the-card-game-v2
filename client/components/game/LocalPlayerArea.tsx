@@ -1,13 +1,12 @@
 "use client"
 
-import { useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSelector } from '@xstate/react';
-import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
+// FIX: Import the new context
+import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { PlayerActionType, TurnPhase, type PlayerId } from 'shared-types';
 import logger from '@/lib/logger';
 import PlayerHand from './PlayerHand';
-import { User, UserCheck, ArrowDown } from 'lucide-react';
+import { UserCheck, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionController } from './ActionController';
 
@@ -16,8 +15,7 @@ const selectLocalPlayerProps = (state: UIMachineSnapshot) => {
   const isPlayerTurn = currentGameState?.currentPlayerId === localPlayerId;
   const turnPhase = currentGameState?.turnPhase;
   const isChoosingSwapTarget = turnPhase === TurnPhase.DISCARD && isPlayerTurn;
-  const drawnCard = currentGameState?.players[localPlayerId || '']?.pendingDrawnCard;
-
+  
   return {
     localPlayer: localPlayerId ? currentGameState?.players[localPlayerId] : null,
     isCurrentTurn: currentGameState?.currentPlayerId === localPlayerId,
@@ -25,21 +23,13 @@ const selectLocalPlayerProps = (state: UIMachineSnapshot) => {
     abilityContext: currentAbilityContext,
     localPlayerId,
     isChoosingSwapTarget,
-    drawnCard,
   };
 };
 
 export const LocalPlayerArea = () => {
-  const { actorRef } = useContext(UIContext)!;
-  const {
-    localPlayer,
-    isCurrentTurn,
-    turnPhase,
-    abilityContext,
-    localPlayerId,
-    isChoosingSwapTarget,
-    drawnCard,
-  } = useSelector(actorRef, selectLocalPlayerProps);
+  // FIX: Use the new, streamlined hooks
+  const { localPlayer, isCurrentTurn, turnPhase, abilityContext, localPlayerId, isChoosingSwapTarget } = GameUIContext.useSelector(selectLocalPlayerProps);
+  const { send } = GameUIContext.useActorRef();
 
   const { selectedCardIndex, setSelectedCardIndex } = useActionController();
 
@@ -54,13 +44,13 @@ export const LocalPlayerArea = () => {
   const handleCardClick = (cardIndex: number) => {
     if (abilityContext) {
       logger.debug({ cardIndex, abilityContext }, 'Card clicked for ability');
-      actorRef.send({ type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY', playerId: localPlayerId, cardIndex });
+      send({ type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY', playerId: localPlayerId, cardIndex });
       return;
     }
 
     if (isChoosingSwapTarget) {
       logger.debug({ cardIndex }, 'Card clicked for swap and discard');
-      actorRef.send({ type: PlayerActionType.SWAP_AND_DISCARD, payload: { cardIndex } });
+      send({ type: PlayerActionType.SWAP_AND_DISCARD, payload: { cardIndex } });
       return;
     }
 

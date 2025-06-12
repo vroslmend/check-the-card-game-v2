@@ -1,22 +1,12 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { useSelector } from '@xstate/react';
-import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
+import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { type UIMachineEvents } from '@/machines/uiMachine';
 import { GameStage, TurnPhase, PlayerActionType, type ClientCheckGameState, type Player, type ClientAbilityContext, type Card, type PlayerId, type AbilityType, CardRank } from 'shared-types';
 import ActionBarComponent, { Action } from './ActionBarComponent';
 import {
-  createDrawDeckAction,
-  createDrawDiscardAction,
-  createCallCheckAction,
-  createDiscardDrawnCardAction,
-  createPassMatchAction,
-  createAttemptMatchAction,
-  createConfirmAbilityAction,
-  createSkipAbilityAction,
-  createCancelAbilityAction,
-  createReadyForPeekAction,
-  createPlayerReadyAction,
-  createStartGameAction
+  createDrawDeckAction, createDrawDiscardAction, createCallCheckAction, createDiscardDrawnCardAction,
+  createPassMatchAction, createAttemptMatchAction, createConfirmAbilityAction, createSkipAbilityAction,
+  createCancelAbilityAction, createReadyForPeekAction, createPlayerReadyAction, createStartGameAction
 } from './ActionFactories';
 import logger from '@/lib/logger';
 import { isDrawnCard } from '@/lib/types';
@@ -80,9 +70,9 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
 };
 
 export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
-  const { actorRef } = useContext(UIContext)!;
-  const props = useSelector(actorRef, selectActionControllerProps);
-  
+  const props = GameUIContext.useSelector(selectActionControllerProps);
+  const { send } = GameUIContext.useActorRef();
+
   const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(null);
   const [callCheckProgress, setCallCheckProgress] = useState(0);
   const [isHoldingCallCheck, setIsHoldingCallCheck] = useState(false);
@@ -101,10 +91,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ chi
     callCheckIntervalRef.current = null;
   }, []);
 
-  const sendEvent = useCallback((event: UIMachineEvents) => {
-    logger.debug(`Action: ${event.type}`, 'payload' in event ? event : '');
-    actorRef.send(event);
-  }, [actorRef]);
+  const sendEvent = send;
   
   const handleStartCallCheckHold = useCallback(() => {
     if (!props.isMyTurn) return;

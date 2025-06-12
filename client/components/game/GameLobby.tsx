@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import { useSelector } from '@xstate/react';
-import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
+import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, Users, WifiOff, Clock, Copy, PartyPopper, UserMinus, MoreHorizontal, RefreshCw } from 'lucide-react';
 import { type Player, PlayerActionType } from 'shared-types';
@@ -50,11 +49,8 @@ const playerCardVariants = {
 };
 
 const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPlayer: boolean, index: number }) => {
-  const context = useContext(UIContext);
-  if (!context) throw new Error("PlayerRow must be used within a UIContext Provider");
-  
-  const { actorRef } = context;
-  const snapshot = useSelector(actorRef, state => state);
+  const { send } = GameUIContext.useActorRef();
+  const snapshot = GameUIContext.useSelector(state => state);
   const isGameMaster = snapshot.context.currentGameState?.gameMasterId === snapshot.context.localPlayerId;
   
   const [isHolding, setIsHolding] = useState(false);
@@ -74,7 +70,7 @@ const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPl
         
         if (progress >= 100) {
           clearInterval(interval);
-          actorRef.send({ type: PlayerActionType.REMOVE_PLAYER, payload: { playerId: player.id } });
+          send({ type: PlayerActionType.REMOVE_PLAYER, payload: { playerId: player.id } });
           setIsHolding(false);
           setHoldProgress(0);
         }
@@ -84,7 +80,7 @@ const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPl
         clearInterval(interval);
       };
     }
-  }, [isHolding, player.id, actorRef]);
+  }, [isHolding, player.id, send]);
 
   const getStatus = () => {
     if (!player.isConnected) {
@@ -224,7 +220,7 @@ const selectLobbyProps = (state: UIMachineSnapshot) => {
 };
 
 export const GameLobby = () => {
-  const { actorRef } = useContext(UIContext)!;
+  const { send } = GameUIContext.useActorRef();
   const {
     isLoading,
     players,
@@ -234,7 +230,7 @@ export const GameLobby = () => {
     hasEnoughPlayers,
     hasDisconnectedPlayers,
     gameId,
-  } = useSelector(actorRef, selectLobbyProps);
+  } = GameUIContext.useSelector(selectLobbyProps);
   const [copied, setCopied] = useState(false);
   const [buttonHovered, setButtonHovered] = useState(false);
   const [leaveButtonHovered, setLeaveButtonHovered] = useState(false);
@@ -250,14 +246,14 @@ export const GameLobby = () => {
         // Show timeout message if loading takes too long
         setReconnectionTimeout(true);
         // Force transition to error state
-        actorRef.send({ type: 'CONNECTION_ERROR', message: 'Reconnection taking too long' });
+        send({ type: 'CONNECTION_ERROR', message: 'Reconnection taking too long' });
       }, 8000); // 8 second timeout
       
       return () => clearTimeout(timer);
     } else {
       setReconnectionTimeout(false);
     }
-  }, [isLoading, actorRef]);
+  }, [isLoading, send]);
 
   useEffect(() => {
     return () => {
@@ -305,16 +301,13 @@ export const GameLobby = () => {
   }
   
   const handleCopy = () => {
-    if (gameId) {
-      navigator.clipboard.writeText(gameId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+    navigator.clipboard.writeText(gameId ?? '');
+    setCopied(true);
   };
   
-  const handlePlayerReady = () => actorRef.send({ type: PlayerActionType.DECLARE_LOBBY_READY });
-  const handleStartGame = () => actorRef.send({ type: PlayerActionType.START_GAME });
-  const handleLeaveGame = () => actorRef.send({ type: 'LEAVE_GAME' });
+  const handlePlayerReady = () => send({ type: PlayerActionType.DECLARE_LOBBY_READY });
+  const handleStartGame = () => send({ type: PlayerActionType.START_GAME });
+  const handleLeaveGame = () => send({ type: 'LEAVE_GAME' });
   
   const handleRefreshGameState = () => {
     if (isRefreshing) return;
@@ -322,7 +315,7 @@ export const GameLobby = () => {
     setIsRefreshing(true);
     
     // Force a CLIENT_GAME_STATE_UPDATED event by sending the appropriate message
-    actorRef.send({ type: 'CONNECT' });
+    send({ type: 'CONNECT' });
     
     // Set a timeout to reset the refreshing state after 3 seconds to prevent the animation from getting stuck
     refreshTimeoutRef.current = setTimeout(() => {

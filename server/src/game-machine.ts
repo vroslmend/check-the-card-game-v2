@@ -411,7 +411,7 @@ export const gameMachine = setup({
   states: {
     [GameStage.WAITING_FOR_PLAYERS]: {
       on: {
-        PLAYER_JOIN_REQUEST: { guard: 'canJoinGame', actions: ['addPlayer', 'broadcastGameState'] as const },
+        PLAYER_JOIN_REQUEST: { guard: 'canJoinGame', actions: 'addPlayer' },
         [PlayerActionType.DECLARE_LOBBY_READY]: { actions: ['updatePlayerLobbyReady', 'broadcastGameState'] as const },
         [PlayerActionType.START_GAME]: { target: GameStage.DEALING, guard: and(['isGameMaster', 'areAllPlayersReady']) },
         [PlayerActionType.REMOVE_PLAYER]: { guard: 'isGameMaster', actions: ['removePlayer', 'broadcastGameState'] as const },

@@ -1,25 +1,16 @@
 "use client"
 
-import { useState, useContext, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { PlusCircle, Sparkles, ArrowRight } from 'lucide-react';
-import { useSelector } from '@xstate/react';
-
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Magnetic from '@/components/ui/Magnetic';
-import { UIContext } from '../providers/UIMachineProvider';
+import { GameUIContext } from '@/context/GameUIContext';
 
 interface NewGameModalProps {
   isModalOpen: boolean;
@@ -35,34 +26,30 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
   });
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const uiContext = useContext(UIContext);
 
-  const actorRef = uiContext?.actorRef;
-  const isInGame = useSelector(actorRef!, (state) => state.matches('inGame'));
+  const { send } = GameUIContext.useActorRef();
+  const state = GameUIContext.useSelector((s) => s);
 
   useEffect(() => {
-    if (actorRef && isInGame) {
-      const { gameId, currentGameState } = actorRef.getSnapshot().context;
+    if (state.matches('inGame')) {
+      const { gameId, currentGameState } = state.context;
       if (gameId && currentGameState) {
         toast.success(`Created game ${gameId}`);
+        sessionStorage.setItem('initialGameState', JSON.stringify(currentGameState));
         router.push(`/game/${gameId}`);
         setIsLoading(false);
       }
     }
-  }, [isInGame, router, actorRef]);
+  }, [state, router]);
 
   const handleCreateGame = async () => {
     if (!playerName.trim()) {
       toast.error('Please enter your name.');
       return;
     }
-    if (!actorRef) {
-      toast.error('UI service not available. Please refresh the page.');
-      return;
-    }
     setIsLoading(true);
     localStorage.setItem('localPlayerName', playerName);
-    actorRef.send({ type: 'CREATE_GAME_REQUESTED', playerName });
+    send({ type: 'CREATE_GAME_REQUESTED', playerName });
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -75,21 +62,14 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
       <DialogContent className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800">
         <div className="relative">
-          {/* Background decoration */}
           <motion.div 
             className="absolute top-0 right-0 w-64 h-64 bg-stone-100 dark:bg-zinc-900 rounded-full blur-3xl opacity-60"
-            animate={{ 
-              x: [0, 20, 0],
-              y: [0, -20, 0]
-            }}
+            animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
             transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div 
             className="absolute bottom-0 left-0 w-72 h-72 bg-stone-100 dark:bg-zinc-900 rounded-full blur-3xl opacity-60"
-            animate={{ 
-              x: [0, -30, 0],
-              y: [0, 20, 0]
-            }}
+            animate={{ x: [0, -30, 0], y: [0, 20, 0] }}
             transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
           />
           
@@ -151,7 +131,7 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
               <Magnetic>
                 <Button 
                   onClick={handleCreateGame} 
-                  disabled={isLoading || !actorRef}
+                  disabled={isLoading}
                   className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 relative overflow-hidden group"
                   data-cursor-link
                 >
@@ -159,11 +139,7 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
                     {isLoading ? 'Creating...' : 'Create Game'}
                     <motion.div
                       animate={{ x: [0, 4, 0] }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                     >
                       <ArrowRight className="h-4 w-4" />
                     </motion.div>

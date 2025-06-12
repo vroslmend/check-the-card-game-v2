@@ -1,14 +1,10 @@
 "use client"
 
-import React, { useContext } from 'react';
+import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useSelector } from '@xstate/react';
-import {
-  UIContext,
-  type UIMachineSnapshot,
-} from '@/components/providers/UIMachineProvider';
+import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { type PlayerId, type Player, type ClientAbilityContext } from 'shared-types';
-import { PlayerPod, type PlayerPodProps } from './PlayerPod';
+import { PlayerPod } from './PlayerPod';
 import logger from '@/lib/logger';
 
 const selectOpponentProps = (state: UIMachineSnapshot) => {
@@ -28,19 +24,11 @@ const selectOpponentProps = (state: UIMachineSnapshot) => {
   };
 };
 
-interface OpponentPodProps {
-  player: Player;
-  onCardClick: (playerId: PlayerId, cardIndex: number) => void;
-  isCurrentTurn: boolean;
-  abilityContext: ClientAbilityContext | undefined;
-}
-
-const OpponentPod = ({ player, onCardClick, isCurrentTurn, abilityContext }: OpponentPodProps) => {
-  // Determine if this opponent is a valid target for the current ability
+const OpponentPod = ({ player, onCardClick, isCurrentTurn, abilityContext }: { player: Player; onCardClick: (playerId: PlayerId, cardIndex: number) => void; isCurrentTurn: boolean; abilityContext: ClientAbilityContext | undefined; }) => {
   const isTargetable =
-    abilityContext?.validPeekTargets?.some((p) => p.playerId === player.id) ||
-    abilityContext?.validSwapTargets?.some((p) => p.playerId === player.id) ||
-    false; // Explicitly default to false if context is undefined
+    abilityContext?.selectedPeekTargets?.some((p) => p.playerId === player.id) ||
+    abilityContext?.selectedSwapTargets?.some((p) => p.playerId === player.id) ||
+    false;
 
   return (
     <motion.div
@@ -64,13 +52,13 @@ const OpponentPod = ({ player, onCardClick, isCurrentTurn, abilityContext }: Opp
 }
 
 export const OpponentArea = () => {
-  const { actorRef } = useContext(UIContext)!;
-  const { opponentPlayers, currentPlayerId, abilityContext } = useSelector(actorRef, selectOpponentProps);
+  const { opponentPlayers, currentPlayerId, abilityContext } = GameUIContext.useSelector(selectOpponentProps);
+  const { send } = GameUIContext.useActorRef();
 
   const handleCardClick = (playerId: PlayerId, cardIndex: number) => {
     if (abilityContext) {
       logger.debug({ playerId, cardIndex, abilityContext }, 'Opponent card clicked for ability');
-      actorRef.send({ type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY', playerId, cardIndex });
+      send({ type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY', playerId, cardIndex });
     }
   };
 

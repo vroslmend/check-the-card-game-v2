@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useContext } from 'react';
-import { useSelector } from '@xstate/react';
-import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
+import React from 'react';
+import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { HandGrid } from './HandGrid';
-import { type Player, TurnPhase, GameStage, type ClientAbilityContext, type PeekTarget, type SwapTarget } from 'shared-types';
+import { type Player, TurnPhase, GameStage, type ClientAbilityContext, type PeekTarget, type SwapTarget, type Card } from 'shared-types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Eye } from 'lucide-react';
@@ -44,8 +43,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   abilityContext,
   selectedCardIndex = null
 }) => {
-  const { actorRef } = useContext(UIContext)!;
-  const { baseCanInteract, gameStage, visibleCards } = useSelector(actorRef, selectPlayerHandProps);
+  const { baseCanInteract, gameStage, visibleCards } = GameUIContext.useSelector(selectPlayerHandProps);
   
   const canInteract = isLocalPlayer ? (baseCanInteract || isTargetable) : isTargetable;
   

@@ -2,9 +2,7 @@
 
 import { WifiOff, Loader, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { useContext } from 'react';
-import { useSelector } from '@xstate/react';
-import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
+import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { TableArea } from './TableArea';
 import { OpponentArea } from './OpponentArea';
@@ -33,9 +31,8 @@ const selectGameBoardProps = (state: UIMachineSnapshot) => {
 };
 
 const ConnectionStatusBanner = () => {
-  const { actorRef } = useContext(UIContext)!;
-  const isDisconnected = useSelector(actorRef, selectIsDisconnected);
-  const isReconnecting = useSelector(actorRef, selectIsReconnecting);
+  const isDisconnected = GameUIContext.useSelector(selectIsDisconnected);
+  const isReconnecting = GameUIContext.useSelector(selectIsReconnecting);
 
   return (
     <AnimatePresence>
@@ -96,8 +93,7 @@ const LoadingIndicator = () => (
 
 
 export function GameBoard() {
-  const { actorRef } = useContext(UIContext)!;
-  const localPlayerId = useSelector(actorRef, selectLocalPlayerId);
+  const localPlayerId = GameUIContext.useSelector(selectLocalPlayerId);
   const {
     gameStage,
     hasPlayers,
@@ -105,7 +101,7 @@ export function GameBoard() {
     pendingDrawnCard,
     isPlayerTurn,
     turnPhase,
-  } = useSelector(actorRef, selectGameBoardProps);
+  } = GameUIContext.useSelector(selectGameBoardProps);
 
   if (!localPlayerId || !hasGameState) {
     return <LoadingIndicator />;

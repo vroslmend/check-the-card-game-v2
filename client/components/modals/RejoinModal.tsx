@@ -1,13 +1,12 @@
-import { useState, useContext } from "react"
+import { useState } from "react"
 import { useLocalStorage } from "usehooks-ts"
 import { motion } from "framer-motion"
-import { useSelector } from "@xstate/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Modal } from "@/components/ui/Modal"
 import { Loader } from "lucide-react"
-import { UIContext, type UIMachineSnapshot } from "@/components/providers/UIMachineProvider"
+import { GameUIContext, type UIMachineSnapshot } from "@/context/GameUIContext"
 
 const selectRejoinModalProps = (state: UIMachineSnapshot) => {
   return {
@@ -20,10 +19,14 @@ const selectRejoinModalProps = (state: UIMachineSnapshot) => {
 }
 
 export function RejoinModal() {
-  const { actorRef } = useContext(UIContext)!;
-  const { gameId, modalInfo, isLoading } = useSelector(actorRef, selectRejoinModalProps);
+  const { send } = GameUIContext.useActorRef();
+  const { gameId, modalInfo, isLoading } = GameUIContext.useSelector(selectRejoinModalProps);
   
-  const [playerName, setPlayerName] = useLocalStorage("playerName", "");
+  const [playerName, setPlayerName] = useLocalStorage("playerName", "", {
+    // Tell the hook how to read/write a raw string without JSON parsing
+    serializer: (value) => value,
+    deserializer: (value) => value,
+  });
 
   // FIX: The check is now simpler and more direct
   if (modalInfo?.type !== 'rejoin') {
@@ -33,7 +36,7 @@ export function RejoinModal() {
   const handleJoinGame = () => {
     if (playerName.trim() && gameId) {
       // The machine is already in the 'promptToJoin' state and is listening for this event.
-      actorRef.send({
+      send({
         type: 'JOIN_GAME_REQUESTED',
         playerName: playerName.trim(),
         gameId,
@@ -50,7 +53,7 @@ export function RejoinModal() {
   return (
     <Modal
       isOpen={modalInfo?.type === 'rejoin'}
-      onClose={() => actorRef.send({ type: 'DISMISS_MODAL' })}
+      onClose={() => send({ type: 'DISMISS_MODAL' })}
       title={modalInfo.title}
       description={modalInfo.message}
     >

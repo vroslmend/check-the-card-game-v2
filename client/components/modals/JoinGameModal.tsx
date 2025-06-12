@@ -1,25 +1,17 @@
 "use client"
 
-import { useState, useContext, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, Users, Shield, ArrowRight } from 'lucide-react';
-import { useSelector } from '@xstate/react';
 
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Magnetic from '@/components/ui/Magnetic';
-import { UIContext } from '../providers/UIMachineProvider';
+import { GameUIContext } from '@/context/GameUIContext';
 
 interface JoinGameModalProps {
   isModalOpen: boolean;
@@ -37,35 +29,30 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
   const router = useRouter();
-  const uiContext = useContext(UIContext);
 
-  const actorRef = uiContext?.actorRef;
-  const isInGame = useSelector(actorRef!, (state) => state.matches('inGame'));
+  const state = GameUIContext.useSelector((s) => s);
+  const { send } = GameUIContext.useActorRef();
 
   useEffect(() => {
-    if (actorRef && isInGame) {
-      const { gameId: joinedGameId } = actorRef.getSnapshot().context;
+    if (state.matches('inGame')) {
+      const { gameId: joinedGameId, currentGameState } = state.context;
       if (joinedGameId) {
         toast.success(`Joined game ${joinedGameId}`);
+        sessionStorage.setItem('initialGameState', JSON.stringify(currentGameState));
         router.push(`/game/${joinedGameId}`);
         setIsLoading(false);
       }
     }
-  }, [isInGame, router, actorRef]);
+  }, [state, router]);
 
   const handleJoinGame = async () => {
     if (!gameId.trim() || !playerName.trim()) {
       toast.error('Please enter a game ID and your name.');
       return;
     }
-    if (!actorRef) {
-      toast.error('UI service not available. Please refresh the page.');
-      return;
-    }
-
     setIsLoading(true);
     localStorage.setItem('localPlayerName', playerName);
-    actorRef.send({ type: 'JOIN_GAME_REQUESTED', gameId, playerName });
+    send({ type: 'JOIN_GAME_REQUESTED', gameId, playerName });
   };
 
   const handleNextStep = () => {
@@ -73,12 +60,10 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
       toast.error('Please enter your name.');
       return;
     }
-    
     if (step === 2 && !gameId.trim()) {
       toast.error('Please enter a game ID.');
       return;
     }
-    
     if (step === 1) {
       setStep(2);
     } else {
@@ -101,7 +86,6 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
     <Dialog open={isModalOpen} onOpenChange={resetAndClose}>
       <DialogContent className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800">
         <div className="relative">
-          {/* Background decoration */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-stone-100 dark:bg-zinc-900 rounded-full blur-3xl opacity-60" />
           <div className="absolute bottom-0 left-0 w-72 h-72 bg-stone-100 dark:bg-zinc-900 rounded-full blur-3xl opacity-60" />
           
@@ -124,7 +108,7 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
             </DialogHeader>
             
             <div className="mb-6">
-              <div className="flex justify-between mb-4">
+            <div className="flex justify-between mb-4">
                 <div className={`flex items-center gap-2 ${step >= 1 ? 'text-stone-900 dark:text-stone-100' : 'text-stone-400'}`}>
                   <div className={`rounded-full h-6 w-6 flex items-center justify-center ${step >= 1 ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900' : 'bg-stone-200 dark:bg-stone-800 text-stone-500 dark:text-stone-500'}`}>
                     {step > 1 ? <CheckCircle className="h-4 w-4" /> : "1"}
@@ -200,7 +184,7 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
             </div>
             
             <DialogFooter className="flex items-center justify-between mt-8">
-              {step > 1 && (
+            {step > 1 && (
                 <Button 
                   type="button" 
                   variant="outline" 

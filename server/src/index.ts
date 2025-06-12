@@ -84,49 +84,40 @@ io.on('connection', (socket: Socket) => {
 
       logger.info({ gameId, playerId, playerName: playerSetupData.name }, 'Creating game');
 
-      const gameActor = createActor(gameMachine, { input: { gameId } });
-
-      // Listener for the initial join callback
-      const joinSubscription = gameActor.on('PLAYER_JOIN_SUCCESSFUL', (event) => {
-        if (event.playerId === playerId) {
-          const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
-          callback({ success: true, gameId, playerId, gameState: playerSpecificView });
-          // This is a one-time subscription for the creating player
-          joinSubscription.unsubscribe();
-        }
+      const gameActor = createActor(gameMachine, { 
+        input: { gameId }
+        // If you need to pass custom settings:
+        // input: { gameId, maxPlayers: playerSetupData.maxPlayers } 
       });
 
-      // Listener for broadcasting game state to all in the room
+      // General listener for broadcasting game state to all in the room
       const broadcastSubscription = gameActor.on('BROADCAST_GAME_STATE', () => {
           broadcastGameState(gameId, gameActor);
       });
       
-      // Listener for broadcasting chat messages to all in the room
+      // General listener for broadcasting chat messages
       const chatSubscription = gameActor.on('BROADCAST_CHAT_MESSAGE', (event) => {
-        logger.debug({ gameId, chatMessage: event.chatMessage }, 'Broadcasting new chat message');
         io.to(gameId).emit(SocketEventName.NEW_CHAT_MESSAGE, event.chatMessage);
       });
 
-      // Listener for sending a specific event to a single player
+      // General listener for sending a specific event to a single player
       const directMessageSubscription = gameActor.on('SEND_EVENT_TO_PLAYER', (event) => {
           const { playerId: targetPlayerId, eventName, eventData } = event.payload;
           const targetPlayer = gameActor.getSnapshot().context.players[targetPlayerId];
           if (targetPlayer?.socketId && targetPlayer.isConnected) {
-              io.to(targetPlayer.socketId).emit(eventName as ServerToClientEventName, eventData as any);
+              io.to(targetPlayer.socketId).emit(eventName as any, eventData as any);
           }
       });
 
-      // General subscriber for cleanup
       const actorSubscription = gameActor.subscribe({
           error: (err) => logger.error({ err, gameId }, 'Game machine error'),
           complete: () => {
               logger.info({ gameId }, 'Game machine has completed.');
               activeGameMachines.delete(gameId);
-              // Clean up all subscriptions for this actor
               broadcastSubscription.unsubscribe();
               chatSubscription.unsubscribe();
               directMessageSubscription.unsubscribe();
-              actorSubscription.unsubscribe(); // unsubscribe self
+              actorSubscription.unsubscribe();
           }
       });
       
@@ -135,7 +126,15 @@ io.on('connection', (socket: Socket) => {
       socket.join(gameId);
       registerSocketSession(gameId, playerId);
       
+      // Send the join request to the machine
       gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
+
+      // FIX: Immediately invoke the callback with the success response.
+      // The game state is now ready for the creator.
+      const creatorView = generatePlayerView(gameActor.getSnapshot(), playerId);
+      if (callback) {
+        callback({ success: true, gameId, playerId, gameState: creatorView });
+      }
 
     } catch (e: any) {
       logger.error({ err: e }, `[Server-CreateGame] Error`);
@@ -143,84 +142,94 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
-  socket.on(
-    SocketEventName.JOIN_GAME,
-    (
-      gameId: string,
-      playerSetupData: InitialPlayerSetupData,
-      callback: (response: JoinGameResponse) => void
-    ) => {
-      const gameActor = activeGameMachines.get(gameId);
+  socket.on(SocketEventName.JOIN_GAME, (gameId: string, playerSetupData: InitialPlayerSetupData, callback: (response: JoinGameResponse) => void) => {
+      try {
+        const gameActor = activeGameMachines.get(gameId);
 
-      if (!playerSetupData) {
-        logger.error({ gameId, socketId: socket.id }, 'Join failed: playerSetupData is missing.');
-        if (callback) callback({ success: false, message: 'Player data is missing.' });
-        return;
-      }
-
-      logger.info({ gameId, playerName: playerSetupData.name, socketId: socket.id }, 'Player attempting to join game');
-
-      if (!gameActor) {
-          logger.warn({ gameId }, 'Join failed: game not found.');
-          if (callback) callback({ success: false, message: 'Game not found.' });
+        if (!playerSetupData) {
+          logger.error({ gameId, socketId: socket.id }, 'Join failed: playerSetupData is missing.');
+          if (callback) callback({ success: false, message: 'Player data is missing.' });
           return;
-      }
-
-      const currentState = gameActor.getSnapshot();
-      if (currentState.value !== GameStage.WAITING_FOR_PLAYERS) {
-        logger.warn({ gameId, currentState: currentState.value }, 'Join failed: game has already started.');
-        if (callback) callback({ success: false, message: 'Game has already started.' });
-        return;
-      }
-      
-      const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || '4', 10);
-      if (Object.keys(currentState.context.players).length >= MAX_PLAYERS) {
-        logger.warn({ gameId, playerCount: Object.keys(currentState.context.players).length }, 'Join failed: game is full.');
-        if (callback) callback({ success: false, message: 'Game is full.' });
-        return;
-      }
-      
-      const playerId = nanoid();
-      const finalPlayerSetupData = { ...playerSetupData, id: playerId, socketId: socket.id };
-
-      const joinSubscription = gameActor.on('PLAYER_JOIN_SUCCESSFUL', (event) => {
-        if (event.playerId === playerId) {
-          const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
-          callback({ success: true, gameId, playerId, gameState: playerSpecificView });
-          joinSubscription.unsubscribe();
         }
-      });
 
-      socket.join(gameId);
-      registerSocketSession(gameId, playerId);
+        logger.info({ gameId, playerName: playerSetupData.name, socketId: socket.id }, 'Player attempting to join game');
 
-      gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
+        if (!gameActor) {
+            logger.warn({ gameId }, 'Join failed: game not found.');
+            if (callback) callback({ success: false, message: 'Game not found.' });
+            return;
+        }
+
+        const currentState = gameActor.getSnapshot();
+        if (currentState.context.gameStage !== GameStage.WAITING_FOR_PLAYERS) {
+          logger.warn({ gameId, currentState: currentState.value }, 'Join failed: game has already started.');
+          if (callback) callback({ success: false, message: 'Game has already started.' });
+          return;
+        }
+        
+        if (Object.keys(currentState.context.players).length >= currentState.context.maxPlayers) {
+          logger.warn({ gameId, playerCount: Object.keys(currentState.context.players).length }, 'Join failed: game is full.');
+          if (callback) callback({ success: false, message: 'Game is full.' });
+          return;
+        }
+        
+        const playerId = nanoid();
+        const finalPlayerSetupData = { ...playerSetupData, id: playerId, socketId: socket.id };
+
+        socket.join(gameId);
+        registerSocketSession(gameId, playerId);
+
+        // Send the join request to the machine
+        gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
+
+        // FIX: Immediately invoke the callback with the success response.
+        const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
+        if (callback) {
+          callback({ success: true, gameId, playerId, gameState: playerSpecificView });
+        }
+        
+        // After confirming with the new player, broadcast to update the lobby for everyone else.
+        broadcastGameState(gameId, gameActor);
+
+      } catch (e: any) {
+        logger.error({ err: e }, `[Server-JoinGame] Error`);
+        if (callback) callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
+      }
   });
 
   socket.on(SocketEventName.ATTEMPT_REJOIN, (data: { gameId: GameId, playerId: PlayerId }, callback: (r: AttemptRejoinResponse) => void) => {
-    const { gameId, playerId } = data;
-    const gameActor = activeGameMachines.get(gameId);
+    try {
+      const { gameId, playerId } = data;
+      const gameActor = activeGameMachines.get(gameId);
 
-    if (gameActor) {
+      if (!gameActor) {
+        logger.warn({ gameId, playerId }, 'Attempted rejoin for non-existent game');
+        if (callback) callback({ success: false, message: 'Game not found.' });
+        return;
+      }
+      
       logger.info({ playerId, gameId, newSocketId: socket.id }, 'Player attempting to rejoin game');
       
-      const reconnectSubscription = gameActor.on('PLAYER_RECONNECT_SUCCESSFUL', (event) => {
-        if(event.playerId === playerId) {
-          const snapshot = gameActor.getSnapshot();
-          const playerSpecificView = generatePlayerView(snapshot, playerId);
-          callback({ success: true, gameState: playerSpecificView, logs: snapshot.context.log });
-          reconnectSubscription.unsubscribe();
-        }
-      });
-
       socket.join(gameId);
       registerSocketSession(gameId, playerId);
       
+      // Send the reconnect event to the machine to update the player's socketId
       gameActor.send({ type: 'PLAYER_RECONNECTED', playerId, newSocketId: socket.id });
 
-    } else {
-      logger.warn({ gameId, playerId }, 'Attempted rejoin for non-existent game');
-      callback({ success: false, message: 'Game not found.' });
+      // FIX: Immediately invoke the callback with the latest game state.
+      const snapshot = gameActor.getSnapshot();
+      const playerSpecificView = generatePlayerView(snapshot, playerId);
+      if (callback) {
+        callback({ success: true, gameState: playerSpecificView, logs: snapshot.context.log });
+      }
+      
+      // After confirming with the rejoining player, broadcast to update everyone else's view
+      // (e.g., to show the reconnected player's status as 'connected').
+      broadcastGameState(gameId, gameActor);
+
+    } catch (e: any) {
+      logger.error({ err: e }, `[Server-Rejoin] Error`);
+      if (callback) callback({ success: false, message: `Server error: ${e.message || 'Unknown error'}` });
     }
   });
 

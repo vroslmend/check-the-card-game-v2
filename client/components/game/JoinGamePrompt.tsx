@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { UIContext } from '@/components/providers/UIMachineProvider';
+import { GameUIContext } from '@/context/GameUIContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useParams } from 'next/navigation';
@@ -19,7 +19,7 @@ export const JoinGamePrompt = () => {
   });
 
   const [isLoading, setIsLoading] = useState(false);
-  const { actorRef } = useContext(UIContext)!;
+  const { send } = GameUIContext.useActorRef();
   const params = useParams();
   const gameId = params.gameId as string;
 
@@ -34,7 +34,7 @@ export const JoinGamePrompt = () => {
     // Persist the name for future joins
     localStorage.setItem('localPlayerName', playerName.trim());
     
-    actorRef.send({
+    send({
       type: 'JOIN_GAME_REQUESTED',
       playerName: playerName.trim(),
       gameId,
