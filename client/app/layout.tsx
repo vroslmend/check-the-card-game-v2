@@ -41,13 +41,13 @@ export default function RootLayout({
           enableSystem
         >
           <UIMachineProvider>
-            <CursorProvider>
-              <SmoothScrollProvider>
-                {children}
-                <CustomCursor />
-              </SmoothScrollProvider>
-              <Toaster />
-            </CursorProvider>
+          <CursorProvider>
+            <SmoothScrollProvider>
+              {children}
+              <CustomCursor />
+            </SmoothScrollProvider>
+            <Toaster />
+          </CursorProvider>
           </UIMachineProvider>
         </ThemeProvider>
       </body>

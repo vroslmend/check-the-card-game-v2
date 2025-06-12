@@ -16,10 +16,10 @@ import { AnimateOnView } from "@/components/ui/AnimateOnView"
 import Magnetic from "@/components/ui/Magnetic"
 import { Signature } from "@/components/ui/Signature"
 import { Scrollytelling } from "@/components/ui/Scrollytelling"
-// import { MainNav } from "@/components/layout/MainNav" // This line is commented out as the file does not exist
 import { socket } from "@/lib/socket"
 import { useRouter } from "next/navigation"
-import { UIMachineProvider } from "@/components/providers/UIMachineProvider"
+import { NewGameModal } from "@/components/modals/NewGameModal"
+import { JoinGameModal } from "@/components/modals/JoinGameModal"
 
 const textContainerVariants = {
   hover: {
@@ -202,19 +202,21 @@ function HomePage() {
   }, [handleMouseMove]);
 
   const handleCreateGame = () => {
-    router.push("/game/start?mode=create")
+    setShowNewGame(true);
   }
 
   const handleJoinGame = () => {
-    router.push("/game/start?mode=join")
+    setShowJoinGame(true)
   }
 
   return (
+
     <div
       ref={containerRef}
       className="relative flex min-h-screen flex-col bg-stone-50 dark:bg-zinc-950 noselect"
     >
-      {/* <MainNav onNewGame={() => setShowNewGame(true)} onJoinGame={() => setShowJoinGame(true)} /> */}
+      <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
+      <JoinGameModal isModalOpen={showJoinGame} setIsModalOpen={setShowJoinGame} />
       <OptimizedShapes mouseX={mouseX} mouseY={mouseY} scrollY={shapeY} shouldReduceMotion={shouldReduceMotion ?? false} />
 
       <motion.header

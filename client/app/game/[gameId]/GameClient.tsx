@@ -1,82 +1,43 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useLocalStorage } from 'usehooks-ts';
-import { UIMachineProvider } from '@/components/providers/UIMachineProvider';
+import React, { useContext, useEffect } from 'react';
+import { useSelector } from '@xstate/react';
+import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
 import LoadingOrError from '@/components/layout/LoadingOrError';
-import { RejoinModal } from '@/components/modals/RejoinModal'
-import { ClientCheckGameState } from 'shared-types';
-import logger from '@/lib/logger';
+import GameUI from '@/components/game/GameUI';
+import { RejoinModal } from '@/components/modals/RejoinModal';
+
+const selectIsReadyForGame = (state: UIMachineSnapshot) => 
+  !state.matches('initializing') && !state.matches('outOfGame');
 
 export default function GameClient({
   gameId,
-  initialGameState,
-  children,
 }: {
   gameId: string;
-  initialGameState?: ClientCheckGameState;
-  children: React.ReactNode;
+  // No 'children' prop here
 }) {
-  const [localPlayerId, setLocalPlayerId] = useLocalStorage<string | null>(`player-id-${gameId}`, null);
-  const [sessionGameState, setSessionGameState] = useState<ClientCheckGameState | undefined>(undefined);
-  const [isClient, setIsClient] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const { actorRef } = useContext(UIContext)!;
 
   useEffect(() => {
-    setIsClient(true);
-    
-    // Check for session data
-    try {
-      // Try to get player ID and game state from session
-      const persistedPlayerSessionJSON = sessionStorage.getItem('playerSession');
-      const persistedGameStateJSON = sessionStorage.getItem('initialGameState');
-      
-      if (persistedPlayerSessionJSON) {
-        const session = JSON.parse(persistedPlayerSessionJSON);
-        if (session.gameId === gameId) {
-          logger.info({ gameId, playerId: session.playerId }, 'Found matching player session');
-          setLocalPlayerId(session.playerId);
-        }
-      }
-      
-      if (persistedGameStateJSON) {
-        logger.info({ gameId }, 'Found persisted game state, loading directly');
-        const gameState = JSON.parse(persistedGameStateJSON);
-        setSessionGameState(gameState);
-        
-        // We don't want to remove initialGameState from storage here anymore
-        // since we'll directly pass it to the machine
-      }
-    } catch (e) {
-      logger.error({ error: e }, 'Error retrieving session data');
+    const snapshot = actorRef.getSnapshot();
+    if (snapshot.context.gameId !== gameId) {
+        actorRef.send({ 
+            type: 'HYDRATE_GAME_STATE', 
+            gameState: { gameId } as any 
+        });
     }
-    
-    setIsLoading(false);
-  }, [gameId, setLocalPlayerId]);
+  }, [gameId, actorRef]);
 
-  if (!isClient || isLoading) {
-    return <LoadingOrError message="Initializing game..." />;
+  const isReady = useSelector(actorRef, selectIsReadyForGame);
+
+  if (!isReady) {
+    return <LoadingOrError message={`Connecting to game ${gameId}...`} />;
   }
 
-  // Use either the provided initialGameState, the one from session storage, or undefined
-  const effectiveGameState = initialGameState || sessionGameState;
-
-  logger.info(
-    { 
-      hasInitialState: !!effectiveGameState, 
-      hasPlayerId: !!localPlayerId 
-    }, 
-    'Initializing UIMachineProvider'
-  );
-
   return (
-    <UIMachineProvider 
-      gameId={gameId} 
-      localPlayerId={localPlayerId} 
-      initialGameState={effectiveGameState}
-    >
+    <>
+      <GameUI />
       <RejoinModal />
-      {children}
-    </UIMachineProvider>
+    </>
   );
-} 
+}

@@ -92,6 +92,7 @@ export interface UIMachineContext {
   reconnectionAttempts: number;
   socket: any;
   hasPassedMatch: boolean;
+  modal: { type: 'rejoin' | 'error', title: string, message: string } | null;
 }
 
 type RejoinPollOutput = {
@@ -118,6 +119,7 @@ export type UIMachineEvents =
   | { type: 'RECOVERY_FAILED' }
   | { type: 'CLEANUP_EXPIRED_CARDS' }
   | { type: 'HYDRATE_GAME_STATE'; gameState: ClientCheckGameState }
+  | { type: 'DISMISS_MODAL' }
   | { type: PlayerActionType.START_GAME }
   | { type: PlayerActionType.DECLARE_LOBBY_READY }
   | { type: PlayerActionType.REMOVE_PLAYER; payload: { playerId: string } }
@@ -369,6 +371,7 @@ export const uiMachine = setup({
     incrementReconnectionAttempts: assign({ reconnectionAttempts: ({ context }) => context.reconnectionAttempts + 1 }),
     resetReconnectionAttempts: assign({ reconnectionAttempts: 0 }),
     cleanupExpiredVisibleCards: assign({ visibleCards: ({ context }) => context.visibleCards.filter(vc => !vc.expireAt || vc.expireAt > Date.now()) }),
+    dismissModal: assign({ modal: null }),
     redirectToHome: () => { if (typeof window !== 'undefined') { window.location.href = '/'; } },
   },
   guards: {
@@ -388,15 +391,18 @@ export const uiMachine = setup({
     currentAbilityContext: undefined, visibleCards: [], isSidePanelOpen: false, error: null,
     reconnectionAttempts: 0, socket: undefined, playerName: undefined, selectedCardIndices: [],
     hasPassedMatch: false,
+    modal: null,
   }),
   initial: 'initializing',
   on: {
     DISCONNECT: { target: '.inGame.disconnected' },
     ERROR_RECEIVED: { actions: 'showErrorToast' },
+    CONNECTION_ERROR: { actions: 'showErrorToast' },
   },
   states: {
     initializing: {
       always: [
+        { target: 'inGame.promptToJoin', guard: ({ context }) => !!context.gameId && !context.localPlayerId, description: "Has a game ID from URL, but no player ID from session. Must prompt to join." },
         { target: 'inGame', guard: ({ context }) => !!context.currentGameState },
         { target: 'inGame.reconnecting', guard: ({ context }) => !!context.localPlayerId && !context.currentGameState },
         { target: 'outOfGame' },
@@ -452,6 +458,7 @@ export const uiMachine = setup({
         CALL_CHECK: { actions: 'emitCallCheck' },
         DECLARE_READY_FOR_PEEK: { actions: 'emitDeclareReadyForPeek' },
         PLAY_AGAIN: { actions: 'emitPlayAgain' },
+        DISMISS_MODAL: { actions: 'dismissModal' },
       },
       states: {
         routing: {
@@ -529,6 +536,23 @@ export const uiMachine = setup({
           },
         },
         recoveryFailed: { entry: ['clearSession', 'redirectToHome'] },
+        promptToJoin: {
+          tags: ['prompting'],
+          entry: assign({
+            modal: {
+              type: 'rejoin' as const, // Use the 'rejoin' modal type
+              title: 'Join Game',
+              message: 'You have been invited to a game. Please enter your name to join.'
+            }
+          }),
+          on: {
+            JOIN_GAME_REQUESTED: {
+              // Once the user joins, clear the modal and let the routing handle the redirect
+              target: 'routing', 
+              actions: ['emitJoinGame', 'dismissModal']
+            }
+          }
+        },
       },
     },
   },

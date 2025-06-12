@@ -12,8 +12,10 @@ import { UIContext, type UIMachineSnapshot } from "@/components/providers/UIMach
 const selectRejoinModalProps = (state: UIMachineSnapshot) => {
   return {
     gameId: state.context.gameId,
-    modalInfo: state.context.modal,
-    isLoading: state.hasTag('loading'),
+    // FIX: The modal's visibility and content are now driven by the modal context object
+    modalInfo: state.context.modal, 
+    // This can be simplified if the loading state is just for the button
+    isLoading: state.hasTag('loading'), 
   }
 }
 
@@ -21,17 +23,16 @@ export function RejoinModal() {
   const { actorRef } = useContext(UIContext)!;
   const { gameId, modalInfo, isLoading } = useSelector(actorRef, selectRejoinModalProps);
   
-  const [playerName, setPlayerName] = useLocalStorage("playerName", "", {
-    serializer: v => v,
-    deserializer: v => v,
-  });
+  const [playerName, setPlayerName] = useLocalStorage("playerName", "");
 
+  // FIX: The check is now simpler and more direct
   if (modalInfo?.type !== 'rejoin') {
     return null;
   }
 
   const handleJoinGame = () => {
     if (playerName.trim() && gameId) {
+      // The machine is already in the 'promptToJoin' state and is listening for this event.
       actorRef.send({
         type: 'JOIN_GAME_REQUESTED',
         playerName: playerName.trim(),
