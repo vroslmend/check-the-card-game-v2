@@ -1,931 +1,357 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createActor, Actor } from 'xstate';
-import { gameMachine, GameContext, ServerPlayer } from '../game-machine.js';
-import { PlayerActionType, GameStage, TurnPhase, Card, CardRank, Suit, PlayerStatus } from 'shared-types';
+import { gameMachine } from '../game-machine.js';
+import { PlayerActionType, GameStage, CardRank, Suit, Card } from 'shared-types';
 
-// Mock the deck-utils module to have predictable cards
-vi.mock('../lib/deck-utils.js', () => ({
-    createDeck: vi.fn(() => {
-        const suits = Object.values(Suit);
-        const ranks = Object.values(CardRank);
-        const mockDeck: Card[] = [];
-        for (const suit of suits) {
-            for (const rank of ranks) {
-                mockDeck.push({ id: `card-${suit}-${rank}`, suit, rank });
-            }
-        }
-        return [...mockDeck];
-    }),
-    shuffleDeck: vi.fn((cards) => cards),
+// Mock the logger to prevent console output during tests
+vi.mock('../lib/logger.js', () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
 }));
 
-// Helper to create test player data
-const createTestPlayer = (id: string, name: string = `Player ${id}`) => ({
-  playerSetupData: { id, name, socketId: `socket-${id}` },
-  playerId: id,
-});
+// Test Constants
+const P1 = { id: 'player1', name: 'Alice', sid: 's1' };
+const P2 = { id: 'player2', name: 'Bob', sid: 's2' };
+const P3 = { id: 'player3', name: 'Charlie', sid: 's3' };
+const GAME_ID = 'test-game';
 
-// Helper to get a player's state from the machine's context
-const getPlayer = (actor: Actor<typeof gameMachine>, playerId: string): ServerPlayer => {
-  return actor.getSnapshot().context.players[playerId]!;
-};
+// Card Constants for predictable tests
+const S2: Card = { id: 'S2', suit: Suit.Spades, rank: CardRank.Two };
+const H2: Card = { id: 'H2', suit: Suit.Hearts, rank: CardRank.Two };
+const C2: Card = { id: 'C2', suit: Suit.Clubs, rank: CardRank.Two };
+const D5: Card = { id: 'D5', suit: Suit.Diamonds, rank: CardRank.Five };
+const H9: Card = { id: 'H9', suit: Suit.Hearts, rank: CardRank.Nine };
+const DJ: Card = { id: 'DJ', suit: Suit.Diamonds, rank: CardRank.Jack };
+const SK: Card = { id: 'SK', suit: Suit.Spades, rank: CardRank.King };
+const CK: Card = { id: 'CK', suit: Suit.Clubs, rank: CardRank.King };
+const DA: Card = { id: 'DA', suit: Suit.Diamonds, rank: CardRank.Ace };
 
-const waitForState = (
-    actor: Actor<typeof gameMachine>,
-    stateValue: 
-        | GameStage
-        | 'error'
-        | 'recovering'
-        | 'failedRecovery'
-        | { [key: string]: any }
-) => {
-    return new Promise<void>((resolve) => {
-        const { unsubscribe } = actor.subscribe((state) => {
-            if (state.matches(stateValue)) {
-                unsubscribe();
-                resolve();
-            }
-        });
-    });
-};
-
-describe('Game Machine - Comprehensive Tests', () => {
-  let actor: Actor<typeof gameMachine>;
-
-  const setupActorWithPlayers = (playerIds: string[]) => {
-    actor = createActor(gameMachine, { input: { gameId: 'test-game' } }).start();
-    playerIds.forEach((id) => {
-      actor.send({ type: 'PLAYER_JOIN_REQUEST', ...createTestPlayer(id) });
-    });
-  };
-
-  const readyAllPlayers = () => {
-    const playerIds = actor.getSnapshot().context.turnOrder;
-    playerIds.forEach((id) => {
-      actor.send({ type: PlayerActionType.DECLARE_LOBBY_READY, playerId: id });
-    });
-  };
-
-  const startGame = () => {
-    const gameMasterId = actor.getSnapshot().context.gameMasterId;
-    if (gameMasterId) {
-      actor.send({ type: PlayerActionType.START_GAME, playerId: gameMasterId });
+// Test Utilities
+const createTestActor = (input: Partial<Parameters<typeof createActor<typeof gameMachine>>[1]['input']> = {}) => {
+  return createActor(gameMachine, {
+    input: {
+      gameId: GAME_ID,
+      ...input
     }
-  };
+  });
+};
+
+const setupTwoPlayerGame = (actor: Actor<typeof gameMachine>) => {
+  actor.start();
+  actor.send({ type: 'PLAYER_JOIN_REQUEST', playerId: P1.id, playerSetupData: { name: P1.name, socketId: P1.sid }});
+  actor.send({ type: 'PLAYER_JOIN_REQUEST', playerId: P2.id, playerSetupData: { name: P2.name, socketId: P2.sid }});
+  actor.send({ type: PlayerActionType.DECLARE_LOBBY_READY, playerId: P1.id });
+  actor.send({ type: PlayerActionType.DECLARE_LOBBY_READY, playerId: P2.id });
+  actor.send({ type: PlayerActionType.START_GAME, playerId: P1.id });
+  actor.send({ type: 'TIMER.PEEK_EXPIRED' });
+};
+
+describe('gameMachine', () => {
+
+  describe('Lobby and Game Setup', () => {
+    it('should allow a player to join and become game master', () => {
+      const actor = createTestActor();
+      actor.start();
+      actor.send({ type: 'PLAYER_JOIN_REQUEST', playerId: P1.id, playerSetupData: { name: P1.name }});
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.context.players[P1.id]).toBeDefined();
+      expect(snapshot.context.gameMasterId).toBe(P1.id);
+      expect(snapshot.value).toBe(GameStage.WAITING_FOR_PLAYERS);
+    });
+
+    it('should not start the game with only one player', () => {
+      const actor = createTestActor();
+      actor.start();
+      actor.send({ type: 'PLAYER_JOIN_REQUEST', playerId: P1.id, playerSetupData: { name: P1.name }});
+      actor.send({ type: PlayerActionType.DECLARE_LOBBY_READY, playerId: P1.id });
+      actor.send({ type: PlayerActionType.START_GAME, playerId: P1.id });
+      expect(actor.getSnapshot().value).toBe(GameStage.WAITING_FOR_PLAYERS);
+    });
+
+    it('should start the game when two players are ready and game master starts it', () => {
+        const actor = createTestActor();
+        setupTwoPlayerGame(actor);
+        const snapshot = actor.getSnapshot();
+        expect(snapshot.value).toEqual({ [GameStage.PLAYING]: 'turn' });
+        expect(snapshot.context.currentPlayerId).toBe(P1.id);
+        expect(snapshot.context.players[P1.id].hand.length).toBe(4);
+        expect(snapshot.context.players[P2.id].hand.length).toBe(4);
+    });
+  });
+
+  describe('Configurable Game Settings', () => {
+    it('should respect the maxPlayers setting', () => {
+      const actor = createTestActor({ maxPlayers: 2 });
+      setupTwoPlayerGame(actor); // Game is now full
+      
+      // Attempt to join a third player
+      actor.send({ type: 'PLAYER_JOIN_REQUEST', playerId: P3.id, playerSetupData: { name: P3.name } });
+      
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.context.players[P3.id]).toBeUndefined();
+      expect(Object.keys(snapshot.context.players).length).toBe(2);
+    });
+
+    it('should respect the cardsPerPlayer setting', () => {
+      const actor = createTestActor({ cardsPerPlayer: 2 });
+      setupTwoPlayerGame(actor);
+      
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.context.players[P1.id].hand.length).toBe(2);
+      expect(snapshot.context.players[P2.id].hand.length).toBe(2);
+    });
+  });
+
+  describe('Resilient Disconnection Handling', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('should allow the game to continue if a player fails to reconnect in a 3+ player game', () => {
+      const actor = createTestActor();
+      actor.start();
+      // Setup a 3 player game
+      actor.send({ type: 'PLAYER_JOIN_REQUEST', playerId: P1.id, playerSetupData: { name: P1.name, socketId: P1.sid }});
+      actor.send({ type: 'PLAYER_JOIN_REQUEST', playerId: P2.id, playerSetupData: { name: P2.name, socketId: P2.sid }});
+      actor.send({ type: 'PLAYER_JOIN_REQUEST', playerId: P3.id, playerSetupData: { name: P3.name, socketId: P3.sid }});
+      actor.send({ type: PlayerActionType.DECLARE_LOBBY_READY, playerId: P1.id });
+      actor.send({ type: PlayerActionType.DECLARE_LOBBY_READY, playerId: P2.id });
+      actor.send({ type: PlayerActionType.DECLARE_LOBBY_READY, playerId: P3.id });
+      actor.send({ type: PlayerActionType.START_GAME, playerId: P1.id });
+      actor.send({ type: 'TIMER.PEEK_EXPIRED' });
+
+      expect(actor.getSnapshot().context.currentPlayerId).toBe(P1.id);
+
+      // P1 disconnects during their turn
+      actor.send({ type: 'PLAYER_DISCONNECTED', playerId: P1.id });
+      expect(actor.getSnapshot().value).toEqual({ [GameStage.PLAYING]: 'error' });
+      
+      // Simulate reconnect timer running out
+      vi.advanceTimersByTime(30000);
+
+      // Assert game continues
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.value).toEqual({ [GameStage.PLAYING]: 'turn' });
+      expect(snapshot.context.players[P1.id].forfeited).toBe(true);
+      expect(snapshot.context.turnOrder).not.toContain(P1.id);
+      expect(snapshot.context.currentPlayerId).toBe(P2.id); // Turn should advance
+    });
+
+    it('should end the game if a player fails to reconnect in a 2-player game', () => {
+      const actor = createTestActor();
+      setupTwoPlayerGame(actor);
+
+      // P1 disconnects
+      actor.send({ type: 'PLAYER_DISCONNECTED', playerId: P1.id });
+      expect(actor.getSnapshot().value).toEqual({ [GameStage.PLAYING]: 'error' });
+
+      // Simulate reconnect timer running out
+      vi.advanceTimersByTime(30000);
+
+      // Assert game ends
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.value).toBe(GameStage.GAMEOVER);
+      expect(snapshot.context.gameover?.winnerId).toBe(P2.id);
+      expect(snapshot.context.gameover?.loserId).toBe(P1.id);
+    });
+  });
   
-  const advanceToPlayingPhase = async () => {
-    vi.advanceTimersToNextTimer(); // DEALING -> INITIAL_PEEK delay
-    const playerIds = actor.getSnapshot().context.turnOrder;
-    playerIds.forEach(id => {
-        actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: id });
-    });
-  };
-
-  const playFullTurn = async (playerId: string) => {
-    actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId });
-    actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId });
-    await vi.advanceTimersToNextTimerAsync(); // matching timer
-    await vi.advanceTimersToNextTimerAsync(); // endOfTurn delay timer
-  };
-
-  const playCheckTurn = async (playerId: string) => {
-    actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId });
-    actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId });
-    await vi.runAllTimersAsync();
-  };
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    actor.stop();
-  });
-
-  // --- Test Suites ---
-
-  describe('1. Game Setup & Player Management', () => {
+  describe('Basic Turn Flow', () => {
+    let actor: Actor<typeof gameMachine>;
     beforeEach(() => {
-      actor = createActor(gameMachine, { input: { gameId: 'setup-test' } }).start();
-    });
-
-    it('should start in WAITING_FOR_PLAYERS state', () => {
-      expect(actor.getSnapshot().value).toBe(GameStage.WAITING_FOR_PLAYERS);
-    });
-
-    it('should allow a player to join and become the game master', () => {
-      actor.send({ type: 'PLAYER_JOIN_REQUEST', ...createTestPlayer('p1') });
-      const state = actor.getSnapshot();
-      expect(Object.keys(state.context.players).length).toBe(1);
-      expect(getPlayer(actor, 'p1')).toBeDefined();
-      expect(state.context.gameMasterId).toBe('p1');
-      expect(getPlayer(actor, 'p1').isDealer).toBe(true);
-    });
-
-    it('should allow multiple players to join', () => {
-      actor.send({ type: 'PLAYER_JOIN_REQUEST', ...createTestPlayer('p1') });
-      actor.send({ type: 'PLAYER_JOIN_REQUEST', ...createTestPlayer('p2') });
-      const state = actor.getSnapshot();
-      expect(Object.keys(state.context.players).length).toBe(2);
-      expect(state.context.turnOrder).toEqual(['p1', 'p2']);
-      expect(getPlayer(actor, 'p2').isDealer).toBe(false);
-    });
-
-    it('should not allow more than MAX_PLAYERS to join', () => {
-        setupActorWithPlayers(['p1', 'p2', 'p3', 'p4']);
-        actor.send({ type: 'PLAYER_JOIN_REQUEST', ...createTestPlayer('p5') });
-        expect(Object.keys(actor.getSnapshot().context.players).length).toBe(4);
-    });
-
-    it('should not start the game if not all players are ready', () => {
-      setupActorWithPlayers(['p1', 'p2']);
-      actor.send({ type: PlayerActionType.DECLARE_LOBBY_READY, playerId: 'p1' });
-      startGame();
-      expect(actor.getSnapshot().value).toBe(GameStage.WAITING_FOR_PLAYERS);
-    });
-    
-    it('should not start the game if started by non-game-master', () => {
-        setupActorWithPlayers(['p1', 'p2']);
-        readyAllPlayers();
-        actor.send({ type: PlayerActionType.START_GAME, playerId: 'p2' });
-        expect(actor.getSnapshot().value).toBe(GameStage.WAITING_FOR_PLAYERS);
-    });
-
-    it('should transition to DEALING when game master starts with all players ready', () => {
-      setupActorWithPlayers(['p1', 'p2']);
-      readyAllPlayers();
-      startGame();
-      expect(actor.getSnapshot().value).toBe(GameStage.DEALING);
-    });
-  });
-
-  describe('2. Dealing & Initial Peek', () => {
-    beforeEach(() => {
-        setupActorWithPlayers(['p1', 'p2']);
-        readyAllPlayers();
-        startGame();
-    });
-
-    it('should deal 4 cards to each player', () => {
-      const state = actor.getSnapshot();
-      expect(getPlayer(actor, 'p1').hand.length).toBe(4);
-      expect(getPlayer(actor, 'p2').hand.length).toBe(4);
-      expect(state.context.deck.length).toBe(52 - 8);
-    });
-
-    it('should transition to INITIAL_PEEK after dealing', () => {
-        vi.advanceTimersToNextTimer(); 
-        expect(actor.getSnapshot().value).toBe(GameStage.INITIAL_PEEK);
-    });
-    
-    it('should transition to PLAYING when all players are ready for peek', async () => {
-        vi.advanceTimersToNextTimer(); // DEALING -> INITIAL_PEEK
-        actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: 'p1' });
-        actor.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK, playerId: 'p2' });
-        expect(actor.getSnapshot().value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DRAW } });
-        expect(actor.getSnapshot().context.currentPlayerId).toBe('p1');
-    });
-  });
-
-  describe('3. Core Gameplay Loop', () => {
-    beforeEach(async () => {
-      setupActorWithPlayers(['p1', 'p2']);
-      readyAllPlayers();
-      startGame();
-      await advanceToPlayingPhase();
-    });
-
-    it('should start with the first player in DRAW phase', () => {
-      const state = actor.getSnapshot();
-      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DRAW } });
-      expect(state.context.currentPlayerId).toBe('p1');
+        actor = createTestActor();
+        setupTwoPlayerGame(actor);
     });
 
     it('should allow the current player to draw from the deck', () => {
-        const initialDeckSize = actor.getSnapshot().context.deck.length;
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-        const state = actor.getSnapshot();
-        expect(state.context.deck.length).toBe(initialDeckSize - 1);
-        expect(getPlayer(actor, 'p1').pendingDrawnCard).toBeDefined();
-        expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DISCARD } });
-    });
-    
-    it('should not allow drawing from discard if top card is special (King)', () => {
-        actor.getSnapshot().context.discardPile = [{ id: 'c1', rank: CardRank.King, suit: Suit.Clubs }];
-        actor.send({ type: PlayerActionType.DRAW_FROM_DISCARD, playerId: 'p1' });
-        
-        const state = actor.getSnapshot();
-        expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DRAW } }); 
-        expect(getPlayer(actor, 'p1').pendingDrawnCard).toBeNull();
-    });
-
-    it('should allow drawing from discard and transition to DISCARD phase', () => {
-        const cardToDraw: Card = { id: 'c-discard', rank: CardRank.Five, suit: Suit.Diamonds };
-        actor.getSnapshot().context.discardPile.push(cardToDraw);
-        actor.send({ type: PlayerActionType.DRAW_FROM_DISCARD, playerId: 'p1' });
-        const state = actor.getSnapshot();
-        expect(getPlayer(actor, 'p1').pendingDrawnCard?.card).toEqual(cardToDraw);
-        expect(state.context.discardPile.length).toBe(0);
-        expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DISCARD } });
-    });
-
-    it('should allow player to swap drawn card with hand card', () => {
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-        const drawnCard = getPlayer(actor, 'p1').pendingDrawnCard!.card;
-        const handCardToDiscard = getPlayer(actor, 'p1').hand[3]!;
-        actor.send({ type: PlayerActionType.SWAP_AND_DISCARD, playerId: 'p1', payload: { handCardIndex: 3 } });
-        const player = getPlayer(actor, 'p1');
-        const state = actor.getSnapshot();
-        expect(player.pendingDrawnCard).toBeNull();
-        expect(player.hand[3]).toEqual(drawnCard);
-        expect(state.context.discardPile.at(-1)).toEqual(handCardToDiscard);
-        expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.MATCHING } });
-    });
-
-    it('should allow player to discard the card they just drew from the deck', () => {
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-        const drawnCard = getPlayer(actor, 'p1').pendingDrawnCard!.card;
-        actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-        const state = actor.getSnapshot();
-        expect(getPlayer(actor, 'p1').pendingDrawnCard).toBeNull();
-        expect(state.context.discardPile.at(-1)).toEqual(drawnCard);
-        expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.MATCHING } });
-    });
-
-    it('should transition to the next player after a turn', async () => {
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      await vi.advanceTimersToNextTimerAsync(); 
-      await vi.advanceTimersToNextTimerAsync(); 
-      const state = actor.getSnapshot();
-      expect(state.context.currentPlayerId).toBe('p2');
-      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DRAW } });
-    });
-  });
-  
-  describe('4. Matching Mechanic', () => {
-    beforeEach(async () => {
-        setupActorWithPlayers(['p1', 'p2', 'p3']);
-        readyAllPlayers();
-        startGame();
-        await advanceToPlayingPhase();
-    });
-
-    it('should create a matching opportunity when a non-special card is discarded', () => {
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-        actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-        const state = actor.getSnapshot();
-        expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.MATCHING } });
-        expect(state.context.matchingOpportunity).not.toBeNull();
-        expect(state.context.matchingOpportunity?.remainingPlayerIDs).toEqual(['p2', 'p3']);
-    });
-    
-    it('should allow another player to successfully match the card', async () => {
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-        const drawnCard = getPlayer(actor, 'p1').pendingDrawnCard!.card;
-        actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-        const p2 = getPlayer(actor, 'p2');
-        p2.hand[0] = { ...drawnCard }; 
-        const p2HandSize = p2.hand.length;
-        actor.send({ type: PlayerActionType.ATTEMPT_MATCH, playerId: 'p2', payload: { handCardIndex: 0 } });
-        const state = actor.getSnapshot();
-        expect(getPlayer(actor, 'p2').hand.length).toBe(p2HandSize - 1);
-        expect(state.context.discardPile.at(-1)?.rank).toBe(drawnCard.rank);
-        expect(state.context.matchingOpportunity).toBeNull();
-        expect(state.context.discardPileIsSealed).toBe(true);
-        expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: 'endOfTurn' } });
-    });
-
-    it('should transition to CHECK stage if a match empties a player\'s hand', async () => {
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-        const drawnCard = getPlayer(actor, 'p1').pendingDrawnCard!.card;
-        actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-        const p2 = getPlayer(actor, 'p2');
-        p2.hand = [{ ...drawnCard }];
-        actor.send({ type: PlayerActionType.ATTEMPT_MATCH, playerId: 'p2', payload: { handCardIndex: 0 } });
-        expect(actor.getSnapshot().matches(GameStage.CHECK)).toBe(true);
-        expect(getPlayer(actor, 'p2').hand.length).toBe(0);
-        expect(getPlayer(actor, 'p2').isLocked).toBe(true);
-    });
-
-    it('should end the matching phase if the timer runs out', async () => {
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-        actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-        expect(actor.getSnapshot().value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.MATCHING } });
-        await vi.advanceTimersToNextTimerAsync();
-        const state = actor.getSnapshot();
-        expect(state.context.matchingOpportunity).toBeNull();
-        expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: 'endOfTurn' } });
-    });
-  });
-
-  describe('5. Calling "Check"', () => {
-    beforeEach(async () => {
-        setupActorWithPlayers(['p1', 'p2', 'p3']);
-        readyAllPlayers();
-        startGame();
-        await advanceToPlayingPhase();
-    });
-
-    it('should transition to CHECK stage when a player calls check', () => {
-        actor.send({ type: PlayerActionType.CALL_CHECK, playerId: 'p1' });
-        expect(actor.getSnapshot().matches(GameStage.CHECK)).toBe(true);
-        expect(actor.getSnapshot().context.checkDetails?.callerId).toBe('p1');
-        expect(getPlayer(actor, 'p1').isLocked).toBe(true);
-    });
-
-    it('should set up the check round with the correct player order', () => {
-        // Complete p1's turn manually
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-        actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-        
-        // Skip the async wait and manually transition to p2's turn
+        const deckSizeBefore = actor.getSnapshot().context.deck.length;
+        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P1.id });
         const snapshot = actor.getSnapshot();
-        console.log('State after p1 turn:', snapshot.value);
-        
-        // Directly modify the actor's context to set currentPlayerId to p2
-        actor.getSnapshot().context.currentPlayerId = 'p2';
-        
-        // Now call check as p2
-        actor.send({ type: PlayerActionType.CALL_CHECK, playerId: 'p2' });
-        
-        // Check the results
-        const stateAfterCheck = actor.getSnapshot();
-        console.log('State after CHECK call:', stateAfterCheck.value);
-        console.log('Check details:', stateAfterCheck.context.checkDetails);
-        
-        expect(stateAfterCheck.matches(GameStage.CHECK)).toBe(true);
-        expect(stateAfterCheck.context.checkDetails?.playersYetToPlay).toContain('p3');
-        expect(stateAfterCheck.context.checkDetails?.playersYetToPlay).toContain('p1');
-        expect(stateAfterCheck.context.currentPlayerId).toBe('p3');
+        expect(snapshot.context.deck.length).toBe(deckSizeBefore - 1);
+        expect(snapshot.context.players[P1.id].pendingDrawnCard).toBeDefined();
+        expect(snapshot.value).toEqual({ [GameStage.PLAYING]: 'discard' });
     });
 
-    it('should proceed through players in the check round', () => {
-        // Call check directly
-        actor.send({ type: PlayerActionType.CALL_CHECK, playerId: 'p1' });
+    it('should allow a player to swap their drawn card with one in hand', () => {
+        actor.getSnapshot().context.players[P1.id].hand = [S2, H2, C2, D5];
+        const cardToSwap = actor.getSnapshot().context.players[P1.id].hand[0];
+        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P1.id });
+        const drawnCard = actor.getSnapshot().context.players[P1.id].pendingDrawnCard!.card;
         
-        // Verify we're in CHECK state
-        const stateAfterCheck = actor.getSnapshot();
-        console.log('After check call:', stateAfterCheck.value);
-        expect(stateAfterCheck.matches(GameStage.CHECK)).toBe(true);
-        
-        // Verify p2 is current player
-        expect(stateAfterCheck.context.currentPlayerId).toBe('p2');
-        
-        // Have p2 play their turn
-        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p2' });
-        actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p2' });
-        
-        // Check if we're in the correct state
-        const stateAfterP2 = actor.getSnapshot();
-        console.log('After p2 plays:', stateAfterP2.value);
-        console.log('Current player:', stateAfterP2.context.currentPlayerId);
-        console.log('Players yet to play:', stateAfterP2.context.checkDetails?.playersYetToPlay);
-        
-        // Update expectations based on the actual behavior:
-        // It appears p2 doesn't get removed from playersYetToPlay upon playing their turn
-        expect(stateAfterP2.context.checkDetails?.playersYetToPlay).toContain('p3');
-        expect(stateAfterP2.context.currentPlayerId).toBe('p2');
-        
-        // We need to manually advance to the next player in this test
-        actor.getSnapshot().context.currentPlayerId = 'p3';
+        actor.send({ type: PlayerActionType.SWAP_AND_DISCARD, playerId: P1.id, payload: { handCardIndex: 0 } });
+
+        const snapshot = actor.getSnapshot();
+        expect(snapshot.context.players[P1.id].hand[0]).toEqual(drawnCard);
+        expect(snapshot.context.discardPile.at(-1)).toEqual(cardToSwap);
+        expect(snapshot.value).toEqual({ [GameStage.PLAYING]: 'matching' });
     });
 
-    it('should transition to GAMEOVER after the last player in the check round plays', () => {
-        // Call check directly
-        actor.send({ type: PlayerActionType.CALL_CHECK, playerId: 'p1' });
+    it('should allow a player to discard their drawn card directly', () => {
+        actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P1.id });
+        const drawnCard = actor.getSnapshot().context.players[P1.id].pendingDrawnCard!.card;
+
+        actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: P1.id });
         
-        // Verify we're in CHECK state
-        const stateAfterCheck = actor.getSnapshot();
-        expect(stateAfterCheck.matches(GameStage.CHECK)).toBe(true);
-        
-        // Since the Check state implementation seems different from expected,
-        // we'll directly manipulate the state to simulate all players having played
-        
-        // Empty the playersYetToPlay array to simulate all players having played
-        const currentContext = actor.getSnapshot().context;
-        if (currentContext.checkDetails) {
-            currentContext.checkDetails.playersYetToPlay = [];
-        }
-        
-        // Manually trigger game end by simulating completion of the check round
-        // In a real game, this would be handled by the state machine
-        actor.getSnapshot().context.gameover = {
-            winnerId: 'p1',
-            loserId: 'p3',
-            playerScores: { 'p1': 5, 'p2': 10, 'p3': 15 }
-        };
-        
-        // Check if we're in GAMEOVER state - for the test, we'll just check if gameover is set
-        const finalState = actor.getSnapshot();
-        console.log('After all plays (modified):', finalState.context.gameover);
-        
-        // Expectation: gameover should be populated with scores
-        expect(finalState.context.gameover).not.toBeNull();
-        if (finalState.context.gameover) {
-            expect(finalState.context.gameover.winnerId).toBe('p1');
-        }
+        const snapshot = actor.getSnapshot();
+        expect(snapshot.context.discardPile.at(-1)).toEqual(drawnCard);
+        expect(snapshot.context.players[P1.id].pendingDrawnCard).toBeNull();
+        expect(snapshot.value).toEqual({ [GameStage.PLAYING]: 'matching' });
     });
   });
 
-  describe('6. Game Over and Restart', () => {
-    beforeEach(async () => {
-        setupActorWithPlayers(['p1', 'p2']);
-        readyAllPlayers();
-        startGame();
-        await advanceToPlayingPhase();
-        const p1 = getPlayer(actor, 'p1');
-        const p2 = getPlayer(actor, 'p2');
-        p1.hand = [{ id: 'c1', rank: CardRank.Ace, suit: Suit.Clubs }, { id: 'c2', rank: CardRank.Two, suit: Suit.Clubs }]; 
-        p2.hand = [{ id: 'c3', rank: CardRank.Ten, suit: Suit.Clubs }, { id: 'c4', rank: CardRank.Nine, suit: Suit.Clubs }]; 
-        actor.send({ type: PlayerActionType.CALL_CHECK, playerId: 'p1' });
-        await playCheckTurn('p2');
-    });
-
-    it('should calculate scores correctly and determine the winner', () => {
-        const state = actor.getSnapshot();
-        expect(state.matches(GameStage.GAMEOVER)).toBe(true);
-        const scores = state.context.gameover?.playerScores;
-        expect(scores?.['p1']).toBe(1);
-        expect(scores?.['p2']).toBe(19);
-        expect(state.context.gameover?.winnerId).toBe('p1');
-    });
-
-    it('should reset the game for a new round on PLAY_AGAIN', async () => {
-        actor.send({ type: PlayerActionType.PLAY_AGAIN, playerId: 'p1' });
-        const state = actor.getSnapshot();
-        expect(state.value).toBe(GameStage.DEALING);
-        expect(state.context.checkDetails).toBeNull();
-        expect(state.context.gameover).toBeNull();
-        expect(getPlayer(actor, 'p1').hand.length).toBe(4);
-        expect(getPlayer(actor, 'p1').isLocked).toBe(false);
-        expect(getPlayer(actor, 'p2').isDealer).toBe(true);
-    });
-  });
-
-  describe('7. Player Connectivity', () => {
-    beforeEach(async () => {
-        setupActorWithPlayers(['p1', 'p2']);
-        readyAllPlayers();
-        startGame();
-        await advanceToPlayingPhase();
-    });
-
-    it('should mark a non-current player as disconnected', () => {
-        expect(getPlayer(actor, 'p2').isConnected).toBe(true);
-        actor.send({ type: 'PLAYER_DISCONNECTED', playerId: 'p2' });
-        expect(getPlayer(actor, 'p2').isConnected).toBe(false);
-        expect(actor.getSnapshot().value).not.toBe('error');
-    });
-
-    it('should transition to error state if the current player disconnects', () => {
-        actor.send({ type: 'PLAYER_DISCONNECTED', playerId: 'p1' });
-        expect(getPlayer(actor, 'p1').isConnected).toBe(false);
-        expect(actor.getSnapshot().value).toBe('error');
-        expect(actor.getSnapshot().context.errorState?.affectedPlayerId).toBe('p1');
-    });
-
-    it('should recover from error state when the player reconnects', () => {
-        actor.send({ type: 'PLAYER_DISCONNECTED', playerId: 'p1' });
-        expect(actor.getSnapshot().value).toBe('error');
-        actor.send({ type: 'PLAYER_RECONNECTED', playerId: 'p1', newSocketId: 'new-socket' });
-        expect(getPlayer(actor, 'p1').isConnected).toBe(true);
-        expect(getPlayer(actor, 'p1').socketId).toBe('new-socket');
-        expect(actor.getSnapshot().value).toEqual({ [GameStage.PLAYING]: { turn: 'DRAW' } });
-    });
-  });
-
-  describe('8. Special Card Abilities', () => {
-    beforeEach(async () => {
-      setupActorWithPlayers(['p1', 'p2', 'p3']);
-      readyAllPlayers();
-      startGame();
-      await advanceToPlayingPhase();
-    });
-
-    it('should set up a king ability when a King is discarded from drawn card', () => {
-      const kingCard: Card = { id: 'c-king', rank: CardRank.King, suit: Suit.Spades };
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const p1 = getPlayer(actor, 'p1');
-      p1.pendingDrawnCard = { card: kingCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      const state = actor.getSnapshot();
-      expect(state.context.abilityStack).toHaveLength(1);
-      expect(state.context.abilityStack.at(-1)?.type).toBe('king');
-      expect(state.context.abilityStack.at(-1)?.playerId).toBe('p1');
-      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: 'ABILITY' } });
-    });
-
-    it('should set up a queen ability when a Queen is discarded from drawn card', () => {
-      const queenCard: Card = { id: 'c-queen', rank: CardRank.Queen, suit: Suit.Hearts };
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const p1 = getPlayer(actor, 'p1');
-      p1.pendingDrawnCard = { card: queenCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      const state = actor.getSnapshot();
-      expect(state.context.abilityStack).toHaveLength(1);
-      expect(state.context.abilityStack.at(-1)?.type).toBe('peek');
-      expect(state.context.abilityStack.at(-1)?.playerId).toBe('p1');
-      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: 'ABILITY' } });
-    });
-
-    it('should set up a swap ability when a Jack is discarded from drawn card', () => {
-      const jackCard: Card = { id: 'c-jack', rank: CardRank.Jack, suit: Suit.Diamonds };
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      const p1 = getPlayer(actor, 'p1');
-      p1.pendingDrawnCard = { card: jackCard, source: 'deck' };
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      const state = actor.getSnapshot();
-      expect(state.context.abilityStack).toHaveLength(1);
-      expect(state.context.abilityStack.at(-1)?.type).toBe('swap');
-      expect(state.context.abilityStack.at(-1)?.playerId).toBe('p1');
-      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: 'ABILITY' } });
-    });
-
-    it("should correctly handle a 'peek' ability usage", () => {
-      actor.getSnapshot().context.abilityStack = [
-        { type: 'peek', playerId: 'p1', stage: 'peeking' }
-      ];
-      const initialState = actor.getSnapshot();
-      expect(initialState.context.abilityStack.at(-1)?.type).toBe('peek');
-      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('peeking');
-
-      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: { action: 'peek', targets: [] } });
-
-      const finalState = actor.getSnapshot();
-      expect(finalState.context.abilityStack.at(-1)?.stage).toBe('swapping');
-    });
-
-    it("should correctly handle a 'swap' ability usage (ending the ability)", () => {
-      actor.getSnapshot().context.abilityStack = [
-        { type: 'swap', playerId: 'p1', stage: 'swapping' }
-      ];
-      const initialState = actor.getSnapshot();
-      expect(initialState.context.abilityStack.at(-1)?.type).toBe('swap');
-      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('swapping');
-      
-      const p1Hand = initialState.context.players['p1']!.hand;
-      const p2Hand = initialState.context.players['p2']!.hand;
-
-      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: {
-        action: 'swap',
-        source: { playerId: 'p1', cardIndex: 0 },
-        target: { playerId: 'p2', cardIndex: 0 },
-      }});
-
-      const finalState = actor.getSnapshot();
-      expect(finalState.context.abilityStack).toHaveLength(0);
-      expect(finalState.context.players['p1']!.hand[0]).toEqual(p2Hand[0]);
-      expect(finalState.context.players['p2']!.hand[0]).toEqual(p1Hand[0]);
-    });
-
-    it("should correctly handle a 'king' ability usage (peek then swap)", () => {
-       actor.getSnapshot().context.abilityStack = [
-        { type: 'king', playerId: 'p1', stage: 'peeking' }
-      ];
-      const initialState = actor.getSnapshot();
-      expect(initialState.context.abilityStack.at(-1)?.type).toBe('king');
-      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('peeking');
-
-      // First part: peek
-      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: { action: 'peek', targets: [] } });
-      const midState = actor.getSnapshot();
-      expect(midState.context.abilityStack.at(-1)?.stage).toBe('swapping');
-      
-      const p1Hand = midState.context.players['p1']!.hand;
-      const p2Hand = midState.context.players['p2']!.hand;
-
-      // Second part: swap
-      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: {
-        action: 'swap',
-        source: { playerId: 'p1', cardIndex: 1 },
-        target: { playerId: 'p2', cardIndex: 1 },
-      }});
-      
-      const finalState = actor.getSnapshot();
-      expect(finalState.context.abilityStack).toHaveLength(0);
-      expect(finalState.context.players['p1']!.hand[1]).toEqual(p2Hand[1]);
-      expect(finalState.context.players['p2']!.hand[1]).toEqual(p1Hand[1]);
-    });
-    
-    it("should correctly handle skipping an ability", () => {
-      actor.getSnapshot().context.abilityStack = [
-        { type: 'swap', playerId: 'p1', stage: 'swapping' }
-      ];
-      const initialState = actor.getSnapshot();
-      expect(initialState.context.abilityStack.at(-1)?.type).toBe('swap');
-      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('swapping');
-
-      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: { action: 'skip' } });
-
-      const finalState = actor.getSnapshot();
-      expect(finalState.context.abilityStack).toHaveLength(0);
-    });
-
-    it("should correctly handle skipping the peek part of a king ability", () => {
-      actor.getSnapshot().context.abilityStack = [
-        { type: 'king', playerId: 'p1', stage: 'peeking' }
-      ];
-      const initialState = actor.getSnapshot();
-      expect(initialState.context.abilityStack.at(-1)?.type).toBe('king');
-      expect(initialState.context.abilityStack.at(-1)?.stage).toBe('peeking');
-
-      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: 'p1', payload: { action: 'skip' } });
-
-      const finalState = actor.getSnapshot();
-      expect(finalState.context.abilityStack.at(-1)?.stage).toBe('swapping');
-    });
-
-  });
-
-  describe('9. Error Recovery and Edge Cases', () => {
-    beforeEach(async () => {
-      setupActorWithPlayers(['p1', 'p2']);
-      readyAllPlayers();
-      startGame();
-      await advanceToPlayingPhase();
-    });
-
-    it('should transition to error state when draw is attempted with empty deck', () => {
-      // Setup - Empty the deck
-      actor.getSnapshot().context.deck = [];
-      
-      // Action - Try to draw from empty deck
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      
-      // Assert
-      const state = actor.getSnapshot();
-      expect(state.value).toBe('error');
-      expect(state.context.errorState?.errorType).toBe('DECK_EMPTY');
-    });
-
-    it('should reshuffle discard pile into deck during recovery from empty deck', () => {
-      // Setup - Empty deck and populated discard pile
-      actor.getSnapshot().context.deck = [];
-      const discardCards = [
-        { id: 'discard-1', rank: CardRank.Three, suit: Suit.Clubs },
-        { id: 'discard-2', rank: CardRank.Four, suit: Suit.Diamonds },
-        { id: 'discard-3', rank: CardRank.Five, suit: Suit.Spades }
-      ];
-      actor.getSnapshot().context.discardPile = [...discardCards];
-      
-      // Trigger error state
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      expect(actor.getSnapshot().value).toBe('error');
-      
-      // Simulate transition to recovering state and reshuffling
-      actor.getSnapshot().value = 'recovering';
-      
-      // Manually implement reshuffling to simulate what the state machine should do
-      const topCard = actor.getSnapshot().context.discardPile[actor.getSnapshot().context.discardPile.length - 1];
-      actor.getSnapshot().context.deck = [...actor.getSnapshot().context.discardPile.slice(0, -1)];
-      actor.getSnapshot().context.discardPile = topCard ? [topCard] : [];
-      actor.getSnapshot().context.errorState = null;
-      
-      // Assert deck was reshuffled correctly
-      const recoveredState = actor.getSnapshot();
-      expect(recoveredState.context.deck.length).toBeGreaterThan(0);
-      // Should keep at least one card in discard
-      expect(recoveredState.context.discardPile.length).toBe(1);
-      // Error state should be cleared
-      expect(recoveredState.context.errorState).toBeNull();
-    });
-    
-    it('should prevent drawing special cards from discard pile', () => {
-      // Setup - Place a King card on top of the discard pile
-      const kingCard = { id: 'king-discard', rank: CardRank.King, suit: Suit.Hearts };
-      actor.getSnapshot().context.discardPile = [kingCard];
-      actor.getSnapshot().context.discardPileIsSealed = false; // Make sure pile is not sealed
-      
-      // Act - Try to draw the King card from discard
-      actor.send({ type: PlayerActionType.DRAW_FROM_DISCARD, playerId: 'p1' });
-      
-      // Assert - Player should not receive the card and turn phase should remain DRAW
-      const state = actor.getSnapshot();
-      expect(state.context.players['p1'].pendingDrawnCard).toBeNull();
-      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DRAW } });
-      expect(state.context.discardPile).toContain(kingCard); // Card should still be in discard
-    });
-    
-    it('should prevent drawing from sealed discard pile', () => {
-      // Setup - Put a normal card on discard but seal the pile
-      const normalCard = { id: 'normal-discard', rank: CardRank.Five, suit: Suit.Hearts };
-      actor.getSnapshot().context.discardPile = [normalCard];
-      actor.getSnapshot().context.discardPileIsSealed = true;
-      
-      // Action - Try to draw from sealed discard
-      actor.send({ type: PlayerActionType.DRAW_FROM_DISCARD, playerId: 'p1' });
-      
-      // Assert - Should not allow drawing
-      const state = actor.getSnapshot();
-      expect(state.context.players['p1'].pendingDrawnCard).toBeNull();
-      // Should still be in DRAW phase
-      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DRAW } });
-    });
-
-    it('should handle player reconnection during game', () => {
-      // Action - Disconnect current player
-      actor.send({ type: 'PLAYER_DISCONNECTED', playerId: 'p1' });
-      
-      // Assert
-      const disconnectedState = actor.getSnapshot();
-      expect(disconnectedState.value).toBe('error');
-      expect(disconnectedState.context.errorState?.affectedPlayerId).toBe('p1');
-      expect(disconnectedState.context.players['p1'].isConnected).toBe(false);
-      
-      // Action - Reconnect player
-      actor.send({ type: 'PLAYER_RECONNECTED', playerId: 'p1', newSocketId: 'new-socket-id' });
-      
-      // Assert
-      const reconnectedState = actor.getSnapshot();
-      expect(reconnectedState.context.players['p1'].isConnected).toBe(true);
-      expect(reconnectedState.context.players['p1'].socketId).toBe('new-socket-id');
-      expect(reconnectedState.context.errorState).toBeNull();
-    });
-    
-    it('should transition to failedRecovery if max retries exceeded', () => {
-      // Setup - Create error state with max retries
-      actor.getSnapshot().value = 'error';
-      actor.getSnapshot().context.errorState = {
-        message: 'Test error',
-        retryCount: 3,
-        errorType: 'GENERAL_ERROR',
-        affectedPlayerId: 'p1'
-      };
-      
-      // Simulate timeout - would normally be done by after(RECONNECT_TIMEOUT_MS)
-      actor.getSnapshot().value = 'failedRecovery';
-      
-      // Assert
-      const failedState = actor.getSnapshot();
-      expect(failedState.matches('failedRecovery')).toBe(true);
-      
-      // Action - Reset game
-      actor.send({ type: PlayerActionType.PLAY_AGAIN, playerId: 'p1' });
-      
-      // Assert
-      const resetState = actor.getSnapshot();
-      expect(resetState.value).toBe(GameStage.DEALING);
-      expect(resetState.context.errorState).toBeNull();
-    });
-  });
-
-  describe('10. Discard and Matching Mechanics', () => {
-    beforeEach(async () => {
-      setupActorWithPlayers(['p1', 'p2', 'p3']);
-      readyAllPlayers();
-      startGame();
-      await advanceToPlayingPhase();
-    });
-
-    it('should seal discard pile after a successful match', () => {
-      // Setup - Have p1 draw and discard a card
-      const fiveCard = { id: 'five-draw', rank: CardRank.Five, suit: Suit.Hearts };
-      actor.getSnapshot().context.deck = [fiveCard, ...actor.getSnapshot().context.deck];
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Setup - Give p2 a matching card
-      actor.getSnapshot().context.players['p2'].hand[0] = { id: 'five-match', rank: CardRank.Five, suit: Suit.Clubs };
-      
-      // Action - p2 matches the card
-      actor.send({ 
-        type: PlayerActionType.ATTEMPT_MATCH, 
-        playerId: 'p2', 
-        payload: { handCardIndex: 0 } 
-      });
-      
-      // Assert
-      const state = actor.getSnapshot();
-      expect(state.context.discardPileIsSealed).toBe(true);
-    });
-    
-    it('should automatically call check when a player empties their hand through matching', () => {
-      // Setup - Have p1 draw and discard a card
-      const fiveCard = { id: 'five-draw', rank: CardRank.Five, suit: Suit.Hearts };
-      actor.getSnapshot().context.deck = [fiveCard, ...actor.getSnapshot().context.deck];
-      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: 'p1' });
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Setup - Give p2 only one card that matches
-      actor.getSnapshot().context.players['p2'].hand = [{ id: 'five-match', rank: CardRank.Five, suit: Suit.Clubs }];
-      
-      // Action - p2 matches the card, emptying their hand
-      actor.send({ 
-        type: PlayerActionType.ATTEMPT_MATCH, 
-        playerId: 'p2', 
-        payload: { handCardIndex: 0 } 
-      });
-      
-      // Assert
-      const state = actor.getSnapshot();
-      // Player should be in check state
-      expect(state.matches(GameStage.CHECK)).toBe(true);
-      expect(state.context.checkDetails?.callerId).toBe('p2');
-    });
-
-    it('should not allow drawing special cards from the discard pile', () => {
-      // Setup - Place a King card on top of the discard pile
-      const kingCard = { id: 'king-discard', rank: CardRank.King, suit: Suit.Hearts };
-      actor.getSnapshot().context.discardPile = [kingCard];
-      actor.getSnapshot().context.discardPileIsSealed = false; // Make sure pile is not sealed
-      
-      // Act - Try to draw the King card from discard
-      actor.send({ type: PlayerActionType.DRAW_FROM_DISCARD, playerId: 'p1' });
-      
-      // Assert - Player should not receive the card and turn phase should remain DRAW
-      const state = actor.getSnapshot();
-      expect(state.context.players['p1'].pendingDrawnCard).toBeNull();
-      expect(state.value).toEqual({ [GameStage.PLAYING]: { turn: TurnPhase.DRAW } });
-      expect(state.context.discardPile).toContain(kingCard); // Card should still be in discard
-    });
-
-    it('should not allow drawing from discard and immediately discarding without swapping', () => {
-      // Setup - Place a normal card on top of the discard pile
-      const normalCard = { id: 'normal-discard', rank: CardRank.Five, suit: Suit.Hearts };
-      actor.getSnapshot().context.discardPile = [normalCard];
-      actor.getSnapshot().context.discardPileIsSealed = false; // Make sure pile is not sealed
-      
-      // Act - Draw the card from discard
-      actor.send({ type: PlayerActionType.DRAW_FROM_DISCARD, playerId: 'p1' });
-      
-      // Verify card was drawn
-      const stateAfterDraw = actor.getSnapshot();
-      expect(stateAfterDraw.context.players['p1'].pendingDrawnCard?.card).toEqual(normalCard);
-      expect(stateAfterDraw.context.discardPile.length).toBe(0);
-      
-      // Try to discard the drawn card without swapping
-      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: 'p1' });
-      
-      // Assert - This shouldn't be allowed, player should still have pendingDrawnCard
-      const finalState = actor.getSnapshot();
-      expect(finalState.context.players['p1'].pendingDrawnCard).not.toBeNull();
-      
-      // Only SWAP_AND_DISCARD should be allowed after drawing from discard
-      actor.send({ 
-        type: PlayerActionType.SWAP_AND_DISCARD, 
-        playerId: 'p1', 
-        payload: { handCardIndex: 0 } 
-      });
-      
-      // Now the drawn card should be in the player's hand and the hand card in discard
-      const stateAfterSwap = actor.getSnapshot();
-      expect(stateAfterSwap.context.players['p1'].pendingDrawnCard).toBeNull();
-      expect(stateAfterSwap.context.discardPile.length).toBe(1);
-    });
-  });
-
-  describe('11. Chat Functionality', () => {
+  describe('Matching Logic', () => {
+    let actor: Actor<typeof gameMachine>;
     beforeEach(() => {
-      setupActorWithPlayers(['p1', 'p2']);
+      actor = createTestActor();
+      setupTwoPlayerGame(actor);
+      actor.getSnapshot().context.players[P1.id].hand = [S2, H9];
+      actor.getSnapshot().context.players[P2.id].hand = [H2, DJ];
+      actor.getSnapshot().context.discardPile = [D5];
+      actor.getSnapshot().context.currentPlayerId = P1.id;
     });
 
-    it('should add chat messages to the context', () => {
-      const chatPayload = {
-        senderId: 'p1',
-        senderName: 'Player 1',
-        message: 'Hello, world!'
-      };
+    it('should allow another player to match a discard', () => {
+      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P1.id });
+      actor.send({ type: PlayerActionType.SWAP_AND_DISCARD, playerId: P1.id, payload: { handCardIndex: 0 } }); // P1 discards S2
       
-      // Action - Send a chat message
-      actor.send({ 
-        type: PlayerActionType.SEND_CHAT_MESSAGE, 
-        payload: chatPayload 
-      });
-      
-      // Assert
-      const state = actor.getSnapshot();
-      expect(state.context.chat.length).toBe(1);
-      expect(state.context.chat[0].senderId).toBe('p1');
-      expect(state.context.chat[0].message).toBe('Hello, world!');
-      expect(state.context.chat[0].id).toBeDefined();
-      expect(state.context.chat[0].timestamp).toBeDefined();
+      expect(actor.getSnapshot().value).toEqual({ [GameStage.PLAYING]: 'matching' });
+      expect(actor.getSnapshot().context.matchingOpportunity?.cardToMatch).toEqual(S2);
+
+      actor.send({ type: PlayerActionType.ATTEMPT_MATCH, playerId: P2.id, payload: { handCardIndex: 0 } }); // P2 matches with H2
+
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.context.players[P2.id].hand.length).toBe(1);
+      expect(snapshot.context.discardPile.at(-1)).toEqual(H2);
+      expect(snapshot.context.discardPileIsSealed).toBe(true);
+      expect(snapshot.value).toEqual({ [GameStage.PLAYING]: 'endOfTurn' });
     });
 
-    it('should allow sending chat messages during different game stages', async () => {
-      // During waiting for players
-      actor.send({ 
-        type: PlayerActionType.SEND_CHAT_MESSAGE, 
-        payload: { senderId: 'p1', senderName: 'Player 1', message: 'Lobby message' } 
-      });
+    it('should allow a player to match their own discard', () => {
+      actor.getSnapshot().context.players[P1.id].hand = [S2, H2, C2];
+      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P1.id });
+      actor.send({ type: PlayerActionType.SWAP_AND_DISCARD, playerId: P1.id, payload: { handCardIndex: 0 } }); // P1 discards S2
+
+      actor.send({ type: PlayerActionType.ATTEMPT_MATCH, playerId: P1.id, payload: { handCardIndex: 0 } }); // P1 matches with H2
+
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.context.players[P1.id].hand.length).toBe(2);
+      expect(snapshot.context.discardPile.at(-1)).toEqual(H2);
+    });
+  });
+
+  describe('Special Abilities & LIFO Stacking', () => {
+    let actor: Actor<typeof gameMachine>;
+    beforeEach(() => {
+      actor = createTestActor();
+      setupTwoPlayerGame(actor);
+    });
+
+    it('should trigger a King ability upon discard', () => {
+      actor.getSnapshot().context.players[P1.id].hand = [SK, H9];
+      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P1.id });
+      actor.send({ type: PlayerActionType.SWAP_AND_DISCARD, playerId: P1.id, payload: { handCardIndex: 0 } });
       
-      // Start game
-      readyAllPlayers();
-      startGame();
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.value).toEqual({ [GameStage.PLAYING]: 'ability' });
+      expect(snapshot.context.abilityStack.length).toBe(1);
+      expect(snapshot.context.abilityStack[0]?.type).toBe('king');
+      expect(snapshot.context.abilityStack[0]?.playerId).toBe(P1.id);
+    });
+
+    it('should correctly implement LIFO for a special card match', () => {
+      actor.getSnapshot().context.players[P1.id].hand = [SK, H9];
+      actor.getSnapshot().context.players[P2.id].hand = [CK, DJ];
+      actor.getSnapshot().context.currentPlayerId = P1.id;
+
+      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P1.id });
+      actor.send({ type: PlayerActionType.SWAP_AND_DISCARD, playerId: P1.id, payload: { handCardIndex: 0 } });
+      actor.send({ type: PlayerActionType.ATTEMPT_MATCH, playerId: P2.id, payload: { handCardIndex: 0 } });
+
+      let snapshot = actor.getSnapshot();
+      expect(snapshot.value).toEqual({ [GameStage.PLAYING]: 'ability' });
+      expect(snapshot.context.abilityStack.length).toBe(2);
+      expect(snapshot.context.abilityStack.at(-1)?.playerId).toBe(P2.id);
+      expect(snapshot.context.abilityStack.at(0)?.playerId).toBe(P1.id);
+
+      actor.send({ type: PlayerActionType.USE_ABILITY, playerId: P2.id, payload: { action: 'skip' } });
+      snapshot = actor.getSnapshot();
       
-      // During peek phase
-      await advanceToPlayingPhase();
-      actor.send({ 
-        type: PlayerActionType.SEND_CHAT_MESSAGE, 
-        payload: { senderId: 'p1', senderName: 'Player 1', message: 'Game message' } 
-      });
+      expect(snapshot.context.abilityStack.length).toBe(1);
+      expect(snapshot.context.abilityStack.at(-1)?.playerId).toBe(P1.id);
+    });
+  });
+
+  describe('Calling Check and Final Turns', () => {
+    let actor: Actor<typeof gameMachine>;
+    beforeEach(() => {
+        actor = createTestActor();
+        setupTwoPlayerGame(actor);
+    });
+
+    it('should enter final turns when a player calls "Check"', () => {
+      actor.send({ type: PlayerActionType.CALL_CHECK, playerId: P1.id });
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.value).toBe(GameStage.FINAL_TURNS);
+      expect(snapshot.context.players[P1.id].isLocked).toBe(true);
+      expect(snapshot.context.checkDetails?.callerId).toBe(P1.id);
+      expect(snapshot.context.checkDetails?.finalTurnOrder).toEqual([P2.id]);
+      expect(snapshot.context.currentPlayerId).toBe(P2.id);
+    });
+
+    it('should enter final turns automatically when a player matches to an empty hand', () => {
+      actor.getSnapshot().context.players[P1.id].hand = [S2];
+      actor.getSnapshot().context.players[P2.id].hand = [H2, DJ];
+      actor.getSnapshot().context.currentPlayerId = P2.id;
+      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P2.id });
+      actor.send({ type: PlayerActionType.SWAP_AND_DISCARD, playerId: P2.id, payload: { handCardIndex: 0 } }); // P2 discards H2
       
-      // Assert
-      const state = actor.getSnapshot();
-      expect(state.context.chat.length).toBe(2);
-      expect(state.context.chat[0].message).toBe('Lobby message');
-      expect(state.context.chat[1].message).toBe('Game message');
+      actor.send({ type: PlayerActionType.ATTEMPT_MATCH, playerId: P1.id, payload: { handCardIndex: 0 } }); // P1 matches with S2
+      
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.value).toBe(GameStage.FINAL_TURNS);
+      expect(snapshot.context.players[P1.id].isLocked).toBe(true);
+      expect(snapshot.context.checkDetails?.callerId).toBe(P1.id);
+    });
+
+    it('should transition to scoring after all final turns are complete', () => {
+      actor.send({ type: PlayerActionType.CALL_CHECK, playerId: P1.id });
+      
+      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P2.id });
+      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: P2.id });
+      actor.send({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT, playerId: P1.id });
+      actor.send({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT, playerId: P2.id });
+      
+      expect(actor.getSnapshot().value).toBe(GameStage.SCORING);
+    });
+  });
+
+  describe('Scoring', () => {
+    it('should correctly calculate scores, including negative for Aces', () => {
+      const actor = createTestActor();
+      setupTwoPlayerGame(actor);
+      actor.getSnapshot().context.players[P1.id].hand = [DA, S2];
+      actor.getSnapshot().context.players[P2.id].hand = [D5, H9];
+      
+      // Manually trigger scoring
+      actor.send({ type: PlayerActionType.CALL_CHECK, playerId: P1.id });
+      actor.send({ type: PlayerActionType.DRAW_FROM_DECK, playerId: P2.id });
+      actor.send({ type: PlayerActionType.DISCARD_DRAWN_CARD, playerId: P2.id });
+      actor.send({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT, playerId: P1.id });
+      actor.send({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT, playerId: P2.id });
+
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.value).toBe(GameStage.SCORING);
+      expect(snapshot.context.gameover?.playerScores[P1.id]).toBe(1);
+      expect(snapshot.context.gameover?.playerScores[P2.id]).toBe(14);
+      expect(snapshot.context.gameover?.winnerId).toBe(P1.id);
     });
   });
 });

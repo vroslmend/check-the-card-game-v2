@@ -7,14 +7,14 @@ import {
   UIContext,
   type UIMachineSnapshot,
 } from '@/components/providers/UIMachineProvider';
-import { type PlayerId } from 'shared-types';
-import { PlayerPod } from './PlayerPod';
+import { type PlayerId, type Player, type ClientAbilityContext } from 'shared-types';
+import { PlayerPod, type PlayerPodProps } from './PlayerPod';
 import logger from '@/lib/logger';
 
 const selectOpponentProps = (state: UIMachineSnapshot) => {
   const { localPlayerId, currentGameState } = state.context;
   if (!currentGameState || !localPlayerId) {
-    return { opponentPlayers: [], currentPlayerId: null };
+    return { opponentPlayers: [], currentPlayerId: null, abilityContext: undefined };
   }
 
   const opponentPlayers = Object.values(currentGameState.players).filter(
@@ -28,13 +28,42 @@ const selectOpponentProps = (state: UIMachineSnapshot) => {
   };
 };
 
+interface OpponentPodProps {
+  player: Player;
+  onCardClick: (playerId: PlayerId, cardIndex: number) => void;
+  isCurrentTurn: boolean;
+  abilityContext: ClientAbilityContext | undefined;
+}
+
+const OpponentPod = ({ player, onCardClick, isCurrentTurn, abilityContext }: OpponentPodProps) => {
+  // Determine if this opponent is a valid target for the current ability
+  const isTargetable = abilityContext?.validPeekTargets?.some(p => p.playerId === player.id) ||
+                       abilityContext?.validSwapTargets?.some(p => p.playerId === player.id);
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.8 }}
+      transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+      className="relative"
+    >
+      <PlayerPod
+        player={player}
+        isLocalPlayer={false}
+        isCurrentTurn={isCurrentTurn}
+        onCardClick={(cardIndex) => onCardClick(player.id, cardIndex)}
+        isTargetable={isTargetable}
+        abilityContext={abilityContext}
+      />
+    </motion.div>
+  );
+}
+
 export const OpponentArea = () => {
   const { actorRef } = useContext(UIContext)!;
   const { opponentPlayers, currentPlayerId, abilityContext } = useSelector(actorRef, selectOpponentProps);
-
-  if (!opponentPlayers.length) {
-    return <div className="h-[220px]" />; // Placeholder for layout stability
-  }
 
   const handleCardClick = (playerId: PlayerId, cardIndex: number) => {
     if (abilityContext) {
@@ -43,21 +72,29 @@ export const OpponentArea = () => {
     }
   };
 
+  if (!opponentPlayers.length) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-lg bg-stone-50 dark:bg-zinc-800/50 shadow-inner">
+        <p className="font-serif text-stone-500">Waiting for opponents...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full flex items-start justify-center gap-4 md:gap-8">
-      <AnimatePresence>
-        {opponentPlayers.map((player) => (
-          <motion.div key={player.id}>
-            <PlayerPod
+    <div className="relative w-full h-full flex items-center justify-center p-2 sm:p-4 rounded-lg bg-stone-50 dark:bg-zinc-800/50 shadow-inner">
+      <motion.div layout className="flex flex-row items-center justify-center gap-4 h-full w-full">
+        <AnimatePresence>
+          {opponentPlayers.map((player) => (
+            <OpponentPod 
+              key={player.id}
               player={player}
-              isLocalPlayer={false}
+              onCardClick={handleCardClick}
               isCurrentTurn={player.id === currentPlayerId}
-              onCardClick={(cardIndex) => handleCardClick(player.id, cardIndex)}
-              isChoosingSwapTarget={false}
+              abilityContext={abilityContext}
             />
-          </motion.div>
-        ))}
-      </AnimatePresence>
+          ))}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 };

@@ -14,22 +14,36 @@ import {
   SocketEventName,
   type Card,
   type PlayerId,
+  type ChatMessage,
 } from 'shared-types';
 import logger from '@/lib/logger';
+import { InspectionEvent } from 'xstate';
 
-// These are the events the client is allowed to send to the server.
-const clientToServerEvents = [
-  SocketEventName.CREATE_GAME,
-  SocketEventName.JOIN_GAME,
-  SocketEventName.PLAYER_ACTION,
-  SocketEventName.ATTEMPT_REJOIN,
-  SocketEventName.SEND_CHAT_MESSAGE, // Added this as it's a client->server event
-];
-type ClientToServerEventName = typeof clientToServerEvents[number];
-
-function isClientToServerEvent(eventName: string): eventName is ClientToServerEventName {
-  return (clientToServerEvents as string[]).includes(eventName);
-}
+// Create a single inspector instance that can be reused
+const inspector =
+  process.env.NODE_ENV === 'development' && typeof window !== 'undefined'
+    ? {
+        inspect: (inspectionEvent: InspectionEvent) => {
+          if (inspectionEvent.type === '@xstate.snapshot') {
+            if (inspectionEvent.event.type.startsWith('xstate.after')) return;
+            const { snapshot, actorRef } = inspectionEvent;
+            console.groupCollapsed(`%cSNAPSHOT: %c${(actorRef as any).id}`, 'color: #999; font-weight: lighter;', 'color: #999; font-weight: bold;');
+            if ('value' in snapshot && 'context' in snapshot) {
+              console.log(snapshot.value);
+              console.log(snapshot.context);
+            } else {
+              console.log(snapshot);
+            }
+            console.groupEnd();
+          } else if (inspectionEvent.type === '@xstate.event') {
+            if (inspectionEvent.event.type.startsWith('xstate.after')) return;
+            console.groupCollapsed(`%cEVENT: %c${inspectionEvent.event.type} %c(from ${(inspectionEvent.sourceRef as any)?.id ?? 'external'})`, 'color: #999; font-weight: lighter;', 'color: #0AF; font-weight: bold;', 'color: #999; font-weight: lighter;');
+            console.log(inspectionEvent.event);
+            console.groupEnd();
+          }
+        },
+      }
+    : undefined;
 
 type UIContextType = {
   actorRef: UIMachineActorRef;
@@ -69,6 +83,7 @@ export const UIMachineProvider = ({
   const { playerId: sessionPlayerId } = getSessionInfo();
 
   const actorRef = useActorRef(uiMachine, {
+    inspect: inspector?.inspect,
     input: {
       gameId,
       localPlayerId: localPlayerId ?? sessionPlayerId ?? undefined,
@@ -77,23 +92,16 @@ export const UIMachineProvider = ({
   });
 
   useEffect(() => {
-    // This effect runs once on mount to handle one-time hydration from session storage.
-    // This is more robust against React StrictMode re-renders than doing it during initialization.
     const persistedGameStateJSON = sessionStorage.getItem('initialGameState');
-    
-    // If we have game state from props, log it and use it
     if (explicitInitialGameState) {
       logger.info({ gameId, source: 'props' }, 'Using provided initialGameState directly from props');
-      // Make sure this state also gets properly hydrated into the machine
       actorRef.send({ type: 'HYDRATE_GAME_STATE', gameState: explicitInitialGameState });
     }
-    // Otherwise try to get from session storage
     else if (persistedGameStateJSON) {
       try {
         const gameState = JSON.parse(persistedGameStateJSON);
         logger.info({ gameId, source: 'sessionStorage' }, 'Sending HYDRATE_GAME_STATE event from session storage.');
         actorRef.send({ type: 'HYDRATE_GAME_STATE', gameState });
-        // We can remove this now since it's been processed
         sessionStorage.removeItem('initialGameState');
       } catch (e) {
         logger.error({ error: e }, 'Failed to parse persisted game state from sessionStorage');
@@ -101,34 +109,28 @@ export const UIMachineProvider = ({
     }
   }, [actorRef, gameId, explicitInitialGameState]);
 
-  // Monitor socket connection state and sync with state machine
   useEffect(() => {
     const handleConnect = () => {
       logger.info('Socket connected, notifying state machine');
-      // Send CONNECT event to state machine when socket connects
       actorRef.send({ type: 'CONNECT' });
     };
 
     const handleDisconnect = (reason: string) => {
       logger.warn({ reason }, 'Socket disconnected, notifying state machine');
-      // Send DISCONNECT event to state machine when socket disconnects
       actorRef.send({ type: 'DISCONNECT' });
     };
 
     const handleConnectError = (error: Error) => {
       logger.error({ error: error.message }, 'Socket connection error');
-      // Send CONNECTION_ERROR event to state machine
+      // This event needs to be added to UIMachineEvents to be valid
       actorRef.send({ type: 'CONNECTION_ERROR', message: error.message });
     };
 
-    // Set up listeners for connection events
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
 
-    // If socket is already connected when component mounts, notify state machine
     if (socket.connected) {
-      logger.info('Socket already connected on mount, notifying state machine');
       actorRef.send({ type: 'CONNECT' });
     }
 
@@ -147,6 +149,10 @@ export const UIMachineProvider = ({
     const onNewLog = (logMessage: RichGameLogMessage) => {
       logger.debug({ logMessage }, `Socket IN: ${SocketEventName.SERVER_LOG_ENTRY}`);
       actorRef.send({ type: 'NEW_GAME_LOG', logMessage });
+    };
+    const onNewChatMessage = (chatMessage: ChatMessage) => {
+      logger.debug({ chatMessage }, `Socket IN: ${SocketEventName.NEW_CHAT_MESSAGE}`);
+      actorRef.send({ type: 'NEW_CHAT_MESSAGE', chatMessage });
     };
     const onInitialPeek = (data: { hand: Card[] }) => {
       logger.debug({ hand: data.hand }, `Socket IN: ${SocketEventName.INITIAL_PEEK_INFO}`);
@@ -167,6 +173,7 @@ export const UIMachineProvider = ({
 
     socket.on(SocketEventName.GAME_STATE_UPDATE, onGameStateUpdate);
     socket.on(SocketEventName.SERVER_LOG_ENTRY, onNewLog);
+    socket.on(SocketEventName.NEW_CHAT_MESSAGE, onNewChatMessage);
     socket.on(SocketEventName.INITIAL_PEEK_INFO, onInitialPeek);
     socket.on(SocketEventName.ABILITY_PEEK_RESULT, onCardDetails);
     socket.on(SocketEventName.ERROR_MESSAGE, onError);
@@ -175,32 +182,27 @@ export const UIMachineProvider = ({
     return () => {
       socket.off(SocketEventName.GAME_STATE_UPDATE, onGameStateUpdate);
       socket.off(SocketEventName.SERVER_LOG_ENTRY, onNewLog);
+      socket.off(SocketEventName.NEW_CHAT_MESSAGE, onNewChatMessage);
       socket.off(SocketEventName.INITIAL_PEEK_INFO, onInitialPeek);
       socket.off(SocketEventName.ABILITY_PEEK_RESULT, onCardDetails);
       socket.off(SocketEventName.ERROR_MESSAGE, onError);
       socket.off(SocketEventName.INITIAL_LOGS, onInitialLogs);
     };
   }, [actorRef]);
-
-  // It subscribes to specific events emitted by the machine and forwards them to the socket.
-  // This is the preferred, type-safe way to handle emitted events from an actor.
+  
   useEffect(() => {
     const subscription = actorRef.on('EMIT_TO_SOCKET', (event) => {
       logger.debug({ eventName: event.eventName, payload: event.payload }, `Socket OUT: ${event.eventName}`);
 
-      // Using a switch statement allows TypeScript to correctly narrow the event type
-      // and ensure the payload/ack match the specific event being emitted.
+      // FIX: Handle each case explicitly to satisfy TypeScript's strict type checking
       switch (event.eventName) {
         case SocketEventName.CREATE_GAME:
-          logger.info({ payload: event.payload }, 'Emitting CREATE_GAME to socket');
           socket.emit(event.eventName, event.payload, event.ack);
           break;
         case SocketEventName.JOIN_GAME:
-          logger.info({ payload: event.payload }, 'Emitting JOIN_GAME to socket');
           socket.emit(event.eventName, ...event.payload, event.ack);
           break;
         case SocketEventName.ATTEMPT_REJOIN:
-          logger.info({ payload: event.payload }, 'Emitting ATTEMPT_REJOIN to socket');
           socket.emit(event.eventName, event.payload, event.ack);
           break;
         case SocketEventName.PLAYER_ACTION:
@@ -210,7 +212,6 @@ export const UIMachineProvider = ({
           socket.emit(event.eventName, event.payload);
           break;
         default:
-          // This should be unreachable due to the machine's strict typing
           logger.error({ event }, 'Attempted to emit an unhandled event to socket');
       }
     });

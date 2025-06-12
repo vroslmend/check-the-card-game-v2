@@ -32,7 +32,7 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
           className={`relative ${deckClickableStyle}`}
           onClick={canDrawFromDeck ? onDeckClick : undefined}
         >
-          <PlayingCard isFaceDown={true} layoutId="deck-back" canInteract={!!onDeckClick && canDrawFromDeck} />
+          <PlayingCard faceDown={true} layoutId="deck-back" canInteract={!!onDeckClick && canDrawFromDeck} />
           {deckSize > 0 && (
             <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full px-2 py-1 shadow-md">
               {deckSize}

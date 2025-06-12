@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, useSpring, useMotionValue, Variants } from 'framer-motion';
 import { useCursor } from '@/components/providers/CursorProvider';
 import { useTheme } from 'next-themes';
+import { usePathname } from 'next/navigation';
 
 const CustomCursor = () => {
   const { variant, setVariant } = useCursor();
@@ -13,10 +14,26 @@ const CustomCursor = () => {
   const [isIdle, setIsIdle] = useState(false);
   const previousVariant = useRef('default');
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pathname = usePathname();
+
+  // The cursor is active if we are not on a game page.
+  const isCursorActive = !pathname.startsWith('/game');
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+
+    // Dynamically add/remove class to body to show/hide native cursor
+    if (isCursorActive) {
+      document.body.classList.add('no-native-cursor');
+    } else {
+      document.body.classList.remove('no-native-cursor');
+    }
+
+    // Cleanup on component unmount or when isCursorActive changes
+    return () => {
+      document.body.classList.remove('no-native-cursor');
+    };
+  }, [isCursorActive]);
 
   const getCursorVariants = (theme: string | undefined): Variants => {
     const isDark = theme === 'dark';
@@ -181,7 +198,7 @@ const CustomCursor = () => {
     };
   }, [setVariant, isPointerInViewport, variant, mouseX, mouseY]);
   
-  if (!mounted) {
+  if (!mounted || !isCursorActive) {
     return null;
   }
 

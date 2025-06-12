@@ -1,15 +1,22 @@
 "use client"
 
 import { useContext } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSelector } from '@xstate/react';
 import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
-import { TurnPhase } from 'shared-types';
+import { TurnPhase, type PlayerId } from 'shared-types';
 import logger from '@/lib/logger';
-import { PlayerPod } from './PlayerPod';
+import PlayerHand from './PlayerHand';
+import { User, UserCheck, ArrowDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useActionController } from './ActionController';
 
 const selectLocalPlayerProps = (state: UIMachineSnapshot) => {
   const { currentGameState, localPlayerId, currentAbilityContext } = state.context;
-  const isChoosingSwapTarget = state.matches({ inGame: { playing: 'selectingSwapTarget' } });
+  const isPlayerTurn = currentGameState?.currentPlayerId === localPlayerId;
+  const turnPhase = currentGameState?.turnPhase;
+  const isChoosingSwapTarget = turnPhase === TurnPhase.DISCARD && isPlayerTurn;
+  const drawnCard = currentGameState?.players[localPlayerId || '']?.pendingDrawnCard;
 
   return {
     localPlayer: localPlayerId ? currentGameState?.players[localPlayerId] : null,
@@ -18,6 +25,7 @@ const selectLocalPlayerProps = (state: UIMachineSnapshot) => {
     abilityContext: currentAbilityContext,
     localPlayerId,
     isChoosingSwapTarget,
+    drawnCard,
   };
 };
 
@@ -30,10 +38,17 @@ export const LocalPlayerArea = () => {
     abilityContext,
     localPlayerId,
     isChoosingSwapTarget,
+    drawnCard,
   } = useSelector(actorRef, selectLocalPlayerProps);
 
+  const { selectedCardIndex, setSelectedCardIndex } = useActionController();
+
   if (!localPlayer || !localPlayerId) {
-    return <div className="h-[250px]" />; // Placeholder for layout stability
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <p className="font-serif text-stone-500">Waiting for player...</p>
+      </div>
+    );
   }
 
   const handleCardClick = (cardIndex: number) => {
@@ -50,21 +65,91 @@ export const LocalPlayerArea = () => {
     }
 
     if (turnPhase === TurnPhase.MATCHING) {
-      logger.debug({ cardIndex }, 'Card clicked for match attempt');
-      actorRef.send({ type: 'ATTEMPT_MATCH', handCardIndex: cardIndex });
+      logger.debug({ cardIndex }, 'Card clicked for match attempt - setting selected card');
+      setSelectedCardIndex(cardIndex);
       return;
     }
 
     logger.warn({ cardIndex, turnPhase, isMyTurn: isCurrentTurn }, 'Card click had no effect');
   };
-  
+
+  const promptText = isChoosingSwapTarget ? "Select a card from your hand to swap" : null;
+
   return (
-    <PlayerPod 
-      player={localPlayer}
-      isLocalPlayer={true}
-      isCurrentTurn={isCurrentTurn}
-      onCardClick={handleCardClick}
-      isChoosingSwapTarget={isChoosingSwapTarget}
-    />
+    <motion.div 
+      layout 
+      className="relative w-full h-full flex flex-col justify-end p-2 sm:p-4 bg-stone-50 dark:bg-zinc-800/50 rounded-lg shadow-inner"
+    >
+      {/* Player Hand Area */}
+      <div className="flex-grow flex flex-col items-center justify-center w-full">
+        <PlayerHand 
+          player={localPlayer}
+          isLocalPlayer={true}
+          onCardClick={handleCardClick}
+          className="w-full max-w-md lg:max-w-lg xl:max-w-xl"
+          selectedCardIndex={selectedCardIndex}
+        />
+        <AnimatePresence>
+          {promptText && (
+            <motion.div
+              className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ArrowDown className="w-3 h-3" />
+              {promptText}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      
+      {/* Player Info Bar at bottom */}
+      <motion.div
+        layout="position"
+        className={cn(
+          "relative mt-4 w-full max-w-xs mx-auto px-4 py-2 rounded-lg border",
+          "bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm",
+          isCurrentTurn 
+            ? "border-emerald-500/50"
+            : "border-stone-200 dark:border-zinc-700/50"
+        )}
+      >
+        <AnimatePresence>
+          {isCurrentTurn && (
+            <motion.div
+              className="absolute -top-px -left-px -right-px h-0.5 bg-emerald-500"
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              exit={{ scaleX: 0 }}
+              transition={{ duration: 0.5, ease: 'easeInOut' }}
+              style={{ originX: 0.5 }}
+            />
+          )}
+        </AnimatePresence>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              "w-7 h-7 rounded-full flex items-center justify-center",
+              isCurrentTurn 
+                ? "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400"
+                : "bg-stone-100 dark:bg-zinc-800 text-stone-600 dark:text-stone-400"
+            )}>
+              <UserCheck className="h-4 w-4" />
+            </div>
+            <div>
+              <span className="font-semibold text-sm text-stone-900 dark:text-stone-100">{localPlayer.name}</span>
+              <p className="text-xs font-medium text-stone-500 dark:text-stone-400">
+                {isCurrentTurn ? 
+                  <span className="text-emerald-600 dark:text-emerald-400">Your Turn</span> : 
+                  "Waiting..."}
+              </p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };

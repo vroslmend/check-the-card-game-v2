@@ -38,8 +38,8 @@ const pendingCallbacks = new Map<string, (response: CreateGameResponse | JoinGam
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
 logger.info({ corsOrigin: CORS_ORIGIN }, `CORS origin set`);
 
-const httpServer = http.createServer();
-const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+export const httpServer = http.createServer();
+export const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
     origin: CORS_ORIGIN,
     methods: ["GET", "POST"]
@@ -100,6 +100,12 @@ io.on('connection', (socket: Socket) => {
       const broadcastSubscription = gameActor.on('BROADCAST_GAME_STATE', () => {
           broadcastGameState(gameId, gameActor);
       });
+      
+      // Listener for broadcasting chat messages to all in the room
+      const chatSubscription = gameActor.on('BROADCAST_CHAT_MESSAGE', (event) => {
+        logger.debug({ gameId, chatMessage: event.chatMessage }, 'Broadcasting new chat message');
+        io.to(gameId).emit(SocketEventName.NEW_CHAT_MESSAGE, event.chatMessage);
+      });
 
       // Listener for sending a specific event to a single player
       const directMessageSubscription = gameActor.on('SEND_EVENT_TO_PLAYER', (event) => {
@@ -118,6 +124,7 @@ io.on('connection', (socket: Socket) => {
               activeGameMachines.delete(gameId);
               // Clean up all subscriptions for this actor
               broadcastSubscription.unsubscribe();
+              chatSubscription.unsubscribe();
               directMessageSubscription.unsubscribe();
               actorSubscription.unsubscribe(); // unsubscribe self
           }

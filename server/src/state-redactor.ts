@@ -13,10 +13,6 @@ import {
 import type { GameContext, ServerPlayer } from './game-machine.js';
 import logger from './lib/logger.js';
 
-// The server-side context now comes from the game machine itself.
-// These types are defined locally in the machine file.
-
-
 /**
  * Generates a player-specific view of the game state, redacting sensitive information.
  * @param snapshot The full snapshot from the server's machine.
@@ -82,6 +78,14 @@ export const generatePlayerView = (
     gameStageValue = GameStage.WAITING_FOR_PLAYERS;
   }
   
+  // IMPROVEMENT: Implement private log redaction.
+  // This ensures that a player only receives log entries that are either 'public'
+  // or are 'private' and specifically intended for them.
+  const clientLog = fullGameContext.log.filter(entry => 
+      entry.type === 'public' || 
+      (entry.type === 'private' && entry.actor?.id === viewingPlayerId)
+  );
+
   const clientGameState: ClientCheckGameState = {
     gameId: fullGameContext.gameId,
     viewingPlayerId,
@@ -98,7 +102,7 @@ export const generatePlayerView = (
     checkDetails: fullGameContext.checkDetails,
     gameover: fullGameContext.gameover,
     lastRoundLoserId: fullGameContext.lastRoundLoserId,
-    log: fullGameContext.log,
+    log: clientLog, // <-- Use the filtered log
     chat: fullGameContext.chat ?? [],
     discardPileIsSealed: fullGameContext.discardPileIsSealed,
   };

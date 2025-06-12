@@ -1,215 +1,140 @@
 import { describe, it, expect } from 'vitest';
 import { generatePlayerView } from '../state-redactor.js';
-import { CardRank, Suit, TurnPhase, GameStage, PlayerStatus } from 'shared-types';
-import type { GameContext } from '../game-machine.js';
+import { GameContext, ServerPlayer } from '../game-machine.js';
+import { GameStage, CardRank, Suit, PlayerStatus, Card } from 'shared-types';
 
-describe('State Redactor', () => {
-  describe('generatePlayerView', () => {
-    it('should redact hidden cards from other players', () => {
-      // Create a test game state
-      const gameState = {
-        context: {
-          players: {
-            p1: {
-              id: 'p1',
-              name: 'Player 1',
-              hand: [
-                { id: 'card1', rank: CardRank.Ace, suit: Suit.Hearts, isFaceDownToOwner: false },
-                { id: 'card2', rank: CardRank.Two, suit: Suit.Spades, isFaceDownToOwner: true },
-                { id: 'card3', rank: CardRank.King, suit: Suit.Diamonds, isFaceDownToOwner: false },
-                { id: 'card4', rank: CardRank.Queen, suit: Suit.Clubs, isFaceDownToOwner: true }
-              ],
-              score: 0,
-              isReady: true,
-              isConnected: true,
-              status: PlayerStatus.PLAYING,
-              isDealer: false,
-              hasCalledCheck: false,
-              isLocked: false,
-              socketId: 'socket1',
-              pendingDrawnCard: null,
-              forfeited: false
-            },
-            p2: {
-              id: 'p2',
-              name: 'Player 2',
-              hand: [
-                { id: 'card5', rank: CardRank.Five, suit: Suit.Hearts },
-                { id: 'card6', rank: CardRank.Six, suit: Suit.Spades }
-              ],
-              score: 0,
-              isReady: true,
-              isConnected: true,
-              status: PlayerStatus.PLAYING,
-              isDealer: false,
-              hasCalledCheck: false,
-              isLocked: false,
-              socketId: 'socket2',
-              pendingDrawnCard: null,
-              forfeited: false
-            }
-          },
-          deck: [
-            { id: 'card7', rank: CardRank.Seven, suit: Suit.Diamonds }
-          ],
-          discardPile: [
-            { id: 'card8', rank: CardRank.Eight, suit: Suit.Hearts }
-          ],
-          discardPileIsSealed: false,
-          errorState: null,
-          currentTurnSegment: TurnPhase.DRAW,
-          currentPlayerId: 'p1',
-          turnOrder: ['p1', 'p2'],
-          gameId: 'test-game',
-          gameMasterId: null,
-          activeAbility: null,
-          matchingOpportunity: null,
-          checkDetails: null,
-          gameover: null,
-          lastRoundLoserId: null,
-          log: [],
-          chat: [],
-          abilityStack: [],
-        },
-        value: GameStage.PLAYING
-      };
+// Mocks and Test Data
+const P1_ID = 'player1';
+const P2_ID = 'player2';
 
-      // Generate player view for p1
-      const p1View = generatePlayerView(gameState as { context: GameContext, value: unknown }, 'p1');
+const MOCK_CARD_1: Card = { id: 'c1', rank: CardRank.Ace, suit: Suit.Clubs };
+const MOCK_CARD_2: Card = { id: 'c2', rank: CardRank.King, suit: Suit.Diamonds };
+const MOCK_CARD_3: Card = { id: 'c3', rank: CardRank.Ten, suit: Suit.Hearts };
+const MOCK_CARD_4: Card = { id: 'c4', rank: CardRank.Seven, suit: Suit.Spades };
 
-      // Check that p1 can see their own cards
-      expect(p1View.players['p1'].hand).toHaveLength(4);
-      expect(p1View.players['p1'].hand[0]).toHaveProperty('rank', CardRank.Ace);
-      expect(p1View.players['p1'].hand[1]).toHaveProperty('rank', CardRank.Two);
-      expect(p1View.players['p1'].hand[2]).toHaveProperty('rank', CardRank.King);
-      expect(p1View.players['p1'].hand[3]).toHaveProperty('rank', CardRank.Queen);
+const createMockPlayer = (id: string, name: string, overrides: Partial<ServerPlayer> = {}): ServerPlayer => ({
+  id,
+  name,
+  socketId: `socket_${id}`,
+  hand: [],
+  isReady: true,
+  isDealer: false,
+  hasCalledCheck: false,
+  isLocked: false,
+  score: 0,
+  isConnected: true,
+  pendingDrawnCard: null,
+  forfeited: false,
+  status: PlayerStatus.PLAYING,
+  ...overrides,
+});
 
-      // Check that p1 can't see p2's cards (they should be hidden)
-      expect(p1View.players['p2'].hand).toHaveLength(2);
-      expect(p1View.players['p2'].hand.every(card => 'facedown' in card && card.facedown === true)).toBe(true);
-      
-      // Check that the deck is represented as a count, not the actual cards
-      expect(p1View).not.toHaveProperty('deck');
-      expect(p1View.deckSize).toBe(1);
+const createMockContext = (overrides: Partial<GameContext> = {}): GameContext => ({
+  gameId: 'test-game',
+  deck: [MOCK_CARD_3, MOCK_CARD_4],
+  players: {
+    [P1_ID]: createMockPlayer(P1_ID, 'Alice', { hand: [MOCK_CARD_1] }),
+    [P2_ID]: createMockPlayer(P2_ID, 'Bob', { hand: [MOCK_CARD_2] }),
+  },
+  discardPile: [],
+  turnOrder: [P1_ID, P2_ID],
+  gameMasterId: P1_ID,
+  currentPlayerId: P1_ID,
+  currentTurnSegment: null,
+  gameStage: GameStage.PLAYING,
+  matchingOpportunity: null,
+  abilityStack: [],
+  checkDetails: null,
+  gameover: null,
+  lastRoundLoserId: null,
+  log: [],
+  chat: [],
+  discardPileIsSealed: false,
+  errorState: null,
+  // FIX: Add the new required properties with default values
+  maxPlayers: 4,
+  cardsPerPlayer: 4,
+  ...overrides,
+});
 
-      // Check that the discard pile is visible
-      expect(p1View.discardPile).toHaveLength(1);
-      expect(p1View.discardPile[0].rank).toBe(CardRank.Eight);
-    });
+describe('state-redactor: generatePlayerView', () => {
 
-    it('should include the viewing player ID', () => {
-      // Create a minimal test game state
-      const gameState = {
-        context: {
-          players: { 
-            p1: {
-              id: 'p1',
-              name: 'Player 1',
-              hand: [],
-              score: 0,
-              isReady: true,
-              isConnected: true,
-              status: PlayerStatus.WAITING,
-              isDealer: false,
-              hasCalledCheck: false,
-              isLocked: false,
-              socketId: 'socket1',
-              pendingDrawnCard: null,
-              forfeited: false
-            }
-          },
-          deck: [],
-          discardPile: [],
-          discardPileIsSealed: false,
-          errorState: null,
-          gameId: 'test-game',
-          gameMasterId: null,
-          currentPlayerId: null,
-          turnOrder: [],
-          currentTurnSegment: null,
-          activeAbility: null,
-          matchingOpportunity: null,
-          checkDetails: null,
-          gameover: null,
-          lastRoundLoserId: null,
-          log: [],
-          chat: [],
-          abilityStack: [],
-        },
-        value: GameStage.WAITING_FOR_PLAYERS
-      };
+  it('should show the viewing player their own hand', () => {
+    const context = createMockContext();
+    const snapshot = { context, value: GameStage.PLAYING };
 
-      // Generate player view for p1
-      const p1View = generatePlayerView(gameState as { context: GameContext, value: unknown }, 'p1');
+    const player1View = generatePlayerView(snapshot, P1_ID);
 
-      // Check that viewingPlayerId is set correctly
-      expect(p1View.viewingPlayerId).toBe('p1');
-    });
-
-    it('should preserve game stage and current player', () => {
-      // Create a test game state with specific phase and current player
-      const gameState = {
-        context: {
-          players: { 
-            p1: {
-              id: 'p1',
-              name: 'Player 1',
-              hand: [],
-              score: 0,
-              isReady: true,
-              isConnected: true,
-              status: PlayerStatus.PLAYING,
-              isDealer: false,
-              hasCalledCheck: false,
-              isLocked: false,
-              socketId: 'socket1',
-              pendingDrawnCard: null,
-              forfeited: false
-            },
-            p2: {
-              id: 'p2',
-              name: 'Player 2',
-              hand: [],
-              score: 0,
-              isReady: true,
-              isConnected: true,
-              status: PlayerStatus.PLAYING,
-              isDealer: false,
-              hasCalledCheck: false,
-              isLocked: false,
-              socketId: 'socket2',
-              pendingDrawnCard: null,
-              forfeited: false
-            }
-          },
-          deck: [],
-          discardPile: [],
-          discardPileIsSealed: false,
-          errorState: null,
-          currentTurnSegment: TurnPhase.DRAW,
-          currentPlayerId: 'p2',
-          turnOrder: ['p1', 'p2'],
-          gameId: 'test-game',
-          gameMasterId: null,
-          activeAbility: null,
-          matchingOpportunity: null,
-          checkDetails: null,
-          gameover: null,
-          lastRoundLoserId: null,
-          log: [],
-          chat: [],
-          abilityStack: [],
-        },
-        value: GameStage.PLAYING
-      };
-
-      // Generate player view for p1
-      const p1View = generatePlayerView(gameState as { context: GameContext, value: unknown }, 'p1');
-
-      // Check that phase and current player are preserved
-      expect(p1View.gameStage).toBe(GameStage.PLAYING);
-      expect(p1View.turnPhase).toBe(TurnPhase.DRAW);
-      expect(p1View.currentPlayerId).toBe('p2');
-    });
+    expect(player1View.players[P1_ID].hand).toEqual([MOCK_CARD_1]);
   });
-}); 
+
+  it('should redact the opponent\'s hand', () => {
+    const context = createMockContext();
+    const snapshot = { context, value: GameStage.PLAYING };
+
+    const player1View = generatePlayerView(snapshot, P1_ID);
+
+    expect(player1View.players[P2_ID].hand).toEqual([{ facedown: true }]);
+  });
+
+  it('should show the viewing player their pending drawn card', () => {
+    const context = createMockContext({
+      players: {
+        [P1_ID]: createMockPlayer(P1_ID, 'Alice', { pendingDrawnCard: { card: MOCK_CARD_3, source: 'deck' } }),
+        [P2_ID]: createMockPlayer(P2_ID, 'Bob'),
+      },
+    });
+    const snapshot = { context, value: GameStage.PLAYING };
+
+    const player1View = generatePlayerView(snapshot, P1_ID);
+
+    expect(player1View.players[P1_ID].pendingDrawnCard).toEqual(MOCK_CARD_3);
+  });
+
+  it('should redact an opponent\'s pending drawn card', () => {
+    const context = createMockContext({
+      players: {
+        [P1_ID]: createMockPlayer(P1_ID, 'Alice', { pendingDrawnCard: { card: MOCK_CARD_3, source: 'deck' } }),
+        [P2_ID]: createMockPlayer(P2_ID, 'Bob'),
+      },
+    });
+    const snapshot = { context, value: GameStage.PLAYING };
+
+    const player2View = generatePlayerView(snapshot, P2_ID);
+
+    expect(player2View.players[P1_ID].pendingDrawnCard).toEqual({ facedown: true });
+  });
+
+  it('should correctly expose public game state properties', () => {
+    const context = createMockContext({
+      deck: [MOCK_CARD_1, MOCK_CARD_2, MOCK_CARD_3],
+      discardPile: [MOCK_CARD_4],
+      currentPlayerId: P2_ID
+    });
+    const snapshot = { context, value: GameStage.PLAYING };
+
+    const view = generatePlayerView(snapshot, P1_ID);
+
+    expect(view.deckSize).toBe(3);
+    expect(view.discardPile).toEqual([MOCK_CARD_4]);
+    expect(view.currentPlayerId).toBe(P2_ID);
+    expect(view.viewingPlayerId).toBe(P1_ID);
+    expect(view.gameId).toBe('test-game');
+  });
+
+  it('should correctly derive gameStage from a simple state value', () => {
+    const context = createMockContext();
+    const snapshot = { context, value: GameStage.GAMEOVER };
+
+    const view = generatePlayerView(snapshot, P1_ID);
+    expect(view.gameStage).toBe(GameStage.GAMEOVER);
+  });
+
+  it('should correctly derive gameStage from a nested state value', () => {
+    const context = createMockContext();
+    const snapshot = { context, value: { [GameStage.PLAYING]: 'matching' } };
+    
+    const view = generatePlayerView(snapshot, P1_ID);
+    expect(view.gameStage).toBe(GameStage.PLAYING);
+  });
+});

@@ -16,7 +16,8 @@ export enum GameStage {
   DEALING = 'DEALING',
   INITIAL_PEEK = 'INITIAL_PEEK',
   PLAYING = 'PLAYING',
-  CHECK = 'CHECK',
+  FINAL_TURNS = 'FINAL_TURNS',
+  SCORING = 'SCORING',
   GAMEOVER = 'GAMEOVER',
 }
 
@@ -97,6 +98,7 @@ export interface ClientCheckGameState {
   matchingOpportunity: {
     cardToMatch: Card;
     originalPlayerID: PlayerId;
+    remainingPlayerIDs: PlayerId[];
   } | null;
   checkDetails: {
     callerId: PlayerId | null;
@@ -124,6 +126,8 @@ export interface ServerToClientEvents {
   [SocketEventName.ABILITY_PEEK_RESULT]: (payload: { card: Card; playerId: PlayerId; cardIndex: number }) => void;
   [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
   [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;
+  // FIX: Added event for server broadcasting a new chat message
+  [SocketEventName.NEW_CHAT_MESSAGE]: (chatMessage: ChatMessage) => void;
 }
 
 export interface ClientToServerEvents {
@@ -148,6 +152,8 @@ export enum SocketEventName {
   ABILITY_PEEK_RESULT = 'ABILITY_PEEK_RESULT',
   SERVER_LOG_ENTRY = 'SERVER_LOG_ENTRY',
   INITIAL_LOGS = 'INITIAL_LOGS',
+  // FIX: Added event name for server broadcasting a new chat message
+  NEW_CHAT_MESSAGE = 'NEW_CHAT_MESSAGE',
 }
 
 export interface BasicResponse {
@@ -246,12 +252,16 @@ export interface PeekTarget {
   cardIndex: number;
 }
 
-export interface SwapTarget extends PeekTarget {}
+export interface SwapTarget {
+  playerId: PlayerId;
+  cardIndex: number;
+}
 
 export interface ActiveAbility {
   type: AbilityType;
   stage: 'peeking' | 'swapping' | 'done';
   playerId: PlayerId;
+  sourceCard: Card;
 }
 
 export type PeekAbilityPayload = {
@@ -272,6 +282,7 @@ export type SwapAbilityPayload = {
     playerId: PlayerId;
     cardIndex: number;
   };
+  sourceCard: Card;
 };
 
 export type SkipAbilityPayload = {
@@ -286,9 +297,13 @@ export type AbilityActionPayload = PeekAbilityPayload | SwapAbilityPayload | Ski
 export interface ClientAbilityContext {
   type: AbilityType;
   stage: 'peeking' | 'swapping' | 'done';
+  sourceCard: Card;
   maxPeekTargets: number;
   selectedPeekTargets: PeekTarget[];
   peekedCards?: (PeekTarget & { card: Card })[];
+  maxSwapTargets: number;
   selectedSwapTargets: SwapTarget[];
+  validPeekTargets?: PeekTarget[];
+  validSwapTargets?: SwapTarget[];
   playerId: PlayerId;
 }

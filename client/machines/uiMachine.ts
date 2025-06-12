@@ -1,10 +1,8 @@
-import { setup, assign, emit, assertEvent, type ActorRefFrom, type SnapshotFrom, type StateFrom, fromCallback } from 'xstate';
+import { setup, assign, emit, assertEvent, type ActorRefFrom, type SnapshotFrom, type StateFrom, fromCallback, fromPromise } from 'xstate';
 import {
   PlayerActionType,
   SocketEventName,
   GameStage,
-  TurnPhase,
-  type AbilityType,
   type ClientAbilityContext,
   type PlayerId,
   type GameId,
@@ -16,33 +14,28 @@ import {
   type RichGameLogMessage,
   type Card,
   type AbilityActionPayload,
-  type PeekAbilityPayload,
-  type SwapAbilityPayload,
-  type SkipAbilityPayload,
   type PeekTarget,
   type SwapTarget,
 } from 'shared-types';
 import { toast } from 'sonner';
 import logger from '@/lib/logger';
 
-// Constants for error handling
+// Constants
 const MAX_RECONNECT_ATTEMPTS = parseInt(process.env.NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS || '3', 10);
 const RECONNECT_INTERVAL_MS = parseInt(process.env.NEXT_PUBLIC_RECONNECT_INTERVAL_MS || '3000', 10);
+const PEEK_ABILITY_DURATION_MS = 5000;
 
 // #region ----- TYPE DEFINITIONS -----
 
-// These are the actions the server can send to the client machine
 type ServerToClientEvents =
   | { type: 'CLIENT_GAME_STATE_UPDATED'; gameState: ClientCheckGameState }
   | { type: 'NEW_GAME_LOG'; logMessage: RichGameLogMessage }
+  | { type: 'NEW_CHAT_MESSAGE'; chatMessage: ChatMessage }
   | { type: 'INITIAL_PEEK_INFO'; hand: Card[] }
   | { type: 'ABILITY_PEEK_RESULT'; card: Card; playerId: PlayerId; cardIndex: number }
   | { type: 'ERROR_RECEIVED'; error: string }
   | { type: 'INITIAL_LOGS_RECEIVED'; logs: RichGameLogMessage[] };
 
-// These are the events the client can send to the server.
-// By defining them as a discriminated union, we can ensure type safety
-// when emitting events from the machine to the socket.
 type SocketEmitEvent =
   | {
       eventName: SocketEventName.CREATE_GAME;
@@ -57,7 +50,7 @@ type SocketEmitEvent =
   | {
       eventName: SocketEventName.ATTEMPT_REJOIN;
       payload: { gameId: string; playerId: string };
-      ack: (response: any) => void; // TODO: Type this properly
+      ack: (response: AttemptRejoinResponse) => void;
     }
   | {
       eventName: SocketEventName.SEND_CHAT_MESSAGE;
@@ -70,29 +63,7 @@ type SocketEmitEvent =
       ack?: never;
     };
 
-// This is the shape of the event that the machine emits internally.
-type EmittedEventToSocket = {
-  type: 'EMIT_TO_SOCKET';
-} & SocketEmitEvent;
-
-type EmittedEvent = EmittedEventToSocket | {
-  type: 'REPORT_ERROR_TO_SERVER';
-  errorType: string;
-  message: string;
-  context?: any;
-};
-
-// Define missing types
-type AbilityAction = {
-  type: AbilityType;
-  targets?: any[];
-};
-
-type LogEntry = {
-  id: string;
-  text: string;
-  timestamp: string;
-};
+type EmittedEventToSocket = { type: 'EMIT_TO_SOCKET' } & SocketEmitEvent;
 
 export type UIMachineInput = {
   gameId?: string;
@@ -104,8 +75,8 @@ export type PeekedCardInfo = {
   playerId: PlayerId | null;
   cardIndex: number;
   card: Card;
-  expireAt?: number; // Optional timestamp when this peek should expire
-  source: 'ability' | 'initial-peek'; // Source of the peek
+  expireAt?: number;
+  source: 'ability' | 'initial-peek';
 };
 
 export interface UIMachineContext {
@@ -113,88 +84,51 @@ export interface UIMachineContext {
   currentGameState?: ClientCheckGameState;
   localPlayerId?: string;
   playerName?: string;
-  pendingAbilityAction?: AbilityAction;
   currentAbilityContext?: ClientAbilityContext;
-  logEntries: LogEntry[];
   selectedCardIndices: number[];
-  highlightedCardIndices: number[];
-  peekedCardIndices: number[];
-  visibleCardAnimations: Record<string, boolean>;
-  modals: {
-    createGame: {
-      isOpen: boolean;
-    };
-    joinGame: {
-      isOpen: boolean;
-    };
-    rules: {
-      isOpen: boolean;
-    };
-    gameSettings: {
-      isOpen: boolean;
-    };
-  };
   visibleCards: PeekedCardInfo[];
-  chatMessages: ChatMessage[];
-  gameLog: RichGameLogMessage[];
   isSidePanelOpen: boolean;
-  error: {
-    message: string;
-    details?: string;
-  } | null;
+  error: { message: string; details?: string; } | null;
   reconnectionAttempts: number;
-  connectionErrors: {
-    message: string;
-    timestamp: string;
-  }[];
-  modal?: {
-    type: string;
-    title: string;
-    message: string;
-  } | null;
+  socket: any;
 }
+
+type RejoinPollOutput = {
+  gameState: ClientCheckGameState;
+  logs: RichGameLogMessage[];
+};
 
 export type UIMachineEvents =
   | ServerToClientEvents
+  | { type: 'CONNECTION_ERROR'; message: string }
   | { type: 'CREATE_GAME_REQUESTED'; playerName: string }
   | { type: 'JOIN_GAME_REQUESTED'; playerName: string; gameId: string }
   | { type: 'GAME_CREATED_SUCCESSFULLY'; response: CreateGameResponse }
   | { type: 'GAME_JOINED_SUCCESSFULLY'; response: JoinGameResponse }
   | { type: 'CONNECT' }
   | { type: 'DISCONNECT' }
-  | { type: 'NEW_GAME_LOG'; logMessage: RichGameLogMessage }
-  | { type: 'INITIAL_PEEK_INFO'; hand: Card[] }
-  | { type: 'ABILITY_PEEK_RESULT'; card: Card; playerId: PlayerId; cardIndex: number }
-  | { type: 'ERROR_RECEIVED'; error: string }
-  | { type: 'INITIAL_LOGS_RECEIVED'; logs: RichGameLogMessage[] }
-  | { type: 'RECONNECT' }
-  | { type: 'START_GAME' }
-  | { type: 'PLAYER_READY' }
   | { type: 'LEAVE_GAME' }
-  | { type: 'REMOVE_PLAYER'; playerId: string }
-  | { type: 'SUBMIT_CHAT_MESSAGE'; message: string; senderId: string; senderName: string; gameId: string }
+  | { type: 'SUBMIT_CHAT_MESSAGE'; message: string }
   | { type: 'PLAYER_SLOT_CLICKED_FOR_ABILITY'; playerId: PlayerId; cardIndex: number }
   | { type: 'CONFIRM_ABILITY_ACTION' }
   | { type: 'SKIP_ABILITY_STAGE' }
   | { type: 'CANCEL_ABILITY' }
-  | { type: 'SWAP_AND_DISCARD'; cardIndex: number }
-  | { type: 'DISCARD_DRAWN_CARD' }
-  | { type: 'DRAW_FROM_DECK' }
-  | { type: 'DRAW_FROM_DISCARD' }
-  | { type: 'ATTEMPT_MATCH'; handCardIndex: number }
-  | { type: 'PASS_ON_MATCH' }
   | { type: 'TOGGLE_SIDE_PANEL' }
-  | { type: 'DECLARE_READY_FOR_PEEK_CLICKED' }
-  | { type: 'CHOOSE_SWAP_TARGET' }
-  | { type: 'CONNECTION_ERROR'; message: string }
-  | { type: 'SERVER_ERROR'; message: string; details?: string }
-  | { type: 'RETRY_RECONNECTION' }
   | { type: 'RECOVERY_FAILED' }
-  | { type: 'DISMISS_MODAL' }
   | { type: 'CLEANUP_EXPIRED_CARDS' }
-  | { type: 'CALL_CHECK' }
   | { type: 'HYDRATE_GAME_STATE'; gameState: ClientCheckGameState }
-  | { type: 'PLAYER_ACTION'; payload: { type: PlayerActionType; payload?: any } };
+  | { type: PlayerActionType.START_GAME }
+  | { type: PlayerActionType.DECLARE_LOBBY_READY }
+  | { type: PlayerActionType.REMOVE_PLAYER; payload: { playerId: string } }
+  | { type: PlayerActionType.DRAW_FROM_DECK }
+  | { type: PlayerActionType.DRAW_FROM_DISCARD }
+  | { type: PlayerActionType.SWAP_AND_DISCARD; payload: { cardIndex: number } }
+  | { type: PlayerActionType.DISCARD_DRAWN_CARD }
+  | { type: PlayerActionType.ATTEMPT_MATCH; payload: { handCardIndex: number } }
+  | { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }
+  | { type: PlayerActionType.CALL_CHECK }
+  | { type: PlayerActionType.DECLARE_READY_FOR_PEEK }
+  | { type: PlayerActionType.PLAY_AGAIN };
 
 // #endregion
 
@@ -202,835 +136,384 @@ export const uiMachine = setup({
   types: {
     context: {} as UIMachineContext,
     events: {} as UIMachineEvents,
-    emitted: {} as EmittedEvent,
+    emitted: {} as EmittedEventToSocket,
     input: {} as UIMachineInput,
   },
   actors: {
     cardVisibilityCleanup: fromCallback(({ sendBack }) => {
-      // Clean up expired cards every second
-      const interval = setInterval(() => {
-        sendBack({ type: 'CLEANUP_EXPIRED_CARDS' });
-      }, 1000);
-      
+      const interval = setInterval(() => { sendBack({ type: 'CLEANUP_EXPIRED_CARDS' }); }, 1000);
       return () => clearInterval(interval);
+    }),
+    rejoinAndPoll: fromPromise<RejoinPollOutput>(async ({ input }) => {
+      const { gameId, playerId, socket } = input as { gameId: string; playerId: string, socket: any };
+      let attempts = 0;
+      while (attempts < MAX_RECONNECT_ATTEMPTS) {
+        try {
+          const response: AttemptRejoinResponse = await new Promise((resolve, reject) => {
+            socket.emit(SocketEventName.ATTEMPT_REJOIN, { gameId, playerId }, (res: AttemptRejoinResponse) => {
+              if (res.success) { resolve(res); }
+              else { reject(new Error(res.message || 'Rejoin attempt failed')); }
+            });
+          });
+          if (response.success && response.gameState) {
+            return { gameState: response.gameState, logs: response.logs ?? [] };
+          }
+        } catch (error) {
+          logger.warn({ error: (error as Error).message, attempt: attempts + 1 }, 'Rejoin attempt failed');
+          attempts++;
+          if (attempts >= MAX_RECONNECT_ATTEMPTS) { throw new Error('Failed to reconnect after multiple attempts.'); }
+          await new Promise(resolve => setTimeout(resolve, RECONNECT_INTERVAL_MS));
+        }
+      }
+      throw new Error('Rejoin polling loop exited unexpectedly.');
     }),
   },
   actions: {
-    // #region ----- Context Updaters -----
     setCurrentGameState: assign({
       currentGameState: ({ event }) => {
-        assertEvent(event, 'CLIENT_GAME_STATE_UPDATED');
-        logger.debug({ gameState: event.gameState }, 'Action: setCurrentGameState');
-        return event.gameState;
+        assertEvent(event, ['CLIENT_GAME_STATE_UPDATED', 'HYDRATE_GAME_STATE', 'GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
+        if ('gameState' in event && event.gameState) return event.gameState;
+        if ('response' in event && event.response.gameState) return event.response.gameState;
+        return undefined;
       },
     }),
     addGameLog: assign({
-      gameLog: ({ context, event }) => {
+      currentGameState: ({ context, event }) => {
         assertEvent(event, 'NEW_GAME_LOG');
-        logger.debug('Action: addGameLog');
-        return [...context.gameLog, event.logMessage];
-      }
-    }),
-    setInitialLogs: assign({
-      gameLog: ({ event }) => {
-        assertEvent(event, 'INITIAL_LOGS_RECEIVED');
-        logger.debug({ logCount: event.logs.length }, 'Action: setInitialLogs');
-        return event.logs;
+        if (!context.currentGameState) return undefined;
+        return { ...context.currentGameState, log: [...context.currentGameState.log, event.logMessage] };
       }
     }),
     addChatMessage: assign({
-      chatMessages: ({ context, event }) => {
-        assertEvent(event, 'SUBMIT_CHAT_MESSAGE');
-        const newChatMessage: ChatMessage = {
-          id: `chat_${Date.now()}`,
-          message: event.message,
-          senderId: event.senderId,
-          senderName: event.senderName,
-          timestamp: new Date().toISOString(),
-        };
-        logger.debug({ chatMessage: newChatMessage }, 'Action: addChatMessage');
-        return [...context.chatMessages, newChatMessage];
+      currentGameState: ({ context, event }) => {
+        assertEvent(event, 'NEW_CHAT_MESSAGE');
+        if (!context.currentGameState) return undefined;
+        return { ...context.currentGameState, chat: [...context.currentGameState.chat, event.chatMessage] };
       },
+    }),
+    setInitialLogs: assign({
+      currentGameState: ({ context, event }) => {
+        assertEvent(event, 'INITIAL_LOGS_RECEIVED');
+        if (!context.currentGameState) return undefined;
+        return { ...context.currentGameState, log: event.logs };
+      }
     }),
     setGameIdAndPlayerId: assign({
-      gameId: ({ event }) => {
-        assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-        logger.info({ gameId: event.response.gameId }, 'Action: setGameId');
-        return event.response.gameId!;
-      },
-      localPlayerId: ({ event }) => {
-        assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-        logger.info({ playerId: event.response.playerId }, 'Action: setPlayerId');
-        return event.response.playerId!;
-      },
-    }),
-    setInitialGameState: assign({
-      currentGameState: ({ event }) => {
-        assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-        logger.info('Action: setInitialGameState');
-        return event.response.gameState!;
-      },
+      gameId: ({ event }) => { assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']); return event.response.gameId!; },
+      localPlayerId: ({ event }) => { assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']); return event.response.playerId!; },
     }),
     resetGameContext: assign({
-        localPlayerId: undefined,
-        gameId: undefined,
-        currentGameState: undefined,
-        currentAbilityContext: undefined,
-        visibleCards: [],
-        chatMessages: [],
-        gameLog: [],
-        error: null,
-        reconnectionAttempts: 0,
-        connectionErrors: [],
-        modal: undefined,
+        localPlayerId: undefined, gameId: undefined, currentGameState: undefined,
+        currentAbilityContext: undefined, visibleCards: [], error: null, reconnectionAttempts: 0,
     }),
     persistSession: ({ event }) => {
       assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-      try {
-        if (!event.response.success || !event.response.gameId || !event.response.playerId || !event.response.gameState) {
-          logger.error({ response: event.response }, 'Cannot persist session, success response is missing critical data.');
-          return;
-        }
-
-        const playerSession = {
-          gameId: event.response.gameId,
-          playerId: event.response.playerId,
-        };
-        sessionStorage.setItem('playerSession', JSON.stringify(playerSession));
-        sessionStorage.setItem('initialGameState', JSON.stringify(event.response.gameState));
-        
-        logger.info({ session: playerSession }, 'Action: persistSession');
-      } catch (e) {
-        logger.error({ error: e }, 'Failed to persist session to sessionStorage');
+      if (event.response.success && event.response.gameId && event.response.playerId) {
+        sessionStorage.setItem('playerSession', JSON.stringify({ gameId: event.response.gameId, playerId: event.response.playerId }));
       }
     },
-    clearSession: () => {
-      try {
-        sessionStorage.removeItem('playerSession');
-        logger.info('Action: clearSession');
-      } catch (e) {
-        logger.error({ error: e }, 'Failed to clear session from sessionStorage');
-      }
-    },
-    // #endregion
-
-    // #region ----- Socket Emitters -----
+    clearSession: () => { sessionStorage.removeItem('playerSession'); },
     emitCreateGame: emit(({ self, event }) => {
       assertEvent(event, 'CREATE_GAME_REQUESTED');
-      logger.info({ playerName: event.playerName }, 'Action: emitCreateGame');
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.CREATE_GAME as const,
-        payload: { name: event.playerName },
-        ack: (response: CreateGameResponse) => {
-          logger.info({ success: response.success, gameId: response.gameId }, 'Create game response received');
-          if (response.success) {
-            logger.info({ gameId: response.gameId }, 'Sending GAME_CREATED_SUCCESSFULLY event');
-            self.send({ type: 'GAME_CREATED_SUCCESSFULLY', response });
-          } else {
-            logger.error({ message: response.message }, 'Failed to create game');
-            toast.error('Failed to create game', { description: response.message });
-            self.send({ type: 'SERVER_ERROR', message: 'Failed to create game', details: response.message });
+      const emittedEvent: EmittedEventToSocket = {
+          type: 'EMIT_TO_SOCKET', eventName: SocketEventName.CREATE_GAME, payload: { name: event.playerName },
+          ack: (response) => {
+              if (response.success) { self.send({ type: 'GAME_CREATED_SUCCESSFULLY', response }); }
+              else { toast.error('Failed to create game', { description: response.message }); }
           }
-        },
       };
+      return emittedEvent;
     }),
-    emitJoinGame: emit(({ self, event }): EmittedEventToSocket => {
+    emitJoinGame: emit(({ self, event }) => {
       assertEvent(event, 'JOIN_GAME_REQUESTED');
-      return {
-        type: 'EMIT_TO_SOCKET',
-        eventName: SocketEventName.JOIN_GAME as const,
-        payload: [
-          event.gameId,
-          { name: event.playerName },
-        ],
-        ack: (response: JoinGameResponse) => {
-          self.send({
-            type: 'GAME_JOINED_SUCCESSFULLY',
-            response,
-          });
-        },
+      const emittedEvent: EmittedEventToSocket = {
+          type: 'EMIT_TO_SOCKET', eventName: SocketEventName.JOIN_GAME, payload: [event.gameId, { name: event.playerName }],
+          ack: (response) => {
+              if (response.success) { self.send({ type: 'GAME_JOINED_SUCCESSFULLY', response }); }
+              else { toast.error('Failed to join game', { description: response.message }); }
+          }
       };
+      return emittedEvent;
     }),
     emitAttemptRejoin: emit(({ context, self }) => {
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.ATTEMPT_REJOIN as const,
-        payload: { gameId: context.gameId!, playerId: context.localPlayerId! },
-        ack: (response: AttemptRejoinResponse) => {
-          if (response.success) {
-            self.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState: response.gameState! });
-            const logs = (response as any).logs;
-            if (logs) {
-                self.send({ type: 'INITIAL_LOGS_RECEIVED', logs: logs });
-            }
-          } else {
-            self.send({ type: 'RECOVERY_FAILED' });
+      const emittedEvent: EmittedEventToSocket = {
+          type: 'EMIT_TO_SOCKET', eventName: SocketEventName.ATTEMPT_REJOIN, payload: { gameId: context.gameId!, playerId: context.localPlayerId! },
+          ack: (response) => {
+              if (response.success && response.gameState) {
+                  self.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState: response.gameState });
+                  if (response.logs) { self.send({ type: 'INITIAL_LOGS_RECEIVED', logs: response.logs }); }
+              } else { self.send({ type: 'RECOVERY_FAILED' }); }
           }
-        },
       };
+      return emittedEvent;
     }),
-    emitChatMessage: emit(({ event }) => {
+    emitChatMessage: emit(({ context, event }) => {
       assertEvent(event, 'SUBMIT_CHAT_MESSAGE');
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.SEND_CHAT_MESSAGE as const,
-        payload: {
-          message: event.message,
-          senderId: event.senderId,
-          senderName: event.senderName,
-          gameId: event.gameId,
-        },
+      const me = context.currentGameState?.players[context.localPlayerId!];
+      const emittedEvent: EmittedEventToSocket = {
+          type: 'EMIT_TO_SOCKET', eventName: SocketEventName.SEND_CHAT_MESSAGE,
+          payload: { message: event.message, senderId: me!.id, senderName: me!.name, gameId: context.gameId! }
       };
+      return emittedEvent;
     }),
-    // Convenience wrappers for Player Actions
-    emitPlayerReady: emit({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION as const,
-      payload: { type: PlayerActionType.DECLARE_LOBBY_READY },
+    emitStartGame: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.START_GAME } }),
+    emitDeclareLobbyReady: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.DECLARE_LOBBY_READY } }),
+    emitRemovePlayer: emit(({ event }) => {
+        assertEvent(event, PlayerActionType.REMOVE_PLAYER);
+        const emittedEvent: EmittedEventToSocket = { type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.REMOVE_PLAYER, payload: event.payload } };
+        return emittedEvent;
     }),
-    emitStartGame: emit({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION as const,
-      payload: { type: PlayerActionType.START_GAME },
-    }),
-    emitDeclareReadyForPeek: emit({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION as const,
-      payload: { type: PlayerActionType.DECLARE_READY_FOR_PEEK },
-    }),
-    emitDrawFromDeck: emit({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION as const,
-      payload: { type: PlayerActionType.DRAW_FROM_DECK },
-    }),
-    emitDrawFromDiscard: emit({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION as const,
-      payload: { type: PlayerActionType.DRAW_FROM_DISCARD },
-    }),
+    emitDrawFromDeck: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.DRAW_FROM_DECK } }),
+    emitDrawFromDiscard: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.DRAW_FROM_DISCARD } }),
     emitSwapAndDiscard: emit(({ event }) => {
-      assertEvent(event, 'SWAP_AND_DISCARD');
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.PLAYER_ACTION as const,
-        payload: {
-          type: PlayerActionType.SWAP_AND_DISCARD,
-          payload: { handCardIndex: event.cardIndex },
-        },
-      };
+        assertEvent(event, PlayerActionType.SWAP_AND_DISCARD);
+        const emittedEvent: EmittedEventToSocket = { type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.SWAP_AND_DISCARD, payload: event.payload } };
+        return emittedEvent;
     }),
-    emitDiscardDrawnCard: emit({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION as const,
-      payload: { type: PlayerActionType.DISCARD_DRAWN_CARD },
-    }),
+    emitDiscardDrawnCard: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.DISCARD_DRAWN_CARD } }),
     emitAttemptMatch: emit(({ event }) => {
-      assertEvent(event, 'ATTEMPT_MATCH');
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.PLAYER_ACTION as const,
-        payload: {
-          type: PlayerActionType.ATTEMPT_MATCH,
-          payload: { handCardIndex: event.handCardIndex },
-        },
-      };
+        assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
+        const emittedEvent: EmittedEventToSocket = { type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.ATTEMPT_MATCH, payload: event.payload } };
+        return emittedEvent;
     }),
-    emitPassOnMatch: emit({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION as const,
-      payload: { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT },
-    }),
-    emitCallCheck: emit({
-      type: 'EMIT_TO_SOCKET' as const,
-      eventName: SocketEventName.PLAYER_ACTION as const,
-      payload: { type: PlayerActionType.CALL_CHECK },
-    }),
-    emitRemovePlayer: emit(({ context, event }) => {
-      assertEvent(event, 'REMOVE_PLAYER');
-      return {
-        type: 'EMIT_TO_SOCKET' as const,
-        eventName: SocketEventName.PLAYER_ACTION as const,
-        payload: {
-          type: PlayerActionType.REMOVE_PLAYER,
-          payload: { playerId: event.playerId }
+    emitPassOnMatch: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT } }),
+    emitCallCheck: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.CALL_CHECK } }),
+    emitDeclareReadyForPeek: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.DECLARE_READY_FOR_PEEK } }),
+    emitPlayAgain: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.PLAY_AGAIN } }),
+    emitConfirmAbility: emit(({ context }) => {
+        const ability = context.currentAbilityContext;
+        if (!ability) throw new Error('Ability context missing');
+        let payload: AbilityActionPayload;
+        if (ability.stage === 'peeking') {
+            payload = { action: 'peek', targets: ability.selectedPeekTargets };
+        } else {
+            payload = { action: 'swap', source: ability.selectedSwapTargets[0]!, target: ability.selectedSwapTargets[1]!, sourceCard: ability.sourceCard };
         }
-      };
+        const emittedEvent: EmittedEventToSocket = { type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.USE_ABILITY, payload } };
+        return emittedEvent;
     }),
-    // #endregion
-
-    // #region ----- UI Actions -----
-    showErrorToast: ({ event }) => {
-        assertEvent(event, 'ERROR_RECEIVED');
-        logger.error({ error: event.error }, 'Action: showErrorToast');
-        toast.error(event.error);
-    },
-    toggleSidePanel: assign({
-        isSidePanelOpen: ({ context }) => {
-            logger.debug({ wasOpen: context.isSidePanelOpen }, 'Action: toggleSidePanel');
-            return !context.isSidePanelOpen;
-        }
-    }),
-    dismissModal: assign({
-        modal: undefined,
-    }),
+    emitSkipAbilityStage: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.USE_ABILITY, payload: { action: 'skip' } } }),
+    showErrorToast: ({ event }) => { assertEvent(event, 'ERROR_RECEIVED'); toast.error(event.error); },
+    toggleSidePanel: assign({ isSidePanelOpen: ({ context }) => !context.isSidePanelOpen }),
     addPeekedCardToContext: assign({
       visibleCards: ({ context, event }) => {
         assertEvent(event, 'ABILITY_PEEK_RESULT');
-        const newCard: PeekedCardInfo = {
-          playerId: event.playerId,
-          cardIndex: event.cardIndex,
-          card: event.card,
-          source: 'ability' as const,
-          // Set an expiration time, e.g., 5 seconds from now
-          expireAt: Date.now() + 5000
-        };
-        logger.debug({ peekedCard: newCard }, 'Action: addPeekedCardToContext');
-        return [ ...context.visibleCards, newCard ];
+        const newCard: PeekedCardInfo = { playerId: event.playerId, cardIndex: event.cardIndex, card: event.card, source: 'ability', expireAt: Date.now() + PEEK_ABILITY_DURATION_MS };
+        return [ ...context.visibleCards.filter(c => !(c.playerId === event.playerId && c.cardIndex === event.cardIndex)), newCard ];
       },
     }),
     setInitialPeekCards: assign({
       visibleCards: ({ context, event }) => {
         assertEvent(event, 'INITIAL_PEEK_INFO');
-        logger.debug('Action: setInitialPeekCards');
-        // Get the indices of the bottom two cards in a 2x2 grid
-        const bottomCards = [2, 3]; 
-        const PEEK_DURATION = 10000; // 10 seconds
-        return event.hand.map((card, idx) => ({
-          playerId: context.localPlayerId ?? null,
-          cardIndex: bottomCards[idx],
-          card,
-          source: 'initial-peek' as const,
-          expireAt: Date.now() + PEEK_DURATION,
+        if (event.hand.length < 4) return [];
+        const bottomCardIndices = [2, 3];
+        const peekDuration = 10000;
+        return [event.hand[2], event.hand[3]].map((card, idx) => ({
+            playerId: context.localPlayerId ?? null, cardIndex: bottomCardIndices[idx]!, card, source: 'initial-peek' as const, expireAt: Date.now() + peekDuration
         }));
       },
     }),
-    clearTemporaryCardStates: assign({
-      visibleCards: () => {
-        logger.debug('Action: clearTemporaryCardStates');
-        return [];
-      }
-    }),
-    // #endregion
-
-    // #region ----- ABILITY CONTEXT -----
+    clearTemporaryCardStates: assign({ visibleCards: [], selectedCardIndices: [] }),
     syncAbilityContext: assign({
       currentAbilityContext: ({ context }) => {
         const serverAbilityStack = context.currentGameState?.abilityStack ?? [];
+        if (serverAbilityStack.length === 0 || serverAbilityStack.at(-1)!.playerId !== context.localPlayerId) return undefined;
+        const topServerAbility = serverAbilityStack.at(-1)!;
         const currentClientAbility = context.currentAbilityContext;
-
-        if (serverAbilityStack.length === 0) {
-          if (currentClientAbility) logger.debug('Action: syncAbilityContext (clearing)');
-          return undefined;
-        }
-
-        const topServerAbility = serverAbilityStack[serverAbilityStack.length - 1];
-
-        if (topServerAbility.playerId !== context.localPlayerId) {
-           if (currentClientAbility) logger.debug('Action: syncAbilityContext (clearing, not our turn)');
-          return undefined;
-        }
-
-        if (!currentClientAbility || currentClientAbility.type !== topServerAbility.type) {
-          logger.debug({ serverAbility: topServerAbility }, 'Action: syncAbilityContext (initializing new)');
-          const { type, stage, playerId } = topServerAbility;
-          let maxPeekTargets = 0;
-          if (type === 'king') maxPeekTargets = 2;
-          if (type === 'peek') maxPeekTargets = 1;
-
-          const newContext: ClientAbilityContext = {
-            type,
-            stage,
-            playerId,
-            maxPeekTargets,
-            selectedPeekTargets: [],
-            selectedSwapTargets: [],
-            peekedCards: [],
-          };
-          return newContext;
-        }
-
-        if (currentClientAbility.stage !== topServerAbility.stage) {
-          logger.debug({ oldStage: currentClientAbility.stage, newStage: topServerAbility.stage }, 'Action: syncAbilityContext (stage changed)');
-          return {
-            ...currentClientAbility,
-            stage: topServerAbility.stage,
-            selectedPeekTargets: [],
-            selectedSwapTargets: [],
+        if (!currentClientAbility || currentClientAbility.type !== topServerAbility.type || currentClientAbility.stage !== topServerAbility.stage) {
+          const { type, stage, playerId, sourceCard } = topServerAbility;
+          return { type, stage, playerId, sourceCard,
+            maxPeekTargets: type === 'king' ? 2 : (type === 'peek' ? 1 : 0),
+            maxSwapTargets: type === 'swap' || type === 'king' ? 2 : 0,
+            selectedPeekTargets: [], selectedSwapTargets: [], peekedCards: [],
           };
         }
         return currentClientAbility;
       },
     }),
-    updateAbilityContext: assign({
+    clearAbilityContext: assign({ currentAbilityContext: undefined }),
+    setAbilityPeekTarget: assign({
       currentAbilityContext: ({ context, event }) => {
         assertEvent(event, 'PLAYER_SLOT_CLICKED_FOR_ABILITY');
-        const { currentAbilityContext: abilityContext } = context;
-        if (!abilityContext) return undefined;
-        logger.debug({ event, abilityContext }, 'Action: updateAbilityContext');
-
+        if (!context.currentAbilityContext || context.currentAbilityContext.stage !== 'peeking') return context.currentAbilityContext;
         const { playerId, cardIndex } = event;
-        const newTarget = { playerId, cardIndex: cardIndex! };
-
-        if (abilityContext.stage === 'peeking') {
-          const currentTargets = abilityContext.selectedPeekTargets;
-          if (currentTargets.some(t => t.playerId === newTarget.playerId && t.cardIndex === newTarget.cardIndex)) {
-            return abilityContext;
-          }
-          if (currentTargets.length < abilityContext.maxPeekTargets) {
-            return {
-              ...abilityContext,
-              selectedPeekTargets: [...currentTargets, newTarget],
-            };
-          }
+        const { maxPeekTargets, selectedPeekTargets } = context.currentAbilityContext;
+        const newTarget = { playerId, cardIndex };
+        const isAlreadySelected = selectedPeekTargets.some(t => t.playerId === playerId && t.cardIndex === cardIndex);
+        let newSelectedTargets: PeekTarget[];
+        if (isAlreadySelected) {
+          newSelectedTargets = selectedPeekTargets.filter(t => !(t.playerId === playerId && t.cardIndex === cardIndex));
+        } else {
+          newSelectedTargets = [...selectedPeekTargets, newTarget].slice(-maxPeekTargets);
         }
-        
-        if (abilityContext.stage === 'swapping') {
-          const currentTargets = abilityContext.selectedSwapTargets;
-           if (currentTargets.some(t => t.playerId === newTarget.playerId && t.cardIndex === newTarget.cardIndex)) {
-            return abilityContext;
-          }
-          if (currentTargets.length < 2) {
-             return {
-              ...abilityContext,
-              selectedSwapTargets: [...currentTargets, newTarget],
-            };
-          }
-        }
-        return abilityContext;
+        return { ...context.currentAbilityContext, selectedPeekTargets: newSelectedTargets };
       },
     }),
-    clearAbilityContext: assign({
-      currentAbilityContext: () => {
-        logger.debug('Action: clearAbilityContext');
-        return undefined;
-      }
-    }),
-    // #endregion
-
-    // #region ----- Error Handling -----
-    showConnectionErrorToast: ({ event }) => {
-      assertEvent(event, 'CONNECTION_ERROR');
-      logger.warn({ message: event.message }, 'Action: showConnectionErrorToast');
-      toast.error(`Connection error: ${event.message}. Attempting to reconnect...`);
-    },
-    
-    showServerErrorToast: ({ event }) => {
-      assertEvent(event, 'SERVER_ERROR');
-      logger.error({ event }, 'Action: showServerErrorToast');
-      toast.error(`Server error: ${event.message}`);
-    },
-    
-    addConnectionError: assign({
-      connectionErrors: ({ context, event }) => {
-        assertEvent(event, 'CONNECTION_ERROR');
-        const newError = {
-          message: event.message,
-          timestamp: new Date().toISOString()
-        };
-        logger.warn(newError, 'Action: addConnectionError');
-        return [...context.connectionErrors, newError];
-      }
-    }),
-    
-    clearErrors: assign({
-      error: () => {
-        logger.debug('Action: clearErrors');
-        return null;
-      },
-      connectionErrors: []
-    }),
-    
-    incrementReconnectionAttempts: assign({
-      reconnectionAttempts: ({ context }) => {
-        const newCount = context.reconnectionAttempts + 1;
-        logger.warn({ attempt: newCount }, 'Action: incrementReconnectionAttempts');
-        return newCount;
-      }
-    }),
-    
-    resetReconnectionAttempts: assign({
-      reconnectionAttempts: () => {
-        logger.info('Action: resetReconnectionAttempts');
-        return 0;
-      }
-    }),
-    
-    reportErrorToServer: emit(({ event }) => {
-      assertEvent(event, ['ERROR_RECEIVED', 'CONNECTION_ERROR', 'SERVER_ERROR']);
-      const errorPayload = {
-        errorType: event.type,
-        message: 'error' in event ? event.error : event.message,
-        context: 'details' in event ? event.details : undefined
-      };
-      logger.debug(errorPayload, 'Action: reportErrorToServer');
-      return {
-        type: 'REPORT_ERROR_TO_SERVER' as const,
-        ...errorPayload
-      };
-    }),
-    // #endregion
-
-    cleanupExpiredVisibleCards: assign({
-      visibleCards: ({ context }) => {
-        const now = Date.now();
-        const initialCount = context.visibleCards.length;
-        const remainingCards = context.visibleCards.filter(vc => !vc.expireAt || vc.expireAt > now);
-        if (initialCount > remainingCards.length) {
-            logger.trace({ removed: initialCount - remainingCards.length }, 'Action: cleanupExpiredVisibleCards');
+    setAbilitySwapTarget: assign({
+      currentAbilityContext: ({ context, event }) => {
+        assertEvent(event, 'PLAYER_SLOT_CLICKED_FOR_ABILITY');
+        if (!context.currentAbilityContext || context.currentAbilityContext.stage !== 'swapping') return context.currentAbilityContext;
+        const { selectedSwapTargets } = context.currentAbilityContext;
+        const newTarget = { playerId: event.playerId, cardIndex: event.cardIndex };
+        const isAlreadySelected = selectedSwapTargets.some(t => t.playerId === event.playerId && t.cardIndex === event.cardIndex);
+        let newSelectedTargets: SwapTarget[];
+        if (isAlreadySelected) {
+          newSelectedTargets = selectedSwapTargets.filter(t => !(t.playerId === event.playerId && t.cardIndex === event.cardIndex));
+        } else {
+          newSelectedTargets = [...selectedSwapTargets, newTarget].slice(-2);
         }
-        return remainingCards;
+        return { ...context.currentAbilityContext, selectedSwapTargets: newSelectedTargets };
       }
     }),
-
-    // Add this action to redirect to the home page
-    redirectToHome: () => {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/';
-      }
-    },
+    incrementReconnectionAttempts: assign({ reconnectionAttempts: ({ context }) => context.reconnectionAttempts + 1 }),
+    resetReconnectionAttempts: assign({ reconnectionAttempts: 0 }),
+    cleanupExpiredVisibleCards: assign({ visibleCards: ({ context }) => context.visibleCards.filter(vc => !vc.expireAt || vc.expireAt > Date.now()) }),
+    redirectToHome: () => { if (typeof window !== 'undefined') { window.location.href = '/'; } },
   },
   guards: {
     isAbilityActionComplete: ({ context }) => {
-        const { currentAbilityContext: abilityContext } = context;
-        if (!abilityContext) return false;
-        let result = false;
-        if (abilityContext.stage === 'peeking') {
-            result = abilityContext.selectedPeekTargets.length === abilityContext.maxPeekTargets;
-        }
-        if (abilityContext.stage === 'swapping') {
-            result = abilityContext.selectedSwapTargets.length === 2;
-        }
-        logger.debug({ result, abilityContext }, 'Guard: isAbilityActionComplete');
-        return result;
+        const ability = context.currentAbilityContext;
+        if (!ability) return false;
+        if (ability.stage === 'peeking') return ability.selectedPeekTargets.length === ability.maxPeekTargets;
+        if (ability.stage === 'swapping') return ability.selectedSwapTargets.length === 2;
+        return false;
       },
-    canAttemptReconnection: ({ context }) => {
-      const result = context.reconnectionAttempts < MAX_RECONNECT_ATTEMPTS;
-      logger.debug({ result, attempts: context.reconnectionAttempts }, 'Guard: canAttemptReconnection');
-      return result;
-    },
+    canAttemptReconnection: ({ context }) => context.reconnectionAttempts < MAX_RECONNECT_ATTEMPTS,
   },
 }).createMachine({
   id: 'ui',
   context: ({ input }) => ({
-    localPlayerId: input.localPlayerId ?? undefined,
-    gameId: input.gameId ?? undefined,
-    currentGameState: input.initialGameState ?? undefined,
-    currentAbilityContext: undefined,
-    visibleCards: [],
-    chatMessages: input.initialGameState?.chat ?? [],
-    gameLog: input.initialGameState?.log ?? [],
-    isSidePanelOpen: false,
-    error: null,
-    reconnectionAttempts: 0,
-    connectionErrors: [],
-    modal: undefined,
-    // Add missing required properties
-    logEntries: [],
-    selectedCardIndices: [],
-    highlightedCardIndices: [],
-    peekedCardIndices: [],
-    visibleCardAnimations: {},
-    modals: {
-      createGame: { isOpen: false },
-      joinGame: { isOpen: false },
-      rules: { isOpen: false },
-      gameSettings: { isOpen: false },
-    },
+    localPlayerId: input.localPlayerId, gameId: input.gameId, currentGameState: input.initialGameState,
+    currentAbilityContext: undefined, visibleCards: [], isSidePanelOpen: false, error: null,
+    reconnectionAttempts: 0, socket: undefined, playerName: undefined, selectedCardIndices: [],
   }),
   initial: 'initializing',
   on: {
-    RECONNECT: {
-      target: '#ui.inGame.reconnecting',
-      actions: () => logger.info('Event: RECONNECT'),
-    },
-    ERROR_RECEIVED: {
-      actions: ['showErrorToast', 'reportErrorToServer'],
-    },
-    CONNECTION_ERROR: {
-      actions: ['showConnectionErrorToast', 'addConnectionError', 'reportErrorToServer'],
-    },
-    SERVER_ERROR: {
-      actions: ['showServerErrorToast', 'reportErrorToServer'],
-    },
-    DISMISS_MODAL: {
-      actions: 'dismissModal',
-    },
+    DISCONNECT: { target: '.inGame.disconnected' },
+    ERROR_RECEIVED: { actions: 'showErrorToast' },
   },
   states: {
     initializing: {
-      entry: () => logger.info('State: initializing'),
       always: [
-        {
-          target: 'inGame',
-          guard: ({ context }) => {
-            const hasState = !!context.currentGameState;
-            logger.info({ 
-              hasState, 
-              gameId: context.gameId,
-              hasPlayerId: !!context.localPlayerId
-            }, 'Guard: hasInitialGameState');
-            return hasState;
-          },
-          description:
-            'Game state was provided during initialization (e.g., from SSR or test setup). No need to reconnect.',
-        },
-        {
-          target: 'inGame.reconnecting',
-          guard: ({ context }) => {
-            const shouldReconnect = !!context.localPlayerId && !context.currentGameState;
-            logger.info({ 
-              shouldReconnect, 
-              hasPlayerId: !!context.localPlayerId,
-              hasGameState: !!context.currentGameState,
-              gameId: context.gameId
-            }, 'Guard: shouldReconnect');
-            return shouldReconnect;
-          },
-          description: 'Has player ID from session, but no game state. Must reconnect.',
-        },
-        {
-          target: 'outOfGame',
-          description: 'No session and no initial state. Start fresh.',
-        },
+        { target: 'inGame', guard: ({ context }) => !!context.currentGameState },
+        { target: 'inGame.reconnecting', guard: ({ context }) => !!context.localPlayerId && !context.currentGameState },
+        { target: 'outOfGame' },
       ],
-      on: {
-        HYDRATE_GAME_STATE: {
-          target: 'inGame',
-          actions: assign({
-            currentGameState: ({ event }) => event.gameState,
-          }),
-        },
-      },
+      on: { HYDRATE_GAME_STATE: { target: 'inGame', actions: 'setCurrentGameState' }, },
     },
     outOfGame: {
       id: 'outOfGame',
-      entry: () => logger.info('State: outOfGame'),
       on: {
-        CREATE_GAME_REQUESTED: {
-          actions: ['emitCreateGame', () => logger.info('Event: CREATE_GAME_REQUESTED')],
-        },
-        JOIN_GAME_REQUESTED: {
-          actions: ['emitJoinGame', () => logger.info('Event: JOIN_GAME_REQUESTED')],
-        },
-        GAME_CREATED_SUCCESSFULLY: {
-          target: 'inGame',
-          actions: ['setGameIdAndPlayerId', 'setInitialGameState', 'persistSession', () => logger.info('Event: GAME_CREATED_SUCCESSFULLY')],
-        },
-        GAME_JOINED_SUCCESSFULLY: {
-          target: 'inGame',
-          actions: ['setGameIdAndPlayerId', 'setInitialGameState', 'persistSession', () => logger.info('Event: GAME_JOINED_SUCCESSFULLY')],
-        },
+        CREATE_GAME_REQUESTED: { actions: 'emitCreateGame' },
+        JOIN_GAME_REQUESTED: { actions: 'emitJoinGame' },
+        GAME_CREATED_SUCCESSFULLY: { target: 'inGame', actions: ['setGameIdAndPlayerId', 'setCurrentGameState', 'persistSession'] as const },
+        GAME_JOINED_SUCCESSFULLY: { target: 'inGame', actions: ['setGameIdAndPlayerId', 'setCurrentGameState', 'persistSession'] as const },
       },
     },
     inGame: {
       id: 'inGame',
-      entry: () => logger.info('State: inGame'),
       initial: 'routing',
       on: {
-        DISCONNECT: {
-          target: '.disconnected',
-          actions: [
-            () => logger.warn('Event: DISCONNECT'),
-            assign({
-              error: { message: 'You have been disconnected from the game server' }
-            })
-          ]
-        },
         LEAVE_GAME: { target: '.leaving' },
         TOGGLE_SIDE_PANEL: { actions: 'toggleSidePanel' },
-        CLIENT_GAME_STATE_UPDATED: {
-          target: '.routing',
-          actions: ['setCurrentGameState', 'syncAbilityContext'],
-        },
-        INITIAL_PEEK_INFO: {
-          actions: 'setInitialPeekCards'
-        },
-        ABILITY_PEEK_RESULT: {
-          actions: 'addPeekedCardToContext'
-        },
-        NEW_GAME_LOG: {
-          actions: 'addGameLog'
-        },
-        INITIAL_LOGS_RECEIVED: {
-          actions: 'setInitialLogs'
-        },
-        SUBMIT_CHAT_MESSAGE: {
-          actions: ['addChatMessage', 'emitChatMessage'],
-        },
-        DECLARE_READY_FOR_PEEK_CLICKED: { actions: 'emitDeclareReadyForPeek' },
+        CLIENT_GAME_STATE_UPDATED: { target: '.routing', actions: ['setCurrentGameState', 'syncAbilityContext'] },
+        HYDRATE_GAME_STATE: { target: '.routing', actions: ['setCurrentGameState', 'syncAbilityContext'] },
+        NEW_GAME_LOG: { actions: 'addGameLog' },
+        NEW_CHAT_MESSAGE: { actions: 'addChatMessage' },
+        INITIAL_LOGS_RECEIVED: { actions: 'setInitialLogs' },
+        SUBMIT_CHAT_MESSAGE: { actions: 'emitChatMessage' },
+        INITIAL_PEEK_INFO: { actions: 'setInitialPeekCards' },
+        ABILITY_PEEK_RESULT: { actions: 'addPeekedCardToContext' },
+        // FIX: Re-added all specific event handlers
+        START_GAME: { actions: 'emitStartGame' },
+        DECLARE_LOBBY_READY: { actions: 'emitDeclareLobbyReady' },
         REMOVE_PLAYER: { actions: 'emitRemovePlayer' },
+        DRAW_FROM_DECK: { actions: 'emitDrawFromDeck' },
+        DRAW_FROM_DISCARD: { actions: 'emitDrawFromDiscard' },
+        SWAP_AND_DISCARD: { actions: 'emitSwapAndDiscard' },
+        DISCARD_DRAWN_CARD: { actions: 'emitDiscardDrawnCard' },
+        ATTEMPT_MATCH: { actions: 'emitAttemptMatch' },
+        PASS_ON_MATCH_ATTEMPT: { actions: 'emitPassOnMatch' },
+        CALL_CHECK: { actions: 'emitCallCheck' },
+        DECLARE_READY_FOR_PEEK: { actions: 'emitDeclareReadyForPeek' },
+        PLAY_AGAIN: { actions: 'emitPlayAgain' },
       },
       states: {
         routing: {
-          entry: () => logger.info('State: inGame.routing'),
           always: [
-            {
-              target: 'lobby',
-              guard: ({ context }) => context.currentGameState?.gameStage === GameStage.WAITING_FOR_PLAYERS,
-            },
-            {
-              target: 'playing',
-              guard: ({ context }) => !!context.currentGameState && context.currentGameState.gameStage !== GameStage.WAITING_FOR_PLAYERS,
-            },
-            // Fallback if there's no game state for some reason, prevents getting stuck
-            { 
-              target: '#outOfGame',
-              actions: () => logger.warn('Routing fallback: no game state, returning to outOfGame.'),
-            }
+            { target: 'lobby', guard: ({ context }) => context.currentGameState?.gameStage === GameStage.WAITING_FOR_PLAYERS },
+            { target: 'initialPeek', guard: ({ context }) => context.currentGameState?.gameStage === GameStage.INITIAL_PEEK },
+            { target: 'playing', guard: ({ context }) => context.currentGameState?.gameStage === GameStage.PLAYING },
+            { target: 'finalTurns', guard: ({ context }) => context.currentGameState?.gameStage === GameStage.FINAL_TURNS },
+            { target: 'scoring', guard: ({ context }) => context.currentGameState?.gameStage === GameStage.SCORING },
+            { target: 'gameover', guard: ({ context }) => context.currentGameState?.gameStage === GameStage.GAMEOVER },
+            { target: '#outOfGame', actions: () => logger.warn('Routing fallback: no matching game state, returning to outOfGame.') }
           ]
         },
-        lobby: {
-          entry: () => logger.info('State: inGame.lobby'),
-          on: {
-            START_GAME: { actions: 'emitStartGame' },
-            PLAYER_READY: { actions: 'emitPlayerReady' },
-            REMOVE_PLAYER: { actions: 'emitRemovePlayer' },
-          },
+        lobby: { tags: ['lobby'] },
+        initialPeek: {
+            tags: ['peeking'],
+            invoke: { src: 'cardVisibilityCleanup' },
+            on: { CLEANUP_EXPIRED_CARDS: { actions: 'cleanupExpiredVisibleCards' } },
         },
         playing: {
-            entry: ['clearTemporaryCardStates', () => logger.info('State: inGame.playing')],
-            initial: 'idle', // Start in idle, then transition to ability if needed
+            tags: ['playing'],
+            entry: 'clearTemporaryCardStates',
+            invoke: { src: 'cardVisibilityCleanup' },
+            always: [{ target: 'ability', guard: ({ context }) => !!context.currentAbilityContext?.playerId }],
+            on: { CLEANUP_EXPIRED_CARDS: { actions: 'cleanupExpiredVisibleCards' } },
+        },
+        finalTurns: {
+            tags: ['playing'],
+            always: [{ target: 'ability', guard: ({ context }) => !!context.currentAbilityContext?.playerId }],
+        },
+        ability: {
+            tags: ['ability'],
+            initial: 'evaluating',
             states: {
-                idle: {
-                  entry: () => logger.debug('State: inGame.playing.idle'),
-                  invoke: {
-                    src: 'cardVisibilityCleanup',
-                  },
-                  always: [
-                    {
-                      target: 'ability',
-                      guard: ({ context }) => !!context.currentAbilityContext,
-                    }
-                  ],
-                  on: {
-                    CLEANUP_EXPIRED_CARDS: {
-                      actions: 'cleanupExpiredVisibleCards'
-                    },
-                    SWAP_AND_DISCARD:   { actions: 'emitSwapAndDiscard' },
-                    DISCARD_DRAWN_CARD: { actions: 'emitDiscardDrawnCard' },
-                    DRAW_FROM_DECK:     { actions: 'emitDrawFromDeck' },
-                    DRAW_FROM_DISCARD:  { actions: 'emitDrawFromDiscard' },
-                    ATTEMPT_MATCH:      { actions: 'emitAttemptMatch' },
-                    PASS_ON_MATCH:      { actions: 'emitPassOnMatch' },
-                    CALL_CHECK:         { actions: 'emitCallCheck' },
-                    CHOOSE_SWAP_TARGET: { target: 'selectingSwapTarget' },
-                  },
-                },
-                ability: {
-                    entry: () => logger.debug('State: inGame.playing.ability'),
+                evaluating: {
                     always: [
-                      {
-                        target: 'idle',
-                        guard: ({ context }) => !context.currentAbilityContext,
-                      }
-                    ],
+                        { target: 'peeking', guard: ({ context }) => context.currentAbilityContext?.stage === 'peeking' },
+                        { target: 'swapping', guard: ({ context }) => context.currentAbilityContext?.stage === 'swapping' },
+                        { target: '#inGame.routing' }
+                    ]
+                },
+                peeking: {
                     on: {
-                        PLAYER_SLOT_CLICKED_FOR_ABILITY: { actions: 'updateAbilityContext' },
-                        CANCEL_ABILITY: {
-                            target: 'idle',
-                            actions: ['clearAbilityContext'],
-                        },
-                        CONFIRM_ABILITY_ACTION: {
-                          guard: 'isAbilityActionComplete',
-                          actions: emit(({ context }) => {
-                            const { currentAbilityContext: abilityContext } = context;
-                            if (!abilityContext) throw new Error('Ability context missing');
-          
-                            let payload: AbilityActionPayload;
-                            if (abilityContext.stage === 'peeking') {
-                              payload = { action: 'peek', targets: abilityContext.selectedPeekTargets as PeekTarget[] };
-                            } else {
-                              payload = { action: 'swap', source: abilityContext.selectedSwapTargets[0]! as SwapTarget, target: abilityContext.selectedSwapTargets[1]! as SwapTarget };
-                            }
-                            return {
-                              type: 'EMIT_TO_SOCKET' as const,
-                              eventName: SocketEventName.PLAYER_ACTION as const,
-                              payload: {
-                                type: PlayerActionType.USE_ABILITY,
-                                payload,
-                              },
-                            };
-                          }),
-                        },
-                        SKIP_ABILITY_STAGE: {
-                          actions: emit(() => ({
-                            type: 'EMIT_TO_SOCKET' as const,
-                            eventName: SocketEventName.PLAYER_ACTION as const,
-                            payload: {
-                              type: PlayerActionType.USE_ABILITY,
-                              payload: { action: 'skip' } satisfies SkipAbilityPayload,
-                            },
-                          })),
-                        },
-                    },
+                        PLAYER_SLOT_CLICKED_FOR_ABILITY: { actions: 'setAbilityPeekTarget' },
+                        CONFIRM_ABILITY_ACTION: { target: 'evaluating', guard: 'isAbilityActionComplete' as const, actions: 'emitConfirmAbility' },
+                        SKIP_ABILITY_STAGE: { target: 'evaluating', actions: 'emitSkipAbilityStage' },
+                    }
                 },
-                selectingSwapTarget: {
-                  entry: () => logger.debug('State: inGame.playing.selectingSwapTarget'),
-                  on: {
-                    SWAP_AND_DISCARD: {
-                      target: 'idle',
-                      actions: 'emitSwapAndDiscard',
-                    },
-                    // Allow canceling the swap selection
-                    DRAW_FROM_DECK: { target: 'idle' },
-                    DRAW_FROM_DISCARD: { target: 'idle' },
-                  }
-                },
+                swapping: {
+                    on: {
+                        PLAYER_SLOT_CLICKED_FOR_ABILITY: { actions: 'setAbilitySwapTarget' },
+                        CONFIRM_ABILITY_ACTION: { target: 'evaluating', guard: 'isAbilityActionComplete' as const, actions: 'emitConfirmAbility' },
+                        SKIP_ABILITY_STAGE: { target: 'evaluating', actions: 'emitSkipAbilityStage' },
+                    }
+                }
             },
+            on: { CANCEL_ABILITY: { target: 'playing', actions: 'clearAbilityContext' } },
         },
-        leaving: {
-          entry: ['resetGameContext', 'clearSession', 'redirectToHome', () => logger.warn('State: inGame.leaving')],
-        },
+        scoring: { tags: ['scoring'] },
+        gameover: { tags: ['gameover'] },
+        leaving: { entry: ['resetGameContext', 'clearSession', 'redirectToHome'] },
         disconnected: {
-          entry: ['incrementReconnectionAttempts', () => logger.warn('State: inGame.disconnected')],
-          on: { 
-            CONNECT: 'reconnecting',
-            RETRY_RECONNECTION: {
-              target: 'reconnecting',
-              guard: 'canAttemptReconnection',
-              actions: 'incrementReconnectionAttempts'
-            },
-            RECOVERY_FAILED: 'recoveryFailed'
-          },
-          after: {
-            [RECONNECT_INTERVAL_MS]: [
-              {
-                target: 'reconnecting',
-                guard: 'canAttemptReconnection',
-                actions: 'incrementReconnectionAttempts'
-              },
-              {
-                target: 'recoveryFailed'
-              }
-            ]
-          }
+          tags: ['recovering'],
+          entry: 'incrementReconnectionAttempts',
+          always: { target: 'reconnecting', guard: 'canAttemptReconnection' as const },
+          on: { RECOVERY_FAILED: { target: 'recoveryFailed' } }
         },
         reconnecting: {
-          tags: ['loading'],
-          entry: ['emitAttemptRejoin', () => logger.info('State: inGame.reconnecting')],
-          on: {
-            CLIENT_GAME_STATE_UPDATED: {
-              target: 'routing',
-              actions: ['setCurrentGameState', 'syncAbilityContext', 'resetReconnectionAttempts', 'clearErrors'],
-            },
-            CONNECTION_ERROR: 'disconnected'
+          tags: ['recovering'],
+          invoke: {
+            src: 'rejoinAndPoll',
+            input: ({ context }) => ({ gameId: context.gameId!, playerId: context.localPlayerId!, socket: context.socket }),
+            onDone: { target: 'routing', actions: assign({ currentGameState: ({ event }) => event.output.gameState, reconnectionAttempts: 0 }) },
+            onError: { target: 'disconnected' },
           },
-          after: {
-            [RECONNECT_INTERVAL_MS]: 'disconnected'
-          }
         },
-        recoveryFailed: {
-          entry: [
-            () => logger.fatal('State: inGame.recoveryFailed'),
-            ({ context }) => {
-              toast.error(`Failed to reconnect after ${context.reconnectionAttempts} attempts. Please refresh the page and try again.`);
-            },
-          ],
-          on: {
-            CONNECT: 'reconnecting',
-          }
-        },
+        recoveryFailed: { entry: ['clearSession', 'redirectToHome'] },
       },
     },
   },

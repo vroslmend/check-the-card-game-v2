@@ -35,3 +35,9 @@ export type UIGamePhase =
   | 'Playing' 
   | 'FinalTurns' 
   | 'GameEnd'; 
+
+import { Card } from 'shared-types';
+
+export function isDrawnCard(card: unknown): card is { card: Card; source: 'deck' | 'discard' } {
+  return card !== null && typeof card === 'object' && 'card' in card && 'source' in card;
+} 
