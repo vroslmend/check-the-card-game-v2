@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../ui/button';
-import { GameStage } from 'shared-types';
+import { GameStage, PlayerActionType } from 'shared-types';
 import { useSelector } from '@xstate/react';
 import { useContext } from 'react';
 import { UIContext, UIMachineSnapshot } from '../providers/UIMachineProvider';
@@ -28,7 +28,7 @@ export function GamePhaseIndicator({ stage, localPlayerId }: GamePhaseIndicatorP
   const handleReadyClick = () => {
     if (stage === GameStage.INITIAL_PEEK) {
       logger.info('Player clicked ready for peek');
-      actorRef.send({ type: 'DECLARE_READY_FOR_PEEK_CLICKED' });
+      actorRef.send({ type: PlayerActionType.DECLARE_READY_FOR_PEEK });
     }
   };
 

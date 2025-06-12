@@ -91,6 +91,7 @@ export interface UIMachineContext {
   error: { message: string; details?: string; } | null;
   reconnectionAttempts: number;
   socket: any;
+  hasPassedMatch: boolean;
 }
 
 type RejoinPollOutput = {
@@ -386,6 +387,7 @@ export const uiMachine = setup({
     localPlayerId: input.localPlayerId, gameId: input.gameId, currentGameState: input.initialGameState,
     currentAbilityContext: undefined, visibleCards: [], isSidePanelOpen: false, error: null,
     reconnectionAttempts: 0, socket: undefined, playerName: undefined, selectedCardIndices: [],
+    hasPassedMatch: false,
   }),
   initial: 'initializing',
   on: {
@@ -416,7 +418,14 @@ export const uiMachine = setup({
       on: {
         LEAVE_GAME: { target: '.leaving' },
         TOGGLE_SIDE_PANEL: { actions: 'toggleSidePanel' },
-        CLIENT_GAME_STATE_UPDATED: { target: '.routing', actions: ['setCurrentGameState', 'syncAbilityContext'] },
+        CLIENT_GAME_STATE_UPDATED: { 
+            target: '.routing', 
+            actions: [
+                assign({ hasPassedMatch: false }), // Reset the flag on any server update
+                'setCurrentGameState', 
+                'syncAbilityContext'
+            ] as const
+        },
         HYDRATE_GAME_STATE: { target: '.routing', actions: ['setCurrentGameState', 'syncAbilityContext'] },
         NEW_GAME_LOG: { actions: 'addGameLog' },
         NEW_CHAT_MESSAGE: { actions: 'addChatMessage' },
@@ -424,7 +433,8 @@ export const uiMachine = setup({
         SUBMIT_CHAT_MESSAGE: { actions: 'emitChatMessage' },
         INITIAL_PEEK_INFO: { actions: 'setInitialPeekCards' },
         ABILITY_PEEK_RESULT: { actions: 'addPeekedCardToContext' },
-        // FIX: Re-added all specific event handlers
+
+        // Player Actions
         START_GAME: { actions: 'emitStartGame' },
         DECLARE_LOBBY_READY: { actions: 'emitDeclareLobbyReady' },
         REMOVE_PLAYER: { actions: 'emitRemovePlayer' },
@@ -433,7 +443,12 @@ export const uiMachine = setup({
         SWAP_AND_DISCARD: { actions: 'emitSwapAndDiscard' },
         DISCARD_DRAWN_CARD: { actions: 'emitDiscardDrawnCard' },
         ATTEMPT_MATCH: { actions: 'emitAttemptMatch' },
-        PASS_ON_MATCH_ATTEMPT: { actions: 'emitPassOnMatch' },
+        PASS_ON_MATCH_ATTEMPT: { 
+          actions: [
+              'emitPassOnMatch',
+              assign({ hasPassedMatch: true }) // Optimistically set flag
+          ] as const 
+        },
         CALL_CHECK: { actions: 'emitCallCheck' },
         DECLARE_READY_FOR_PEEK: { actions: 'emitDeclareReadyForPeek' },
         PLAY_AGAIN: { actions: 'emitPlayAgain' },

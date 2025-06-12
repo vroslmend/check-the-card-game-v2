@@ -37,8 +37,10 @@ interface OpponentPodProps {
 
 const OpponentPod = ({ player, onCardClick, isCurrentTurn, abilityContext }: OpponentPodProps) => {
   // Determine if this opponent is a valid target for the current ability
-  const isTargetable = abilityContext?.validPeekTargets?.some(p => p.playerId === player.id) ||
-                       abilityContext?.validSwapTargets?.some(p => p.playerId === player.id);
+  const isTargetable =
+    abilityContext?.validPeekTargets?.some((p) => p.playerId === player.id) ||
+    abilityContext?.validSwapTargets?.some((p) => p.playerId === player.id) ||
+    false; // Explicitly default to false if context is undefined
 
   return (
     <motion.div

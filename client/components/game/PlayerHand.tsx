@@ -61,21 +61,18 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   const isInitialPeek = gameStage === GameStage.INITIAL_PEEK;
 
   const getHighlightedIndices = (): number[] => {
-    if (!isTargetable || !abilityContext) return [];
-    
-    if (abilityContext.stage === 'peeking' && abilityContext.validPeekTargets) {
-      return abilityContext.validPeekTargets
-        .filter((target: PeekTarget) => target.playerId === player.id)
-        .map((target: PeekTarget) => target.cardIndex);
-    }
-    
-    if (abilityContext.stage === 'swapping' && abilityContext.validSwapTargets) {
-       return abilityContext.validSwapTargets
-        .filter((target: SwapTarget) => target.playerId === player.id)
-        .map((target: SwapTarget) => target.cardIndex);
-    }
+    if (!abilityContext || !isTargetable) return [];
 
-    return [];
+    // Combine both peek and swap targets from the context
+    const selectedTargets = [
+      ...(abilityContext.selectedPeekTargets || []),
+      ...(abilityContext.selectedSwapTargets || []),
+    ];
+
+    // Filter for targets that belong to the current player and return their indices
+    return selectedTargets
+      .filter((target) => target.playerId === player.id)
+      .map((target) => target.cardIndex);
   };
 
   return (

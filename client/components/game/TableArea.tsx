@@ -4,7 +4,7 @@ import React, { useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSelector } from '@xstate/react';
 import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
-import { type Card, TurnPhase } from 'shared-types';
+import { type Card, TurnPhase, PlayerActionType } from 'shared-types';
 import { DrawnCardArea } from './DrawnCardArea';
 import { VisualCardStack } from '../cards/VisualCardStack';
 import logger from '@/lib/logger';
@@ -42,14 +42,14 @@ export const TableArea = ({ drawnCard }: TableAreaProps) => {
   const handleDeckClick = () => {
     if (canDrawFromDeck) {
       logger.info('Player is drawing from deck');
-      actorRef.send({ type: 'DRAW_FROM_DECK' });
+      actorRef.send({ type: PlayerActionType.DRAW_FROM_DECK });
     }
   }
 
   const handleDiscardClick = () => {
     if (canDrawFromDiscard) {
       logger.info('Player is drawing from discard');
-      actorRef.send({ type: 'DRAW_FROM_DISCARD' });
+      actorRef.send({ type: PlayerActionType.DRAW_FROM_DISCARD });
     }
   }
 

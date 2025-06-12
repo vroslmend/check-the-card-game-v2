@@ -4,7 +4,7 @@ import { useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSelector } from '@xstate/react';
 import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
-import { TurnPhase, type PlayerId } from 'shared-types';
+import { PlayerActionType, TurnPhase, type PlayerId } from 'shared-types';
 import logger from '@/lib/logger';
 import PlayerHand from './PlayerHand';
 import { User, UserCheck, ArrowDown } from 'lucide-react';
@@ -60,7 +60,7 @@ export const LocalPlayerArea = () => {
 
     if (isChoosingSwapTarget) {
       logger.debug({ cardIndex }, 'Card clicked for swap and discard');
-      actorRef.send({ type: 'SWAP_AND_DISCARD', cardIndex });
+      actorRef.send({ type: PlayerActionType.SWAP_AND_DISCARD, payload: { cardIndex } });
       return;
     }
 

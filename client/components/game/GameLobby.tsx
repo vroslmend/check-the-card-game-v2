@@ -6,7 +6,7 @@ import { useSelector } from '@xstate/react';
 import { UIContext, type UIMachineSnapshot } from '@/components/providers/UIMachineProvider';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, Users, WifiOff, Clock, Copy, PartyPopper, UserMinus, MoreHorizontal, RefreshCw } from 'lucide-react';
-import { type Player } from 'shared-types';
+import { type Player, PlayerActionType } from 'shared-types';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import Magnetic from '@/components/ui/Magnetic';
@@ -74,7 +74,7 @@ const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPl
         
         if (progress >= 100) {
           clearInterval(interval);
-          actorRef.send({ type: 'REMOVE_PLAYER', playerId: player.id });
+          actorRef.send({ type: PlayerActionType.REMOVE_PLAYER, payload: { playerId: player.id } });
           setIsHolding(false);
           setHoldProgress(0);
         }
@@ -312,8 +312,8 @@ export const GameLobby = () => {
     }
   };
   
-  const handlePlayerReady = () => actorRef.send({ type: 'PLAYER_READY' });
-  const handleStartGame = () => actorRef.send({ type: 'START_GAME' });
+  const handlePlayerReady = () => actorRef.send({ type: PlayerActionType.DECLARE_LOBBY_READY });
+  const handleStartGame = () => actorRef.send({ type: PlayerActionType.START_GAME });
   const handleLeaveGame = () => actorRef.send({ type: 'LEAVE_GAME' });
   
   const handleRefreshGameState = () => {

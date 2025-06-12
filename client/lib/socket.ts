@@ -33,37 +33,6 @@ declare global {
   var socket: Socket<ServerToClientEvents, ClientToServerEvents> | undefined;
 }
 
-const attemptImmediateRejoin = (socket: Socket<ServerToClientEvents, ClientToServerEvents>) => {
-  try {
-    const persistedSessionJSON = sessionStorage.getItem('playerSession');
-    if (persistedSessionJSON) {
-      const session = JSON.parse(persistedSessionJSON);
-      if (session.gameId && session.playerId) {
-        logger.info({ gameId: session.gameId, playerId: session.playerId }, "Attempting immediate rejoin on socket connection");
-        
-        // Emit rejoin attempt as soon as we have a connection
-        socket.emit(SocketEventName.ATTEMPT_REJOIN, 
-          { gameId: session.gameId, playerId: session.playerId }, 
-          (response: AttemptRejoinResponse) => {
-            if (response.success) {
-              logger.info("Immediate rejoin successful");
-              // Store the game state for later hydration
-              if (response.gameState) {
-                sessionStorage.setItem('initialGameState', JSON.stringify(response.gameState));
-              }
-              // We'll let the state machine handle the rest when it initializes
-            } else {
-              logger.warn({ error: response.message }, "Immediate rejoin failed");
-            }
-          }
-        );
-      }
-    }
-  } catch (e) {
-    logger.error({ error: e }, "Error attempting immediate rejoin");
-  }
-};
-
 const createSocket = (): Socket<ServerToClientEvents, ClientToServerEvents> => {
   logger.info({ url: URL }, "Creating new socket connection.");
   const newSocket: Socket<ServerToClientEvents, ClientToServerEvents> = io(URL, {
@@ -74,8 +43,6 @@ const createSocket = (): Socket<ServerToClientEvents, ClientToServerEvents> => {
 
   newSocket.on('connect', () => {
     logger.info({ socketId: newSocket.id }, "Socket connected");
-    // Attempt to rejoin immediately if we have session data
-    attemptImmediateRejoin(newSocket);
   });
 
   newSocket.on('disconnect', (reason) => {
