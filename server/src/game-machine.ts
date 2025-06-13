@@ -105,10 +105,42 @@ export const gameMachine = setup({
       assertEvent(event, PlayerActionType.USE_ABILITY);
       const { playerId, payload } = event;
       const currentAbility = context.abilityStack.at(-1);
-      if (!currentAbility || currentAbility.playerId !== playerId || context.players[playerId]!.isLocked) return false;
-      if (payload.action === 'skip') return true;
-      if (payload.action === 'peek' && (currentAbility.type === 'peek' || (currentAbility.type === 'king' && currentAbility.stage === 'peeking'))) return true;
-      if (payload.action === 'swap' && (currentAbility.type === 'swap' || (currentAbility.type === 'king' && currentAbility.stage === 'swapping'))) return true;
+    
+      if (!currentAbility || currentAbility.playerId !== playerId || context.players[playerId]!.isLocked) {
+        return false;
+      }
+    
+      if (payload.action === 'skip') {
+        return true;
+      }
+    
+      if (payload.action === 'peek' && (currentAbility.type === 'peek' || (currentAbility.type === 'king' && currentAbility.stage === 'peeking'))) {
+        // Check that no target is a locked opponent
+        for (const target of payload.targets) {
+          const targetPlayer = context.players[target.playerId];
+          if (target.playerId !== playerId && targetPlayer?.isLocked) {
+            return false; // Cannot peek at a locked opponent's cards
+          }
+        }
+        return true;
+      }
+    
+      if (payload.action === 'swap' && (currentAbility.type === 'swap' || (currentAbility.type === 'king' && currentAbility.stage === 'swapping'))) {
+        const { source, target } = payload;
+        const sourcePlayer = context.players[source.playerId];
+        const targetPlayer = context.players[target.playerId];
+    
+        // Check if the source card belongs to a locked opponent
+        if (source.playerId !== playerId && sourcePlayer?.isLocked) {
+          return false;
+        }
+        // Check if the target card belongs to a locked opponent
+        if (target.playerId !== playerId && targetPlayer?.isLocked) {
+          return false;
+        }
+        return true;
+      }
+    
       return false;
     },
     isCheckRoundOver: ({ context }) => {
@@ -119,6 +151,18 @@ export const gameMachine = setup({
     isCurrentPlayer: ({ context, event }) => {
       assertEvent(event, 'PLAYER_DISCONNECTED');
       return context.currentPlayerId === event.playerId;
+    },
+    isInvalidMatchAttempt: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
+      const { playerId, payload: { handCardIndex } } = event;
+      const { matchingOpportunity, players } = context;
+    
+      if (!matchingOpportunity) return false;
+      const player = players[playerId];
+      if (!player || !matchingOpportunity.remainingPlayerIDs.includes(playerId)) return false;
+    
+      const cardInHand = player.hand[handCardIndex];
+      return !!cardInHand && cardInHand.rank !== matchingOpportunity.cardToMatch.rank;
     },
   },
   actions: {
@@ -365,6 +409,52 @@ export const gameMachine = setup({
     }),
     broadcastGameState: emit({ type: 'BROADCAST_GAME_STATE' }),
     setInitialPlayer: assign(({ context }) => ({ currentPlayerId: context.turnOrder[0]!, gameStage: GameStage.PLAYING })),
+    applyMatchPenalty: assign(({ context, event }) => {
+      assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
+      const { playerId } = event;
+  
+      let tempDeck = [...context.deck];
+      let tempDiscard = [...context.discardPile];
+      let logMessageText = '';
+  
+      // If deck is empty, reshuffle discard pile into it
+      if (tempDeck.length === 0) {
+          const topCard = tempDiscard.pop();
+          tempDeck = shuffleDeck(tempDiscard);
+          tempDiscard = topCard ? [topCard] : [];
+          logMessageText = `The discard pile was reshuffled. `;
+      }
+  
+      if (tempDeck.length === 0) {
+          // This case occurs if both deck and discard were empty.
+          // We cannot apply a penalty, so we just log it.
+          logMessageText += `${getPlayerNameForLog(playerId, context)} attempted an invalid match, but no penalty card could be drawn.`;
+          return {
+              log: [...context.log, createLogEntry(context, {
+                  message: logMessageText,
+                  type: 'public',
+                  tags: ['game-event', 'error']
+              })]
+          };
+      }
+  
+      const penaltyCard = tempDeck.pop()!;
+      const newPlayers = JSON.parse(JSON.stringify(context.players));
+      newPlayers[playerId]!.hand.push(penaltyCard);
+  
+      logMessageText += `${getPlayerNameForLog(playerId, context)} attempted an invalid match and received a penalty card.`;
+  
+      return {
+          deck: tempDeck,
+          discardPile: tempDiscard,
+          players: newPlayers,
+          log: [...context.log, createLogEntry(context, {
+              message: logMessageText,
+              type: 'public',
+              tags: ['player-action', 'game-event']
+          })],
+      };
+    }),
   },
   actors: {
     peekTimer: fromPromise(() => new Promise(resolve => setTimeout(resolve, PEEK_TOTAL_DURATION_MS))),
@@ -422,8 +512,23 @@ export const gameMachine = setup({
       after: { 100: GameStage.INITIAL_PEEK },
     },
     [GameStage.INITIAL_PEEK]: {
-      entry: enqueueActions(({ context, enqueue }) => {
-          context.turnOrder.forEach(playerId => enqueue(emit({ type: 'SEND_EVENT_TO_PLAYER', payload: { playerId, eventName: SocketEventName.INITIAL_PEEK_INFO, eventData: { hand: context.players[playerId]!.hand } } })));
+        entry: enqueueActions(({ context, enqueue }) => {
+          context.turnOrder.forEach(playerId => {
+              const playerHand = context.players[playerId]!.hand;
+              // As per the rules, players can only peek at their bottom two cards.
+              // We assume this means the last two cards dealt to them.
+              const peekableCards = playerHand.slice(-2);
+      
+              enqueue(emit({
+                  type: 'SEND_EVENT_TO_PLAYER',
+                  payload: {
+                      playerId,
+                      eventName: SocketEventName.INITIAL_PEEK_INFO,
+                      // Only send the cards the player is allowed to see.
+                      eventData: { hand: peekableCards }
+                  }
+              }));
+          });
           enqueue('broadcastGameState' as const);
       }),
       invoke: { src: 'peekTimer', onDone: { target: GameStage.PLAYING, actions: 'setInitialPlayer' as const } },
@@ -470,8 +575,23 @@ export const gameMachine = setup({
             entry: ['setupMatchingOpportunity', 'broadcastGameState'] as const,
             invoke: { src: 'matchingTimerActor', onDone: { target: 'endOfTurn', actions: ['clearMatchingOpportunity', 'broadcastGameState'] as const } },
             on: {
-                [PlayerActionType.ATTEMPT_MATCH]: { guard: 'canAttemptMatch' as const, actions: 'handleSuccessfulMatch', target: 'postMatch' },
-                [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: { actions: 'handlePlayerPassedOnMatch' }
+                [PlayerActionType.ATTEMPT_MATCH]: [
+                  // 1. Successful Match
+                  {
+                    guard: 'canAttemptMatch' as const,
+                    actions: 'handleSuccessfulMatch',
+                    target: 'postMatch',
+                  },
+                  // 2. Invalid Match (Penalty)
+                  {
+                    guard: 'isInvalidMatchAttempt' as const,
+                    // No target, stay in 'matching' state
+                    actions: ['applyMatchPenalty', 'broadcastGameState'] as const,
+                  }
+                ],
+                [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
+                  actions: 'handlePlayerPassedOnMatch',
+              },
             },
             always: {
                 guard: ({ context }: { context: GameContext }) => !context.matchingOpportunity || context.matchingOpportunity.remainingPlayerIDs.length === 0,

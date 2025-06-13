@@ -170,7 +170,6 @@ export interface CreateGameResponse extends BasicResponse {
 export interface JoinGameResponse extends BasicResponse {
   gameId?: GameId;
   playerId?: PlayerId;
-  gameState?: ClientCheckGameState;
 }
 
 export interface AttemptRejoinResponse extends BasicResponse {

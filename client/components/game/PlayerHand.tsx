@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { HandGrid } from './HandGrid';
 import { type Player, TurnPhase, GameStage, type ClientAbilityContext, type PeekTarget, type SwapTarget, type Card } from 'shared-types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,7 +43,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   abilityContext,
   selectedCardIndex = null
 }) => {
-  const { baseCanInteract, gameStage, visibleCards } = GameUIContext.useSelector(selectPlayerHandProps);
+  const { baseCanInteract, gameStage, visibleCards } = useUISelector(selectPlayerHandProps);
   
   const canInteract = isLocalPlayer ? (baseCanInteract || isTargetable) : isTargetable;
   

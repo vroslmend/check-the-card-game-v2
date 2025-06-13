@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { type PlayerId, type Player, type ClientAbilityContext } from 'shared-types';
 import { PlayerPod } from './PlayerPod';
 import logger from '@/lib/logger';
@@ -52,8 +52,8 @@ const OpponentPod = ({ player, onCardClick, isCurrentTurn, abilityContext }: { p
 }
 
 export const OpponentArea = () => {
-  const { opponentPlayers, currentPlayerId, abilityContext } = GameUIContext.useSelector(selectOpponentProps);
-  const { send } = GameUIContext.useActorRef();
+  const { opponentPlayers, currentPlayerId, abilityContext } = useUISelector(selectOpponentProps);
+  const { send } = useUIActorRef();
 
   const handleCardClick = (playerId: PlayerId, cardIndex: number) => {
     if (abilityContext) {

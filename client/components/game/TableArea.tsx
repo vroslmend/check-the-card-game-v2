@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { type Card, TurnPhase, PlayerActionType } from 'shared-types';
 import { DrawnCardArea } from './DrawnCardArea';
 import { VisualCardStack } from '../cards/VisualCardStack';
@@ -28,7 +28,7 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
 };
 
 export const TableArea = ({ drawnCard }: TableAreaProps) => {
-  const { send } = GameUIContext.useActorRef();
+  const { send } = useUIActorRef();
   const {
     deckSize,
     discardPile,
@@ -36,7 +36,7 @@ export const TableArea = ({ drawnCard }: TableAreaProps) => {
     discardPileIsSealed,
     canDrawFromDeck,
     canDrawFromDiscard,
-  } = GameUIContext.useSelector(selectTableAreaProps);
+  } = useUISelector(selectTableAreaProps);
   
   const handleDeckClick = () => {
     if (canDrawFromDeck) {

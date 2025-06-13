@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Magnetic from '@/components/ui/Magnetic';
-import { GameUIContext } from '@/context/GameUIContext';
+import { useUISelector, useUIActorRef } from '@/context/GameUIContext';
 
 interface JoinGameModalProps {
   isModalOpen: boolean;
@@ -30,20 +30,8 @@ export function JoinGameModal({ isModalOpen, setIsModalOpen }: JoinGameModalProp
   const [step, setStep] = useState(1);
   const router = useRouter();
 
-  const state = GameUIContext.useSelector((s) => s);
-  const { send } = GameUIContext.useActorRef();
-
-  useEffect(() => {
-    if (state.matches('inGame')) {
-      const { gameId: joinedGameId, currentGameState } = state.context;
-      if (joinedGameId) {
-        toast.success(`Joined game ${joinedGameId}`);
-        sessionStorage.setItem('initialGameState', JSON.stringify(currentGameState));
-        router.push(`/game/${joinedGameId}`);
-        setIsLoading(false);
-      }
-    }
-  }, [state, router]);
+  const state = useUISelector((s) => s);
+  const { send } = useUIActorRef();
 
   const handleJoinGame = async () => {
     if (!gameId.trim() || !playerName.trim()) {

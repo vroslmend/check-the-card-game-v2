@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Modal } from "@/components/ui/Modal"
 import { Loader } from "lucide-react"
-import { GameUIContext, type UIMachineSnapshot } from "@/context/GameUIContext"
+import { useUIActorRef, useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext"
 
 const selectRejoinModalProps = (state: UIMachineSnapshot) => {
   return {
@@ -19,8 +19,8 @@ const selectRejoinModalProps = (state: UIMachineSnapshot) => {
 }
 
 export function RejoinModal() {
-  const { send } = GameUIContext.useActorRef();
-  const { gameId, modalInfo, isLoading } = GameUIContext.useSelector(selectRejoinModalProps);
+  const { send } = useUIActorRef();
+  const { gameId, modalInfo, isLoading } = useUISelector(selectRejoinModalProps);
   
   const [playerName, setPlayerName] = useLocalStorage("playerName", "", {
     // Tell the hook how to read/write a raw string without JSON parsing

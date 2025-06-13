@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { type UIMachineEvents } from '@/machines/uiMachine';
 import { GameStage, TurnPhase, PlayerActionType, type ClientCheckGameState, type Player, type ClientAbilityContext, type Card, type PlayerId, type AbilityType, CardRank } from 'shared-types';
 import ActionBarComponent, { Action } from './ActionBarComponent';
@@ -70,8 +70,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
 };
 
 export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
-  const props = GameUIContext.useSelector(selectActionControllerProps);
-  const { send } = GameUIContext.useActorRef();
+  const props = useUISelector(selectActionControllerProps);
+  const { send } = useUIActorRef();
 
   const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(null);
   const [callCheckProgress, setCallCheckProgress] = useState(0);

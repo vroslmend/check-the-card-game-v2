@@ -1,8 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from 'framer-motion';
-// FIX: Import the new context
-import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { PlayerActionType, TurnPhase, type PlayerId } from 'shared-types';
 import logger from '@/lib/logger';
 import PlayerHand from './PlayerHand';
@@ -27,9 +26,8 @@ const selectLocalPlayerProps = (state: UIMachineSnapshot) => {
 };
 
 export const LocalPlayerArea = () => {
-  // FIX: Use the new, streamlined hooks
-  const { localPlayer, isCurrentTurn, turnPhase, abilityContext, localPlayerId, isChoosingSwapTarget } = GameUIContext.useSelector(selectLocalPlayerProps);
-  const { send } = GameUIContext.useActorRef();
+  const { localPlayer, isCurrentTurn, turnPhase, abilityContext, localPlayerId, isChoosingSwapTarget } = useUISelector(selectLocalPlayerProps);
+  const { send } = useUIActorRef();
 
   const { selectedCardIndex, setSelectedCardIndex } = useActionController();
 

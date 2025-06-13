@@ -1,4 +1,4 @@
-import { setup, assign, emit, assertEvent, type ActorRefFrom, type SnapshotFrom, type StateFrom, fromCallback, fromPromise } from 'xstate';
+import { setup, assign, emit, assertEvent, type ActorRefFrom, type SnapshotFrom, type StateFrom, fromCallback, fromPromise, raise } from 'xstate';
 import {
   PlayerActionType,
   SocketEventName,
@@ -102,6 +102,7 @@ type RejoinPollOutput = {
 
 export type UIMachineEvents =
   | ServerToClientEvents
+  | { type: '_SESSION_ESTABLISHED'; response: CreateGameResponse | JoinGameResponse }
   | { type: 'CONNECTION_ERROR'; message: string }
   | { type: 'CREATE_GAME_REQUESTED'; playerName: string }
   | { type: 'JOIN_GAME_REQUESTED'; playerName: string; gameId: string }
@@ -139,7 +140,7 @@ export const uiMachine = setup({
   types: {
     context: {} as UIMachineContext,
     events: {} as UIMachineEvents,
-    emitted: {} as EmittedEventToSocket,
+    emitted: {} as EmittedEventToSocket | { type: 'NAVIGATE'; path: string },
     input: {} as UIMachineInput,
   },
   actors: {
@@ -174,9 +175,16 @@ export const uiMachine = setup({
   actions: {
     setCurrentGameState: assign({
       currentGameState: ({ event }) => {
-        assertEvent(event, ['CLIENT_GAME_STATE_UPDATED', 'HYDRATE_GAME_STATE', 'GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-        if ('gameState' in event && event.gameState) return event.gameState;
-        if ('response' in event && event.response.gameState) return event.response.gameState;
+        assertEvent(event, ['CLIENT_GAME_STATE_UPDATED', 'HYDRATE_GAME_STATE', '_SESSION_ESTABLISHED']);
+    
+        if (event.type === 'CLIENT_GAME_STATE_UPDATED' || event.type === 'HYDRATE_GAME_STATE') {
+          return event.gameState;
+        }
+        
+        if (event.type === '_SESSION_ESTABLISHED' && 'gameState' in event.response) {
+          return event.response.gameState;
+        }
+    
         return undefined;
       },
     }),
@@ -202,20 +210,44 @@ export const uiMachine = setup({
       }
     }),
     setGameIdAndPlayerId: assign({
-      gameId: ({ event }) => { assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']); return event.response.gameId!; },
-      localPlayerId: ({ event }) => { assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']); return event.response.playerId!; },
+      gameId: ({ event }) => {
+        assertEvent(event, '_SESSION_ESTABLISHED');
+        return event.response.gameId!;
+      },
+      localPlayerId: ({ event }) => {
+        assertEvent(event, '_SESSION_ESTABLISHED');
+        return event.response.playerId!;
+      },
     }),
     resetGameContext: assign({
         localPlayerId: undefined, gameId: undefined, currentGameState: undefined,
         currentAbilityContext: undefined, visibleCards: [], error: null, reconnectionAttempts: 0,
     }),
     persistSession: ({ event }) => {
-      assertEvent(event, ['GAME_CREATED_SUCCESSFULLY', 'GAME_JOINED_SUCCESSFULLY']);
-      if (event.response.success && event.response.gameId && event.response.playerId) {
-        sessionStorage.setItem('playerSession', JSON.stringify({ gameId: event.response.gameId, playerId: event.response.playerId }));
+      assertEvent(event, '_SESSION_ESTABLISHED');
+    
+      if (!event.response.success || !event.response.gameId || !event.response.playerId) {
+        return;
+      }
+      
+      const sessionData = {
+        gameId: event.response.gameId,
+        playerId: event.response.playerId
+      };
+      sessionStorage.setItem('playerSession', JSON.stringify(sessionData));
+    
+      // The 'gameState' property only exists on the CreateGameResponse, which is handled here.
+      if ('gameState' in event.response && event.response.gameState) {
+        sessionStorage.setItem('initialGameState', JSON.stringify(event.response.gameState));
       }
     },
-    clearSession: () => { sessionStorage.removeItem('playerSession'); },
+    clearInitialGameStateFromSession: () => {
+      if (typeof window !== 'undefined') {
+        logger.info("Hydration successful. Clearing one-time initialGameState from sessionStorage.");
+        sessionStorage.removeItem('initialGameState');
+      }
+    },
+    clearSession: () => { sessionStorage.removeItem('playerSession'); sessionStorage.removeItem('initialGameState'); },
     emitCreateGame: emit(({ self, event }) => {
       assertEvent(event, 'CREATE_GAME_REQUESTED');
       const emittedEvent: EmittedEventToSocket = {
@@ -387,14 +419,31 @@ export const uiMachine = setup({
 }).createMachine({
   id: 'ui',
   context: ({ input }) => ({
-    localPlayerId: input.localPlayerId, gameId: input.gameId, currentGameState: input.initialGameState,
-    currentAbilityContext: undefined, visibleCards: [], isSidePanelOpen: false, error: null,
-    reconnectionAttempts: 0, socket: undefined, playerName: undefined, selectedCardIndices: [],
+    localPlayerId: input.localPlayerId,
+    gameId: input.gameId,
+    currentGameState: input.initialGameState,
+    currentAbilityContext: undefined,
+    visibleCards: [],
+    isSidePanelOpen: false,
+    error: null,
+    reconnectionAttempts: 0,
+    socket: undefined,
+    playerName: undefined,
+    selectedCardIndices: [],
     hasPassedMatch: false,
     modal: null,
   }),
   initial: 'initializing',
   on: {
+    _SESSION_ESTABLISHED: {
+      target: '.inGame',
+      actions: [
+        'setGameIdAndPlayerId',
+        'setCurrentGameState',
+        'persistSession',
+        emit(({ event }) => ({ type: 'NAVIGATE', path: `/game/${event.response.gameId}` })),
+      ],
+    },
     DISCONNECT: { target: '.inGame.disconnected' },
     ERROR_RECEIVED: { actions: 'showErrorToast' },
     CONNECTION_ERROR: { actions: 'showErrorToast' },
@@ -402,9 +451,21 @@ export const uiMachine = setup({
   states: {
     initializing: {
       always: [
-        { target: 'inGame.promptToJoin', guard: ({ context }) => !!context.gameId && !context.localPlayerId, description: "Has a game ID from URL, but no player ID from session. Must prompt to join." },
-        { target: 'inGame', guard: ({ context }) => !!context.currentGameState },
-        { target: 'inGame.reconnecting', guard: ({ context }) => !!context.localPlayerId && !context.currentGameState },
+        { 
+          target: 'inGame', 
+          guard: ({ context }) => !!context.currentGameState, 
+          description: "Has initial game state provided via input. Hydrate immediately.",
+          actions: ['clearInitialGameStateFromSession']
+        },
+        { 
+          target: 'inGame.promptToJoin', 
+          guard: ({ context }) => !!context.gameId && !context.localPlayerId, 
+          description: "Has a game ID from URL, but no player ID from session. Must prompt to join." 
+        },
+        { 
+          target: 'inGame.reconnecting', 
+          guard: ({ context }) => !!context.localPlayerId && !context.currentGameState 
+        },
         { target: 'outOfGame' },
       ],
       on: { HYDRATE_GAME_STATE: { target: 'inGame', actions: 'setCurrentGameState' }, },
@@ -414,8 +475,18 @@ export const uiMachine = setup({
       on: {
         CREATE_GAME_REQUESTED: { actions: 'emitCreateGame' },
         JOIN_GAME_REQUESTED: { actions: 'emitJoinGame' },
-        GAME_CREATED_SUCCESSFULLY: { target: 'inGame', actions: ['setGameIdAndPlayerId', 'setCurrentGameState', 'persistSession'] as const },
-        GAME_JOINED_SUCCESSFULLY: { target: 'inGame', actions: ['setGameIdAndPlayerId', 'setCurrentGameState', 'persistSession'] as const },
+        GAME_CREATED_SUCCESSFULLY: {
+          actions: raise(({ event }) => ({
+            type: '_SESSION_ESTABLISHED',
+            response: event.response,
+          })),
+        },
+        GAME_JOINED_SUCCESSFULLY: {
+          actions: raise(({ event }) => ({
+            type: '_SESSION_ESTABLISHED',
+            response: event.response,
+          })),
+        },
       },
     },
     inGame: {
@@ -427,7 +498,7 @@ export const uiMachine = setup({
         CLIENT_GAME_STATE_UPDATED: { 
             target: '.routing', 
             actions: [
-                assign({ hasPassedMatch: false }), // Reset the flag on any server update
+                assign({ hasPassedMatch: false }),
                 'setCurrentGameState', 
                 'syncAbilityContext'
             ] as const
@@ -439,8 +510,6 @@ export const uiMachine = setup({
         SUBMIT_CHAT_MESSAGE: { actions: 'emitChatMessage' },
         INITIAL_PEEK_INFO: { actions: 'setInitialPeekCards' },
         ABILITY_PEEK_RESULT: { actions: 'addPeekedCardToContext' },
-
-        // Player Actions
         START_GAME: { actions: 'emitStartGame' },
         DECLARE_LOBBY_READY: { actions: 'emitDeclareLobbyReady' },
         REMOVE_PLAYER: { actions: 'emitRemovePlayer' },
@@ -452,7 +521,7 @@ export const uiMachine = setup({
         PASS_ON_MATCH_ATTEMPT: { 
           actions: [
               'emitPassOnMatch',
-              assign({ hasPassedMatch: true }) // Optimistically set flag
+              assign({ hasPassedMatch: true })
           ] as const 
         },
         CALL_CHECK: { actions: 'emitCallCheck' },
@@ -540,14 +609,13 @@ export const uiMachine = setup({
           tags: ['prompting'],
           entry: assign({
             modal: {
-              type: 'rejoin' as const, // Use the 'rejoin' modal type
+              type: 'rejoin' as const,
               title: 'Join Game',
               message: 'You have been invited to a game. Please enter your name to join.'
             }
           }),
           on: {
             JOIN_GAME_REQUESTED: {
-              // Once the user joins, clear the modal and let the routing handle the redirect
               target: 'routing', 
               actions: ['emitJoinGame', 'dismissModal']
             }

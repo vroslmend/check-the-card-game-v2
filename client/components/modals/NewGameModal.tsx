@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Magnetic from '@/components/ui/Magnetic';
-import { GameUIContext } from '@/context/GameUIContext';
+import { useUIActorRef, useUISelector } from '@/context/GameUIContext';
 
 interface NewGameModalProps {
   isModalOpen: boolean;
@@ -27,20 +27,8 @@ export function NewGameModal({ isModalOpen, setIsModalOpen }: NewGameModalProps)
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const { send } = GameUIContext.useActorRef();
-  const state = GameUIContext.useSelector((s) => s);
-
-  useEffect(() => {
-    if (state.matches('inGame')) {
-      const { gameId, currentGameState } = state.context;
-      if (gameId && currentGameState) {
-        toast.success(`Created game ${gameId}`);
-        sessionStorage.setItem('initialGameState', JSON.stringify(currentGameState));
-        router.push(`/game/${gameId}`);
-        setIsLoading(false);
-      }
-    }
-  }, [state, router]);
+  const { send } = useUIActorRef();
+  const state = useUISelector((s) => s);
 
   const handleCreateGame = async () => {
     if (!playerName.trim()) {

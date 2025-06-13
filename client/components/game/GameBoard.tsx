@@ -2,7 +2,7 @@
 
 import { WifiOff, Loader, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { TableArea } from './TableArea';
 import { OpponentArea } from './OpponentArea';
@@ -31,8 +31,8 @@ const selectGameBoardProps = (state: UIMachineSnapshot) => {
 };
 
 const ConnectionStatusBanner = () => {
-  const isDisconnected = GameUIContext.useSelector(selectIsDisconnected);
-  const isReconnecting = GameUIContext.useSelector(selectIsReconnecting);
+  const isDisconnected = useUISelector(selectIsDisconnected);
+  const isReconnecting = useUISelector(selectIsReconnecting);
 
   return (
     <AnimatePresence>
@@ -93,7 +93,7 @@ const LoadingIndicator = () => (
 
 
 export function GameBoard() {
-  const localPlayerId = GameUIContext.useSelector(selectLocalPlayerId);
+  const localPlayerId = useUISelector(selectLocalPlayerId);
   const {
     gameStage,
     hasPlayers,
@@ -101,7 +101,7 @@ export function GameBoard() {
     pendingDrawnCard,
     isPlayerTurn,
     turnPhase,
-  } = GameUIContext.useSelector(selectGameBoardProps);
+  } = useUISelector(selectGameBoardProps);
 
   if (!localPlayerId || !hasGameState) {
     return <LoadingIndicator />;

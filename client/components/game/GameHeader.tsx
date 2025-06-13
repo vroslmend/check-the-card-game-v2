@@ -4,7 +4,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { PanelLeftClose, PanelLeftOpen, Info, Copy, Check, ChevronLeft } from 'lucide-react';
-import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUIActorRef, useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -18,8 +18,8 @@ const selectGameHeaderProps = (state: UIMachineSnapshot) => {
 };
 
 export const GameHeader = () => {
-  const { send } = GameUIContext.useActorRef();
-  const { gameId, isSidePanelOpen } = GameUIContext.useSelector(selectGameHeaderProps);
+  const { send } = useUIActorRef();
+  const { gameId, isSidePanelOpen } = useUISelector(selectGameHeaderProps);
   const [copied, setCopied] = React.useState(false);
 
   const toggleSidePanel = () => {

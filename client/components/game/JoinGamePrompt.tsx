@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { GameUIContext } from '@/context/GameUIContext';
+import { useUIActorRef } from '@/context/GameUIContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useParams } from 'next/navigation';
@@ -19,7 +19,7 @@ export const JoinGamePrompt = () => {
   });
 
   const [isLoading, setIsLoading] = useState(false);
-  const { send } = GameUIContext.useActorRef();
+  const { send } = useUIActorRef();
   const params = useParams();
   const gameId = params.gameId as string;
 

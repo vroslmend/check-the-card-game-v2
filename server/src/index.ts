@@ -185,7 +185,7 @@ io.on('connection', (socket: Socket) => {
         // FIX: Immediately invoke the callback with the success response.
         const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
         if (callback) {
-          callback({ success: true, gameId, playerId, gameState: playerSpecificView });
+          callback({ success: true, gameId, playerId });
         }
         
         // After confirming with the new player, broadcast to update the lobby for everyone else.

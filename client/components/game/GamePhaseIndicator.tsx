@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../ui/button';
 import { GameStage, PlayerActionType } from 'shared-types';
-import { GameUIContext, UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUIActorRef, useUISelector, UIMachineSnapshot } from '@/context/GameUIContext';
 import { Check } from 'lucide-react';
 import logger from '@/lib/logger';
 
@@ -20,8 +20,8 @@ const selectIsLocalPlayerReady = (state: UIMachineSnapshot) => {
 };
 
 export function GamePhaseIndicator({ stage, localPlayerId }: GamePhaseIndicatorProps) {
-  const { send } = GameUIContext.useActorRef();
-  const isLocalPlayerReady = GameUIContext.useSelector(selectIsLocalPlayerReady);
+  const { send } = useUIActorRef();
+  const isLocalPlayerReady = useUISelector(selectIsLocalPlayerReady);
 
   const handleReadyClick = () => {
     if (stage === GameStage.INITIAL_PEEK) {

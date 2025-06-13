@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { GameUIContext } from '@/context/GameUIContext';
+import { useUISelector } from '@/context/GameUIContext';
 import { GameBoard } from '@/components/game/GameBoard';
 import { GameLobby } from '@/components/game/GameLobby';
 import LoadingOrError from '@/components/layout/LoadingOrError';
@@ -9,7 +9,7 @@ import { RejoinModal } from '@/components/modals/RejoinModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function GameUI() {
-  const state = GameUIContext.useSelector((s) => s);
+  const state = useUISelector((s) => s);
 
   const renderContent = () => {
     if (state.matches('initializing')) {

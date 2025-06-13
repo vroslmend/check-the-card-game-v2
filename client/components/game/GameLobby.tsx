@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import { GameUIContext, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, Users, WifiOff, Clock, Copy, PartyPopper, UserMinus, MoreHorizontal, RefreshCw } from 'lucide-react';
 import { type Player, PlayerActionType } from 'shared-types';
@@ -49,8 +49,8 @@ const playerCardVariants = {
 };
 
 const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPlayer: boolean, index: number }) => {
-  const { send } = GameUIContext.useActorRef();
-  const snapshot = GameUIContext.useSelector(state => state);
+  const { send } = useUIActorRef();
+  const snapshot = useUISelector(state => state);
   const isGameMaster = snapshot.context.currentGameState?.gameMasterId === snapshot.context.localPlayerId;
   
   const [isHolding, setIsHolding] = useState(false);
@@ -220,7 +220,7 @@ const selectLobbyProps = (state: UIMachineSnapshot) => {
 };
 
 export const GameLobby = () => {
-  const { send } = GameUIContext.useActorRef();
+  const { send } = useUIActorRef();
   const {
     isLoading,
     players,
@@ -230,7 +230,7 @@ export const GameLobby = () => {
     hasEnoughPlayers,
     hasDisconnectedPlayers,
     gameId,
-  } = GameUIContext.useSelector(selectLobbyProps);
+  } = useUISelector(selectLobbyProps);
   const [copied, setCopied] = useState(false);
   const [buttonHovered, setButtonHovered] = useState(false);
   const [leaveButtonHovered, setLeaveButtonHovered] = useState(false);
