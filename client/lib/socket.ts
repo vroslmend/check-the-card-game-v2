@@ -8,6 +8,8 @@ import logger from './logger';
 
 const URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8000';
 
+logger.info({ socketUrl: URL }, 'Initializing Socket.IO client');
+
 // We create the socket instance once and export it.
 // The connection itself will be managed by our state machine.
 const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(URL, {

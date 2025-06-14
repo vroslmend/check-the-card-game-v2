@@ -35,8 +35,11 @@ const activeGameMachines = new Map<GameId, GameMachineActorRef>();
 const socketSessionMap = new Map<string, { gameId: GameId; playerId: PlayerId }>();
 const pendingCallbacks = new Map<string, (response: CreateGameResponse | JoinGameResponse) => void>();
 
-const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
-logger.info({ corsOrigin: CORS_ORIGIN }, `CORS origin set`);
+const CORS_ORIGIN = (process.env.CORS_ORIGIN ?? "http://localhost:3000,https://check-the-game.vercel.app")
+  .split(',')
+  .map((o) => o.trim());
+
+logger.info({ corsOrigins: CORS_ORIGIN }, 'CORS origins set');
 
 export const httpServer = http.createServer((req, res) => {
   // Health check endpoint for Render
@@ -51,9 +54,9 @@ export const httpServer = http.createServer((req, res) => {
 });
 export const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
-    origin: CORS_ORIGIN.split(','),
-    methods: ["GET", "POST"]
-  }
+    origin: CORS_ORIGIN,
+    methods: ["GET", "POST"],
+  },
 });
 
 io.on('connection', (socket: Socket) => {
@@ -298,7 +301,7 @@ io.on('connection', (socket: Socket) => {
 
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8000;
 httpServer.listen(PORT, () => {
   logger.info({ port: PORT }, 'Server listening');
 });
