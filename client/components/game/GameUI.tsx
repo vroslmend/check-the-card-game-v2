@@ -1,3 +1,5 @@
+// client/components/game/GameUI.tsx
+
 'use client';
 
 import React from 'react';
@@ -6,43 +8,69 @@ import { GameBoard } from '@/components/game/GameBoard';
 import { GameLobby } from '@/components/game/GameLobby';
 import LoadingOrError from '@/components/layout/LoadingOrError';
 import { RejoinModal } from '@/components/modals/RejoinModal';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
+import { GameStage } from 'shared-types';
+
+const selectStableView = (s: any) => {
+  if (s.context.modal?.type === 'rejoin' || s.matches({ inGame: 'promptToJoin' })) {
+    return 'loading';
+  }
+  if (s.context.currentGameState?.gameStage === GameStage.WAITING_FOR_PLAYERS) {
+    return 'lobby';
+  }
+  if (s.context.currentGameState?.gameStage) {
+    return 'game';
+  }
+  return 'loading';
+};
 
 export default function GameUI() {
-  const state = useUISelector((s) => s);
+  // Select only the parts of state needed for view routing.
+  const { state, gameStage, modalType, view } = useUISelector((s) => ({
+    state: s,
+    gameStage: s.context.currentGameState?.gameStage,
+    modalType: s.context.modal?.type,
+    view: selectStableView(s),
+  }));
 
   const renderContent = () => {
-    if (state.matches('initializing')) {
-      return <LoadingOrError message="Initializing Game..." />;
+    // 1. If we are prompting the user to join/rejoin, the modal takes precedence.
+    if (modalType === 'rejoin' || state.matches({ inGame: 'promptToJoin' })) {
+      return <LoadingOrError message="Awaiting your input..." />;
     }
-    if (state.matches({ inGame: 'lobby' })) {
-      return <GameLobby />;
-    }
-    if (state.hasTag('playing') || state.matches({ inGame: 'scoring' }) || state.matches({ inGame: 'gameover' })) {
+
+    // 2. We have gameStage information – route accordingly.
+    if (gameStage) {
+      if (gameStage === GameStage.WAITING_FOR_PLAYERS) {
+        return <GameLobby />;
+      }
+      // Any active gameplay stage renders the GameBoard.
       return <GameBoard />;
     }
-    if (state.matches({ inGame: 'promptToJoin' })) {
-      return <div className="w-full h-full bg-stone-900/10 backdrop-blur-sm" />;
-    }
+
+    // 3. Fallback – no gameStage yet, show connecting spinner.
     return <LoadingOrError message="Connecting..." />;
   };
 
   return (
-    <main className="fixed inset-0 overflow-hidden bg-stone-100 dark:bg-zinc-900">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={String(state.value)}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="w-full h-full"
-        >
-          {renderContent()}
-        </motion.div>
-      </AnimatePresence>
+    <LayoutGroup>
+      <main className="fixed inset-0 overflow-hidden bg-stone-100 dark:bg-zinc-900">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={view}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="w-full h-full"
+          >
+            {renderContent()}
+          </motion.div>
+        </AnimatePresence>
 
-      <RejoinModal />
-    </main>
+        {/* Rejoin modal controls its own visibility based on machine context */}
+        <RejoinModal />
+      </main>
+    </LayoutGroup>
   );
 }

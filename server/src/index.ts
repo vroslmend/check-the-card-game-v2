@@ -126,15 +126,20 @@ io.on('connection', (socket: Socket) => {
       socket.join(gameId);
       registerSocketSession(gameId, playerId);
       
-      // Send the join request to the machine
-      gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
+      // One-time listener: wait for the machine to confirm the player was added
+      const joinSubscription = gameActor.on('PLAYER_JOIN_SUCCESSFUL', (event) => {
+        if (event.playerId === playerId) {
+          logger.info({ gameId, playerId }, 'PLAYER_JOIN_SUCCESSFUL event received for creator. Responding to client.');
+          const creatorView = generatePlayerView(gameActor.getSnapshot(), playerId);
+          if (callback) {
+            callback({ success: true, gameId, playerId, gameState: creatorView });
+          }
+          joinSubscription.unsubscribe();
+        }
+      });
 
-      // FIX: Immediately invoke the callback with the success response.
-      // The game state is now ready for the creator.
-      const creatorView = generatePlayerView(gameActor.getSnapshot(), playerId);
-      if (callback) {
-        callback({ success: true, gameId, playerId, gameState: creatorView });
-      }
+      // Send the join request to the machine. The response will be handled by the listener above.
+      gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
 
     } catch (e: any) {
       logger.error({ err: e }, `[Server-CreateGame] Error`);
@@ -179,17 +184,22 @@ io.on('connection', (socket: Socket) => {
         socket.join(gameId);
         registerSocketSession(gameId, playerId);
 
+        // Set up a listener for the machine to confirm the join before responding to the client
+        const joinSubscription = gameActor.on('PLAYER_JOIN_SUCCESSFUL', (event) => {
+          if (event.playerId === playerId) {
+            logger.info({ gameId, playerId }, 'PLAYER_JOIN_SUCCESSFUL event received from machine. Responding to client.');
+            const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
+            if (callback) {
+              callback({ success: true, gameId, playerId, gameState: playerSpecificView });
+            }
+            joinSubscription.unsubscribe();
+          }
+        });
+
         // Send the join request to the machine
         gameActor.send({ type: 'PLAYER_JOIN_REQUEST', playerSetupData: finalPlayerSetupData, playerId });
 
-        // FIX: Immediately invoke the callback with the success response.
-        const playerSpecificView = generatePlayerView(gameActor.getSnapshot(), playerId);
-        if (callback) {
-          callback({ success: true, gameId, playerId });
-        }
-        
-        // After confirming with the new player, broadcast to update the lobby for everyone else.
-        broadcastGameState(gameId, gameActor);
+        // The broadcast will be triggered by the machine itself once state updates, so no manual broadcast here.
 
       } catch (e: any) {
         logger.error({ err: e }, `[Server-JoinGame] Error`);

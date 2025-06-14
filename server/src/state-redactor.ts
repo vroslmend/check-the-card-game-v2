@@ -4,13 +4,8 @@ import {
   PlayerId,
   ClientCheckGameState,
   GameStage,
-  TurnPhase,
-  RichGameLogMessage,
-  PlayerStatus,
-  ChatMessage,
-  ActiveAbility,
 } from 'shared-types';
-import type { GameContext, ServerPlayer } from './game-machine.js';
+import type { GameContext } from './game-machine.js';
 import logger from './lib/logger.js';
 
 /**
@@ -32,23 +27,18 @@ export const generatePlayerView = (
     const serverPlayer = fullGameContext.players[pId];
     const isViewingPlayer = pId === viewingPlayerId;
 
-    let clientHand: (Card | { facedown: true })[];
-
-    if (isViewingPlayer) {
-      // The player can always see their own hand. We explicitly map to ensure 
-      // the type is correctly inferred as (Card | { facedown: true })[]
-      // even though for the local player it will only ever contain Cards.
-      clientHand = serverPlayer.hand.map(card => ({ id: card.id, suit: card.suit, rank: card.rank }));
-    } else {
-      // Other players' hands are always facedown.
-      clientHand = serverPlayer.hand.map(() => ({ facedown: true as const }));
-    }
-
-    let clientPendingDrawnCard: Card | { facedown: true } | null = null;
+    // Redact opponent hands
+    const clientHand: (Card | { facedown: true })[] = isViewingPlayer
+      ? serverPlayer.hand
+      : serverPlayer.hand.map(() => ({ facedown: true as const }));
+    
+    // Correctly redact the pending drawn card according to our new shared type
+    let clientPendingDrawnCard: { card: Card } | null = null;
     if (serverPlayer.pendingDrawnCard) {
-      clientPendingDrawnCard = isViewingPlayer
-        ? serverPlayer.pendingDrawnCard.card
-        : { facedown: true as const };
+      if (isViewingPlayer) {
+        clientPendingDrawnCard = { card: serverPlayer.pendingDrawnCard.card };
+      }
+      // If not the viewing player, it remains null, correctly hiding the info.
     }
 
     clientPlayers[pId] = {
@@ -70,17 +60,12 @@ export const generatePlayerView = (
   if (typeof snapshot.value === 'string') {
     gameStageValue = snapshot.value as GameStage;
   } else if (typeof snapshot.value === 'object' && snapshot.value !== null) {
-    // For nested states, the value is an object like { PLAYING: 'turn' }. We want the top-level key.
     gameStageValue = Object.keys(snapshot.value)[0] as GameStage;
   } else {
-    // Fallback in case of an unexpected state value
     logger.warn({ value: snapshot.value, gameId: fullGameContext.gameId }, 'Unexpected snapshot value type, defaulting game stage.');
     gameStageValue = GameStage.WAITING_FOR_PLAYERS;
   }
   
-  // IMPROVEMENT: Implement private log redaction.
-  // This ensures that a player only receives log entries that are either 'public'
-  // or are 'private' and specifically intended for them.
   const clientLog = fullGameContext.log.filter(entry => 
       entry.type === 'public' || 
       (entry.type === 'private' && entry.actor?.id === viewingPlayerId)
@@ -102,7 +87,7 @@ export const generatePlayerView = (
     checkDetails: fullGameContext.checkDetails,
     gameover: fullGameContext.gameover,
     lastRoundLoserId: fullGameContext.lastRoundLoserId,
-    log: clientLog, // <-- Use the filtered log
+    log: clientLog,
     chat: fullGameContext.chat ?? [],
     discardPileIsSealed: fullGameContext.discardPileIsSealed,
   };

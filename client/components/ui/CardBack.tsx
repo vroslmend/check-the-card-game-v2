@@ -35,7 +35,7 @@ export function CardBack({
   return (
     <div
       className={cn(
-        "relative w-full h-full rounded-xl border border-stone-200/50 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-md",
+        "relative w-full h-full rounded-xl border border-stone-200/50 dark:border-zinc-600 bg-white dark:bg-zinc-300 shadow-md",
         sizeClasses[size]
       )}
     >
@@ -43,12 +43,12 @@ export function CardBack({
         <div 
           className="absolute inset-1.5 rounded-lg border border-dashed border-stone-300 dark:border-zinc-600 flex items-center justify-center"
         >
-          <div className="w-4 h-4 rounded-full bg-stone-200 dark:bg-zinc-700" />
+          <div className="w-4 h-4 rounded-full bg-stone-200 dark:bg-zinc-500" />
         </div>
       </div>
 
       {/* Card Pattern Background */}
-      <div className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-br from-white to-stone-100 dark:from-zinc-800 dark:to-zinc-900">
+      <div className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-br from-white to-stone-100 dark:from-zinc-300 dark:to-zinc-600">
         {/* Diamond pattern */}
         <motion.div 
           className="absolute inset-0 opacity-10"

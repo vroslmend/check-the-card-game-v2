@@ -48,7 +48,7 @@ export const LocalPlayerArea = () => {
 
     if (isChoosingSwapTarget) {
       logger.debug({ cardIndex }, 'Card clicked for swap and discard');
-      send({ type: PlayerActionType.SWAP_AND_DISCARD, payload: { cardIndex } });
+      send({ type: PlayerActionType.SWAP_AND_DISCARD, payload: { handCardIndex: cardIndex } });
       return;
     }
 

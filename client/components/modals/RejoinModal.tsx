@@ -1,19 +1,21 @@
-import { useState } from "react"
-import { useLocalStorage } from "usehooks-ts"
-import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Modal } from "@/components/ui/Modal"
-import { Loader } from "lucide-react"
-import { useUIActorRef, useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext"
+// client/components/modals/RejoinModal.tsx
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { useUIActorRef, useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Loader, Users, ArrowRight } from 'lucide-react';
+import { toast } from 'sonner';
 
 const selectRejoinModalProps = (state: UIMachineSnapshot) => {
   return {
     gameId: state.context.gameId,
-    // FIX: The modal's visibility and content are now driven by the modal context object
     modalInfo: state.context.modal, 
-    // This can be simplified if the loading state is just for the button
     isLoading: state.hasTag('loading'), 
   }
 }
@@ -22,76 +24,107 @@ export function RejoinModal() {
   const { send } = useUIActorRef();
   const { gameId, modalInfo, isLoading } = useUISelector(selectRejoinModalProps);
   
-  const [playerName, setPlayerName] = useLocalStorage("playerName", "", {
-    // Tell the hook how to read/write a raw string without JSON parsing
-    serializer: (value) => value,
-    deserializer: (value) => value,
+  // Use local state for the input field, initialized from localStorage
+  const [playerName, setPlayerName] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('localPlayerName') || '';
+    }
+    return '';
   });
 
-  // FIX: The check is now simpler and more direct
-  if (modalInfo?.type !== 'rejoin') {
-    return null;
-  }
-
-  const handleJoinGame = () => {
-    if (playerName.trim() && gameId) {
-      // The machine is already in the 'promptToJoin' state and is listening for this event.
-      send({
-        type: 'JOIN_GAME_REQUESTED',
-        playerName: playerName.trim(),
-        gameId,
-      })
+  // This effect ensures that if the modal becomes visible, the input is focused.
+  useEffect(() => {
+    if (modalInfo?.type === 'rejoin') {
+      setTimeout(() => {
+        document.getElementById('player-name-rejoin')?.focus();
+      }, 100);
     }
+  }, [modalInfo]);
+
+  const isVisible = modalInfo?.type === 'rejoin';
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (playerName.trim().length < 2) {
+      toast.error('Please enter a name with at least 2 characters.');
+      return;
+    }
+    if (!gameId) {
+      toast.error('Game ID is missing. Cannot join.');
+      return;
+    }
+    
+    // Persist the name for future joins
+    localStorage.setItem('localPlayerName', playerName.trim());
+    
+    send({
+      type: 'JOIN_GAME_REQUESTED',
+      playerName: playerName.trim(),
+      gameId,
+    });
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && playerName.trim() && !isLoading) {
-      handleJoinGame();
+      handleSubmit(e);
     }
-  }
+  };
 
   return (
-    <Modal
-      isOpen={modalInfo?.type === 'rejoin'}
-      onClose={() => send({ type: 'DISMISS_MODAL' })}
-      title={modalInfo.title}
-      description={modalInfo.message}
-    >
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="player-name">Your Name</Label>
-          <Input
-            id="player-name"
-            placeholder="e.g., Jane Doe"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            className="text-base"
-            onKeyDown={onKeyDown}
-          />
-        </div>
-        <motion.div
-          className="flex justify-end pt-4"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.3 }}
-        >
-          <Button
-            size="lg"
-            onClick={handleJoinGame}
-            disabled={isLoading || !playerName.trim()}
-            className="w-full sm:w-auto"
-          >
-            {isLoading ? (
-              <>
-                <Loader className="mr-2 h-4 w-4 animate-spin" />
-                Joining...
-              </>
-            ) : (
-              "Join Game"
-            )}
-          </Button>
-        </motion.div>
-      </div>
-    </Modal>
-  )
-} 
+    <Dialog open={isVisible} onOpenChange={(open) => !open && send({ type: 'DISMISS_MODAL' })}>
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800">
+        <form onSubmit={handleSubmit} className="relative p-6 md:p-8">
+            <DialogHeader className="mb-6 text-center">
+              <div className="inline-flex items-center justify-center gap-2 mx-auto">
+                <div className="rounded-full bg-stone-100 dark:bg-zinc-900 p-2">
+                  <Users className="h-5 w-5 text-stone-600 dark:text-stone-400" />
+                </div>
+                <DialogTitle className="text-3xl font-light">{modalInfo?.title || 'Join Game'}</DialogTitle>
+              </div>
+              <DialogDescription className="text-stone-500 dark:text-stone-400 mt-2">
+                {modalInfo?.message || `You've been invited to game ${gameId}`}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 mb-8">
+              <div className="space-y-2">
+                <Label htmlFor="player-name-rejoin" className="text-sm font-normal text-stone-600 dark:text-stone-400">
+                  What should we call you?
+                </Label>
+                <Input
+                  id="player-name-rejoin"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="rounded-xl border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 h-12 px-4 text-lg text-center"
+                  onKeyDown={onKeyDown}
+                  autoComplete="off"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center">
+              <Button
+                type="submit"
+                disabled={isLoading || !playerName.trim()}
+                className="w-full rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader className="mr-2 h-4 w-4 animate-spin" />
+                    Joining...
+                  </>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    Confirm and Join
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
+                )}
+              </Button>
+            </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

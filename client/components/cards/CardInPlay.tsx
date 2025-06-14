@@ -4,7 +4,7 @@ import React from 'react';
 import { Card as CardType } from 'shared-types';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { DeckCard } from './DeckCard';
+import { DeckCard } from './CardPile';
 
 interface CardInPlayProps {
   card: CardType;

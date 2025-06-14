@@ -8,7 +8,7 @@ import { PlayerPod } from './PlayerPod';
 import logger from '@/lib/logger';
 
 const selectOpponentProps = (state: UIMachineSnapshot) => {
-  const { localPlayerId, currentGameState } = state.context;
+  const { localPlayerId, currentGameState, currentAbilityContext } = state.context;
   if (!currentGameState || !localPlayerId) {
     return { opponentPlayers: [], currentPlayerId: null, abilityContext: undefined };
   }
@@ -20,16 +20,17 @@ const selectOpponentProps = (state: UIMachineSnapshot) => {
   return {
     opponentPlayers,
     currentPlayerId: currentGameState.currentPlayerId,
-    abilityContext: state.context.currentAbilityContext,
+    abilityContext: currentAbilityContext,
   };
 };
 
-const OpponentPod = ({ player, onCardClick, isCurrentTurn, abilityContext }: { player: Player; onCardClick: (playerId: PlayerId, cardIndex: number) => void; isCurrentTurn: boolean; abilityContext: ClientAbilityContext | undefined; }) => {
-  const isTargetable =
-    abilityContext?.selectedPeekTargets?.some((p) => p.playerId === player.id) ||
-    abilityContext?.selectedSwapTargets?.some((p) => p.playerId === player.id) ||
-    false;
-
+const OpponentPod = ({ player, onCardClick, isCurrentTurn, isTargetable, abilityContext }: { 
+  player: Player; 
+  onCardClick: (playerId: PlayerId, cardIndex: number) => void; 
+  isCurrentTurn: boolean; 
+  isTargetable: boolean;
+  abilityContext: ClientAbilityContext | undefined; 
+}) => {
   return (
     <motion.div
       layout
@@ -70,6 +71,8 @@ export const OpponentArea = () => {
     );
   }
 
+  const isAbilityTargetingPhase = !!abilityContext;
+
   return (
     <div className="relative w-full h-full flex items-center justify-center p-2 sm:p-4 rounded-lg bg-stone-50 dark:bg-zinc-800/50 shadow-inner">
       <motion.div layout className="flex flex-row items-center justify-center gap-4 h-full w-full">
@@ -80,6 +83,7 @@ export const OpponentArea = () => {
               player={player}
               onCardClick={handleCardClick}
               isCurrentTurn={player.id === currentPlayerId}
+              isTargetable={isAbilityTargetingPhase && !player.isLocked}
               abilityContext={abilityContext}
             />
           ))}

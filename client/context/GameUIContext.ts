@@ -1,19 +1,18 @@
 'use client';
 
 import { createContext, useContext, useMemo } from 'react';
-// Correctly import the types from the machine file
-import { type UIMachineActorRef, type UIMachineSnapshot } from '@/machines/uiMachine';
 import { useSyncExternalStore } from 'react';
+import { type UIMachineActorRef, type UIMachineSnapshot } from '@/machines/uiMachine';
 
-// Re-export the types so other files can use them
+// Re-export the types so components can use them easily
 export type { UIMachineSnapshot, UIMachineActorRef };
 
-// Create a standard React Context to hold our actor reference.
+// 1. Create a standard React Context to hold our actor reference.
 export const GameUIActorContext = createContext<UIMachineActorRef | null>(null);
 
 /**
  * A hook to get the raw actor reference from the context.
- * Useful for sending events.
+ * This is how components will get the `send` function.
  */
 export function useUIActorRef() {
   const actorRef = useContext(GameUIActorContext);
@@ -25,7 +24,7 @@ export function useUIActorRef() {
 
 /**
  * A hook to subscribe to the actor's state and select a part of it.
- * This is the equivalent of the `useSelector` that createActorContext provided.
+ * This is the custom equivalent of the `useSelector` that createActorContext provided.
  */
 export function useUISelector<T>(
   selector: (snapshot: UIMachineSnapshot) => T,
@@ -33,15 +32,15 @@ export function useUISelector<T>(
 ): T {
   const actorRef = useUIActorRef();
 
+  // useSyncExternalStore is the modern React hook for subscribing to external stores like XState.
   const state = useSyncExternalStore(
     (onStoreChange) => {
       const subscription = actorRef.subscribe(onStoreChange);
       return () => subscription.unsubscribe();
     },
-    () => actorRef.getSnapshot(),
-    () => actorRef.getSnapshot()
+    () => actorRef.getSnapshot(), // How to get the state on the client
+    () => actorRef.getSnapshot()  // How to get the state on the server (for hydration)
   );
 
-  // useMemo ensures the selector only re-runs when the state actually changes.
-  return useMemo(() => selector(state), [state, selector]);
+  return useMemo(() => selector(state), [state, selector, compare]);
 }

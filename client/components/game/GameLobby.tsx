@@ -70,7 +70,7 @@ const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPl
         
         if (progress >= 100) {
           clearInterval(interval);
-          send({ type: PlayerActionType.REMOVE_PLAYER, payload: { playerId: player.id } });
+          send({ type: PlayerActionType.REMOVE_PLAYER, payload: { playerIdToRemove: player.id } });
           setIsHolding(false);
           setHoldProgress(0);
         }

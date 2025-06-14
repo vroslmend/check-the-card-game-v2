@@ -159,7 +159,7 @@ describe('gameMachine', () => {
       // Assert game ends
       const snapshot = actor.getSnapshot();
       expect(snapshot.value).toBe(GameStage.GAMEOVER);
-      expect(snapshot.context.gameover?.winnerId).toBe(P2.id);
+      expect(snapshot.context.gameover?.winnerIds).toContain(P2.id);
       expect(snapshot.context.gameover?.loserId).toBe(P1.id);
     });
   });
@@ -351,7 +351,7 @@ describe('gameMachine', () => {
       expect(snapshot.value).toBe(GameStage.SCORING);
       expect(snapshot.context.gameover?.playerScores[P1.id]).toBe(1);
       expect(snapshot.context.gameover?.playerScores[P2.id]).toBe(14);
-      expect(snapshot.context.gameover?.winnerId).toBe(P1.id);
+      expect(snapshot.context.gameover?.winnerIds).toContain(P1.id);
     });
   });
 });

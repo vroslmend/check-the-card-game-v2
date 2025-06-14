@@ -115,35 +115,31 @@ export function GameBoard() {
     : undefined;
 
   return (
-    <LayoutGroup>
-      <div className="h-screen w-screen bg-stone-900 flex items-center justify-center p-4">
-        <div className="relative w-full h-full max-w-7xl max-h-[calc(100vh-2rem)] aspect-[16/10] bg-stone-100 dark:bg-zinc-900 rounded-lg shadow-2xl overflow-hidden">
-        
-          <ConnectionStatusBanner />
-          <GameStateError hasPlayers={hasPlayers} hasGameState={hasGameState} />
+    <div className="relative w-full h-full max-w-7xl max-h-[calc(100vh-2rem)] aspect-[16/10] bg-stone-100 dark:bg-zinc-900 rounded-lg shadow-2xl overflow-hidden">
+    
+      <ConnectionStatusBanner />
+      <GameStateError hasPlayers={hasPlayers} hasGameState={hasGameState} />
+      
+      {gameStage && <GamePhaseIndicator stage={gameStage} localPlayerId={localPlayerId} />}
+      
+      <ActionController>
+        <div className="grid grid-rows-[2fr,3fr,3fr] h-full p-1 sm:p-2 md:p-4 gap-1 sm:gap-2 md:gap-4 min-h-0">
+          {/* Opponent Area */}
+          <div className="min-h-0">
+            <OpponentArea />
+          </div>
           
-          {gameStage && <GamePhaseIndicator stage={gameStage} localPlayerId={localPlayerId} />}
+          {/* Table Area */}
+          <div className="min-h-0">
+            <TableArea drawnCard={drawnCardData} />
+          </div>
           
-          <ActionController>
-            <div className="grid grid-rows-[2fr,3fr,3fr] h-full p-1 sm:p-2 md:p-4 gap-1 sm:gap-2 md:gap-4 min-h-0">
-              {/* Opponent Area */}
-              <div className="min-h-0">
-                <OpponentArea />
-              </div>
-              
-              {/* Table Area */}
-              <div className="min-h-0">
-                <TableArea drawnCard={drawnCardData} />
-              </div>
-              
-              {/* Local Player Area */}
-              <div className="min-h-0">
-                <LocalPlayerArea />
-              </div>
-            </div>
-          </ActionController>
+          {/* Local Player Area */}
+          <div className="min-h-0">
+            <LocalPlayerArea />
+          </div>
         </div>
-      </div>
-    </LayoutGroup>
+      </ActionController>
+    </div>
   );
 }

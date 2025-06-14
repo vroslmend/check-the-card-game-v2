@@ -76,7 +76,7 @@ export interface Player {
   isLocked: boolean;
   score: number;
   isConnected: boolean;
-  pendingDrawnCard: Card | { facedown: true } | null;
+  pendingDrawnCard: { card: Card } | null;
 }
 
 /**
@@ -104,7 +104,7 @@ export interface ClientCheckGameState {
     callerId: PlayerId | null;
   } | null;
   gameover: {
-    winnerId: PlayerId | null;
+    winnerIds: PlayerId[];
     loserId: PlayerId | null;
     playerScores: Record<PlayerId, number>;
   } | null;
@@ -170,6 +170,7 @@ export interface CreateGameResponse extends BasicResponse {
 export interface JoinGameResponse extends BasicResponse {
   gameId?: GameId;
   playerId?: PlayerId;
+  gameState?: ClientCheckGameState;
 }
 
 export interface AttemptRejoinResponse extends BasicResponse {

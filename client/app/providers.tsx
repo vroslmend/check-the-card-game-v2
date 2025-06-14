@@ -3,122 +3,169 @@
 import { ThemeProvider } from 'next-themes';
 import { CursorProvider } from '@/components/providers/CursorProvider';
 import CustomCursor from '@/components/ui/CustomCursor';
-import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
+import { SmoothScrollProvider } from '@/components/providers/SmoothScrollProvider';
 import { Toaster } from '@/components/ui/sonner';
-import { GameUIActorContext, type UIMachineActorRef } from '@/context/GameUIContext';
+import {
+  GameUIActorContext,
+  type UIMachineActorRef,
+} from '@/context/GameUIContext';
 import { uiMachine, type UIMachineInput } from '@/machines/uiMachine';
 import { usePathname, useRouter } from 'next/navigation';
 import logger from '@/lib/logger';
 import { socket } from '@/lib/socket';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { createActor } from 'xstate';
-import { SocketEventName } from 'shared-types';
+import {
+  SocketEventName,
+  type ClientCheckGameState,
+  type PlayerActionType,
+} from 'shared-types';
 
-// The getInitialInput function remains unchanged and is correct.
-const getInitialInput = (pathname: string): UIMachineInput => {
-    if (typeof window === 'undefined') return {}; 
-    try {
-        const playerSessionJSON = sessionStorage.getItem('playerSession');
-        const initialGameStateJSON = sessionStorage.getItem('initialGameState');
-        
-        const session = playerSessionJSON ? JSON.parse(playerSessionJSON) : null;
-        const initialGameState = initialGameStateJSON ? JSON.parse(initialGameStateJSON) : null;
-        const gameIdFromUrl = pathname.split('/').pop();
-        
-        if (session?.gameId && session?.playerId && initialGameState && session.gameId === gameIdFromUrl) {
-            logger.info({ ...session }, "Providers: Will create actor with HYDRATION input.");
-            return { 
-                gameId: session.gameId, 
-                localPlayerId: session.playerId, 
-                initialGameState: initialGameState 
-            };
-        }
-        
-        if (session?.gameId && session?.playerId && session.gameId === gameIdFromUrl) {
-            logger.info({ ...session }, "Providers: Will create actor with REJOIN input.");
-            return { gameId: session.gameId, localPlayerId: session.playerId };
-        }
-
-        if (pathname.startsWith('/game/')) {
-            if (gameIdFromUrl) {
-                logger.warn({ gameId: gameIdFromUrl }, "Providers: Will create actor with PROMPT JOIN input.");
-                return { gameId: gameIdFromUrl };
-            }
-        }
-    } catch (e) {
-        logger.error({ error: e }, "Error creating initial input in Providers");
-    }
-    
-    logger.info("Providers: Will create actor with empty input.");
-    return {};
-};
-
+// ============================================================================
+//  EFFECTS BRIDGE COMPONENT – connects the actor to sockets and routing
+// ============================================================================
 function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Get the full type of the machine's emitted events for strong typing
-    type EmittedEvent = Parameters<Parameters<UIMachineActorRef['on']>[1]>[0];
+    type EmittedEvent = Parameters<Parameters<typeof actor.on>[1]>[0];
 
-    const socketSubscription = actor.on('EMIT_TO_SOCKET', (emitted: EmittedEvent) => {
-      // The `emitted` parameter is now strongly typed
+    const socketSub = actor.on('EMIT_TO_SOCKET', (emitted: EmittedEvent) => {
       if (emitted.type !== 'EMIT_TO_SOCKET') return;
-      
-      const { eventName, payload, ack } = emitted;
-      
-      if (eventName === SocketEventName.JOIN_GAME && Array.isArray(payload)) {
-          socket.emit(eventName, ...payload, ack as any);
-          return;
-      }
-      
-      switch (eventName) {
-        case SocketEventName.CREATE_GAME:
-        case SocketEventName.ATTEMPT_REJOIN:
-          if (ack) {
-            socket.emit(eventName, payload as any, ack as any);
-          } else {
-             logger.error({ eventName }, "Socket event expected ack, but none was provided.");
-          }
-          break;
-        case SocketEventName.PLAYER_ACTION:
-        case SocketEventName.SEND_CHAT_MESSAGE:
-          socket.emit(eventName, payload as any);
-          break;
-        default:
-          logger.warn({ eventName }, 'Unhandled socket event emitted from UI machine');
+      if (emitted.eventName === SocketEventName.PLAYER_ACTION) {
+        socket.emit(
+          emitted.eventName,
+          emitted.payload as { type: PlayerActionType; payload?: any }
+        );
+      } else {
+        logger.warn(
+          { event: emitted },
+          'Unhandled socket event emitted from UI machine'
+        );
       }
     });
 
-    const navigationSubscription = actor.on('NAVIGATE', (event: EmittedEvent) => {
-        // The `event` parameter is now strongly typed
-        if(event.type !== 'NAVIGATE') return;
-        router.push(event.path);
+    const navSub = actor.on('NAVIGATE', (event: EmittedEvent) => {
+      if (event.type !== 'NAVIGATE') return;
+      router.push(event.path);
     });
+
+    // Socket → Actor bridges
+    const gs = (g: ClientCheckGameState) =>
+      actor.send({ type: 'CLIENT_GAME_STATE_UPDATED', gameState: g });
+    const lg = (m: any) => actor.send({ type: 'NEW_GAME_LOG', logMessage: m });
+    const cm = (m: any) =>
+      actor.send({ type: 'NEW_CHAT_MESSAGE', chatMessage: m });
+    const pk = (d: { hand: any[] }) =>
+      actor.send({ type: 'INITIAL_PEEK_INFO', hand: d.hand });
+    const pr = (d: any) => actor.send({ type: 'ABILITY_PEEK_RESULT', ...d });
+    const er = (e: { message: string }) =>
+      actor.send({ type: 'ERROR_RECEIVED', error: e.message });
+    const il = (l: any[]) =>
+      actor.send({ type: 'INITIAL_LOGS_RECEIVED', logs: l });
+    const onConnect = () => actor.send({ type: 'CONNECT' });
+    const onDisconnect = () => actor.send({ type: 'DISCONNECT' });
+
+    socket.on(SocketEventName.GAME_STATE_UPDATE, gs);
+    socket.on(SocketEventName.SERVER_LOG_ENTRY, lg);
+    socket.on(SocketEventName.NEW_CHAT_MESSAGE, cm);
+    socket.on(SocketEventName.INITIAL_PEEK_INFO, pk);
+    socket.on(SocketEventName.ABILITY_PEEK_RESULT, pr);
+    socket.on(SocketEventName.ERROR_MESSAGE, er);
+    socket.on(SocketEventName.INITIAL_LOGS, il);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    if (!socket.connected) socket.connect();
+    else onConnect();
 
     return () => {
-      socketSubscription.unsubscribe();
-      navigationSubscription.unsubscribe();
+      socketSub.unsubscribe();
+      navSub.unsubscribe();
+      socket.off(SocketEventName.GAME_STATE_UPDATE, gs);
+      socket.off(SocketEventName.SERVER_LOG_ENTRY, lg);
+      socket.off(SocketEventName.NEW_CHAT_MESSAGE, cm);
+      socket.off(SocketEventName.INITIAL_PEEK_INFO, pk);
+      socket.off(SocketEventName.ABILITY_PEEK_RESULT, pr);
+      socket.off(SocketEventName.ERROR_MESSAGE, er);
+      socket.off(SocketEventName.INITIAL_LOGS, il);
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
     };
   }, [actor, router]);
 
   return null;
 }
 
+// ============================================================================
+//  MAIN PROVIDER COMPONENT – guarantees single actor instance via useRef
+// ============================================================================
 export function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [actor, setActor] = useState<UIMachineActorRef | null>(null);
+  const actorRef = useRef<UIMachineActorRef | null>(null);
 
-  useEffect(() => {
-    const input = getInitialInput(pathname);
-    const newActor = createActor(uiMachine, { input });
-    setActor(newActor);
-    newActor.start();
-    return () => { newActor.stop(); };
-  }, [pathname]);
+  if (actorRef.current === null) {
+    const getInitialInput = (): UIMachineInput => {
+      let initial: UIMachineInput = {};
 
-  if (!actor) {
-    return null;
+      // Capture gameId from URL when landing directly on game page
+      if (pathname.startsWith('/game/')) {
+        const id = pathname.split('/').pop();
+        if (id) initial.gameId = id;
+      }
+
+      // Restore session storage data if present
+      if (typeof window !== 'undefined') {
+        try {
+          const sessionJSON = sessionStorage.getItem('playerSession');
+          const session = sessionJSON ? JSON.parse(sessionJSON) : null;
+          if (session?.playerId) {
+            if (!initial.gameId || initial.gameId === session.gameId) {
+              initial.localPlayerId = session.playerId;
+              if (!initial.gameId) initial.gameId = session.gameId;
+            }
+          }
+        } catch (e) {
+          logger.error({ error: e }, 'Error reading playerSession from storage');
+        }
+      }
+
+      logger.info({ initial }, 'Creating UI machine actor (singleton via useRef)');
+      return initial;
+    };
+
+    actorRef.current = createActor(uiMachine, {
+      input: getInitialInput(),
+    }).start();
   }
+
+  const actor = actorRef.current!;
+
+  // Hydrate after hard refresh on game page
+  useEffect(() => {
+    const snap = actor.getSnapshot();
+    const gameIdFromUrl = pathname.startsWith('/game/')
+      ? pathname.split('/').pop()
+      : undefined;
+
+    if (
+      gameIdFromUrl &&
+      snap.context.localPlayerId &&
+      !snap.context.currentGameState
+    ) {
+      const gsJSON = sessionStorage.getItem('initialGameState');
+      if (gsJSON) {
+        try {
+          actor.send({
+            type: 'CLIENT_GAME_STATE_UPDATED',
+            gameState: JSON.parse(gsJSON),
+          });
+        } catch {
+          logger.error('Failed to parse initialGameState during hydration');
+        }
+      }
+    }
+  }, [pathname, actor]);
 
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>

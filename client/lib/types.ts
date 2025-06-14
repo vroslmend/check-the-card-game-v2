@@ -38,6 +38,21 @@ export type UIGamePhase =
 
 import { Card } from 'shared-types';
 
-export function isDrawnCard(card: unknown): card is { card: Card; source: 'deck' | 'discard' } {
-  return card !== null && typeof card === 'object' && 'card' in card && 'source' in card;
+/**
+ * A type guard to check if a card object is a full Card, not a facedown card.
+ */
+export function isCard(card: unknown): card is Card {
+  return typeof card === 'object' && card !== null && 'rank' in card;
+}
+
+/**
+ * A type guard to check if the pendingDrawnCard is valid.
+ */
+export function isDrawnCard(card: unknown): card is { card: Card } {
+  return (
+    typeof card === 'object' &&
+    card !== null &&
+    'card' in card &&
+    isCard((card as any).card)
+  );
 } 
