@@ -19,7 +19,7 @@ type ActionControllerContextType = {
 export const ActionControllerContext = createContext<ActionControllerContextType | null>(null);
 
 const selectActionControllerProps = (state: UIMachineSnapshot) => {
-  const { localPlayerId, currentGameState, currentAbilityContext } = state.context;
+  const { localPlayerId, currentGameState, currentAbilityContext, hasPassedMatch } = state.context;
   
   if (!currentGameState || !localPlayerId) {
     return {
@@ -34,6 +34,7 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       canDrawFromDeck: false,
       canDrawFromDiscard: false,
       allPlayersReady: false,
+      hasPassedMatch: false,
     };
   }
   
@@ -66,6 +67,7 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     canDrawFromDeck,
     canDrawFromDiscard,
     allPlayersReady,
+    hasPassedMatch,
   };
 };
 
@@ -112,7 +114,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ chi
   }, [props.isMyTurn, sendEvent, clearCallCheckTimers]);
   
   const getActions = useCallback((): Action[] => {
-    const { localPlayer, gameStage, abilityContext, isAbilityPlayer, isGameMaster, allPlayersReady, isMyTurn, matchingOpportunity } = props;
+    const { localPlayer, gameStage, abilityContext, isAbilityPlayer, isGameMaster, allPlayersReady, isMyTurn, matchingOpportunity, hasPassedMatch } = props;
     const actions: Action[] = [];
     if (!localPlayer || !gameStage) return actions;
 
@@ -130,7 +132,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ chi
         actions.push(createConfirmAbilityAction(() => sendEvent({type: 'CONFIRM_ABILITY_ACTION'}), type, 'swap', selected, required, selected !== required));
         actions.push(createSkipAbilityAction(() => sendEvent({type: 'SKIP_ABILITY_STAGE'}), type, 'swap'));
       }
-      actions.push(createCancelAbilityAction(() => sendEvent({type: 'CANCEL_ABILITY'})));
       return actions;
     }
 
@@ -139,28 +140,29 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ chi
         if (!localPlayer.isReady) actions.push(createPlayerReadyAction(() => sendEvent({type: PlayerActionType.DECLARE_LOBBY_READY})));
         if (isGameMaster) actions.push(createStartGameAction(() => sendEvent({type: PlayerActionType.START_GAME}), !allPlayersReady));
         break;
-      case GameStage.INITIAL_PEEK:
-        if (!localPlayer.isReady) actions.push(createReadyForPeekAction(() => sendEvent({type: PlayerActionType.DECLARE_READY_FOR_PEEK})));
-        break;
       case GameStage.PLAYING:
       case GameStage.FINAL_TURNS:
         if (isMyTurn) {
-          if (!localPlayer.pendingDrawnCard) {
+          const isDrawPhase = props.turnPhase === TurnPhase.DRAW;
+
+          if (isDrawPhase && !localPlayer.pendingDrawnCard) {
             actions.push(createDrawDeckAction(() => sendEvent({type: PlayerActionType.DRAW_FROM_DECK})));
             if (props.canDrawFromDiscard) actions.push(createDrawDiscardAction(() => sendEvent({type: PlayerActionType.DRAW_FROM_DISCARD})));
           }
-          if (isDrawnCard(localPlayer.pendingDrawnCard)) {
+          if (isDrawnCard(localPlayer.pendingDrawnCard) && (localPlayer.pendingDrawnCard as any).source === 'deck') {
             actions.push(createDiscardDrawnCardAction(() => sendEvent({type: PlayerActionType.DISCARD_DRAWN_CARD})));
           }
-          if (gameStage === GameStage.PLAYING && !localPlayer.pendingDrawnCard) {
+          if (isDrawPhase && gameStage === GameStage.PLAYING && !localPlayer.pendingDrawnCard) {
             actions.push(createCallCheckAction(handleStartCallCheckHold, callCheckProgress, false, isHoldingCallCheck));
           }
         }
-        if (matchingOpportunity && matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id)) {
+        if (matchingOpportunity && matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id) && !hasPassedMatch) {
           actions.push(createPassMatchAction(() => sendEvent({type: PlayerActionType.PASS_ON_MATCH_ATTEMPT})));
-          if (selectedCardIndex !== null) {
-            actions.push(createAttemptMatchAction(() => { sendEvent({type: PlayerActionType.ATTEMPT_MATCH, payload: { handCardIndex: selectedCardIndex } }); setSelectedCardIndex(null); }, false, true));
-          }
+        }
+        break;
+      case GameStage.INITIAL_PEEK:
+        if (!localPlayer.isReady) {
+          actions.push(createReadyForPeekAction(() => sendEvent({ type: PlayerActionType.DECLARE_READY_FOR_PEEK }))); 
         }
         break;
     }
@@ -172,14 +174,40 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ chi
     if (!localPlayer) return null;
 
     if (abilityContext && isAbilityPlayer) {
-      if (abilityContext.stage === 'peeking') return `PEEK: Select ${abilityContext.maxPeekTargets} card(s).`;
-      if (abilityContext.stage === 'swapping') return `SWAP: Select 2 cards to swap.`;
+      if (abilityContext.stage === 'peeking') return `PEEK: Select ${abilityContext.selectedPeekTargets.length}/${abilityContext.maxPeekTargets} card(s).`;
+      if (abilityContext.stage === 'swapping') return `SWAP: Select ${abilityContext.selectedSwapTargets.length}/2 cards.`;
     }
     if (isMyTurn && isDrawnCard(localPlayer.pendingDrawnCard)) {
       return 'Swap with a card in your hand or discard the drawn card.';
     }
     if (matchingOpportunity && matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id)) {
       return 'Select a card from your hand to attempt a match, or pass.';
+    }
+    if (props.gameStage === GameStage.INITIAL_PEEK && !localPlayer.isReady) {
+      return 'Memorize your bottom two cards, then press Ready.';
+    }
+    return null;
+  }, [props]);
+
+  const getStatusText = useCallback((): string | null => {
+    const { gameStage, isMyTurn } = props;
+    if (!gameStage) return null;
+
+    switch (gameStage) {
+      case GameStage.WAITING_FOR_PLAYERS:
+        return 'Lobby';
+      case GameStage.DEALING:
+        return 'Dealing Cards';
+      case GameStage.INITIAL_PEEK:
+        return 'Initial Peek';
+      case GameStage.PLAYING:
+        return isMyTurn ? 'Your Turn' : 'Opponent\'s Turn';
+      case GameStage.FINAL_TURNS:
+        return 'Final Turns';
+      case GameStage.SCORING:
+        return 'Scoring';
+      case GameStage.GAMEOVER:
+        return 'Game Over';
     }
     return null;
   }, [props]);
@@ -188,11 +216,18 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ chi
     <ActionControllerContext.Provider value={{ selectedCardIndex, setSelectedCardIndex }}>
       {children}
       <ActionBarComponent actions={getActions()}>
-        {getPromptText() && (
-          <p className="text-xs text-center text-neutral-300 px-2">
-            {getPromptText()}
-          </p>
-        )}
+        <>
+          {getStatusText() && (
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400 mb-0.5">
+              {getStatusText()}
+            </p>
+          )}
+          {getPromptText() && (
+            <p className="text-xs text-center text-neutral-300 px-2">
+              {getPromptText()}
+            </p>
+          )}
+        </>
       </ActionBarComponent>
     </ActionControllerContext.Provider>
   );

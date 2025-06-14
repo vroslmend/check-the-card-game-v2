@@ -15,6 +15,7 @@ export interface HandGridProps {
   selectedCardIndices?: number[]
   highlightedCardIndices?: number[]
   className?: string
+  initialPeekHighlight?: boolean
 }
 
 export const HandGrid = ({
@@ -26,6 +27,7 @@ export const HandGrid = ({
   selectedCardIndices = [],
   highlightedCardIndices = [],
   className,
+  initialPeekHighlight = false,
 }: HandGridProps) => {
   // Organize cards into a grid
   // For example: with 4 cards, we want a 2x2 grid
@@ -35,15 +37,23 @@ export const HandGrid = ({
   useEffect(() => {
     // Determine card size based on viewport width and hand size
     const calculateCardSize = () => {
-      const width = window.innerWidth
-      
-      if (width < 640) {
-        // Small screens: smaller cards
-        return hand.length > 6 ? 'xs' : 'sm'
-      } else {
-        // Larger screens: medium sized cards for normal hands
-        return hand.length > 8 ? 'sm' : 'md'
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      if (width < 768) {
+        // Phones – always use xs
+        return 'xs';
       }
+
+      if (width < 1024) {
+        // Tablets – sm unless very crowded
+        return hand.length > 6 ? 'xs' : 'sm';
+      }
+
+      // Desktop – md but fall back when too many cards or limited vertical space
+      if (height < 750) return 'sm';
+
+      return hand.length > 8 ? 'sm' : 'md';
     }
     
     // Set initial size
@@ -105,7 +115,7 @@ export const HandGrid = ({
                     "relative",
                     canInteract && 'cursor-pointer',
                     // Bottom row gets a special highlight in the initial peek phase
-                    rowIndex === gridCells.length - 1 && !isOpponent && "z-10"
+                    rowIndex === gridCells.length - 1 && !isOpponent && initialPeekHighlight && "z-10 border-2 border-dashed border-yellow-400 dark:border-yellow-500 rounded-lg"
                   )}
                   onClick={() => canInteract && onCardClick?.(card, cardIndex)}
                 >
@@ -121,10 +131,10 @@ export const HandGrid = ({
                       exit={{ scale: 0.8, opacity: 0 }}
                       transition={{ duration: 0.2 }}
                       className={cn(
-                        "relative transition-transform",
+                        "relative transition-transform rounded-xl",
                         canInteract && "hover:scale-105 hover:-translate-y-1 active:scale-95",
-                        isSelected && "ring-2 ring-blue-500 rounded-lg ring-offset-2 ring-offset-stone-100 dark:ring-offset-zinc-900",
-                        isHighlighted && "ring-2 ring-purple-500 rounded-lg ring-offset-2 ring-offset-stone-100 dark:ring-offset-zinc-900"
+                        isSelected && "ring-2 ring-blue-500 rounded-xl ring-offset-2 ring-offset-stone-100 dark:ring-offset-zinc-900",
+                        isHighlighted && "ring-2 ring-purple-500 rounded-xl ring-offset-2 ring-offset-stone-100 dark:ring-offset-zinc-900"
                       )}
                     >
                       <PlayingCard
@@ -132,8 +142,8 @@ export const HandGrid = ({
                         size={cardSize}
                         faceDown={'facedown' in card}
                         className={cn(
-                          "shadow-sm", 
-                          canInteract && "cursor-pointer",
+                          "shadow-sm rounded-xl", 
+                          canInteract && "cursor-pointer card-hover",
                           (isSelected || isHighlighted) && "shadow-md"
                         )}
                       />

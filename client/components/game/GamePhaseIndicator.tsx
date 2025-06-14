@@ -23,6 +23,14 @@ export function GamePhaseIndicator({ stage, localPlayerId }: GamePhaseIndicatorP
   const { send } = useUIActorRef();
   const isLocalPlayerReady = useUISelector(selectIsLocalPlayerReady);
 
+  // Determine if any player is still not ready during INITIAL_PEEK
+  const shouldShowInitialPeekPrompt = useUISelector((state) => {
+    if (stage !== GameStage.INITIAL_PEEK) return true; // not relevant
+    const gs = state.context.currentGameState;
+    if (!gs) return true;
+    return Object.values(gs.players).some((p) => !p.isReady);
+  });
+
   const handleReadyClick = () => {
     if (stage === GameStage.INITIAL_PEEK) {
       logger.info('Player clicked ready for peek');
@@ -58,6 +66,11 @@ export function GamePhaseIndicator({ stage, localPlayerId }: GamePhaseIndicatorP
   };
 
   const content = getStageContent();
+
+  // Hide overlay during peek animation once everyone is ready
+  if (stage === GameStage.INITIAL_PEEK && !shouldShowInitialPeekPrompt) {
+    return null;
+  }
 
   if (!content) {
     return null;

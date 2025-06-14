@@ -189,6 +189,15 @@ html {
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.08);
   }
 
+  /* Primary gradient button */
+  .btn-primary {
+    @apply rounded-full px-3 py-1.5 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white transition-colors pointer-events-auto select-none;
+  }
+
+  .btn-icon {
+    @apply rounded-full p-2 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white;
+  }
+
   .dark .card-hover:hover {
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
   }

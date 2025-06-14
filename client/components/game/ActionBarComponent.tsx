@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ActionButton from './ActionButton';
+import Magnetic from '@/components/ui/Magnetic';
 
 export interface Action {
   label: string;
@@ -36,10 +37,12 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 400, damping: 35 }}
-        className={`flex flex-row items-center justify-center flex-wrap gap-1.5 p-1.5 bg-neutral-800/85 backdrop-blur-md rounded-full shadow-xl w-auto`}
+        className={"flex flex-row items-center justify-center flex-wrap gap-1.5 p-1.5 bg-neutral-800/70 dark:bg-zinc-800/70 backdrop-blur-md rounded-full shadow-xl w-auto"}
       >
         {actions.map((action, i) => (
-          <ActionButton key={action.label || i} action={action} />
+          <Magnetic key={action.label || i} strength={20}>
+            <ActionButton action={action} />
+          </Magnetic>
         ))}
       </motion.div>
 
@@ -48,11 +51,11 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
           <motion.div
             layout
             key={React.isValidElement(children) ? children.key : 'static-prompt-key'}
-            className="mt-1.5 text-center p-1 bg-neutral-900/70 backdrop-blur-sm rounded-md shadow-md w-auto max-w-full"
+            className="mt-1.5 flex flex-col items-center gap-0.5 text-center p-1 bg-neutral-900/70 backdrop-blur-sm rounded-md shadow-md w-auto max-w-xs sm:max-w-sm"
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
           >
             {children}
           </motion.div>

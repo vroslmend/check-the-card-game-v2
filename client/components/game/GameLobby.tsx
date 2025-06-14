@@ -195,7 +195,9 @@ const selectLobbyProps = (state: UIMachineSnapshot) => {
     };
   }
 
-  const players = Object.values(currentGameState.players);
+  const players = currentGameState.turnOrder
+    ? currentGameState.turnOrder.map((id: string) => currentGameState.players[id])
+    : Object.values(currentGameState.players);
   const localPlayer = localPlayerId ? currentGameState.players[localPlayerId] : null;
   const isGameMaster = localPlayerId === currentGameState.gameMasterId;
 
@@ -566,74 +568,51 @@ export const GameLobby = () => {
                 {getLobbyStatus()}
               </div>
               
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={isGameMaster && isPlayerReady ? "start-game-btn" : "ready-btn"}
+              <Magnetic>
+                <motion.button
+                  key="lobby-main-action"
+                  onClick={buttonConfig.action}
+                  disabled={buttonConfig.disabled}
+                  className={cn(
+                    "h-14 min-w-64 rounded-full shadow-xl px-8 relative overflow-hidden flex items-center justify-center gap-2",
+                    buttonConfig.colors,
+                    buttonConfig.disabled && "opacity-70 cursor-not-allowed"
+                  )}
+                  data-cursor-link
+                  onMouseEnter={() => setButtonHovered(true)}
+                  onMouseLeave={() => setButtonHovered(false)}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -20, scale: 0.9 }}
-                  transition={{ 
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 20,
-                    duration: 0.4
-                  }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20, duration: 0.4 }}
                 >
-                  <Magnetic>
-                    <motion.button
-                      onClick={buttonConfig.action}
-                      disabled={buttonConfig.disabled}
-                      className={cn(
-                        "h-14 min-w-64 rounded-full shadow-xl px-8 relative overflow-hidden flex items-center justify-center gap-2",
-                        buttonConfig.colors,
-                        buttonConfig.disabled && "opacity-70 cursor-not-allowed"
-                      )}
-                      data-cursor-link
-                      onMouseEnter={() => setButtonHovered(true)}
-                      onMouseLeave={() => setButtonHovered(false)}
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                    initial={false}
+                    animate={{ x: buttonHovered ? "100%" : "-100%" }}
+                    transition={{ duration: 1.5, ease: "easeInOut" }}
+                  />
+
+                  <span className="relative z-10 flex items-center gap-2 font-medium">
+                    <motion.span
+                      key={buttonConfig.text}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3 }}
                     >
-                      <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-                        initial={{ x: "-100%" }}
-                        animate={{ 
-                          x: buttonHovered ? "100%" : "-100%"
-                        }}
-                        transition={{ 
-                          duration: 1.5, 
-                          ease: "easeInOut"
-                        }}
-                      />
-                      
-                      <span className="relative z-10 flex items-center gap-2 font-medium">
-                        <motion.span
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.3 }}
-                        >
-                          {buttonConfig.text}
-                        </motion.span>
-                        <motion.div
-                          animate={
-                            buttonConfig.text === "Ready!" || buttonConfig.text === "Start Game" && buttonHovered
-                            ? { rotate: [0, 15, -15, 0] }
-                            : { x: [0, 5, 0] }
-                          }
-                          transition={{
-                            duration: buttonConfig.text === "Ready!" ? 1 : 1.5,
-                            repeat: Infinity,
-                            repeatDelay: 1,
-                            ease: "easeInOut",
-                          }}
-                        >
-                          {buttonConfig.icon}
-                        </motion.div>
-                      </span>
-                    </motion.button>
-                  </Magnetic>
-                </motion.div>
-              </AnimatePresence>
+                      {buttonConfig.text}
+                    </motion.span>
+                    <motion.div
+                      key={buttonConfig.disabled ? "disabled-icon" : "enabled-icon"}
+                      animate={buttonHovered ? { rotate: [0, 15, -15, 0] } : { x: [0, 5, 0] }}
+                      transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1, ease: "easeInOut" }}
+                    >
+                      {buttonConfig.icon}
+                    </motion.div>
+                  </span>
+                </motion.button>
+              </Magnetic>
             </motion.div>
           </div>
         </div>

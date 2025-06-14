@@ -35,55 +35,25 @@ export function CardBack({
   return (
     <div
       className={cn(
-        "relative w-full h-full rounded-xl border border-stone-200/50 dark:border-zinc-600 bg-white dark:bg-zinc-300 shadow-md",
+        "relative w-full h-full rounded-xl overflow-hidden shadow-md border",
+        "border-emerald-700/40 text-emerald-50 dark:border-emerald-300/60 dark:text-emerald-900",
         sizeClasses[size]
       )}
     >
-      <div className="absolute inset-0 rounded-xl overflow-hidden">
-        <div 
-          className="absolute inset-1.5 rounded-lg border border-dashed border-stone-300 dark:border-zinc-600 flex items-center justify-center"
-        >
-          <div className="w-4 h-4 rounded-full bg-stone-200 dark:bg-zinc-500" />
-        </div>
-      </div>
+      {/* solid background always present */}
+      <div className="absolute inset-0 z-0 bg-emerald-700 dark:bg-emerald-300" />
 
-      {/* Card Pattern Background */}
-      <div className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-br from-white to-stone-100 dark:from-zinc-300 dark:to-zinc-600">
-        {/* Diamond pattern */}
-        <motion.div 
-          className="absolute inset-0 opacity-10"
-          initial={{ backgroundPosition: "0% 0%" }}
-          animate={{ backgroundPosition: ["0% 0%", "100% 100%"] }}
-          transition={{ duration: 20, repeat: Infinity, repeatType: "reverse" }}
-          style={{
-            backgroundImage: `repeating-linear-gradient(
-              45deg,
-              currentColor 0,
-              currentColor 1px,
-              transparent 0,
-              transparent 10px
-            )`
-          }}
-        />
+      {/* subtle noise overlay */}
+      <div className="absolute inset-0 z-10 pointer-events-none opacity-10 bg-[url('/noise.svg')] bg-repeat" />
 
-        {/* Center emblem */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <motion.div 
-            className={cn(
-              "flex items-center justify-center",
-              size === 'xs' ? "w-8 h-8" : size === 'sm' ? "w-10 h-10" : "w-12 h-12"
-            )}
-            initial={{ opacity: 0.5 }}
-            animate={{ opacity: [0.5, 0.7, 0.5] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <div className={cn(
-              "font-serif italic text-stone-600/50 dark:text-stone-400 transform -rotate-12",
-              size === 'xs' ? "text-sm" : size === 'sm' ? "text-base" : "text-lg"
-            )}>
-              Check
-            </div>
-          </motion.div>
+      {/* minimal emblem */}
+      <div className="absolute inset-0 z-20 flex items-center justify-center">
+        <div className={cn(
+          "font-serif italic -rotate-12",
+          "text-emerald-100/70 dark:text-emerald-800/60",
+          size === 'xs' ? 'text-sm' : size === 'sm' ? 'text-base' : 'text-lg'
+        )}>
+          Check
         </div>
       </div>
 
@@ -91,7 +61,7 @@ export function CardBack({
       {isPeeked && (
         <motion.div
           className={cn(
-            "absolute right-1 top-1 flex items-center justify-center rounded-full bg-blue-500 dark:bg-blue-400",
+            "absolute right-1 top-1 flex items-center justify-center rounded-full bg-blue-500 dark:bg-blue-600",
             size === 'xs' ? "h-3 w-3" : "h-4 w-4"
           )}
           initial={{ scale: 0, opacity: 0 }}
@@ -106,7 +76,7 @@ export function CardBack({
       {isTarget && (
         <motion.div
           className={cn(
-            "absolute left-1 top-1 flex items-center justify-center rounded-full bg-amber-500 dark:bg-amber-400",
+            "absolute left-1 top-1 flex items-center justify-center rounded-full bg-amber-600 dark:bg-amber-500",
             size === 'xs' ? "h-3 w-3" : "h-4 w-4"
           )}
           initial={{ scale: 0, opacity: 0 }}

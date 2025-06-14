@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import type { Card } from 'shared-types';
+import { CardRank } from 'shared-types';
 import { CardBack } from "../ui/CardBack"
 import { useState, useEffect } from "react"
 
@@ -18,6 +19,7 @@ const PlayingCardRenderer = ({ card, size = "lg" }: { card: Card, size?: "xs" | 
 
   const colorClass = suitColors[card.suit] || 'text-stone-900 dark:text-stone-100';
   const symbol = suitSymbols[card.suit] || '?';
+  const rankLabel = card.rank === CardRank.Ten ? '10' : card.rank;
   
   const sizeClasses = {
     xs: "w-10 h-14 p-0.5 text-xs",
@@ -35,7 +37,7 @@ const PlayingCardRenderer = ({ card, size = "lg" }: { card: Card, size?: "xs" | 
     >
       {/* Top Left */}
       <div className={cn('text-left', colorClass)}>
-        <div className="font-bold leading-none">{card.rank}</div>
+        <div className="font-bold leading-none">{rankLabel}</div>
         <div className="leading-none">{symbol}</div>
       </div>
 
@@ -50,7 +52,7 @@ const PlayingCardRenderer = ({ card, size = "lg" }: { card: Card, size?: "xs" | 
 
       {/* Bottom Right (Rotated) */}
       <div className={cn('self-end rotate-180 text-left', colorClass)}>
-        <div className="font-bold leading-none">{card.rank}</div>
+        <div className="font-bold leading-none">{rankLabel}</div>
         <div className="leading-none">{symbol}</div>
       </div>
     </div>
@@ -86,31 +88,15 @@ export function PlayingCard({
   className,
   position
 }: PlayingCardProps) {
-  // Track the previous face-down state to enable animations
-  const [previousIsFaceDown, setPreviousIsFaceDown] = useState(faceDown);
-  const [isFlipping, setIsFlipping] = useState(false);
-  
-  // Detect changes in faceDown to trigger flip animation
-  useEffect(() => {
-    if (previousIsFaceDown !== faceDown) {
-      setIsFlipping(true);
-      const timer = setTimeout(() => {
-        setIsFlipping(false);
-        setPreviousIsFaceDown(faceDown);
-      }, 400); // Match this with the flip animation duration
-      return () => clearTimeout(timer);
-    }
-  }, [faceDown, previousIsFaceDown]);
-
-  // Determine if we should show the front or back based on animation state
-  const showFront = (isFlipping ? previousIsFaceDown : !faceDown) && !!card;
+  // Simply derive whether the card front should be visible
+  const showFront = !faceDown && !!card;
   
   const springConfig = { type: "spring", stiffness: 400, damping: 25 };
   
   // Define animation variants
   const variants = {
     initial: { 
-      opacity: 0, 
+      opacity: 1, 
       y: 20, 
       scale: 0.95 
     },
@@ -124,7 +110,6 @@ export function PlayingCard({
       }
     },
     exit: { 
-      opacity: 0, 
       scale: 0.95,
       transition: { 
         duration: 0.2 
@@ -188,13 +173,14 @@ export function PlayingCard({
       whileHover="hover"
       whileTap="tap"
       className={cn(
-        "relative cursor-pointer transition-all duration-200",
+        "relative cursor-pointer transition-all duration-200 rounded-xl",
         isSelected && "ring-1 ring-blue-500/50",
         isTarget && "ring-1 ring-amber-500/50",
         isPeeked && "ring-1 ring-green-500/50",
         isHighlighted && "ring-1 ring-yellow-500/50",
         !canInteract && "cursor-not-allowed opacity-70",
         sizeClasses[size],
+        faceDown && "bg-emerald-700 dark:bg-emerald-300",
         className
       )}
       onClick={canInteract ? onClick : undefined}
@@ -206,19 +192,14 @@ export function PlayingCard({
       <motion.div 
         className="w-full h-full relative"
         animate={{
-          rotateY: showFront ? "0deg" : "180deg"
+          rotateY: showFront ? "0deg" : "180deg",
+          transition: { duration: 0.5, ease: "easeInOut" }
         }}
-        transition={{
-          duration: isFlipping ? 0.4 : 0,
-          ease: "easeInOut"
-        }}
-        style={{ 
-          transformStyle: "preserve-3d"
-        }}
+        style={{ transformStyle: "preserve-3d" }}
       >
         {/* Front of card */}
         <motion.div 
-          className="absolute w-full h-full backface-hidden"
+          className="absolute w-full h-full"
           style={{ 
             backfaceVisibility: "hidden",
             transform: showFront ? "rotateY(0deg)" : "rotateY(180deg)"
@@ -229,7 +210,7 @@ export function PlayingCard({
         
         {/* Back of card */}
         <motion.div 
-          className="absolute w-full h-full backface-hidden"
+          className="absolute w-full h-full"
           style={{ 
             backfaceVisibility: "hidden",
             transform: !showFront ? "rotateY(0deg)" : "rotateY(-180deg)"

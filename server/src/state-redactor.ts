@@ -33,10 +33,10 @@ export const generatePlayerView = (
       : serverPlayer.hand.map(() => ({ facedown: true as const }));
     
     // Correctly redact the pending drawn card according to our new shared type
-    let clientPendingDrawnCard: { card: Card } | null = null;
+    let clientPendingDrawnCard: { card: Card, source: string } | null = null;
     if (serverPlayer.pendingDrawnCard) {
       if (isViewingPlayer) {
-        clientPendingDrawnCard = { card: serverPlayer.pendingDrawnCard.card };
+        clientPendingDrawnCard = { card: serverPlayer.pendingDrawnCard.card, source: serverPlayer.pendingDrawnCard.source };
       }
       // If not the viewing player, it remains null, correctly hiding the info.
     }

@@ -28,7 +28,7 @@ const LoadingOrError = ({ message, isError = false }: LoadingOrErrorProps) => {
       <h2 className={`text-xl font-semibold ${isError ? 'text-destructive' : ''}`}>
         {isError ? 'An Error Occurred' : 'Loading'}
       </h2>
-      <p className="text-muted-foreground mt-2">{message}</p>
+      <p className="text-muted-foreground mt-2" suppressHydrationWarning>{message}</p>
     </div>
   );
 };

@@ -53,14 +53,14 @@ export const TableArea = ({ drawnCard }: TableAreaProps) => {
   }
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center p-2 sm:p-4 rounded-lg bg-stone-50 dark:bg-zinc-800/50 shadow-inner">
-      <div className="flex flex-row items-center justify-center gap-6 sm:gap-10 md:gap-16 lg:gap-20">
+    <div className="relative w-full h-auto max-h-60 md:max-h-full flex items-center justify-center p-1 sm:p-3 md:p-4 rounded-lg bg-stone-50 dark:bg-zinc-800/50 shadow-inner">
+      <div className="flex flex-row flex-wrap items-center justify-center gap-4 sm:gap-6 md:gap-10 lg:gap-16">
         {/* Deck */}
         <VisualCardStack 
           title="Deck" 
           count={deckSize} 
           faceDown 
-          size="md"
+          size={typeof window !== 'undefined' && window.innerWidth < 1024 ? 'sm' : 'md'}
           canInteract={canDrawFromDeck}
           onClick={handleDeckClick}
         />
@@ -89,7 +89,7 @@ export const TableArea = ({ drawnCard }: TableAreaProps) => {
           isSealed={discardPileIsSealed}
           canInteract={canDrawFromDiscard}
           onClick={handleDiscardClick}
-          size="md"
+          size={typeof window !== 'undefined' && window.innerWidth < 1024 ? 'sm' : 'md'}
         />
       </div>
     </div>

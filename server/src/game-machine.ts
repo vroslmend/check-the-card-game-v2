@@ -27,8 +27,9 @@ const CARDS_PER_PLAYER = parseInt(process.env.CARDS_PER_PLAYER || '4', 10);
 const RECONNECT_TIMEOUT_MS = parseInt(process.env.RECONNECT_TIMEOUT_MS || '30000', 10);
 
 export interface ServerActiveAbility extends Omit<ActiveAbility, 'stage'> {
-  stage: 'peeking' | 'swapping' | 'done';
+  stage: 'peeking' | 'swapping';
   source: 'discard' | 'stack' | 'stackSecondOfPair';
+  remainingPeeks?: number;
 }
 export interface ServerPlayer { id: PlayerId; name: string; socketId: string; hand: Card[]; isReady: boolean; isDealer: boolean; hasCalledCheck: boolean; isLocked: boolean; score: number; isConnected: boolean; status: PlayerStatus; pendingDrawnCard: { card: Card; source: 'deck' | 'discard'; } | null; forfeited: boolean; }
 export interface GameContext { gameId: string; deck: Card[]; players: Record<PlayerId, ServerPlayer>; discardPile: Card[]; turnOrder: PlayerId[]; gameMasterId: PlayerId | null; currentPlayerId: PlayerId | null; currentTurnSegment: TurnPhase | null; gameStage: GameStage; matchingOpportunity: { cardToMatch: Card; originalPlayerID: PlayerId; remainingPlayerIDs: PlayerId[]; } | null; abilityStack: ServerActiveAbility[]; checkDetails: { callerId: PlayerId; finalTurnOrder: PlayerId[]; finalTurnIndex: number; } | null; gameover: { winnerIds: PlayerId[]; loserId: PlayerId | null; playerScores: Record<PlayerId, number>; } | null; lastRoundLoserId: PlayerId | null; log: RichGameLogMessage[]; chat: ChatMessage[]; discardPileIsSealed: boolean; errorState: { message: string; retryCount: number; errorType: 'DECK_EMPTY' | 'NETWORK_ERROR' | 'PLAYER_ERROR' | 'GENERAL_ERROR' | null; affectedPlayerId?: PlayerId; recoveryState?: any; } | null; maxPlayers: number; cardsPerPlayer: number; }
@@ -47,7 +48,10 @@ const applyDiscardLogic = (context: GameContext, cardToDiscard: Card, playerId: 
     let newAbilityStack = [...context.abilityStack];
     if (abilityRanks.has(cardToDiscard.rank)) {
       const type: AbilityType = cardToDiscard.rank === CardRank.King ? 'king' : cardToDiscard.rank === CardRank.Queen ? 'peek' : 'swap';
-      newAbilityStack.push({ type, stage: type === 'king' || type === 'peek' ? 'peeking' : 'swapping', playerId, sourceCard: cardToDiscard, source: 'discard' });
+      const abilityObj: ServerActiveAbility = { type, stage: type === 'king' || type === 'peek' ? 'peeking' : 'swapping', playerId, sourceCard: cardToDiscard, source: 'discard' };
+      if (type === 'king') abilityObj.remainingPeeks = 2;
+      if (type === 'peek') abilityObj.remainingPeeks = 1;
+      newAbilityStack.push(abilityObj);
     }
     return {
       discardPile: [...context.discardPile, cardToDiscard],
@@ -114,7 +118,7 @@ export const gameMachine = setup({
         return true;
       }
     
-      if (payload.action === 'peek' && (currentAbility.type === 'peek' || (currentAbility.type === 'king' && currentAbility.stage === 'peeking'))) {
+      if (payload.action === 'peek' && currentAbility.stage === 'peeking' && (currentAbility.type === 'peek' || currentAbility.type === 'king')) {
         // Check that no target is a locked opponent
         for (const target of payload.targets) {
           const targetPlayer = context.players[target.playerId];
@@ -125,7 +129,7 @@ export const gameMachine = setup({
         return true;
       }
     
-      if (payload.action === 'swap' && (currentAbility.type === 'swap' || (currentAbility.type === 'king' && currentAbility.stage === 'swapping'))) {
+      if (payload.action === 'swap' && currentAbility.stage === 'swapping') {
         const { source, target } = payload;
         const sourcePlayer = context.players[source.playerId];
         const targetPlayer = context.players[target.playerId];
@@ -199,12 +203,25 @@ export const gameMachine = setup({
       const newPlayers = JSON.parse(JSON.stringify(context.players)) as Record<PlayerId, ServerPlayer>;
       let newLog = [...context.log];
       if (payload.action === 'skip') {
-        if (currentAbility.type === 'king' && currentAbility.stage === 'peeking') { currentAbility.stage = 'swapping'; } else { newAbilityStack.pop(); }
-        newLog.push(createLogEntry(context, { message: `${getPlayerNameForLog(playerId, context)} skipped their ability.`, type: 'public', tags: ['player-action', 'ability']}));
-      } else if (payload.action === 'peek' && (currentAbility.type === 'peek' || (currentAbility.type === 'king' && currentAbility.stage === 'peeking'))) {
-        if (currentAbility.type === 'king') { currentAbility.stage = 'swapping'; } else { newAbilityStack.pop(); }
+        if (currentAbility.stage === 'peeking') {
+          // Player chooses to forego the peek(s) but still retain the swap phase
+          currentAbility.stage = 'swapping';
+          delete currentAbility.remainingPeeks;
+          newLog.push(createLogEntry(context, { message: `${getPlayerNameForLog(playerId, context)} skipped their peeks.`, type: 'public', tags: ['player-action', 'ability'] }));
+        } else {
+          // Skipping during swap stage ends the ability entirely
+          newAbilityStack.pop();
+          newLog.push(createLogEntry(context, { message: `${getPlayerNameForLog(playerId, context)} skipped their swap.`, type: 'public', tags: ['player-action', 'ability'] }));
+        }
+      } else if (payload.action === 'peek' && currentAbility.stage === 'peeking' && (currentAbility.type === 'peek' || currentAbility.type === 'king')) {
+        if (currentAbility.remainingPeeks && currentAbility.remainingPeeks > 1) {
+          currentAbility.remainingPeeks -= 1;
+        } else {
+          currentAbility.stage = 'swapping';
+          delete currentAbility.remainingPeeks;
+        }
         newLog = [...newLog, createLogEntry(context, { message: `${getPlayerNameForLog(playerId, context)} used Peek.`, type: 'public', tags: ['player-action', 'ability']})];
-      } else if (payload.action === 'swap' && (currentAbility.type === 'swap' || (currentAbility.type === 'king' && currentAbility.stage === 'swapping'))) {
+      } else if (payload.action === 'swap' && currentAbility.stage === 'swapping') {
         const { source, target } = payload;
         const sourcePlayer = newPlayers[source.playerId]!; const targetPlayer = newPlayers[target.playerId]!;
         const sourceCard = sourcePlayer.hand[source.cardIndex]; const targetCard = targetPlayer.hand[target.cardIndex];
@@ -327,8 +344,12 @@ export const gameMachine = setup({
           const getAbilityStage = (type: AbilityType) => type === 'king' || type === 'peek' ? 'peeking' : 'swapping';
           const originalDiscarderAbilityType = getAbilityType(cardOnDiscard.rank);
           const matcherAbilityType = getAbilityType(cardFromHand.rank);
-          newAbilityStack.push({ type: originalDiscarderAbilityType, stage: getAbilityStage(originalDiscarderAbilityType), playerId: originalDiscarderId, sourceCard: cardOnDiscard, source: 'stackSecondOfPair' });
-          newAbilityStack.push({ type: matcherAbilityType, stage: getAbilityStage(matcherAbilityType), playerId: playerId, sourceCard: cardFromHand, source: 'stack' });
+          const ability1: ServerActiveAbility = { type: originalDiscarderAbilityType, stage: getAbilityStage(originalDiscarderAbilityType), playerId: originalDiscarderId, sourceCard: cardOnDiscard, source: 'stackSecondOfPair' };
+          const ability2: ServerActiveAbility = { type: matcherAbilityType, stage: getAbilityStage(matcherAbilityType), playerId: playerId, sourceCard: cardFromHand, source: 'stack' };
+          if (ability1.type === 'king') ability1.remainingPeeks = 2; else if (ability1.type === 'peek') ability1.remainingPeeks = 1;
+          if (ability2.type === 'king') ability2.remainingPeeks = 2; else if (ability2.type === 'peek') ability2.remainingPeeks = 1;
+          newAbilityStack.push(ability1);
+          newAbilityStack.push(ability2);
       }
       return { players: newPlayers, discardPile: [...context.discardPile, cardFromHand], matchingOpportunity: null, discardPileIsSealed: true, abilityStack: newAbilityStack, log: [...context.log, createLogEntry(context, { message: `${getPlayerNameForLog(playerId, context)} matched a ${cardFromHand.rank}.`, type: 'public', tags: ['player-action', 'game-event'] })], checkDetails: newCheckDetails, gameStage };
     }),
@@ -560,34 +581,45 @@ export const gameMachine = setup({
       after: { 100: GameStage.INITIAL_PEEK },
     },
     [GameStage.INITIAL_PEEK]: {
-        entry: [
-          'log_ENTER_INITIAL_PEEK',
-          enqueueActions(({ context, enqueue }) => {
+      entry: ['log_ENTER_INITIAL_PEEK', 'broadcastGameState'],
+      initial: 'waitingForReady',
+      states: {
+        waitingForReady: {
+          on: {
+            [PlayerActionType.DECLARE_READY_FOR_PEEK]: {
+              actions: ['updatePlayerPeekReady', 'broadcastGameState'],
+            },
+          },
+          always: {
+            target: 'peeking',
+            guard: 'allPlayersReadyForPeek',
+          },
+        },
+        peeking: {
+          entry: enqueueActions(({ context, enqueue }) => {
             context.turnOrder.forEach(playerId => {
                 const playerHand = context.players[playerId]!.hand;
-                // As per the rules, players can only peek at their bottom two cards.
-                // We assume this means the last two cards dealt to them.
                 const peekableCards = playerHand.slice(-2);
-        
                 enqueue(emit({
                     type: 'SEND_EVENT_TO_PLAYER',
                     payload: {
                         playerId,
                         eventName: SocketEventName.INITIAL_PEEK_INFO,
-                        // Only send the cards the player is allowed to see.
                         eventData: { hand: peekableCards }
                     }
                 }));
             });
             enqueue('broadcastGameState' as const);
-        })
-      ] as const,
-      invoke: { src: 'peekTimer', onDone: { target: GameStage.PLAYING, actions: 'setInitialPlayer' as const } },
-      on: {
-        [PlayerActionType.DECLARE_READY_FOR_PEEK]: { actions: ['updatePlayerPeekReady', 'broadcastGameState'] as const },
-        'TIMER.PEEK_EXPIRED': { target: GameStage.PLAYING, actions: 'setInitialPlayer' as const },
-      },
-      always: { target: GameStage.PLAYING, guard: 'allPlayersReadyForPeek' as const, actions: 'setInitialPlayer' as const }
+          }),
+          invoke: { 
+            src: 'peekTimer', 
+            onDone: { 
+              target: `#game.${GameStage.PLAYING}`, 
+              actions: 'setInitialPlayer' 
+            }
+          },
+        }
+      }
     },
     [GameStage.PLAYING]: {
       entry: 'log_ENTER_PLAYING',
@@ -636,8 +668,8 @@ export const gameMachine = setup({
               on: { [PlayerActionType.SWAP_AND_DISCARD]: { guard: and(['isPlayerTurn', 'hasDrawnCard']), actions: 'swapAndDiscard', target: 'postDiscard' } },
             },
             postDiscard: {
-              entry: 'broadcastGameState' as const,
-              always: [{ guard: 'isAbilityCardOnTopOfAbilityStack' as const, target: 'ability' }, { target: 'matching' }] as const,
+              entry: 'broadcastGameState',
+              always: { target: 'matching' },
             },
             ability: {
               entry: 'log_ENTER_TURN_ABILITY',
@@ -649,7 +681,7 @@ export const gameMachine = setup({
             },
             matching: {
               entry: ['log_ENTER_TURN_MATCHING', 'setupMatchingOpportunity', 'broadcastGameState'] as const,
-              invoke: { src: 'matchingTimerActor', onDone: { target: 'endOfTurn', actions: ['clearMatchingOpportunity', 'broadcastGameState'] as const } },
+              invoke: { src: 'matchingTimerActor', onDone: { actions: ['clearMatchingOpportunity', 'broadcastGameState'], target: 'ability' } },
               on: {
                 [PlayerActionType.ATTEMPT_MATCH]: [
                   { guard: 'canAttemptMatch' as const, actions: 'handleSuccessfulMatch', target: 'postMatch' },
@@ -657,10 +689,10 @@ export const gameMachine = setup({
                 ],
                 [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: { actions: 'handlePlayerPassedOnMatch' },
               },
-              always: {
-                guard: ({ context }: { context: GameContext }) => !context.matchingOpportunity || context.matchingOpportunity.remainingPlayerIDs.length === 0,
-                target: 'endOfTurn', actions: ['clearMatchingOpportunity', 'broadcastGameState'] as const,
-              },
+              always: [
+                { guard: ({ context }: { context: GameContext }) => (!context.matchingOpportunity || context.matchingOpportunity.remainingPlayerIDs.length === 0) && context.abilityStack.length > 0, target: 'ability', actions: ['clearMatchingOpportunity', 'broadcastGameState'] },
+                { guard: ({ context }: { context: GameContext }) => (!context.matchingOpportunity || context.matchingOpportunity.remainingPlayerIDs.length === 0) && context.abilityStack.length === 0, target: 'endOfTurn', actions: ['clearMatchingOpportunity', 'broadcastGameState'] },
+              ],
             },
             postMatch: {
               always: [
@@ -719,7 +751,7 @@ export const gameMachine = setup({
             },
             matching: {
               entry: ['log_ENTER_TURN_MATCHING', 'setupMatchingOpportunity', 'broadcastGameState'] as const,
-              invoke: { src: 'matchingTimerActor', onDone: { target: 'endOfTurn', actions: ['clearMatchingOpportunity', 'broadcastGameState'] as const } },
+              invoke: { src: 'matchingTimerActor', onDone: { actions: ['clearMatchingOpportunity', 'broadcastGameState'], target: 'ability' } },
               on: {
                 [PlayerActionType.ATTEMPT_MATCH]: [
                   { guard: 'canAttemptMatch' as const, actions: 'handleSuccessfulMatch', target: 'postMatch' },
@@ -727,10 +759,10 @@ export const gameMachine = setup({
                 ],
                 [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: { actions: 'handlePlayerPassedOnMatch' },
               },
-              always: {
-                guard: ({ context }: { context: GameContext }) => !context.matchingOpportunity || context.matchingOpportunity.remainingPlayerIDs.length === 0,
-                target: 'endOfTurn', actions: ['clearMatchingOpportunity', 'broadcastGameState'] as const,
-              },
+              always: [
+                { guard: ({ context }: { context: GameContext }) => (!context.matchingOpportunity || context.matchingOpportunity.remainingPlayerIDs.length === 0) && context.abilityStack.length > 0, target: 'ability', actions: ['clearMatchingOpportunity', 'broadcastGameState'] },
+                { guard: ({ context }: { context: GameContext }) => (!context.matchingOpportunity || context.matchingOpportunity.remainingPlayerIDs.length === 0) && context.abilityStack.length === 0, target: 'endOfTurn', actions: ['clearMatchingOpportunity', 'broadcastGameState'] },
+              ],
             },
             postMatch: {
               always: [

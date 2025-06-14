@@ -75,27 +75,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
 
   return (
     <div className={cn("relative flex flex-col items-center justify-center", className)}>
-      {isInitialPeek && isLocalPlayer && (
-        <AnimatePresence>
-          <motion.div 
-            className="absolute -bottom-2 -inset-x-2 h-1/2 rounded-lg border border-dashed border-yellow-400 dark:border-yellow-500 z-0 flex items-end justify-center pb-1"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ 
-              opacity: [0.3, 0.6, 0.3], 
-              scale: 1,
-            }}
-            transition={{ 
-              opacity: { repeat: Infinity, duration: 2 },
-              scale: { duration: 0.5 }
-            }}
-          >
-            <div className='flex items-center gap-1.5 text-yellow-500 dark:text-yellow-400 text-xs font-semibold'>
-              <Eye className='w-3 h-3' />
-              <span>Initial Peek</span>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      )}
+      {/* Removed outer dashed overlay, individual cards now highlighted */}
       
       <HandGrid
         ownerId={player.id}
@@ -105,6 +85,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
         onCardClick={(_, index) => onCardClick(index)}
         selectedCardIndices={selectedCardIndex !== null ? [selectedCardIndex] : []}
         highlightedCardIndices={getHighlightedIndices()}
+        initialPeekHighlight={isInitialPeek && isLocalPlayer}
       />
     </div>
   );

@@ -5,10 +5,8 @@ import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { TableArea } from './TableArea';
-import { OpponentArea } from './OpponentArea';
-import { LocalPlayerArea } from './LocalPlayerArea';
-import { GameStage, type Card, TurnPhase } from 'shared-types';
-import { GamePhaseIndicator } from './GamePhaseIndicator';
+import PlayerHandStrip from './PlayerHandStrip';
+import { type Card, TurnPhase } from 'shared-types';
 import { ActionController } from './ActionController';
 import { isDrawnCard } from '@/lib/types';
 
@@ -95,7 +93,6 @@ const LoadingIndicator = () => (
 export function GameBoard() {
   const localPlayerId = useUISelector(selectLocalPlayerId);
   const {
-    gameStage,
     hasPlayers,
     hasGameState,
     pendingDrawnCard,
@@ -107,36 +104,66 @@ export function GameBoard() {
     return <LoadingIndicator />;
   }
 
-  const drawnCardData = 
+  const drawnCardData =
     isPlayerTurn &&
     turnPhase === TurnPhase.DISCARD &&
     isDrawnCard(pendingDrawnCard)
-    ? pendingDrawnCard.card
-    : undefined;
+      ? pendingDrawnCard.card
+      : undefined;
+
+  const gameState = useUISelector((state) => state.context.currentGameState);
+  const abilityContext = useUISelector((state) => state.context.currentAbilityContext);
+  const opponentPlayers = gameState && localPlayerId ? Object.values(gameState.players).filter((p) => p.id !== localPlayerId) : [];
 
   return (
-    <div className="relative max-w-7xl max-h-[calc(100vh-4rem)] w-full aspect-[16/10] bg-stone-100 dark:bg-zinc-900 rounded-lg shadow-2xl overflow-hidden">
+    <div className="relative w-full md:max-w-7xl glass rounded-none md:rounded-[2.5rem] shadow-xl md:shadow-2xl border-t md:border md:border-stone-200 dark:md:border-zinc-800 pb-32 md:pb-10 mt-24 md:mt-28 max-h-[calc(100vh-5rem)] overflow-y-auto overflow-x-visible">
     
       <ConnectionStatusBanner />
       <GameStateError hasPlayers={hasPlayers} hasGameState={hasGameState} />
       
-      {gameStage && <GamePhaseIndicator stage={gameStage} localPlayerId={localPlayerId} />}
-      
       <ActionController>
-        <div className="grid grid-rows-[2fr,3fr,3fr] h-full p-1 sm:p-2 md:p-4 gap-1 sm:gap-2 md:gap-4 min-h-0">
-          {/* Opponent Area */}
-          <div className="min-h-0">
-            <OpponentArea />
+        <div
+          className="flex flex-col md:grid h-full p-1 sm:p-3 md:p-6 gap-2 sm:gap-4 md:gap-8 min-h-0"
+          style={{ gridTemplateRows: 'auto minmax(140px,1fr) auto' }}
+        >
+          {/* Opponents */}
+          <div className="min-h-0 flex items-center justify-center overflow-x-auto">
+            {opponentPlayers && opponentPlayers.length > 0 ? (
+              <div className="flex flex-row items-center justify-center gap-4 h-full w-full">
+                {opponentPlayers.map((op) => (
+                  <PlayerHandStrip
+                    key={op.id}
+                    player={op}
+                    isLocalPlayer={false}
+                    isCurrentTurn={gameState?.currentPlayerId === op.id}
+                    isTargetable={!!abilityContext && !op.isLocked}
+                    abilityContext={abilityContext}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-lg bg-stone-50 dark:bg-zinc-800/50 shadow-inner">
+                <p className="font-serif text-stone-500">Waiting for opponents...</p>
+              </div>
+            )}
           </div>
-          
-          {/* Table Area */}
-          <div className="min-h-0">
+
+          {/* Table */}
+          <div className="min-h-0 flex-1">
             <TableArea drawnCard={drawnCardData} />
           </div>
-          
-          {/* Local Player Area */}
-          <div className="min-h-0">
-            <LocalPlayerArea />
+
+          {/* Local player */}
+          <div className="min-h-0 flex items-center justify-center overflow-x-auto pb-2">
+            {localPlayerId && gameState ? (
+              <PlayerHandStrip
+                player={gameState.players[localPlayerId]}
+                isLocalPlayer={true}
+                isCurrentTurn={isPlayerTurn}
+                isTargetable={false}
+                abilityContext={abilityContext}
+              />
+            ) : null}
           </div>
         </div>
       </ActionController>

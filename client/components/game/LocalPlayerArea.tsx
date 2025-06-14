@@ -66,7 +66,7 @@ export const LocalPlayerArea = () => {
   return (
     <motion.div 
       layout 
-      className="relative w-full h-full flex flex-col justify-end p-2 sm:p-4 bg-stone-50 dark:bg-zinc-800/50 rounded-lg shadow-inner"
+      className="relative w-full h-full flex flex-col justify-end p-3 sm:p-6 pb-8 sm:pb-10 glass rounded-lg shadow-inner overflow-y-auto"
     >
       {/* Player Hand Area */}
       <div className="flex-grow flex flex-col items-center justify-center w-full">

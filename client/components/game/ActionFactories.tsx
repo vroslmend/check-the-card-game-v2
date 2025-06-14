@@ -79,13 +79,13 @@ export const createAttemptMatchAction = (
 // Special ability actions
 export const createConfirmAbilityAction = (
   onClick: () => void, 
-  abilityType: string,
+  _abilityType: string,
   stage: string,
-  selectionCount: number, 
-  requiredCount: number,
+  _selectionCount: number, 
+  _requiredCount: number,
   disabled?: boolean
 ): Action => ({
-  label: `${abilityType} - ${stage.toUpperCase()}: Confirm ${selectionCount}/${requiredCount}`,
+  label: stage === 'peeking' ? 'Confirm Peek' : 'Confirm Swap',
   onClick,
   disabled,
   icon: <CheckCircle className="h-5 w-5" />,
@@ -94,11 +94,11 @@ export const createConfirmAbilityAction = (
 
 export const createSkipAbilityAction = (
   onClick: () => void, 
-  abilityType: string,
+  _abilityType: string,
   stage: string,
   disabled?: boolean
 ): Action => ({
-  label: `Skip ${abilityType} ${stage}`,
+  label: stage === 'peeking' ? 'Skip Peek' : 'Skip Swap',
   onClick,
   disabled,
   icon: <SkipForward className="h-5 w-5" />,

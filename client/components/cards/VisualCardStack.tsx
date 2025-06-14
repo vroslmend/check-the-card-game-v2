@@ -50,9 +50,14 @@ export const VisualCardStack: React.FC<VisualCardStackProps> = ({
       {/* Card stack */}
       <div 
         className={cn(
-          "relative",
-          canInteract && "cursor-pointer"
+          "relative flex items-center justify-center transition-colors duration-200",
+          canInteract && "cursor-pointer shadow-md hover:shadow-lg",
+          // Only show slot border/background when empty
+          (!topCard && !faceDown)
+            ? "rounded-xl border border-stone-300 dark:border-zinc-700 bg-white/70 dark:bg-zinc-900/60 opacity-80"
+            : "bg-transparent border-none rounded-xl"
         )}
+        style={(!topCard && !faceDown) ? { minWidth: size === 'xs' ? 40 : size === 'sm' ? 48 : size === 'md' ? 64 : 80, minHeight: size === 'xs' ? 56 : size === 'sm' ? 64 : size === 'md' ? 96 : 112 } : undefined}
         onClick={canInteract ? onClick : undefined}
       >
         <AnimatePresence>
@@ -76,7 +81,7 @@ export const VisualCardStack: React.FC<VisualCardStackProps> = ({
             faceDown={faceDown || !topCard}
             card={topCard || undefined}
             className={cn(
-              "shadow-lg border border-stone-200 dark:border-zinc-700",
+              "shadow-lg border border-stone-200 dark:border-zinc-700 rounded-xl",
               canInteract && "hover:shadow-xl"
             )}
           />

@@ -211,15 +211,31 @@ export const uiMachine = setup({
     emitConfirmAbility: emit(({ context }) => {
       const ability = context.currentAbilityContext;
       if (!ability) throw new Error('Ability context missing');
+      const playerId = context.localPlayerId;
+      if (!playerId) throw new Error('Local player ID missing');
+      
       let payload: AbilityActionPayload;
       if (ability.stage === 'peeking') {
         payload = { action: 'peek', targets: ability.selectedPeekTargets };
       } else {
         payload = { action: 'swap', source: ability.selectedSwapTargets[0]!, target: ability.selectedSwapTargets[1]!, sourceCard: ability.sourceCard };
       }
-      return { type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.USE_ABILITY, payload } } as const;
+      return { type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.USE_ABILITY, playerId, payload } } as const;
     }),
-    emitSkipAbilityStage: emit({ type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.USE_ABILITY, payload: { action: 'skip' } } } as const),
+    emitSkipAbilityStage: emit(({ context }) => {
+      const playerId = context.localPlayerId;
+      if (!playerId) throw new Error('Local player ID missing');
+      logger.debug({ action: 'skip', playerId }, 'Emitting skip ability action');
+      return { 
+        type: 'EMIT_TO_SOCKET', 
+        eventName: SocketEventName.PLAYER_ACTION, 
+        payload: { 
+          type: PlayerActionType.USE_ABILITY, 
+          playerId, 
+          payload: { action: 'skip' } 
+        } 
+      } as const;
+    }),
     showErrorToast: ({ event }) => { 
       assertEvent(event, 'ERROR_RECEIVED'); 
       toast.error(event.error); 
