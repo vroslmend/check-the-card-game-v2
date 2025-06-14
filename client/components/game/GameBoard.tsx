@@ -115,7 +115,7 @@ export function GameBoard() {
     : undefined;
 
   return (
-    <div className="relative w-full h-full max-w-7xl max-h-[calc(100vh-2rem)] aspect-[16/10] bg-stone-100 dark:bg-zinc-900 rounded-lg shadow-2xl overflow-hidden">
+    <div className="relative max-w-7xl max-h-[calc(100vh-4rem)] w-full aspect-[16/10] bg-stone-100 dark:bg-zinc-900 rounded-lg shadow-2xl overflow-hidden">
     
       <ConnectionStatusBanner />
       <GameStateError hasPlayers={hasPlayers} hasGameState={hasGameState} />

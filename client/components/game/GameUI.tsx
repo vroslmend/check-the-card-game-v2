@@ -62,7 +62,7 @@ export default function GameUI() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="w-full h-full"
+            className="w-full h-full flex items-center justify-center p-4"
           >
             {renderContent()}
           </motion.div>
