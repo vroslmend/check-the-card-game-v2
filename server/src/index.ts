@@ -38,10 +38,20 @@ const pendingCallbacks = new Map<string, (response: CreateGameResponse | JoinGam
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:3000";
 logger.info({ corsOrigin: CORS_ORIGIN }, `CORS origin set`);
 
-export const httpServer = http.createServer();
+export const httpServer = http.createServer((req, res) => {
+  // Health check endpoint for Render
+  if (req.url === '/health' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('ok');
+    return;
+  }
+  // Fallback for other requests
+  res.writeHead(404);
+  res.end();
+});
 export const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
-    origin: CORS_ORIGIN,
+    origin: CORS_ORIGIN.split(','),
     methods: ["GET", "POST"]
   }
 });

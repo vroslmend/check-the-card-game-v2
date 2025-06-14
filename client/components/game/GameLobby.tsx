@@ -265,11 +265,11 @@ export const GameLobby = () => {
 
   if (isLoading) {
     return (
-      <>
+      <div className="w-full max-w-2xl mx-auto">
         {/* Add the CSS animation style */}
         <style>{spinnerStyle}</style>
         <motion.div 
-          className="flex items-center justify-center min-h-screen font-serif"
+          className="w-full font-serif"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
@@ -296,7 +296,7 @@ export const GameLobby = () => {
             )}
           </div>
         </motion.div>
-      </>
+      </div>
     );
   }
   
@@ -377,7 +377,9 @@ export const GameLobby = () => {
   const buttonConfig = getButtonConfig();
 
   return (
-    <div className="flex items-center justify-center min-h-screen py-10 px-4">
+    <>
+      {/* Add the CSS animation style */}
+      <style>{spinnerStyle}</style>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -636,6 +638,6 @@ export const GameLobby = () => {
           </div>
         </div>
       </motion.div>
-    </div>
+    </>
   );
 }; 
