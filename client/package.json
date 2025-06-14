@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --no-lint",
+    "postinstall": "npm run build -w shared-types",
     "start": "next start",
     "lint": "next lint"
   },
