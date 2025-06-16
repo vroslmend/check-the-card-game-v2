@@ -111,7 +111,7 @@ html {
 @layer utilities {
   .glass {
     background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     will-change: transform;
@@ -161,6 +161,26 @@ html {
 
   .text-gradient {
     background: linear-gradient(135deg, hsl(var(--foreground)), hsl(var(--muted-foreground)));
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shift 4s ease-in-out infinite;
+    will-change: background-position;
+  }
+
+  .text-stone-gradient {
+    background: linear-gradient(135deg, hsl(25, 5%, 45%), hsl(25, 5%, 65%));
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shift 4s ease-in-out infinite;
+    will-change: background-position;
+  }
+
+  .dark .text-stone-gradient {
+    background: linear-gradient(135deg, hsl(240, 5%, 65%), hsl(240, 5%, 85%));
     background-size: 200% 100%;
     background-clip: text;
     -webkit-background-clip: text;

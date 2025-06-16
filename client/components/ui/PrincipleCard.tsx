@@ -55,7 +55,7 @@ export function PrincipleCard({ icon: Icon, title, description, scrollYProgress 
           ref={ref}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
-          whileHover={{ scale: 1.05, boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)" }}
+          whileHover={{ scale: 1.05, boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0)" }}
           style={{
             rotateX,
             rotateY,

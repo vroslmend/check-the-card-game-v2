@@ -1,4 +1,4 @@
-import { setup, assign, fromPromise, assertEvent, emit, and, not, enqueueActions } from 'xstate';
+import { setup, assign, fromPromise, assertEvent, emit, and, not, enqueueActions, raise } from 'xstate';
 import {
   Card,
   CardRank,
@@ -25,6 +25,7 @@ const MATCHING_STAGE_DURATION_MS = parseInt(process.env.MATCHING_STAGE_DURATION_
 const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || '4', 10);
 const CARDS_PER_PLAYER = parseInt(process.env.CARDS_PER_PLAYER || '4', 10);
 const RECONNECT_TIMEOUT_MS = parseInt(process.env.RECONNECT_TIMEOUT_MS || '30000', 10);
+const LOBBY_DISCONNECT_TIMEOUT_MS = parseInt(process.env.LOBBY_DISCONNECT_TIMEOUT_MS || '5000', 10);
 
 export interface ServerActiveAbility extends Omit<ActiveAbility, 'stage'> {
   stage: 'peeking' | 'swapping';
@@ -32,10 +33,10 @@ export interface ServerActiveAbility extends Omit<ActiveAbility, 'stage'> {
   remainingPeeks?: number;
 }
 export interface ServerPlayer { id: PlayerId; name: string; socketId: string; hand: Card[]; isReady: boolean; isDealer: boolean; hasCalledCheck: boolean; isLocked: boolean; score: number; isConnected: boolean; status: PlayerStatus; pendingDrawnCard: { card: Card; source: 'deck' | 'discard'; } | null; forfeited: boolean; }
-export interface GameContext { gameId: string; deck: Card[]; players: Record<PlayerId, ServerPlayer>; discardPile: Card[]; turnOrder: PlayerId[]; gameMasterId: PlayerId | null; currentPlayerId: PlayerId | null; currentTurnSegment: TurnPhase | null; gameStage: GameStage; matchingOpportunity: { cardToMatch: Card; originalPlayerID: PlayerId; remainingPlayerIDs: PlayerId[]; } | null; abilityStack: ServerActiveAbility[]; checkDetails: { callerId: PlayerId; finalTurnOrder: PlayerId[]; finalTurnIndex: number; } | null; gameover: { winnerIds: PlayerId[]; loserId: PlayerId | null; playerScores: Record<PlayerId, number>; } | null; lastRoundLoserId: PlayerId | null; log: RichGameLogMessage[]; chat: ChatMessage[]; discardPileIsSealed: boolean; errorState: { message: string; retryCount: number; errorType: 'DECK_EMPTY' | 'NETWORK_ERROR' | 'PLAYER_ERROR' | 'GENERAL_ERROR' | null; affectedPlayerId?: PlayerId; recoveryState?: any; } | null; maxPlayers: number; cardsPerPlayer: number; }
+export interface GameContext { gameId: string; deck: Card[]; players: Record<PlayerId, ServerPlayer>; discardPile: Card[]; turnOrder: PlayerId[]; gameMasterId: PlayerId | null; currentPlayerId: PlayerId | null; currentTurnSegment: TurnPhase | null; gameStage: GameStage; matchingOpportunity: { cardToMatch: Card; originalPlayerID: PlayerId; remainingPlayerIDs: PlayerId[]; } | null; abilityStack: ServerActiveAbility[]; checkDetails: { callerId: PlayerId; finalTurnOrder: PlayerId[]; finalTurnIndex: number; } | null; gameover: { winnerIds: PlayerId[]; loserId: PlayerId | null; playerScores: Record<PlayerId, number>; } | null; lastRoundLoserId: PlayerId | null; log: RichGameLogMessage[]; chat: ChatMessage[]; discardPileIsSealed: boolean; errorState: { message: string; retryCount: number; errorType: 'DECK_EMPTY' | 'NETWORK_ERROR' | 'PLAYER_ERROR' | 'GENERAL_ERROR' | null; affectedPlayerId?: PlayerId; recoveryState?: any; } | null; maxPlayers: number; cardsPerPlayer: number; winnerId: PlayerId | null; }
 type GameInput = { gameId: string; maxPlayers?: number; cardsPerPlayer?: number; };
 type PlayerActionEvents = | { type: PlayerActionType.START_GAME; playerId: PlayerId; } | { type: PlayerActionType.DECLARE_LOBBY_READY; playerId: PlayerId; } | { type: PlayerActionType.DRAW_FROM_DECK; playerId: PlayerId } | { type: PlayerActionType.DRAW_FROM_DISCARD; playerId: PlayerId } | { type: PlayerActionType.SWAP_AND_DISCARD; playerId: PlayerId; payload: { handCardIndex: number } } | { type: PlayerActionType.DISCARD_DRAWN_CARD; playerId: PlayerId } | { type: PlayerActionType.ATTEMPT_MATCH; playerId: PlayerId; payload: { handCardIndex: number } } | { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT; playerId: PlayerId } | { type: PlayerActionType.CALL_CHECK; playerId: PlayerId } | { type: PlayerActionType.DECLARE_READY_FOR_PEEK; playerId: PlayerId } | { type: PlayerActionType.PLAY_AGAIN; playerId: PlayerId } | { type: PlayerActionType.USE_ABILITY; playerId: PlayerId; payload: AbilityActionPayload } | { type: PlayerActionType.SEND_CHAT_MESSAGE, payload: Omit<ChatMessage, 'id' | 'timestamp'> } | { type: PlayerActionType.LEAVE_GAME; playerId: PlayerId } | { type: PlayerActionType.REMOVE_PLAYER; playerId: PlayerId; payload: { playerIdToRemove: string } };
-type GameEvent = | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData; playerId: PlayerId } | { type: 'PLAYER_RECONNECTED'; playerId: PlayerId; newSocketId: string } | { type: 'PLAYER_DISCONNECTED'; playerId: PlayerId } | { type: 'CLIENT_ERROR_REPORT'; playerId: PlayerId; errorType: string; message: string; context?: any } | PlayerActionEvents | { type: 'TIMER.PEEK_EXPIRED' } | { type: 'TIMER.MATCHING_EXPIRED' };
+type GameEvent = | { type: 'PLAYER_JOIN_REQUEST'; playerSetupData: InitialPlayerSetupData; playerId: PlayerId } | { type: 'PLAYER_RECONNECTED'; playerId: PlayerId; newSocketId: string } | { type: 'PLAYER_DISCONNECTED'; playerId: PlayerId } | { type: 'CLIENT_ERROR_REPORT'; playerId: PlayerId; errorType: string; message: string; context?: any } | PlayerActionEvents | { type: 'TIMER.PEEK_EXPIRED' } | { type: 'TIMER.MATCHING_EXPIRED' } | { type: 'LOBBY_DISCONNECT_TIMEOUT'; playerId: PlayerId };
 type EmittedEvent = | { type: 'BROADCAST_GAME_STATE' } | { type: 'BROADCAST_CHAT_MESSAGE', chatMessage: ChatMessage } | { type: 'PLAYER_JOIN_SUCCESSFUL'; playerId: PlayerId } | { type: 'PLAYER_RECONNECT_SUCCESSFUL'; playerId: PlayerId } | { type: 'SEND_EVENT_TO_PLAYER'; payload: { playerId: PlayerId; eventName: SocketEventName; eventData: unknown; } } | { type: 'LOG_ERROR'; error: Error; errorType: 'DECK_EMPTY' | 'NETWORK_ERROR' | 'PLAYER_ERROR' | 'GENERAL_ERROR'; playerId?: PlayerId; };
 const getPlayerNameForLog = (playerId: string, context: GameContext): string => context.players[playerId]?.name || 'P-' + playerId.slice(-4);
 const createLogEntry = (context: GameContext, data: Omit<RichGameLogMessage, 'id' | 'timestamp'>): RichGameLogMessage => ({ id: `log_${context.gameId}_${Date.now()}`, timestamp: new Date().toISOString(), ...data });
@@ -176,6 +177,41 @@ export const gameMachine = setup({
     },
   },
   actions: {
+    removePlayerAndHandleGM: assign(({ context, event }) => {
+      assertEvent(event, [PlayerActionType.LEAVE_GAME, 'PLAYER_DISCONNECTED', 'LOBBY_DISCONNECT_TIMEOUT']);
+      const { playerId } = event;
+      if (!context.players[playerId]) {
+        return {};
+      }
+  
+      const playerName = getPlayerNameForLog(playerId, context);
+      const { [playerId]: _, ...remainingPlayers } = context.players;
+      const newTurnOrder = context.turnOrder.filter((id) => id !== playerId);
+  
+      let newGameMasterId = context.gameMasterId;
+      // If the disconnected player was the Game Master, and there are other players left...
+      if (playerId === context.gameMasterId && newTurnOrder.length > 0) {
+        // ...make the next player in the list the new Game Master.
+        newGameMasterId = newTurnOrder[0]!;
+      } else if (newTurnOrder.length === 0) {
+        // If no players are left, there's no Game Master.
+        newGameMasterId = null;
+      }
+  
+      return {
+        players: remainingPlayers,
+        turnOrder: newTurnOrder,
+        gameMasterId: newGameMasterId,
+        log: [
+          ...context.log,
+          createLogEntry(context, {
+            message: `${playerName} has left the lobby.`,
+            type: 'public',
+            tags: ['system-message'],
+          }),
+        ],
+      };
+    }),
     addPlayer: assign(({ context, event }) => {
       assertEvent(event, 'PLAYER_JOIN_REQUEST');
       const { playerSetupData, playerId } = event;
@@ -360,9 +396,13 @@ export const gameMachine = setup({
     }),
     clearMatchingOpportunity: assign({ matchingOpportunity: null }),
     calculateScores: assign(({ context }) => {
+      const newPlayers = JSON.parse(JSON.stringify(context.players)) as Record<PlayerId, ServerPlayer>;
       const playerScores: Record<PlayerId, number> = {};
-      Object.values(context.players).forEach(p => {
-        playerScores[p.id] = p.hand.reduce((acc, card) => acc + cardScoreValues[card.rank], 0);
+
+      Object.values(newPlayers).forEach(p => {
+        const score = p.hand.reduce((acc, card) => acc + cardScoreValues[card.rank], 0);
+        playerScores[p.id] = score;
+        p.score = score; // Update the player object directly
       });
 
       let minScore = Infinity;
@@ -383,6 +423,8 @@ export const gameMachine = setup({
       const winnerIds = Object.keys(playerScores).filter(id => playerScores[id] === minScore);
 
       return {
+        players: newPlayers, // Assign the updated players object
+        winnerId: winnerIds[0] || null,
         gameover: { winnerIds, loserId, playerScores },
         gameStage: GameStage.GAMEOVER,
       };
@@ -532,13 +574,30 @@ export const gameMachine = setup({
 }).createMachine({
   id: 'game',
   context: ({ input }) => ({
-    gameId: input.gameId, maxPlayers: input.maxPlayers ?? MAX_PLAYERS, cardsPerPlayer: input.cardsPerPlayer ?? CARDS_PER_PLAYER, deck: [], players: {}, discardPile: [], turnOrder: [], gameMasterId: null, currentPlayerId: null,
-    currentTurnSegment: null, gameStage: GameStage.WAITING_FOR_PLAYERS, matchingOpportunity: null, abilityStack: [],
-    checkDetails: null, gameover: null, lastRoundLoserId: null, log: [], chat: [], discardPileIsSealed: false, errorState: null,
+    gameId: input.gameId,
+    maxPlayers: input.maxPlayers ?? MAX_PLAYERS,
+    cardsPerPlayer: input.cardsPerPlayer ?? CARDS_PER_PLAYER,
+    deck: [],
+    players: {},
+    discardPile: [],
+    turnOrder: [],
+    gameMasterId: null,
+    currentPlayerId: null,
+    currentTurnSegment: null,
+    gameStage: GameStage.WAITING_FOR_PLAYERS,
+    matchingOpportunity: null,
+    abilityStack: [],
+    checkDetails: null,
+    winnerId: null,
+    gameover: null,
+    lastRoundLoserId: null,
+    log: [],
+    chat: [],
+    discardPileIsSealed: false,
+    errorState: null,
   }),
   initial: GameStage.WAITING_FOR_PLAYERS,
   on: {
-    [PlayerActionType.LEAVE_GAME]: { actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'] as const },
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: [
         // 1. Add the message to the context
@@ -574,15 +633,39 @@ export const gameMachine = setup({
         [PlayerActionType.DECLARE_LOBBY_READY]: { actions: ['updatePlayerLobbyReady', 'broadcastGameState'] as const },
         [PlayerActionType.START_GAME]: { target: GameStage.DEALING, guard: and(['isGameMaster', 'areAllPlayersReady']) },
         [PlayerActionType.REMOVE_PLAYER]: { guard: 'isGameMaster', actions: ['removePlayer', 'broadcastGameState'] as const },
+        [PlayerActionType.LEAVE_GAME]: {
+          actions: ['removePlayerAndHandleGM', 'broadcastGameState']
+        },
+        PLAYER_DISCONNECTED: {
+          actions: [
+            'setPlayerDisconnected',
+            'addPlayerDisconnectedLog',
+            'broadcastGameState',
+            raise(({ event }) => ({ type: 'LOBBY_DISCONNECT_TIMEOUT', playerId: event.playerId }), { delay: LOBBY_DISCONNECT_TIMEOUT_MS })
+          ]
+        },
+        PLAYER_RECONNECTED: { actions: ['markPlayerAsConnected', 'broadcastGameState'] },
+        LOBBY_DISCONNECT_TIMEOUT: {
+          guard: ({ context, event }) => !context.players[event.playerId]?.isConnected,
+          actions: ['removePlayerAndHandleGM', 'broadcastGameState']
+        },
       },
     },
     [GameStage.DEALING]: {
       entry: ['log_ENTER_DEALING', 'dealCards', 'broadcastGameState'] as const,
       after: { 100: GameStage.INITIAL_PEEK },
+      on: {
+        [PlayerActionType.LEAVE_GAME]: { actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'] as const },
+        PLAYER_DISCONNECTED: { actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'] as const },
+      }
     },
     [GameStage.INITIAL_PEEK]: {
       entry: ['log_ENTER_INITIAL_PEEK', 'broadcastGameState'],
       initial: 'waitingForReady',
+      on: {
+        [PlayerActionType.LEAVE_GAME]: { actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'] as const },
+        PLAYER_DISCONNECTED: { actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'] as const },
+      },
       states: {
         waitingForReady: {
           on: {
@@ -625,6 +708,7 @@ export const gameMachine = setup({
       entry: 'log_ENTER_PLAYING',
       initial: 'turn',
       on: {
+        [PlayerActionType.LEAVE_GAME]: { target: '.error', guard: 'isCurrentPlayer' as const, actions: ({ event }) => ({ type: 'enterErrorState', params: { errorType: 'NETWORK_ERROR', event }}) },
         PLAYER_DISCONNECTED: { target: '.error', guard: 'isCurrentPlayer' as const, actions: ({ event }) => ({ type: 'enterErrorState', params: { errorType: 'NETWORK_ERROR', event }}) },
         [PlayerActionType.CALL_CHECK]: { target: GameStage.FINAL_TURNS, guard: 'isPlayerTurn' as const, actions: ['setupCheck', 'broadcastGameState'] as const },
       },
@@ -714,6 +798,10 @@ export const gameMachine = setup({
       id: GameStage.FINAL_TURNS,
       entry: ['log_ENTER_FINAL_TURNS', 'setCurrentPlayerInFinalTurns', 'broadcastGameState'] as const,
       always: { target: GameStage.SCORING, guard: 'isCheckRoundOver' as const },
+      on: {
+        [PlayerActionType.LEAVE_GAME]: { target: '#game.error', guard: 'isCurrentPlayer' as const, actions: ({ event }) => ({ type: 'enterErrorState', params: { errorType: 'NETWORK_ERROR', event }}) },
+        PLAYER_DISCONNECTED: { target: '#game.error', guard: 'isCurrentPlayer' as const, actions: ({ event }) => ({ type: 'enterErrorState', params: { errorType: 'NETWORK_ERROR', event }}) },
+      },
       initial: 'turn',
       states: {
         turn: {
@@ -785,7 +873,11 @@ export const gameMachine = setup({
     },
     [GameStage.GAMEOVER]: {
         entry: 'log_ENTER_GAMEOVER',
-        on: { [PlayerActionType.PLAY_AGAIN]: { target: GameStage.DEALING, actions: ['resetForNewRound', 'dealCards', 'broadcastGameState'] as const } },
+        on: { 
+          [PlayerActionType.PLAY_AGAIN]: { target: GameStage.DEALING, actions: ['resetForNewRound', 'dealCards', 'broadcastGameState'] as const },
+          [PlayerActionType.LEAVE_GAME]: { actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'] as const },
+          PLAYER_DISCONNECTED: { actions: ['setPlayerDisconnected', 'addPlayerDisconnectedLog', 'broadcastGameState'] as const },
+        },
     },
     error: {
       id: 'game.error',

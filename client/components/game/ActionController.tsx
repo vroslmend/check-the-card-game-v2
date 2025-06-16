@@ -14,6 +14,8 @@ import { isDrawnCard } from '@/lib/types';
 type ActionControllerContextType = {
   selectedCardIndex: number | null;
   setSelectedCardIndex: React.Dispatch<React.SetStateAction<number | null>>;
+  getActions: () => Action[];
+  getPromptText: () => string | null;
 };
 
 export const ActionControllerContext = createContext<ActionControllerContextType | null>(null);
@@ -157,6 +159,9 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ chi
           }
         }
         if (matchingOpportunity && matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id) && !hasPassedMatch) {
+          if (selectedCardIndex !== null) {
+            actions.push(createAttemptMatchAction(() => sendEvent({type: PlayerActionType.ATTEMPT_MATCH, payload: { handCardIndex: selectedCardIndex }})));
+          }
           actions.push(createPassMatchAction(() => sendEvent({type: PlayerActionType.PASS_ON_MATCH_ATTEMPT})));
         }
         break;
@@ -189,46 +194,9 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({ chi
     return null;
   }, [props]);
 
-  const getStatusText = useCallback((): string | null => {
-    const { gameStage, isMyTurn } = props;
-    if (!gameStage) return null;
-
-    switch (gameStage) {
-      case GameStage.WAITING_FOR_PLAYERS:
-        return 'Lobby';
-      case GameStage.DEALING:
-        return 'Dealing Cards';
-      case GameStage.INITIAL_PEEK:
-        return 'Initial Peek';
-      case GameStage.PLAYING:
-        return isMyTurn ? 'Your Turn' : 'Opponent\'s Turn';
-      case GameStage.FINAL_TURNS:
-        return 'Final Turns';
-      case GameStage.SCORING:
-        return 'Scoring';
-      case GameStage.GAMEOVER:
-        return 'Game Over';
-    }
-    return null;
-  }, [props]);
-  
   return (
-    <ActionControllerContext.Provider value={{ selectedCardIndex, setSelectedCardIndex }}>
+    <ActionControllerContext.Provider value={{ selectedCardIndex, setSelectedCardIndex, getActions, getPromptText }}>
       {children}
-      <ActionBarComponent actions={getActions()}>
-        <>
-          {getStatusText() && (
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400 mb-0.5">
-              {getStatusText()}
-            </p>
-          )}
-          {getPromptText() && (
-            <p className="text-xs text-center text-neutral-300 px-2">
-              {getPromptText()}
-            </p>
-          )}
-        </>
-      </ActionBarComponent>
     </ActionControllerContext.Provider>
   );
 };

@@ -1,5 +1,7 @@
 import {
   Card,
+  FacedownCard,
+  PublicCard,
   Player,
   PlayerId,
   ClientCheckGameState,
@@ -28,9 +30,9 @@ export const generatePlayerView = (
     const isViewingPlayer = pId === viewingPlayerId;
 
     // Redact opponent hands
-    const clientHand: (Card | { facedown: true })[] = isViewingPlayer
+    const clientHand: PublicCard[] = isViewingPlayer
       ? serverPlayer.hand
-      : serverPlayer.hand.map(() => ({ facedown: true as const }));
+      : serverPlayer.hand.map((card) => ({ facedown: true as const, id: card.id }));
     
     // Correctly redact the pending drawn card according to our new shared type
     let clientPendingDrawnCard: { card: Card, source: string } | null = null;
@@ -77,6 +79,7 @@ export const generatePlayerView = (
     gameMasterId: fullGameContext.gameMasterId,
     players: clientPlayers,
     deckSize: fullGameContext.deck.length,
+    deckTop: fullGameContext.deck.length > 0 ? { facedown: true, id: fullGameContext.deck[fullGameContext.deck.length - 1]!.id } : null,
     discardPile: fullGameContext.discardPile,
     turnOrder: fullGameContext.turnOrder,
     gameStage: gameStageValue,
@@ -85,6 +88,7 @@ export const generatePlayerView = (
     abilityStack: fullGameContext.abilityStack,
     matchingOpportunity: fullGameContext.matchingOpportunity,
     checkDetails: fullGameContext.checkDetails,
+    winnerId: fullGameContext.winnerId,
     gameover: fullGameContext.gameover,
     lastRoundLoserId: fullGameContext.lastRoundLoserId,
     log: clientLog,

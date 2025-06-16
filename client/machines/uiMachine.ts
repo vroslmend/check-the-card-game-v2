@@ -16,6 +16,7 @@ import {
   type AbilityActionPayload,
   type PeekTarget,
   type SwapTarget,
+  type AbilityType,
   CardRank,
 } from 'shared-types';
 import { toast } from 'sonner';
@@ -218,7 +219,12 @@ export const uiMachine = setup({
       if (ability.stage === 'peeking') {
         payload = { action: 'peek', targets: ability.selectedPeekTargets };
       } else {
-        payload = { action: 'swap', source: ability.selectedSwapTargets[0]!, target: ability.selectedSwapTargets[1]!, sourceCard: ability.sourceCard };
+        payload = { 
+          action: 'swap', 
+          source: ability.selectedSwapTargets[0]!, 
+          target: ability.selectedSwapTargets[1]!,
+          sourceCard: ability.sourceCard,
+        };
       }
       return { type: 'EMIT_TO_SOCKET', eventName: SocketEventName.PLAYER_ACTION, payload: { type: PlayerActionType.USE_ABILITY, playerId, payload } } as const;
     }),
@@ -273,9 +279,26 @@ export const uiMachine = setup({
         const currentClientAbility = context.currentAbilityContext;
         if (!currentClientAbility || currentClientAbility.type !== topServerAbility.type || currentClientAbility.stage !== topServerAbility.stage) {
           const { type, stage, playerId, sourceCard } = topServerAbility;
+          let maxPeekTargets = 0;
+          let maxSwapTargets = 0;
+
+          switch (type) {
+            case 'king':
+              maxPeekTargets = 2;
+              maxSwapTargets = 2;
+              break;
+            case 'peek': // Queen ability
+              maxPeekTargets = 1;
+              maxSwapTargets = 2;
+              break;
+            case 'swap': // Jack ability
+              maxSwapTargets = 2;
+              break;
+          }
+
           return { type, stage, playerId, sourceCard,
-            maxPeekTargets: type === 'king' ? 2 : (type === 'peek' ? 1 : 0),
-            maxSwapTargets: type === 'swap' || type === 'king' ? 2 : 0,
+            maxPeekTargets,
+            maxSwapTargets,
             selectedPeekTargets: [], selectedSwapTargets: [], peekedCards: [],
           };
         }

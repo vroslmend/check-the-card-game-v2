@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import Magnetic from '@/components/ui/Magnetic';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { CopyToClipboardButton } from '../ui/CopyToClipboardButton';
 
 // Add CSS animation for spinner
 const spinnerStyle = `
@@ -202,10 +203,9 @@ const selectLobbyProps = (state: UIMachineSnapshot) => {
   const isGameMaster = localPlayerId === currentGameState.gameMasterId;
 
   const playerCount = players.length;
-  const readyPlayersCount = players.filter((p: Player) => p.isReady).length;
-  const allPlayersReady = readyPlayersCount === playerCount && playerCount > 1;
-  const hasEnoughPlayers = playerCount >= 2;
+  const readyAndConnectedCount = players.filter((p: Player) => p.isReady && p.isConnected).length;
   const hasDisconnectedPlayers = players.some((p: Player) => !p.isConnected);
+  const allPlayersReady = readyAndConnectedCount === playerCount && playerCount > 1 && !hasDisconnectedPlayers;
 
   return {
     isLoading: false,
@@ -213,9 +213,9 @@ const selectLobbyProps = (state: UIMachineSnapshot) => {
     localPlayer,
     isGameMaster,
     playerCount,
-    readyPlayersCount,
+    readyPlayersCount: readyAndConnectedCount,
     allPlayersReady,
-    hasEnoughPlayers,
+    hasEnoughPlayers: playerCount >= 2,
     hasDisconnectedPlayers,
     gameId,
   };
@@ -233,7 +233,6 @@ export const GameLobby = () => {
     hasDisconnectedPlayers,
     gameId,
   } = useUISelector(selectLobbyProps);
-  const [copied, setCopied] = useState(false);
   const [buttonHovered, setButtonHovered] = useState(false);
   const [leaveButtonHovered, setLeaveButtonHovered] = useState(false);
   const [prevButtonType, setPrevButtonType] = useState<string | null>(null);
@@ -302,11 +301,8 @@ export const GameLobby = () => {
     );
   }
   
-  const handleCopy = () => {
-    navigator.clipboard.writeText(gameId ?? '');
-    setCopied(true);
-  };
-  
+  const inviteLink = typeof window !== 'undefined' ? `${window.location.origin}/game/${gameId}` : '';
+
   const handlePlayerReady = () => send({ type: PlayerActionType.DECLARE_LOBBY_READY });
   const handleStartGame = () => send({ type: PlayerActionType.START_GAME });
   const handleLeaveGame = () => send({ type: 'LEAVE_GAME' });
@@ -356,14 +352,24 @@ export const GameLobby = () => {
         };
       }
       
+      // Game master is ready. Only show "Start Game" if lobby is actually startable.
+      if (hasEnoughPlayers && allPlayersReady) {
+        return {
+          text: "Start Game",
+          action: handleStartGame,
+          disabled: false,
+          icon: <PartyPopper className="h-4 w-4 pointer-events-none" />,
+          colors: "bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white"
+        };
+      }
+
+      // Otherwise fallback to a disabled "Ready!" indicator just like other players.
       return {
-        text: "Start Game",
-        action: handleStartGame,
-        disabled: !hasEnoughPlayers || !allPlayersReady,
-        icon: <PartyPopper className="h-4 w-4 pointer-events-none" />,
-        colors: hasEnoughPlayers 
-          ? "bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white"
-          : "bg-stone-300 dark:bg-zinc-700 text-stone-500 dark:text-stone-400"
+        text: "Ready!",
+        action: () => {},
+        disabled: true,
+        icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
+        colors: "bg-stone-300 dark:bg-zinc-700 text-stone-500 dark:text-stone-400 cursor-default"
       };
     } else {
       return {
@@ -371,7 +377,9 @@ export const GameLobby = () => {
         action: handlePlayerReady,
         disabled: isPlayerReady,
         icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
-        colors: "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 text-white"
+        colors: isPlayerReady
+          ? "bg-stone-300 dark:bg-zinc-700 text-stone-500 dark:text-stone-400 cursor-default"
+          : "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 text-white"
       };
     }
   };
@@ -386,9 +394,9 @@ export const GameLobby = () => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-xl mx-auto font-serif"
+        className="h-full flex items-center justify-center font-serif"
       >
-        <div className="relative overflow-hidden bg-white/80 dark:bg-zinc-950/80 rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl">
+        <div className="w-full max-w-xl mx-auto relative overflow-hidden bg-white/80 dark:bg-zinc-950/80 rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl">
           {/* Decorative elements */}
           <motion.div 
             className="absolute -top-10 -right-10 w-64 h-64 bg-gradient-to-br from-stone-100 dark:from-zinc-900 rounded-full blur-3xl"
@@ -513,35 +521,17 @@ export const GameLobby = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.4 }}
               >
-                <p className="text-sm text-stone-600 dark:text-stone-400 mb-3 font-light text-center">Invite players with this Game ID</p>
-                <TooltipProvider delayDuration={100}>
-                  <Tooltip open={copied}>
-                    <TooltipTrigger asChild>
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className="group"
-                      >
-                        <button 
-                          onClick={handleCopy} 
-                          className="w-full text-lg tracking-widest font-mono p-4 rounded-2xl bg-stone-100 dark:bg-zinc-800/50 border border-stone-200 dark:border-zinc-800 flex items-center justify-center gap-4 transition-colors hover:border-stone-300 dark:hover:border-zinc-700"
-                          data-cursor-link
-                        >
-                          {gameId}
-                          <motion.div
-                            animate={copied ? { scale: [1, 1.5, 1] } : {}}
-                            transition={{ duration: 0.3 }}
-                          >
-                            <Copy className="h-5 w-5 text-stone-500 dark:text-stone-400 group-hover:text-stone-900 dark:group-hover:text-stone-100 transition-colors" />
-                          </motion.div>
-                        </button>
-                      </motion.div>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="font-sans">
-                      <p>Copied!</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <div className="text-center">
+                  <h2 className="text-lg font-medium text-stone-700 dark:text-stone-300">Invite Friends</h2>
+                  <p className="mt-1 text-sm text-stone-500">Share the Game ID or send the link below.</p>
+                  <div className="mt-4 flex justify-center">
+                    <CopyToClipboardButton 
+                      textToCopy={inviteLink} 
+                      buttonText={gameId}
+                      className="text-lg tracking-widest"
+                    />
+                  </div>
+                </div>
               </motion.div>
             )}
 

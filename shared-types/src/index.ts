@@ -57,6 +57,14 @@ export enum CardRank {
   Jack = 'J', Queen = 'Q', King = 'K',
 }
 
+// AFTER CARD, define facedown card and public card types
+export interface FacedownCard {
+  id: string;
+  facedown: true;
+}
+
+export type PublicCard = Card | FacedownCard;
+
 
 // ================================================================================================
 //                                      PLAYER & GAME STATE
@@ -68,7 +76,7 @@ export enum CardRank {
 export interface Player {
   id: PlayerId;
   name: string;
-  hand: (Card | { facedown: true })[];
+  hand: PublicCard[];
   status: PlayerStatus;
   isReady: boolean;
   isDealer: boolean;
@@ -90,6 +98,7 @@ export interface ClientCheckGameState {
   players: Record<PlayerId, Player>;
   deckSize: number;
   discardPile: Card[];
+  deckTop: FacedownCard | null;
   turnOrder: PlayerId[];
   gameStage: GameStage;
   currentPlayerId: PlayerId | null;
@@ -103,6 +112,7 @@ export interface ClientCheckGameState {
   checkDetails: {
     callerId: PlayerId | null;
   } | null;
+  winnerId: PlayerId | null;
   gameover: {
     winnerIds: PlayerId[];
     loserId: PlayerId | null;

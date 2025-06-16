@@ -1,160 +1,102 @@
 "use client"
 
-import { AnimatePresence, motion, LayoutGroup } from "framer-motion"
 import { PlayingCard } from "@/components/cards/PlayingCard"
-import type { Card, PlayerId } from "shared-types"
+import type { Card, PlayerId, PublicCard } from "shared-types"
 import { cn } from "@/lib/utils"
-import { useEffect, useMemo, useState } from 'react'
+import { motion } from "framer-motion"
+import { useUISelector } from '@/context/GameUIContext';
 
 export interface HandGridProps {
   ownerId: PlayerId
-  hand: (Card | { facedown: true })[]
-  isOpponent?: boolean
+  hand: PublicCard[]
   canInteract: boolean
-  onCardClick?: (card: Card | { facedown: true }, index: number) => void
+  onCardClick?: (card: PublicCard, index: number) => void
   selectedCardIndices?: number[]
-  highlightedCardIndices?: number[]
   className?: string
-  initialPeekHighlight?: boolean
+  cardSize?: 'xxs' | 'xs' | 'sm' | 'md' | 'lg'
 }
 
 export const HandGrid = ({
   ownerId,
   hand,
-  isOpponent = false,
   canInteract,
   onCardClick,
   selectedCardIndices = [],
-  highlightedCardIndices = [],
   className,
-  initialPeekHighlight = false,
+  cardSize = 'xs',
 }: HandGridProps) => {
-  // Organize cards into a grid
-  // For example: with 4 cards, we want a 2x2 grid
-  // With 5-6 cards, we want a 2x3 grid, etc.
-  const [cardSize, setCardSize] = useState<'xs' | 'sm' | 'md'>('sm')
+  const firstRow = hand.slice(0, 2);
+  const secondRow = hand.slice(2, 4);
 
-  useEffect(() => {
-    // Determine card size based on viewport width and hand size
-    const calculateCardSize = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+  // Grab ability context to style peek / swap selections
+  const abilitySelectionInfo = useUISelector((state) => {
+    const ability = state.context.currentAbilityContext;
+    return {
+      stage: ability?.stage ?? null,
+      selectedPeekTargets: ability?.selectedPeekTargets ?? [],
+      selectedSwapTargets: ability?.selectedSwapTargets ?? [],
+    };
+  });
 
-      if (width < 768) {
-        // Phones – always use xs
-        return 'xs';
-      }
-
-      if (width < 1024) {
-        // Tablets – sm unless very crowded
-        return hand.length > 6 ? 'xs' : 'sm';
-      }
-
-      // Desktop – md but fall back when too many cards or limited vertical space
-      if (height < 750) return 'sm';
-
-      return hand.length > 8 ? 'sm' : 'md';
-    }
+  const renderCard = (card: PublicCard, originalIndex: number) => {
+    const cardKey = 'facedown' in card ? `${ownerId}-facedown-${originalIndex}` : `${ownerId}-${card.suit}-${card.rank}-${originalIndex}`;
+    const isMatchSelected = selectedCardIndices.includes(originalIndex);
     
-    // Set initial size
-    setCardSize(calculateCardSize())
+    const isAbilityPeekSelected = abilitySelectionInfo.stage === 'peeking' && abilitySelectionInfo.selectedPeekTargets.some(t => t.playerId === ownerId && t.cardIndex === originalIndex);
+    const isAbilitySwapSelected = abilitySelectionInfo.stage === 'swapping' && abilitySelectionInfo.selectedSwapTargets.some(t => t.playerId === ownerId && t.cardIndex === originalIndex);
+
+    const abilityRingClass = isAbilityPeekSelected ? 'ring-yellow-400' : (isAbilitySwapSelected ? 'ring-pink-500' : '');
+
+    const isSelected = isMatchSelected || isAbilityPeekSelected || isAbilitySwapSelected;
     
-    // Add window resize listener
-    const handleResize = () => setCardSize(calculateCardSize())
-    window.addEventListener('resize', handleResize)
-    
-    // Cleanup
-    return () => window.removeEventListener('resize', handleResize)
-  }, [hand.length])
-  
-  const gridCells = useMemo(() => {
-    // Figure out how many cards per row
-    // We aim for a max of 2 cards per row, expanding to more columns as needed
-    const cardsPerRow = 2
-    const numRows = Math.ceil(hand.length / cardsPerRow)
-    
-    // Create a 2D array to represent rows and columns
-    return Array.from({ length: numRows }, (_, rowIndex) => {
-      return Array.from({ length: cardsPerRow }, (_, colIndex) => {
-        const cardIndex = rowIndex * cardsPerRow + colIndex
-        return cardIndex < hand.length ? hand[cardIndex] : null
-      })
-    })
-  }, [hand])
-  
-  // Calculate the gap between cards based on the card size
-  const gapClass = {
-    'xs': 'gap-1',
-    'sm': 'gap-1.5',
-    'md': 'gap-2'
-  }[cardSize]
+    const layoutId = card.id ?? `${ownerId}-${originalIndex}`;
+
+    return (
+      <motion.div
+        key={cardKey}
+        layoutId={layoutId}
+        className={cn(
+          "relative flex items-center justify-center",
+          cardSize === 'xxs' && 'min-w-[48px] min-h-[70px]',
+          cardSize === 'xs' && 'min-w-[64px] min-h-[88px]',
+          cardSize === 'sm' && 'min-w-[80px] min-h-[112px]',
+          cardSize === 'md' && 'min-w-[96px] min-h-[144px]',
+          cardSize === 'lg' && 'min-w-[112px] min-h-[160px]',
+          canInteract && "cursor-pointer",
+          // Matching selection indicator (sky)
+          isMatchSelected && "ring-4 ring-offset-2 ring-offset-stone-900 ring-sky-400 rounded-lg dark:ring-offset-stone-900",
+          // Ability selection indicators
+          (isAbilityPeekSelected || isAbilitySwapSelected) && cn("ring-4 ring-offset-2 ring-offset-stone-900 rounded-lg dark:ring-offset-stone-900", abilityRingClass),
+        )}
+        onClick={() => canInteract && onCardClick?.(card, originalIndex)}
+        whileHover={canInteract ? { y: -8, scale: 1.05 } : {}}
+        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      >
+        <PlayingCard
+          card={'facedown' in card ? undefined : card}
+          faceDown={'facedown' in card}
+          className="card-fluid"
+          size={cardSize}
+        />
+      </motion.div>
+    );
+  };
 
   return (
-    <LayoutGroup id={`hand-${ownerId}`}>
-      <div className={cn(
-        "grid", 
-        gapClass, 
-        hand.length > 0 ? "" : "min-h-[60px]",
-        isOpponent ? "opacity-95 scale-90" : ""
-      )} style={{ gridTemplateRows: `repeat(${gridCells.length}, auto)` }}>
-        {gridCells.map((row, rowIndex) => (
-          <div key={`row-${rowIndex}`} className={cn("flex", gapClass)}>
-            {row.map((card, colIndex) => {
-              const cardIndex = rowIndex * 2 + colIndex
-              
-              if (!card) return <div key={`empty-${cardIndex}`} className="invisible" />
-
-              const cardKey = 'facedown' in card ? `${ownerId}-facedown-${cardIndex}` : `${ownerId}-${card.suit}-${card.rank}-${cardIndex}`
-              const isSelected = selectedCardIndices.includes(cardIndex);
-              const isHighlighted = highlightedCardIndices.includes(cardIndex);
-              
-              return (
-                <div 
-                  key={cardKey}
-                  className={cn(
-                    "relative",
-                    canInteract && 'cursor-pointer',
-                    // Bottom row gets a special highlight in the initial peek phase
-                    rowIndex === gridCells.length - 1 && !isOpponent && initialPeekHighlight && "z-10 border-2 border-dashed border-yellow-400 dark:border-yellow-500 rounded-lg"
-                  )}
-                  onClick={() => canInteract && onCardClick?.(card, cardIndex)}
-                >
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={cardKey}
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ 
-                        scale: isSelected ? 1.05 : 1, 
-                        opacity: 1,
-                        y: isSelected ? -4 : 0 
-                      }}
-                      exit={{ scale: 0.8, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className={cn(
-                        "relative transition-transform rounded-xl",
-                        canInteract && "hover:scale-105 hover:-translate-y-1 active:scale-95",
-                        isSelected && "ring-2 ring-blue-500 rounded-xl ring-offset-2 ring-offset-stone-100 dark:ring-offset-zinc-900",
-                        isHighlighted && "ring-2 ring-purple-500 rounded-xl ring-offset-2 ring-offset-stone-100 dark:ring-offset-zinc-900"
-                      )}
-                    >
-                      <PlayingCard
-                        card={'facedown' in card ? undefined : card}
-                        size={cardSize}
-                        faceDown={'facedown' in card}
-                        className={cn(
-                          "shadow-sm rounded-xl", 
-                          canInteract && "cursor-pointer card-hover",
-                          (isSelected || isHighlighted) && "shadow-md"
-                        )}
-                      />
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-              )
-            })}
-          </div>
-        ))}
+    <div
+      className={cn(
+        "flex flex-col items-center gap-1",
+        className
+      )}
+    >
+      <div className="flex flex-row gap-1">
+        {firstRow.map((card, index) => renderCard(card, index))}
       </div>
-    </LayoutGroup>
+      {secondRow.length > 0 && (
+        <div className="flex flex-row gap-1">
+          {secondRow.map((card, index) => renderCard(card, index + 2))}
+        </div>
+      )}
+    </div>
   )
 } 

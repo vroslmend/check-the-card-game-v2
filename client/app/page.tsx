@@ -112,16 +112,16 @@ function HomePage() {
 
   const features = [
     {
-      title: "Seamless UI",
-      description: "A clean, intuitive interface that lets you focus on your strategy. No clutter, just pure gameplay.",
+      title: "Master Your Memory",
+      description: "Keep track of your cards and your opponents'. A sharp memory is your greatest weapon.",
     },
     {
-      title: "Fluid Animations",
-      description: "Every action, from drawing a card to calling 'Check', is accompanied by smooth, satisfying animations.",
+      title: "Unleash Chaos",
+      description: "Use special abilities from Jacks, Queens, and Kings to peek, swap, and disrupt your way to victory.",
     },
     {
-      title: "Haptic Feedback",
-      description: "Feel the game with subtle vibrations and feedback that make the digital experience feel tangible.",
+      title: "Call Their Bluff",
+      description: "Think you have the lowest score? Call 'Check' to end the round, but be careful—a wrong move could cost you the game.",
     },
   ];
 
@@ -402,8 +402,7 @@ function HomePage() {
                       transition={{ duration: 1, delay: 1.8 }}
                       className="max-w-lg text-xl font-light leading-relaxed text-stone-600 dark:text-stone-400"
                     >
-                      A sophisticated card game where strategy meets elegance. Every decision shapes your destiny in
-                      this refined multiplayer experience.
+                      Outwit your friends in a tense game of memory, strategy, and pure luck. Keep your cards close, your score low, and call "Check" at the perfect moment to snatch victory.
                     </motion.p>
                   </div>
 
@@ -426,7 +425,7 @@ function HomePage() {
                           className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
                         >
                           <span className="pointer-events-none relative z-10 flex items-center gap-2">
-                            Start New Game
+                            Create a Lobby
                             <motion.div
                               animate={!shouldReduceMotion ? { x: [0, 4, 0] } : {}}
                               transition={{
@@ -462,7 +461,7 @@ function HomePage() {
                           className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100 dark:hover:bg-stone-900/80"
                         >
                           <Users className="mr-2 h-4 w-4" />
-                          Join Game
+                          Join a Lobby
                         </Button>
                       </motion.div>
                     </Magnetic>
@@ -508,10 +507,10 @@ function HomePage() {
           <div className="container px-4 mx-auto">
             <AnimateOnView className="mx-auto max-w-4xl text-center">
               <h2 className="mb-8 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
-                Ready to Begin?
+                Your Turn to Play
               </h2>
               <p className="mb-16 text-xl font-light text-stone-600 dark:text-stone-400">
-                Join the most sophisticated card game experience ever created.
+                The table is set, the cards are shuffled. All that's missing is you.
               </p>
 
               <div className="flex flex-col gap-6 sm:flex-row sm:justify-center">
@@ -526,7 +525,7 @@ function HomePage() {
                     className="rounded-full bg-stone-900 px-12 py-4 text-lg font-light text-white shadow-xl transition-all duration-300 hover:shadow-2xl dark:bg-stone-100 dark:text-stone-900"
                     data-cursor-link
                   >
-                    Start Playing
+                    Create a Lobby
                   </Button>
                 </motion.div>
                 <motion.div
@@ -541,7 +540,7 @@ function HomePage() {
                     className="rounded-full border-2 border-stone-200 bg-white/60 px-12 py-4 text-lg font-light backdrop-blur-sm transition-all duration-300 hover:bg-white/80 dark:border-stone-800 dark:bg-stone-900/60 dark:hover:bg-stone-900/80"
                     data-cursor-link
                   >
-                    Join Friends
+                    Join a Lobby
                   </Button>
                 </motion.div>
               </div>

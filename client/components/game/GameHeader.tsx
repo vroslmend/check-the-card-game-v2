@@ -3,13 +3,12 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { PanelLeftClose, PanelLeftOpen, Info, Copy, Check, ChevronLeft, User } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Info, ChevronLeft, User } from 'lucide-react';
 import { useUIActorRef, useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 import Magnetic from '@/components/ui/Magnetic';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { CopyToClipboardButton } from '../ui/CopyToClipboardButton';
 
 const selectGameHeaderProps = (state: UIMachineSnapshot) => {
   const localId = state.context.localPlayerId;
@@ -24,29 +23,13 @@ const selectGameHeaderProps = (state: UIMachineSnapshot) => {
 export const GameHeader = () => {
   const { send } = useUIActorRef();
   const { gameId, isSidePanelOpen, playerName } = useUISelector(selectGameHeaderProps);
-  const [copied, setCopied] = React.useState(false);
 
   const toggleSidePanel = () => {
     send({ type: 'TOGGLE_SIDE_PANEL' });
   };
 
-  const handleCopyGameId = () => {
-    if (gameId) {
-      navigator.clipboard.writeText(gameId);
-      setCopied(true);
-      toast.success("Copied to clipboard", {
-        description: "Game ID has been copied to your clipboard.",
-        duration: 2000,
-      });
-      
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    }
-  };
-
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-stone-200/30 dark:border-zinc-800/30 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md px-4 md:px-6 sticky top-0 z-20">
+    <header className="flex h-16 shrink-0 items-center justify-between border-b border-stone-200/30 dark:border-zinc-800/30 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md px-4 md:px-6 relative top-0 z-20">
       <div className="flex items-center gap-4">
         <Magnetic>
           <Link href="/" data-cursor-link>
@@ -63,45 +46,7 @@ export const GameHeader = () => {
 
         <div className="h-6 w-px bg-stone-200 dark:bg-zinc-800" />
         
-        <motion.div
-          className="flex items-center gap-2"
-          layout
-        >
-          <button
-            onClick={handleCopyGameId}
-            className={cn(
-              "flex items-center gap-2 bg-stone-100/70 hover:bg-stone-100/90 dark:bg-zinc-800/70 dark:hover:bg-zinc-800/90 px-3 py-1.5 rounded-full transition-colors", 
-              "font-mono text-xs text-stone-700 dark:text-stone-300",
-              copied && "opacity-80"
-            )}
-            data-cursor-link
-          >
-            <span>{gameId ?? '...'}</span>
-            <AnimatePresence mode="wait">
-              {copied ? (
-                <motion.div
-                  key="check"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Check className="h-3.5 w-3.5 text-emerald-500" />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="copy"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </button>
-        </motion.div>
+        <CopyToClipboardButton textToCopy={gameId} />
       </div>
 
       <div className="flex items-center gap-2 h-10">

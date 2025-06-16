@@ -24,12 +24,10 @@ interface ActionBarComponentProps {
 const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, children }) => {
   return (
     <motion.div 
-      layout
-      className="fixed left-1/2 bottom-3 md:bottom-4 z-[1000] -translate-x-1/2 flex flex-col items-center w-full max-w-xs sm:max-w-sm md:max-w-md px-2"
-      initial={{ y: 50, opacity: 0 }}
+      className="flex flex-col items-center w-full"
+      initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ 
-        layout: { type: "spring", stiffness: 400, damping: 35, delay: 0 },
         y: { type: "spring", stiffness: 400, damping: 28 },
         opacity: { duration: 0.2 }
       }}
@@ -37,7 +35,7 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 400, damping: 35 }}
-        className={"flex flex-row items-center justify-center flex-wrap gap-1.5 p-1.5 bg-neutral-800/70 dark:bg-zinc-800/70 backdrop-blur-md rounded-full shadow-xl w-auto"}
+        className="flex flex-row items-center justify-center flex-wrap gap-2 p-2 bg-black/20 backdrop-blur-xl rounded-full shadow-lg ring-1 ring-inset ring-white/10"
       >
         {actions.map((action, i) => (
           <Magnetic key={action.label || i} strength={20}>
@@ -50,12 +48,12 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
         {children && (
           <motion.div
             layout
-            key={React.isValidElement(children) ? children.key : 'static-prompt-key'}
-            className="mt-1.5 flex flex-col items-center gap-0.5 text-center p-1 bg-neutral-900/70 backdrop-blur-sm rounded-md shadow-md w-auto max-w-xs sm:max-w-sm"
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            key="prompt-text"
+            className="mt-2 text-center"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
           >
             {children}
           </motion.div>

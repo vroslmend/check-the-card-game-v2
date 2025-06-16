@@ -3,6 +3,12 @@ import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { Action } from './ActionBarComponent';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface ActionButtonProps {
   action: Action;
@@ -18,55 +24,69 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
     isLoading = false,
     isProgressButton = false,
     progressPercent = 0,
-    progressFillClassName = 'bg-blue-500',
-    progressLabelClassName = 'text-blue-300'
+    progressFillClassName = 'bg-sky-500/50',
   } = action;
 
-  return (
-    <motion.button
-      whileHover={{ scale: disabled ? 1 : 1.05 }}
-      whileTap={{ scale: disabled ? 1 : 0.95 }}
-      className={cn(`relative inline-flex items-center justify-center gap-1.5 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed btn-primary`, className)}
-      data-cursor-link
-      disabled={disabled || isLoading}
-      onClick={onClick}
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ duration: 0.15 }}
-    >
-      {/* Icon */}
-      {icon && (
-        <span className="relative flex">
-          {icon}
-        </span>
+  const buttonContent = (
+    <>
+      {icon ? (
+        // Primary case: Icon is present
+        <span className="relative z-10">{icon}</span>
+      ) : (
+        // Fallback case: No icon, show label on button
+        <span className="relative z-10 text-xs font-semibold px-2">{label}</span>
       )}
       
-      {/* Label */}
-      <span className={isProgressButton && progressPercent > 0 ? progressLabelClassName : ''}>
-        {label}
-      </span>
+      {isLoading && <Loader2 className="absolute h-4 w-4 animate-spin z-10" />}
       
-      {/* Loading Spinner */}
-      {isLoading && (
-        <Loader2 className="h-3 w-3 animate-spin ml-1" />
-      )}
-      
-      {/* Progress Overlay */}
       {isProgressButton && progressPercent > 0 && (
         <motion.div 
-          className={`absolute inset-0 rounded-full ${progressFillClassName}`}
+          className={cn("absolute inset-0 rounded-full", progressFillClassName)}
           initial={{ width: '0%' }}
           animate={{ width: `${progressPercent}%` }}
           transition={{ duration: 0.1, ease: 'linear' }}
-          style={{ 
-            transformOrigin: 'left',
-            zIndex: -1,
-          }}
+          style={{ transformOrigin: 'left' }}
         />
       )}
-    </motion.button>
+    </>
+  );
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <motion.button
+            whileHover={{ scale: disabled ? 1 : 1.1 }}
+            whileTap={{ scale: disabled ? 1 : 0.9 }}
+            className={cn(
+              "relative h-10 shrink-0 rounded-full flex items-center justify-center",
+              // If there's an icon, it's a circle. If not, it's a pill with padding.
+              icon ? "w-10" : "px-4",
+              "bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20",
+              "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-black/10 dark:disabled:hover:bg-white/10",
+              "transition-colors",
+              isLoading && "cursor-wait",
+              className
+            )}
+            disabled={disabled || isLoading}
+            onClick={onClick}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          >
+            {buttonContent}
+          </motion.button>
+        </TooltipTrigger>
+        {/* Only show tooltip if there's an icon to hide the label for */}
+        {icon && (
+          <TooltipContent>
+            <p>{label}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 
-export default ActionButton; 
+export default ActionButton;

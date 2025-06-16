@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card } from 'shared-types';
 import { PlayingCard } from '../cards/PlayingCard';
+import { motion } from 'framer-motion';
 
 interface GameBoardAreaProps {
   deckSize: number;
@@ -32,7 +33,9 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
           className={`relative ${deckClickableStyle}`}
           onClick={canDrawFromDeck ? onDeckClick : undefined}
         >
-          <PlayingCard faceDown={true} layoutId="deck-back" canInteract={!!onDeckClick && canDrawFromDeck} />
+          <motion.div layoutId="deck-back">
+            <PlayingCard faceDown={true} canInteract={!!onDeckClick && canDrawFromDeck} />
+          </motion.div>
           {deckSize > 0 && (
             <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full px-2 py-1 shadow-md">
               {deckSize}
@@ -49,11 +52,12 @@ const GameBoardArea: React.FC<GameBoardAreaProps> = ({
           onClick={canDrawFromDiscard && discardPileTopCard ? onDiscardClick : undefined}
         >
           {discardPileTopCard ? (
-            <PlayingCard 
-              layoutId={`${discardPileTopCard.rank}-${discardPileTopCard.suit}`} 
-              card={discardPileTopCard} 
-              canInteract={!!onDiscardClick && canDrawFromDiscard}
-            />
+            <motion.div layoutId={`${discardPileTopCard.rank}-${discardPileTopCard.suit}`}>
+              <PlayingCard 
+                card={discardPileTopCard} 
+                canInteract={!!onDiscardClick && canDrawFromDiscard}
+              />
+            </motion.div>
           ) : (
             <div className="w-32 h-48 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center bg-gray-100">
               <span className="text-gray-400 text-sm">Empty</span>

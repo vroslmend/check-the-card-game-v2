@@ -1,22 +1,22 @@
 import React from 'react';
 import { Action } from './ActionBarComponent';
-import { Circle, Eye, CheckCircle, X, Shuffle, SkipForward, Ban } from 'lucide-react';
+import { Circle, Eye, CheckCircle, X, Shuffle, SkipForward, Ban, Play, Layers, ArrowUpFromLine } from 'lucide-react';
 
 // Card draw actions
 export const createDrawDeckAction = (onClick: () => void, disabled?: boolean): Action => ({
   label: 'Draw from Deck',
   onClick,
   disabled,
-  icon: <Circle className="h-5 w-5" />,
-  className: 'bg-blue-600/70 hover:bg-blue-500/90 text-white',
+  icon: <Layers className="h-5 w-5" />,
+  className: 'text-sky-200',
 });
 
 export const createDrawDiscardAction = (onClick: () => void, disabled?: boolean): Action => ({
   label: 'Draw from Discard',
   onClick,
   disabled,
-  icon: <Eye className="h-5 w-5" />,
-  className: 'bg-indigo-600/70 hover:bg-indigo-500/90 text-white',
+  icon: <ArrowUpFromLine className="h-5 w-5" />,
+  className: 'text-sky-200',
 });
 
 // Card discard actions
@@ -25,7 +25,7 @@ export const createDiscardDrawnCardAction = (onClick: () => void, disabled?: boo
   onClick,
   disabled,
   icon: <X className="h-5 w-5" />,
-  className: 'bg-red-600/70 hover:bg-red-500/90 text-white',
+  className: 'text-rose-300',
 });
 
 // Game control actions
@@ -35,45 +35,38 @@ export const createCallCheckAction = (
   disabled?: boolean, 
   showProgress?: boolean
 ): Action => ({
-  label: 'Call Check',
+  label: 'CHECK!',
   onClick,
   disabled,
-  icon: <CheckCircle className="h-5 w-5" />,
-  className: 'bg-orange-500/90 hover:bg-orange-600 text-white',
+  className: 'bg-amber-400 text-black hover:bg-amber-300 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 font-semibold tracking-wider',
   isProgressButton: showProgress,
   progressPercent,
-  progressFillClassName: 'bg-orange-400/80',
+  progressFillClassName: 'bg-amber-500/50',
 });
 
 export const createPassMatchAction = (
   onClick: () => void, 
-  progressPercent: number = 0,
+  _progressPercent: number = 0,
   disabled?: boolean,
   isPassed: boolean = false
 ): Action => ({
-  label: isPassed ? 'Passed - Waiting' : 'Pass Match',
+  label: isPassed ? 'Passed' : 'Pass Match',
   onClick,
   disabled: disabled || isPassed,
   icon: <Ban className="h-5 w-5" />,
-  className: isPassed 
-    ? 'bg-neutral-500 text-neutral-300' 
-    : 'bg-neutral-700/70 hover:bg-neutral-600/90 text-neutral-100',
-  isProgressButton: !isPassed,
-  progressPercent,
-  progressFillClassName: 'bg-yellow-500/80',
-  progressLabelClassName: 'text-neutral-100 font-medium',
+  className: 'text-stone-300',
 });
 
 export const createAttemptMatchAction = (
   onClick: () => void, 
   disabled?: boolean,
-  hasSelection: boolean = false
+  _hasSelection: boolean = false
 ): Action => ({
-  label: hasSelection ? 'Confirm Match' : 'Attempt Match',
+  label: 'Confirm Match',
   onClick,
   disabled,
   icon: <CheckCircle className="h-5 w-5" />,
-  className: 'bg-green-500/80 hover:bg-green-600/90 text-white'
+  className: 'text-teal-300'
 });
 
 // Special ability actions
@@ -89,7 +82,7 @@ export const createConfirmAbilityAction = (
   onClick,
   disabled,
   icon: <CheckCircle className="h-5 w-5" />,
-  className: 'bg-purple-500/80 hover:bg-purple-600/90 text-white',
+  className: 'text-fuchsia-300',
 });
 
 export const createSkipAbilityAction = (
@@ -102,7 +95,7 @@ export const createSkipAbilityAction = (
   onClick,
   disabled,
   icon: <SkipForward className="h-5 w-5" />,
-  className: 'bg-gray-500 hover:bg-gray-600 text-white',
+  className: 'text-stone-300',
 });
 
 export const createCancelAbilityAction = (onClick: () => void, disabled?: boolean): Action => ({
@@ -110,7 +103,7 @@ export const createCancelAbilityAction = (onClick: () => void, disabled?: boolea
   onClick,
   disabled,
   icon: <Ban className="h-5 w-5" />,
-  className: 'bg-red-500/80 hover:bg-red-600/90 text-white',
+  className: 'text-rose-300',
 });
 
 // Initial setup actions
@@ -119,7 +112,7 @@ export const createReadyForPeekAction = (onClick: () => void, disabled?: boolean
   onClick,
   disabled,
   icon: <Eye className="h-5 w-5" />,
-  className: 'bg-sky-500 hover:bg-sky-600 text-white',
+  className: 'text-teal-300',
 });
 
 export const createPlayerReadyAction = (onClick: () => void, disabled?: boolean): Action => ({
@@ -127,17 +120,15 @@ export const createPlayerReadyAction = (onClick: () => void, disabled?: boolean)
   onClick,
   disabled,
   icon: <CheckCircle className="h-5 w-5" />,
-  className: 'bg-emerald-500 hover:bg-emerald-600 text-white',
+  className: 'text-teal-300',
 });
 
 export const createStartGameAction = (onClick: () => void, disabled?: boolean): Action => ({
   label: 'Start Game',
   onClick,
   disabled,
-  icon: <CheckCircle className="h-5 w-5" />,
-  className: disabled 
-    ? 'bg-neutral-500 text-neutral-300' 
-    : 'bg-emerald-500 hover:bg-emerald-600 text-white',
+  icon: <Play className="h-5 w-5" />,
+  className: 'text-teal-300',
 });
 
 export const createAbilityPeekingAction = (
