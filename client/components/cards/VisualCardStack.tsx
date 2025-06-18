@@ -1,12 +1,14 @@
-'use client';
+// client/src/components/cards/VisualCardStack.tsx
 
-import React from 'react';
-import { type Card, PublicCard } from 'shared-types';
-import { PlayingCard, cardSizeClasses } from './PlayingCard';
-import { CardBack } from './CardBack';
-import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
-import { Lock } from 'lucide-react';
+"use client";
+
+import React from "react";
+import { type Card, PublicCard } from "shared-types";
+import { PlayingCard, cardSizeClasses } from "./PlayingCard";
+import { CardBack } from "./CardBack";
+import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
+import { Lock } from "lucide-react";
 
 interface VisualCardStackProps {
   title: string;
@@ -27,7 +29,7 @@ export const VisualCardStack = ({
   canInteract = false,
   onClick,
   isSealed = false,
-  size = 'xs',
+  size = "xs",
 }: VisualCardStackProps) => {
   const hasCards = count > 0;
 
@@ -38,39 +40,37 @@ export const VisualCardStack = ({
       </h4>
       <motion.div
         whileHover={canInteract ? { scale: 1.05, y: -5 } : {}}
-        transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+        transition={{ type: "spring", stiffness: 400, damping: 20 }}
         onClick={onClick}
         className={cn(
-          'relative',
+          "relative",
           cardSizeClasses[size],
-          canInteract ? 'cursor-pointer' : 'cursor-default',
+          canInteract ? "cursor-pointer" : "cursor-default"
         )}
       >
-        {hasCards ? (
-          <>
-            {topCard && (
-              <motion.div className="absolute inset-0" layoutId={topCard.id}>
-                {faceDown ? (
-                  <PlayingCard faceDown size={size} />
-                ) : (
-                  'facedown' in topCard ? (
-                    <PlayingCard faceDown size={size} />
-                  ) : (
-                    <PlayingCard card={topCard} size={size} />
-                  )
-                )}
-              </motion.div>
+        {hasCards && topCard ? ( // Check for topCard
+          <motion.div
+            layoutId={topCard.id} // ✨ ADD THE LAYOUT ID
+            key={topCard.id} // ✨ ADD A KEY FOR CONSISTENCY
+            className="absolute inset-0"
+          >
+            {faceDown ? (
+              <PlayingCard faceDown size={size} />
+            ) : "facedown" in topCard ? (
+              <PlayingCard faceDown size={size} />
+            ) : (
+              <PlayingCard card={topCard} size={size} />
             )}
-            {isSealed && (
-              <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                <Lock className="text-white/80 h-8 w-8" />
-              </div>
-            )}
-          </>
+          </motion.div>
         ) : (
           <div className="h-full w-full rounded-lg border-2 border-dashed border-stone-300 dark:border-zinc-700 bg-black/10 dark:bg-white/5" />
+        )}
+        {isSealed && (
+          <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+            <Lock className="text-white/80 h-8 w-8" />
+          </div>
         )}
       </motion.div>
     </div>
   );
-}; 
+};

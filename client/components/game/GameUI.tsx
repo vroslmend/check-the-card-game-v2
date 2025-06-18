@@ -1,27 +1,31 @@
 // client/components/game/GameUI.tsx
 
-'use client';
+"use client";
 
-import React from 'react';
-import { useUISelector } from '@/context/GameUIContext';
-import { GameBoard } from '@/components/game/GameBoard';
-import { GameLobby } from '@/components/game/GameLobby';
-import LoadingOrError from '@/components/layout/LoadingOrError';
-import { RejoinModal } from '@/components/modals/RejoinModal';
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { GameStage } from 'shared-types';
+import React from "react";
+import { useUISelector } from "@/context/GameUIContext";
+import { GameBoard } from "@/components/game/GameBoard";
+import { GameLobby } from "@/components/game/GameLobby";
+import LoadingOrError from "@/components/layout/LoadingOrError";
+import { RejoinModal } from "@/components/modals/RejoinModal";
+import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import CardAnimationRoot from "@/components/cards/CardAnimationRoot";
+import { GameStage } from "shared-types";
 
 const selectStableView = (s: any) => {
-  if (s.context.modal?.type === 'rejoin' || s.matches({ inGame: 'promptToJoin' })) {
-    return 'loading';
+  if (
+    s.context.modal?.type === "rejoin" ||
+    s.matches({ inGame: "promptToJoin" })
+  ) {
+    return "loading";
   }
   if (s.context.currentGameState?.gameStage === GameStage.WAITING_FOR_PLAYERS) {
-    return 'lobby';
+    return "lobby";
   }
   if (s.context.currentGameState?.gameStage) {
-    return 'game';
+    return "game";
   }
-  return 'loading';
+  return "loading";
 };
 
 export default function GameUI() {
@@ -35,7 +39,7 @@ export default function GameUI() {
 
   const renderContent = () => {
     // 1. If we are prompting the user to join/rejoin, the modal takes precedence.
-    if (modalType === 'rejoin' || state.matches({ inGame: 'promptToJoin' })) {
+    if (modalType === "rejoin" || state.matches({ inGame: "promptToJoin" })) {
       return <LoadingOrError message="Awaiting your input..." />;
     }
 
@@ -53,7 +57,7 @@ export default function GameUI() {
   };
 
   return (
-    <LayoutGroup>
+    <CardAnimationRoot>
       <main className="fixed inset-0 overflow-hidden bg-stone-100 dark:bg-zinc-900">
         <AnimatePresence mode="wait">
           <motion.div
@@ -71,6 +75,6 @@ export default function GameUI() {
         {/* Rejoin modal controls its own visibility based on machine context */}
         <RejoinModal />
       </main>
-    </LayoutGroup>
+    </CardAnimationRoot>
   );
 }

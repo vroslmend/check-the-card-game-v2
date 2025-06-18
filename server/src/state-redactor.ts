@@ -6,9 +6,9 @@ import {
   PlayerId,
   ClientCheckGameState,
   GameStage,
-} from 'shared-types';
-import type { GameContext } from './game-machine.js';
-import logger from './lib/logger.js';
+} from "shared-types";
+import type { GameContext } from "./game-machine.js";
+import logger from "./lib/logger.js";
 
 /**
  * Generates a player-specific view of the game state, redacting sensitive information.
@@ -17,11 +17,14 @@ import logger from './lib/logger.js';
  * @returns A redacted game state object suitable for sending to the client.
  */
 export const generatePlayerView = (
-  snapshot: { context: GameContext, value: unknown },
+  snapshot: { context: GameContext; value: unknown },
   viewingPlayerId: string
 ): ClientCheckGameState => {
   const { context: fullGameContext, value: snapshotValue } = snapshot;
-  logger.debug({ gameId: fullGameContext.gameId, viewingPlayerId }, 'Generating player view');
+  logger.debug(
+    { gameId: fullGameContext.gameId, viewingPlayerId },
+    "Generating player view"
+  );
 
   const clientPlayers: Record<PlayerId, Player> = {};
 
@@ -32,15 +35,23 @@ export const generatePlayerView = (
     // Redact opponent hands
     const clientHand: PublicCard[] = isViewingPlayer
       ? serverPlayer.hand
-      : serverPlayer.hand.map((card) => ({ facedown: true as const, id: card.id }));
-    
+      : serverPlayer.hand.map((card) => ({
+          facedown: true as const,
+          id: card.id,
+        }));
+
     // Correctly redact the pending drawn card according to our new shared type
-    let clientPendingDrawnCard: { card: Card, source: string } | null = null;
+    let clientPendingDrawnCard: { card: PublicCard } | null = null; // ✨ Use PublicCard
     if (serverPlayer.pendingDrawnCard) {
       if (isViewingPlayer) {
-        clientPendingDrawnCard = { card: serverPlayer.pendingDrawnCard.card, source: serverPlayer.pendingDrawnCard.source };
+        // The viewing player sees the full card
+        clientPendingDrawnCard = { card: serverPlayer.pendingDrawnCard.card };
+      } else {
+        // ✨ Opponents see a facedown card placeholder with the correct ID
+        clientPendingDrawnCard = {
+          card: { id: serverPlayer.pendingDrawnCard.card.id, facedown: true },
+        };
       }
-      // If not the viewing player, it remains null, correctly hiding the info.
     }
 
     clientPlayers[pId] = {
@@ -59,18 +70,22 @@ export const generatePlayerView = (
   }
 
   let gameStageValue: GameStage;
-  if (typeof snapshot.value === 'string') {
+  if (typeof snapshot.value === "string") {
     gameStageValue = snapshot.value as GameStage;
-  } else if (typeof snapshot.value === 'object' && snapshot.value !== null) {
+  } else if (typeof snapshot.value === "object" && snapshot.value !== null) {
     gameStageValue = Object.keys(snapshot.value)[0] as GameStage;
   } else {
-    logger.warn({ value: snapshot.value, gameId: fullGameContext.gameId }, 'Unexpected snapshot value type, defaulting game stage.');
+    logger.warn(
+      { value: snapshot.value, gameId: fullGameContext.gameId },
+      "Unexpected snapshot value type, defaulting game stage."
+    );
     gameStageValue = GameStage.WAITING_FOR_PLAYERS;
   }
-  
-  const clientLog = fullGameContext.log.filter(entry => 
-      entry.type === 'public' || 
-      (entry.type === 'private' && entry.actor?.id === viewingPlayerId)
+
+  const clientLog = fullGameContext.log.filter(
+    (entry) =>
+      entry.type === "public" ||
+      (entry.type === "private" && entry.actor?.id === viewingPlayerId)
   );
 
   const clientGameState: ClientCheckGameState = {
@@ -79,7 +94,13 @@ export const generatePlayerView = (
     gameMasterId: fullGameContext.gameMasterId,
     players: clientPlayers,
     deckSize: fullGameContext.deck.length,
-    deckTop: fullGameContext.deck.length > 0 ? { facedown: true, id: fullGameContext.deck[fullGameContext.deck.length - 1]!.id } : null,
+    deckTop:
+      fullGameContext.deck.length > 0
+        ? {
+            facedown: true,
+            id: fullGameContext.deck[fullGameContext.deck.length - 1]!.id,
+          }
+        : null,
     discardPile: fullGameContext.discardPile,
     turnOrder: fullGameContext.turnOrder,
     gameStage: gameStageValue,
@@ -96,6 +117,14 @@ export const generatePlayerView = (
     discardPileIsSealed: fullGameContext.discardPileIsSealed,
   };
 
-  logger.debug({ gameId: fullGameContext.gameId, viewingPlayerId, stage: clientGameState.gameStage, turnPhase: clientGameState.turnPhase }, 'Finished generating player view');
+  logger.debug(
+    {
+      gameId: fullGameContext.gameId,
+      viewingPlayerId,
+      stage: clientGameState.gameStage,
+      turnPhase: clientGameState.turnPhase,
+    },
+    "Finished generating player view"
+  );
   return clientGameState;
 };
