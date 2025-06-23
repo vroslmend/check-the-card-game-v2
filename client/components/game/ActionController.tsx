@@ -29,6 +29,7 @@ import {
   createStartGameAction,
 } from "./ActionFactories";
 import { isDrawnCard } from "@/lib/types";
+import logger from "@/lib/logger";
 
 type ActionControllerContextType = {
   selectedCardIndex: number | null;
@@ -61,6 +62,7 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       canDrawFromDiscard: false,
       allPlayersReady: false,
       hasPassedMatch: false,
+      isAbilitySelecting: false,
     };
   }
 
@@ -70,8 +72,25 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
   const isSpecialCard =
     !!topDiscardCard &&
     [CardRank.King, CardRank.Queen, CardRank.Jack].includes(
-      topDiscardCard.rank
+      topDiscardCard.rank,
     );
+
+  // Determine if we should show ability action buttons:
+  // 1. Client owns the ability
+  // 2. Ability stage requires input (peeking or swapping)
+  // 3. We are NOT currently in the automatic peek-reveal sub-state
+
+  const isViewingPeek = state.matches(
+    "inGame.ability.resolving.viewingPeek" as any,
+  );
+
+  const isAbilitySelecting =
+    !!currentAbilityContext &&
+    currentAbilityContext.playerId === localPlayerId &&
+    ["peeking", "swapping"].includes(
+      (currentAbilityContext as any).stage ?? "",
+    ) &&
+    !isViewingPeek;
 
   return {
     localPlayer,
@@ -89,9 +108,10 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       !isSpecialCard &&
       !currentGameState.discardPileIsSealed,
     allPlayersReady: Object.values(currentGameState.players).every(
-      (p) => p.isReady
+      (p) => p.isReady,
     ),
     hasPassedMatch,
+    isAbilitySelecting,
   };
 };
 
@@ -99,10 +119,34 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
   children,
 }) => {
   const props = useUISelector(selectActionControllerProps);
-  const { send } = useUIActorRef();
+
+  // Access the underlying actor(ref) so we can inspect the raw XState snapshot
+  const actorRef = useUIActorRef();
+  const { send } = actorRef;
+
+  // Emit a debug-level log whenever the ability-flow related flags change.
+  useEffect(() => {
+    // Only log during development to avoid noisy production logs
+    if (process.env.NODE_ENV === "production") return;
+
+    const snapshot = actorRef.getSnapshot();
+    logger.debug({
+      component: "ActionController",
+      stateValue: snapshot.value,
+      statePaths: (snapshot as any).toStrings?.() ?? [],
+      abilityContext: props.abilityContext,
+      isAbilityPlayer: props.isAbilityPlayer,
+      isAbilitySelecting: props.isAbilitySelecting,
+    });
+  }, [
+    actorRef,
+    props.abilityContext,
+    props.isAbilityPlayer,
+    props.isAbilitySelecting,
+  ]);
 
   const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(
-    null
+    null,
   );
   const [callCheckProgress, setCallCheckProgress] = useState(0);
   const [isHoldingCallCheck, setIsHoldingCallCheck] = useState(false);
@@ -125,23 +169,34 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
 
   const sendEvent = send;
 
-  const handleStartCallCheckHold = useCallback(() => {
-    if (!props.isMyTurn) return;
-    setIsHoldingCallCheck(true);
-    setCallCheckProgress(0);
+  const handleStartCallCheckHold = useCallback<
+    React.PointerEventHandler<HTMLButtonElement>
+  >(
+    (e) => {
+      if (!props.isMyTurn) return;
+      setIsHoldingCallCheck(true);
+      setCallCheckProgress(0);
 
-    callCheckIntervalRef.current = setInterval(() => {
-      setCallCheckProgress((prev) => {
-        const newProgress = prev + 4;
-        if (newProgress >= 100) {
-          clearCallCheckTimers();
-          sendEvent({ type: PlayerActionType.CALL_CHECK });
-          return 100;
-        }
-        return newProgress;
-      });
-    }, 40);
-  }, [props.isMyTurn, sendEvent, clearCallCheckTimers]);
+      callCheckIntervalRef.current = setInterval(() => {
+        setCallCheckProgress((prev) => {
+          const newProgress = prev + 4;
+          if (newProgress >= 100) {
+            clearCallCheckTimers();
+            sendEvent({ type: PlayerActionType.CALL_CHECK });
+            return 100;
+          }
+          return newProgress;
+        });
+      }, 40);
+    },
+    [props.isMyTurn, sendEvent, clearCallCheckTimers],
+  );
+
+  const handleEndCallCheckHold = useCallback<
+    React.PointerEventHandler<HTMLButtonElement>
+  >(() => {
+    clearCallCheckTimers();
+  }, [clearCallCheckTimers]);
 
   const getActions = useCallback((): Action[] => {
     const {
@@ -156,6 +211,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       matchingOpportunity,
       hasPassedMatch,
       canDrawFromDiscard,
+      isAbilitySelecting,
     } = props;
     const actions: Action[] = [];
     if (!localPlayer || !gameStage) return actions;
@@ -172,20 +228,20 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
             sendEvent({
               type: PlayerActionType.ATTEMPT_MATCH,
               payload: { handCardIndex: selectedCardIndex },
-            })
-          )
+            }),
+          ),
         );
       }
       actions.push(
         createPassMatchAction(() =>
-          sendEvent({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT })
-        )
+          sendEvent({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }),
+        ),
       );
       return actions;
     }
 
     // PRIORITY 2: ABILITY RESOLUTION
-    if (abilityContext && isAbilityPlayer) {
+    if (abilityContext && isAbilityPlayer && isAbilitySelecting) {
       const {
         type,
         stage,
@@ -200,21 +256,20 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         const selected = selectedPeekTargets?.length ?? 0;
         const isDisabled = selected !== required;
 
-        // ✨ FIX: Pass explicit labels to the factories
         actions.push(
           createConfirmAbilityAction(
             () => sendEvent({ type: "CONFIRM_ABILITY_ACTION" }),
             "Confirm Peek",
-            isDisabled
-          )
+            isDisabled,
+          ),
         );
 
         if (sourceCard.rank === "K" || sourceCard.rank === "Q") {
           actions.push(
             createSkipAbilityAction(
               () => sendEvent({ type: "SKIP_ABILITY_STAGE" }),
-              "Skip Peek"
-            )
+              "Skip Peek",
+            ),
           );
         }
       } else if (stage === "swapping") {
@@ -227,14 +282,14 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
           createConfirmAbilityAction(
             () => sendEvent({ type: "CONFIRM_ABILITY_ACTION" }),
             "Confirm Swap",
-            isDisabled
-          )
+            isDisabled,
+          ),
         );
         actions.push(
           createSkipAbilityAction(
             () => sendEvent({ type: "SKIP_ABILITY_STAGE" }),
-            "Skip Swap"
-          )
+            "Skip Swap",
+          ),
         );
       }
       return actions;
@@ -246,15 +301,15 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         if (!localPlayer.isReady)
           actions.push(
             createPlayerReadyAction(() =>
-              sendEvent({ type: PlayerActionType.DECLARE_LOBBY_READY })
-            )
+              sendEvent({ type: PlayerActionType.DECLARE_LOBBY_READY }),
+            ),
           );
         if (isGameMaster)
           actions.push(
             createStartGameAction(
               () => sendEvent({ type: PlayerActionType.START_GAME }),
-              !allPlayersReady
-            )
+              !allPlayersReady,
+            ),
           );
         break;
       case GameStage.PLAYING:
@@ -264,22 +319,22 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
           if (turnPhase === TurnPhase.DRAW && !drawnCardInfo) {
             actions.push(
               createDrawDeckAction(() =>
-                sendEvent({ type: PlayerActionType.DRAW_FROM_DECK })
-              )
+                sendEvent({ type: PlayerActionType.DRAW_FROM_DECK }),
+              ),
             );
             if (canDrawFromDiscard)
               actions.push(
                 createDrawDiscardAction(() =>
-                  sendEvent({ type: PlayerActionType.DRAW_FROM_DISCARD })
-                )
+                  sendEvent({ type: PlayerActionType.DRAW_FROM_DISCARD }),
+                ),
               );
           }
           // ✨ FIX: Check if a card is pending, regardless of source. The server validates the action.
           if (drawnCardInfo) {
             actions.push(
               createDiscardDrawnCardAction(() =>
-                sendEvent({ type: PlayerActionType.DISCARD_DRAWN_CARD })
-              )
+                sendEvent({ type: PlayerActionType.DISCARD_DRAWN_CARD }),
+              ),
             );
           }
           if (
@@ -290,10 +345,12 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
             actions.push(
               createCallCheckAction(
                 handleStartCallCheckHold,
+                handleEndCallCheckHold,
+                handleEndCallCheckHold,
                 callCheckProgress,
                 false,
-                isHoldingCallCheck
-              )
+                isHoldingCallCheck,
+              ),
             );
           }
         }
@@ -302,8 +359,8 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         if (!localPlayer.isReady) {
           actions.push(
             createReadyForPeekAction(() =>
-              sendEvent({ type: PlayerActionType.DECLARE_READY_FOR_PEEK })
-            )
+              sendEvent({ type: PlayerActionType.DECLARE_READY_FOR_PEEK }),
+            ),
           );
         }
         break;
@@ -316,6 +373,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     isHoldingCallCheck,
     sendEvent,
     handleStartCallCheckHold,
+    handleEndCallCheckHold,
   ]);
 
   const getPromptText = useCallback((): string | null => {
@@ -326,6 +384,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       abilityContext,
       isAbilityPlayer,
       hasPassedMatch,
+      isAbilitySelecting,
     } = props;
     if (!localPlayer) return null;
 
@@ -336,17 +395,32 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     ) {
       return "Select a card from your hand to attempt a match, or pass.";
     }
-    if (abilityContext && isAbilityPlayer) {
-      if (abilityContext.stage === "peeking")
-        return `PEEK: Select ${abilityContext.selectedPeekTargets.length}/${abilityContext.maxPeekTargets} card(s).`;
-      if (abilityContext.stage === "swapping")
-        return `SWAP: Select ${abilityContext.selectedSwapTargets.length}/2 cards.`;
+    if (abilityContext && isAbilityPlayer && isAbilitySelecting) {
+      const {
+        stage,
+        type,
+        selectedPeekTargets,
+        maxPeekTargets,
+        selectedSwapTargets,
+      } = abilityContext;
+      if (stage === "peeking") {
+        const selected = selectedPeekTargets?.length ?? 0;
+        const required = maxPeekTargets ?? 0;
+        return `PEEK: Select ${selected}/${required} card(s).`;
+      }
+      if (stage === "swapping") {
+        const selected = selectedSwapTargets?.length ?? 0;
+        return `SWAP: Select ${selected}/2 cards to swap.`;
+      }
     }
     if (isMyTurn && isDrawnCard(localPlayer.pendingDrawnCard)) {
       return "Swap with a card in your hand or discard the drawn card.";
     }
     if (props.gameStage === GameStage.INITIAL_PEEK && !localPlayer.isReady) {
       return "Memorize your bottom two cards, then press Ready.";
+    }
+    if (matchingOpportunity && !hasPassedMatch) {
+      return `MATCH: A ${matchingOpportunity.cardToMatch.rank} was played. Match it from your hand.`;
     }
     return null;
   }, [props]);
@@ -369,7 +443,7 @@ export const useActionController = () => {
   const context = useContext(ActionControllerContext);
   if (!context) {
     throw new Error(
-      "useActionController must be used within an ActionController."
+      "useActionController must be used within an ActionController.",
     );
   }
   return context;

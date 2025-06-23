@@ -1,11 +1,14 @@
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import ActionButton from './ActionButton';
-import Magnetic from '@/components/ui/Magnetic';
+import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import ActionButton from "./ActionButton";
+import Magnetic from "@/components/ui/Magnetic";
 
 export interface Action {
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
+  onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
+  onPointerUp?: React.PointerEventHandler<HTMLButtonElement>;
+  onPointerLeave?: React.PointerEventHandler<HTMLButtonElement>;
   disabled?: boolean;
   icon?: React.ReactNode;
   className?: string;
@@ -21,15 +24,18 @@ interface ActionBarComponentProps {
   children?: React.ReactNode;
 }
 
-const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, children }) => {
+const ActionBarComponent: React.FC<ActionBarComponentProps> = ({
+  actions,
+  children,
+}) => {
   return (
-    <motion.div 
+    <motion.div
       className="flex flex-col items-center w-full"
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ 
+      transition={{
         y: { type: "spring", stiffness: 400, damping: 28 },
-        opacity: { duration: 0.2 }
+        opacity: { duration: 0.2 },
       }}
     >
       <motion.div
@@ -53,7 +59,7 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
           >
             {children}
           </motion.div>
@@ -63,4 +69,4 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({ actions, childr
   );
 };
 
-export default ActionBarComponent; 
+export default ActionBarComponent;

@@ -65,35 +65,17 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
   const combinedDeckForDealing = [...deckForRender, ...dealingDeck];
 
   return (
-    <div className="grid grid-cols-3 gap-x-4 justify-items-center items-start">
-      {/* Deck */}
-      <div className="relative w-full h-full flex items-center justify-center">
-        <AnimatePresence>
-          {combinedDeckForDealing.length > 0 ? (
-            combinedDeckForDealing.map((card, index) => (
-              <motion.div
-                key={card.id}
-                className="absolute"
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03, duration: 0.3 }}
-              >
-                <VisualCardStack
-                  title={index === 0 ? "Deck" : ""}
-                  count={deckSize + dealingDeck.length}
-                  topCard={card}
-                  faceDown
-                  canInteract={canDrawFromDeck && dealingDeck.length === 0}
-                  onClick={handleDeckClick}
-                  size="xs"
-                />
-              </motion.div>
-            ))
-          ) : (
-            <VisualCardStack title="Deck" count={0} size="xs" />
-          )}
-        </AnimatePresence>
-      </div>
+    <div className="grid grid-cols-3 grid-rows-1 gap-x-4 justify-items-center items-start">
+      {/* Deck Pile */}
+      <VisualCardStack
+        title="Deck"
+        count={deckSize}
+        topCard={deckTop}
+        faceDown
+        canInteract={canDrawFromDeck}
+        onClick={handleDeckClick}
+        size="xs"
+      />
 
       {/* Drawn Card Area */}
       <div className="flex justify-center min-w-[64px] col-start-2">

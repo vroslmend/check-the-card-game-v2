@@ -75,14 +75,22 @@ export const HandGrid = ({
           );
         }
 
-        // --- PEEK LOGIC ---
-        const isPeeking = visibleCards.some(
+        const isCardVisible = visibleCards.some(
           (vc) => vc.playerId === ownerId && vc.cardIndex === index,
         );
-        const isFaceUp =
-          isPeeking || (ownerId === localPlayerId && "rank" in card);
-        const cardToRender = isFaceUp && "rank" in card ? card : undefined;
-        // --- END PEEK LOGIC ---
+
+        // If the original card lacks rank info (facedown) but we have a visible version, replace it
+        const visibleCardData = isCardVisible
+          ? visibleCards.find(
+              (vc) => vc.playerId === ownerId && vc.cardIndex === index,
+            )?.card
+          : undefined;
+
+        const cardToRender = (
+          "rank" in card ? card : (visibleCardData ?? card)
+        ) as PublicCard;
+
+        const isFaceUp = "rank" in cardToRender;
 
         const isMatchSelected = selectedCardIndices.includes(index);
         const isAbilityPeekSelected =
@@ -132,7 +140,7 @@ export const HandGrid = ({
                   }
                 >
                   <PlayingCard
-                    card={cardToRender}
+                    card={isFaceUp ? (cardToRender as any) : undefined}
                     faceDown={!isFaceUp}
                     className="card-fluid"
                     size={cardSize}

@@ -6,6 +6,7 @@ import {
   PlayerId,
   ClientCheckGameState,
   GameStage,
+  RichGameLogMessage,
 } from "shared-types";
 import type { GameContext } from "./game-machine.js";
 import logger from "./lib/logger.js";
@@ -18,12 +19,12 @@ import logger from "./lib/logger.js";
  */
 export const generatePlayerView = (
   snapshot: { context: GameContext; value: unknown },
-  viewingPlayerId: string
+  viewingPlayerId: string,
 ): ClientCheckGameState => {
   const { context: fullGameContext, value: snapshotValue } = snapshot;
   logger.debug(
     { gameId: fullGameContext.gameId, viewingPlayerId },
-    "Generating player view"
+    "Generating player view",
   );
 
   const clientPlayers: Record<PlayerId, Player> = {};
@@ -32,13 +33,15 @@ export const generatePlayerView = (
     const serverPlayer = fullGameContext.players[pId];
     const isViewingPlayer = pId === viewingPlayerId;
 
-    // Redact opponent hands
-    const clientHand: PublicCard[] = isViewingPlayer
-      ? serverPlayer.hand
-      : serverPlayer.hand.map((card) => ({
-          facedown: true as const,
-          id: card.id,
-        }));
+    const clientHand: PublicCard[] = serverPlayer.hand.map((card: Card) => {
+      // The viewing player always sees their own cards' details.
+      // The UI will decide whether to render them face-up or face-down.
+      if (isViewingPlayer) {
+        return card;
+      }
+      // Opponents' cards are always redacted.
+      return { facedown: true as const, id: card.id };
+    });
 
     // Correctly redact the pending drawn card according to our new shared type
     let clientPendingDrawnCard: { card: PublicCard } | null = null; // ✨ Use PublicCard
@@ -77,15 +80,15 @@ export const generatePlayerView = (
   } else {
     logger.warn(
       { value: snapshot.value, gameId: fullGameContext.gameId },
-      "Unexpected snapshot value type, defaulting game stage."
+      "Unexpected snapshot value type, defaulting game stage.",
     );
     gameStageValue = GameStage.WAITING_FOR_PLAYERS;
   }
 
   const clientLog = fullGameContext.log.filter(
-    (entry) =>
+    (entry: RichGameLogMessage) =>
       entry.type === "public" ||
-      (entry.type === "private" && entry.actor?.id === viewingPlayerId)
+      (entry.type === "private" && entry.actor?.id === viewingPlayerId),
   );
 
   const clientGameState: ClientCheckGameState = {
@@ -124,7 +127,7 @@ export const generatePlayerView = (
       stage: clientGameState.gameStage,
       turnPhase: clientGameState.turnPhase,
     },
-    "Finished generating player view"
+    "Finished generating player view",
   );
   return clientGameState;
 };

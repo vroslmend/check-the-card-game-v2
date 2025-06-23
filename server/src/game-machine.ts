@@ -6,9 +6,11 @@ import {
   emit,
   and,
   not,
+  or,
   enqueueActions,
   raise,
 } from "xstate";
+import type { StateNodeConfig } from "xstate";
 import {
   Card,
   CardRank,
@@ -28,12 +30,20 @@ import {
 import { createDeck, shuffleDeck } from "./lib/deck-utils.js";
 import logger from "./lib/logger.js";
 import "xstate/guards";
+import type {
+  ServerActiveAbility,
+  ServerPlayer,
+  GameContext,
+  GameInput,
+} from "./types.js";
+import { produce } from "immer";
 
 // #region Types and Constants
 const PEEK_TOTAL_DURATION_MS = parseInt(
   process.env.PEEK_DURATION_MS || "10000",
   10,
 );
+const PEEK_VIEW_DURATION_MS = 2000;
 const MATCHING_STAGE_DURATION_MS = parseInt(
   process.env.MATCHING_STAGE_DURATION_MS || "5000",
   10,
@@ -48,78 +58,45 @@ const LOBBY_DISCONNECT_TIMEOUT_MS = parseInt(
   process.env.LOBBY_DISCONNECT_TIMEOUT_MS || "5000",
   10,
 );
+const ABILITY_PEEK_VIEW_DURATION_MS = 5000;
 
-export interface ServerActiveAbility extends Omit<ActiveAbility, "stage"> {
-  stage: "peeking" | "swapping";
-  source: "discard" | "stack" | "stackSecondOfPair";
-  remainingPeeks?: number;
-}
-export interface ServerPlayer {
-  id: PlayerId;
-  name: string;
-  socketId: string;
-  hand: Card[];
-  isReady: boolean;
-  isDealer: boolean;
-  hasCalledCheck: boolean;
-  isLocked: boolean;
-  score: number;
-  isConnected: boolean;
-  status: PlayerStatus;
-  pendingDrawnCard: { card: Card; source: "deck" | "discard" } | null;
-  forfeited: boolean;
-}
-export interface GameContext {
-  gameId: string;
-  deck: Card[];
-  players: Record<PlayerId, ServerPlayer>;
-  discardPile: Card[];
-  turnOrder: PlayerId[];
-  gameMasterId: PlayerId | null;
-  currentPlayerId: PlayerId | null;
-  currentTurnSegment: TurnPhase | null;
-  gameStage: GameStage;
-  matchingOpportunity: {
-    cardToMatch: Card;
-    originalPlayerID: PlayerId;
-    remainingPlayerIDs: PlayerId[];
-  } | null;
-  abilityStack: ServerActiveAbility[];
-  checkDetails: {
-    callerId: PlayerId;
-    finalTurnOrder: PlayerId[];
-    finalTurnIndex: number;
-  } | null;
-  gameover: {
-    winnerIds: PlayerId[];
-    loserId: PlayerId | null;
-    playerScores: Record<PlayerId, number>;
-  } | null;
-  lastRoundLoserId: PlayerId | null;
-  log: RichGameLogMessage[];
-  chat: ChatMessage[];
-  discardPileIsSealed: boolean;
-  errorState: {
-    message: string;
-    retryCount: number;
-    errorType:
-      | "DECK_EMPTY"
-      | "NETWORK_ERROR"
-      | "PLAYER_ERROR"
-      | "GENERAL_ERROR"
-      | null;
-    affectedPlayerId?: PlayerId;
-    recoveryState?: any;
-  } | null;
-  maxPlayers: number;
-  cardsPerPlayer: number;
-  winnerId: PlayerId | null;
-}
-type GameInput = {
-  gameId: string;
-  maxPlayers?: number;
-  cardsPerPlayer?: number;
+const getPlayerNameForLog = (
+  playerId: PlayerId,
+  players: Record<PlayerId, ServerPlayer>,
+): string => players[playerId]?.name || `P-${playerId.slice(-4)}`;
+
+const createLogEntry = (
+  gameId: string,
+  data: Omit<RichGameLogMessage, "id" | "timestamp">,
+): RichGameLogMessage => ({
+  id: `log_${gameId}_${Date.now()}`,
+  timestamp: new Date().toISOString(),
+  ...data,
+});
+
+const cardScoreValues: Record<CardRank, number> = {
+  [CardRank.Ace]: -1,
+  [CardRank.Two]: 2,
+  [CardRank.Three]: 3,
+  [CardRank.Four]: 4,
+  [CardRank.Five]: 5,
+  [CardRank.Six]: 6,
+  [CardRank.Seven]: 7,
+  [CardRank.Eight]: 8,
+  [CardRank.Nine]: 9,
+  [CardRank.Ten]: 10,
+  [CardRank.Jack]: 11,
+  [CardRank.Queen]: 12,
+  [CardRank.King]: 13,
 };
+const specialRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
+const abilityRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
+// #endregion
+
+// -----------------------------------------------------------------------------
+// Action & Event Type Unions (restored)
+// -----------------------------------------------------------------------------
+
 type PlayerActionEvents =
   | { type: PlayerActionType.START_GAME; playerId: PlayerId }
   | { type: PlayerActionType.DECLARE_LOBBY_READY; playerId: PlayerId }
@@ -155,6 +132,7 @@ type PlayerActionEvents =
       playerId: PlayerId;
       payload: { playerIdToRemove: string };
     };
+
 type GameEvent =
   | {
       type: "PLAYER_JOIN_REQUEST";
@@ -172,8 +150,10 @@ type GameEvent =
     }
   | PlayerActionEvents
   | { type: "TIMER.PEEK_EXPIRED" }
+  | { type: "TIMER.PEEK_TO_SWAP" }
   | { type: "TIMER.MATCHING_EXPIRED" }
   | { type: "LOBBY_DISCONNECT_TIMEOUT"; playerId: PlayerId };
+
 type EmittedEvent =
   | { type: "BROADCAST_GAME_STATE" }
   | { type: "BROADCAST_CHAT_MESSAGE"; chatMessage: ChatMessage }
@@ -197,41 +177,27 @@ type EmittedEvent =
         | "GENERAL_ERROR";
       playerId?: PlayerId;
     };
-const getPlayerNameForLog = (playerId: string, context: GameContext): string =>
-  context.players[playerId]?.name || "P-" + playerId.slice(-4);
-const createLogEntry = (
-  context: GameContext,
-  data: Omit<RichGameLogMessage, "id" | "timestamp">,
-): RichGameLogMessage => ({
-  id: `log_${context.gameId}_${Date.now()}`,
-  timestamp: new Date().toISOString(),
-  ...data,
-});
-const cardScoreValues: Record<CardRank, number> = {
-  [CardRank.Ace]: -1,
-  [CardRank.Two]: 2,
-  [CardRank.Three]: 3,
-  [CardRank.Four]: 4,
-  [CardRank.Five]: 5,
-  [CardRank.Six]: 6,
-  [CardRank.Seven]: 7,
-  [CardRank.Eight]: 8,
-  [CardRank.Nine]: 9,
-  [CardRank.Ten]: 10,
-  [CardRank.Jack]: 11,
-  [CardRank.Queen]: 12,
-  [CardRank.King]: 13,
-};
-const specialRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
-const abilityRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
-// #endregion
 
-const applyDiscardLogic = (
-  context: GameContext,
-  cardToDiscard: Card,
-  playerId: PlayerId,
-) => {
-  let newAbilityStack = [...context.abilityStack];
+// Pure helper – no GameContext dependency
+interface DiscardLogicParams {
+  discardPile: Card[];
+  abilityStack: ServerActiveAbility[];
+  log: RichGameLogMessage[];
+  gameId: string;
+  players: Record<PlayerId, ServerPlayer>;
+  cardToDiscard: Card;
+  playerId: PlayerId;
+}
+const applyDiscardLogic = ({
+  discardPile,
+  abilityStack,
+  log,
+  gameId,
+  players,
+  cardToDiscard,
+  playerId,
+}: DiscardLogicParams) => {
+  const newAbilityStack = [...abilityStack];
   if (abilityRanks.has(cardToDiscard.rank)) {
     const type: AbilityType =
       cardToDiscard.rank === CardRank.King
@@ -251,18 +217,245 @@ const applyDiscardLogic = (
     newAbilityStack.push(abilityObj);
   }
   return {
-    discardPile: [...context.discardPile, cardToDiscard],
+    discardPile: [...discardPile, cardToDiscard] as Card[],
     log: [
-      ...context.log,
-      createLogEntry(context, {
-        message: `${getPlayerNameForLog(playerId, context)} discarded a ${cardToDiscard.rank}.`,
+      ...log,
+      createLogEntry(gameId, {
+        message: `${getPlayerNameForLog(playerId, players)} discarded a ${cardToDiscard.rank}.`,
         type: "public",
         tags: ["player-action"],
       }),
-    ],
+    ] as RichGameLogMessage[],
     abilityStack: newAbilityStack,
-  };
+  } as const;
 };
+
+const baseTurnStateNode = {
+  initial: TurnPhase.DRAW,
+  states: {
+    [TurnPhase.DRAW]: {
+      entry: [
+        "log_ENTER_TURN_DRAW",
+        assign({ currentTurnSegment: TurnPhase.DRAW }),
+        "unsealDiscardPile",
+        "broadcastGameState",
+      ],
+      on: {
+        [PlayerActionType.DRAW_FROM_DECK]: {
+          target: TurnPhase.DISCARD,
+          guard: and(["isPlayerTurn", not("isDeckEmpty")]),
+          actions: "drawFromDeck",
+        },
+        [PlayerActionType.DRAW_FROM_DISCARD]: {
+          target: TurnPhase.DISCARD,
+          guard: and(["isPlayerTurn", "canDrawFromDiscard"]),
+          actions: "drawFromDiscard",
+        },
+      },
+      always: {
+        target: "#game.error",
+        guard: "isDeckEmpty",
+        actions: ({ event }: { event: GameEvent }) => ({
+          type: "enterErrorState",
+          params: { errorType: "DECK_EMPTY", event },
+        }),
+      },
+    },
+
+    [TurnPhase.DISCARD]: {
+      entry: [
+        "log_ENTER_TURN_DISCARD",
+        assign({ currentTurnSegment: TurnPhase.DISCARD }),
+        "broadcastGameState",
+      ],
+      on: {
+        [PlayerActionType.SWAP_AND_DISCARD]: {
+          guard: and(["isPlayerTurn", "hasDrawnCard"]),
+          actions: "swapAndDiscard",
+          target: "postDiscard",
+        },
+        [PlayerActionType.DISCARD_DRAWN_CARD]: {
+          guard: and(["isPlayerTurn", "hasDrawnCard", "wasDrawnFromDeck"]),
+          actions: "discardDrawnCard",
+          target: "postDiscard",
+        },
+      },
+    },
+
+    discardAfterDiscardDraw: {
+      on: {
+        [PlayerActionType.SWAP_AND_DISCARD]: {
+          guard: and(["isPlayerTurn", "hasDrawnCard"]),
+          actions: "swapAndDiscard",
+          target: "postDiscard",
+        },
+      },
+    },
+
+    postDiscard: {
+      entry: "broadcastGameState",
+      always: { target: "matching" },
+    },
+
+    ability: {
+      entry: [
+        "log_ENTER_TURN_ABILITY",
+        assign({ currentTurnSegment: TurnPhase.ABILITY }),
+      ],
+      always: [
+        {
+          guard: "isAbilityOwnerLocked",
+          actions: ["fizzleTopAbility", "broadcastGameState"],
+        },
+        {
+          target: "endOfTurn",
+          guard: not("isAbilityCardOnTopOfAbilityStack"),
+        },
+      ],
+      on: {
+        [PlayerActionType.USE_ABILITY]: [
+          {
+            guard: and(["isValidAbilityAction"]),
+            actions: [
+              "performAbilityAction",
+              "emitPeekResults",
+              "schedulePeekToSwap",
+              "broadcastGameState",
+            ],
+          },
+        ],
+      },
+    },
+
+    matching: {
+      entry: [
+        "log_ENTER_TURN_MATCHING",
+        "setupMatchingOpportunity",
+        "broadcastGameState",
+      ],
+      invoke: {
+        src: "matchingTimerActor",
+        onDone: {
+          actions: ["clearMatchingOpportunity", "broadcastGameState"],
+          target: "ability",
+        },
+      },
+      on: {
+        [PlayerActionType.ATTEMPT_MATCH]: [
+          {
+            guard: "canAttemptMatch",
+            actions: "handleSuccessfulMatch",
+            target: "postMatch",
+          },
+          {
+            actions: ["applyMatchPenalty", "broadcastGameState"],
+          },
+        ],
+        [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
+          actions: "handlePlayerPassedOnMatch",
+        },
+      },
+      always: [
+        {
+          guard: ({ context }: { context: GameContext }) =>
+            (!context.matchingOpportunity ||
+              context.matchingOpportunity.remainingPlayerIDs.length === 0) &&
+            context.abilityStack.length > 0,
+          target: "ability",
+          actions: ["clearMatchingOpportunity", "broadcastGameState"],
+        },
+        {
+          guard: ({ context }: { context: GameContext }) =>
+            (!context.matchingOpportunity ||
+              context.matchingOpportunity.remainingPlayerIDs.length === 0) &&
+            context.abilityStack.length === 0,
+          target: "endOfTurn",
+          actions: ["clearMatchingOpportunity", "broadcastGameState"],
+        },
+      ],
+    },
+
+    postMatch: {
+      always: [
+        {
+          target: "ability",
+          guard: "isAbilityCardOnTopOfAbilityStack",
+        },
+        { target: "endOfTurn" },
+      ],
+    },
+
+    endOfTurn: { type: "final" },
+  },
+} as const;
+
+// Define type alias from constant
+type TurnStateNode = typeof baseTurnStateNode;
+
+type OnDoneConfig = { target: string; actions: readonly string[] };
+const createTurnStateNode = (onDone: OnDoneConfig) => ({
+  ...baseTurnStateNode,
+  onDone,
+});
+
+// -----------------------------------------------------------------------------
+// Dedicated action: emitPeekResults – sends ABILITY_PEEK_RESULT events only to
+// the acting player, using strong runtime narrowing via assertEvent to keep
+// TypeScript happy without broad `any` casts.
+// -----------------------------------------------------------------------------
+
+type UseAbilityEvent = Extract<
+  GameEvent,
+  { type: PlayerActionType.USE_ABILITY }
+>;
+
+const emitPeekResults = enqueueActions(({ context, event, enqueue }) => {
+  // Ensure this action only processes valid peek ability events
+  if (event.type !== PlayerActionType.USE_ABILITY) {
+    return;
+  }
+
+  const useAbilityEvent = event as UseAbilityEvent;
+  if (useAbilityEvent.payload.action !== "peek") {
+    return;
+  }
+
+  const actingPlayerId = useAbilityEvent.playerId;
+
+  const targets = useAbilityEvent.payload.targets;
+
+  if (!Array.isArray(targets)) return;
+
+  for (const target of targets) {
+    const targetPlayer = context.players[target.playerId];
+
+    // Validate target player and card index bounds
+    if (!targetPlayer || target.cardIndex >= targetPlayer.hand.length) {
+      logger.warn(
+        { target, gameId: context.gameId },
+        "Invalid peek target received, skipping.",
+      );
+      continue;
+    }
+
+    const card = targetPlayer.hand[target.cardIndex];
+
+    enqueue(
+      emit({
+        type: "SEND_EVENT_TO_PLAYER",
+        payload: {
+          playerId: actingPlayerId,
+          eventName: SocketEventName.ABILITY_PEEK_RESULT,
+          eventData: {
+            card,
+            playerId: target.playerId,
+            cardIndex: target.cardIndex,
+          },
+        },
+      }) as any,
+    );
+  }
+}) as any;
 
 export const gameMachine = setup({
   types: {
@@ -341,56 +534,96 @@ export const gameMachine = setup({
         !!cardInHand && cardInHand.rank === matchingOpportunity.cardToMatch.rank
       );
     },
-    isValidAbilityAction: ({ context, event }) => {
+    abilityOwnerActive: ({ context, event }) => {
       assertEvent(event, PlayerActionType.USE_ABILITY);
-      const { playerId, payload } = event;
       const currentAbility = context.abilityStack.at(-1);
+      return !!currentAbility && currentAbility.playerId === event.playerId;
+    },
+    isPeekFinished: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.USE_ABILITY);
+      const { payload } = event;
+      const ability = context.abilityStack.at(-1);
 
       if (
-        !currentAbility ||
-        currentAbility.playerId !== playerId ||
-        context.players[playerId]!.isLocked
+        !ability ||
+        ability.stage !== "peeking" ||
+        payload.action !== "peek"
       ) {
         return false;
       }
 
-      if (payload.action === "skip") {
-        return true;
-      }
-
-      if (
-        payload.action === "peek" &&
-        currentAbility.stage === "peeking" &&
-        (currentAbility.type === "peek" || currentAbility.type === "king")
-      ) {
-        // Check that no target is a locked opponent
-        for (const target of payload.targets) {
-          const targetPlayer = context.players[target.playerId];
-          if (target.playerId !== playerId && targetPlayer?.isLocked) {
-            return false; // Cannot peek at a locked opponent's cards
-          }
-        }
-        return true;
-      }
-
-      if (payload.action === "swap" && currentAbility.stage === "swapping") {
-        const { source, target } = payload;
-        const sourcePlayer = context.players[source.playerId];
-        const targetPlayer = context.players[target.playerId];
-
-        // Check if the source card belongs to a locked opponent
-        if (source.playerId !== playerId && sourcePlayer?.isLocked) {
-          return false;
-        }
-        // Check if the target card belongs to a locked opponent
-        if (target.playerId !== playerId && targetPlayer?.isLocked) {
-          return false;
-        }
-        return true;
-      }
-
-      return false;
+      const peeksUsed = Array.isArray(payload.targets)
+        ? payload.targets.length
+        : 1;
+      return !!ability.remainingPeeks && ability.remainingPeeks <= peeksUsed;
     },
+    ownerUnlocked: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.USE_ABILITY);
+      return !context.players[event.playerId]!.isLocked;
+    },
+    peekStageAction: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.USE_ABILITY);
+      const currentAbility = context.abilityStack.at(-1);
+      if (
+        !currentAbility ||
+        currentAbility.stage !== "peeking" ||
+        !["peek", "king"].includes(currentAbility.type)
+      )
+        return false;
+
+      if (event.payload.action !== "peek") return false;
+
+      // Ensure there are remaining peeks available
+      const remaining = currentAbility.remainingPeeks ?? 0;
+      const requested = Array.isArray(event.payload.targets)
+        ? event.payload.targets.length
+        : 1;
+
+      return remaining >= requested && remaining > 0;
+    },
+    validPeekTargets: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.USE_ABILITY);
+      if (!("targets" in event.payload)) return false;
+      for (const target of event.payload.targets) {
+        const targetPlayer = context.players[target.playerId];
+        if (target.playerId !== event.playerId && targetPlayer?.isLocked) {
+          return false;
+        }
+      }
+      return true;
+    },
+    swapStageAction: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.USE_ABILITY);
+      const currentAbility = context.abilityStack.at(-1);
+      return (
+        event.payload.action === "swap" && currentAbility?.stage === "swapping"
+      );
+    },
+    validSwapTargets: ({ context, event }) => {
+      assertEvent(event, PlayerActionType.USE_ABILITY);
+      if (!("source" in event.payload) || !("target" in event.payload))
+        return false;
+      const { source, target } = event.payload;
+      const sourcePlayer = context.players[source.playerId];
+      const targetPlayer = context.players[target.playerId];
+      if (source.playerId !== event.playerId && sourcePlayer?.isLocked)
+        return false;
+      if (target.playerId !== event.playerId && targetPlayer?.isLocked)
+        return false;
+      return true;
+    },
+    isValidAbilityAction: and([
+      "abilityOwnerActive",
+      "ownerUnlocked",
+      or([
+        ({ event }) => {
+          assertEvent(event, PlayerActionType.USE_ABILITY);
+          return event.payload.action === "skip";
+        },
+        and(["peekStageAction", "validPeekTargets"]),
+        and(["swapStageAction", "validSwapTargets"]),
+      ]),
+    ]),
     isCheckRoundOver: ({ context }) => {
       if (!context.checkDetails) return false;
       return (
@@ -440,7 +673,7 @@ export const gameMachine = setup({
         return {};
       }
 
-      const playerName = getPlayerNameForLog(playerId, context);
+      const playerName = getPlayerNameForLog(playerId, context.players);
       const { [playerId]: _, ...remainingPlayers } = context.players;
       const newTurnOrder = context.turnOrder.filter((id) => id !== playerId);
 
@@ -460,7 +693,7 @@ export const gameMachine = setup({
         gameMasterId: newGameMasterId,
         log: [
           ...context.log,
-          createLogEntry(context, {
+          createLogEntry(context.gameId, {
             message: `${playerName} has left the lobby.`,
             type: "public",
             tags: ["system-message"],
@@ -493,7 +726,7 @@ export const gameMachine = setup({
         gameMasterId: isGameMaster ? playerId : context.gameMasterId,
         log: [
           ...context.log,
-          createLogEntry(context, {
+          createLogEntry(context.gameId, {
             message: `${newPlayer.name} has joined the game.`,
             type: "public",
             tags: ["system-message"],
@@ -518,8 +751,8 @@ export const gameMachine = setup({
         turnOrder: context.turnOrder.filter((id) => id !== playerIdToRemove),
         log: [
           ...context.log,
-          createLogEntry(context, {
-            message: `${getPlayerNameForLog(playerIdToRemove, context)} was removed from the game.`,
+          createLogEntry(context.gameId, {
+            message: `${getPlayerNameForLog(playerIdToRemove, context.players)} was removed from the game.`,
             type: "public",
             tags: ["system-message"],
           }),
@@ -532,29 +765,38 @@ export const gameMachine = setup({
       let newAbilityStack = [...context.abilityStack];
       const currentAbility = newAbilityStack.at(-1);
       if (!currentAbility || currentAbility.playerId !== playerId) return {};
-      const newPlayers = JSON.parse(JSON.stringify(context.players)) as Record<
-        PlayerId,
-        ServerPlayer
-      >;
+
+      // Start with current players – will mutate draft only when necessary
+      const updatedPlayers = produce(context.players, (draft) => {
+        if (payload.action === "swap" && currentAbility.stage === "swapping") {
+          const { source, target } = payload;
+          const sourcePlayer = draft[source.playerId]!;
+          const targetPlayer = draft[target.playerId]!;
+          const temp = sourcePlayer.hand[source.cardIndex];
+          sourcePlayer.hand[source.cardIndex] =
+            targetPlayer.hand[target.cardIndex];
+          targetPlayer.hand[target.cardIndex] = temp;
+        }
+      });
+
       let newLog = [...context.log];
+
       if (payload.action === "skip") {
         if (currentAbility.stage === "peeking") {
-          // Player chooses to forego the peek(s) but still retain the swap phase
           currentAbility.stage = "swapping";
           delete currentAbility.remainingPeeks;
           newLog.push(
-            createLogEntry(context, {
-              message: `${getPlayerNameForLog(playerId, context)} skipped their peeks.`,
+            createLogEntry(context.gameId, {
+              message: `${getPlayerNameForLog(playerId, context.players)} skipped their peeks.`,
               type: "public",
               tags: ["player-action", "ability"],
             }),
           );
         } else {
-          // Skipping during swap stage ends the ability entirely
           newAbilityStack.pop();
           newLog.push(
-            createLogEntry(context, {
-              message: `${getPlayerNameForLog(playerId, context)} skipped their swap.`,
+            createLogEntry(context.gameId, {
+              message: `${getPlayerNameForLog(playerId, context.players)} skipped their swap.`,
               type: "public",
               tags: ["player-action", "ability"],
             }),
@@ -565,46 +807,40 @@ export const gameMachine = setup({
         currentAbility.stage === "peeking" &&
         (currentAbility.type === "peek" || currentAbility.type === "king")
       ) {
+        const peeksUsed = Array.isArray(payload.targets)
+          ? payload.targets.length
+          : 1;
         if (
           currentAbility.remainingPeeks &&
-          currentAbility.remainingPeeks > 1
+          currentAbility.remainingPeeks > peeksUsed
         ) {
-          currentAbility.remainingPeeks -= 1;
+          currentAbility.remainingPeeks -= peeksUsed;
         } else {
-          currentAbility.stage = "swapping";
           delete currentAbility.remainingPeeks;
         }
-        newLog = [
-          ...newLog,
-          createLogEntry(context, {
-            message: `${getPlayerNameForLog(playerId, context)} used Peek.`,
+        newLog.push(
+          createLogEntry(context.gameId, {
+            message: `${getPlayerNameForLog(playerId, context.players)} used Peek.`,
             type: "public",
             tags: ["player-action", "ability"],
           }),
-        ];
+        );
       } else if (
         payload.action === "swap" &&
         currentAbility.stage === "swapping"
       ) {
-        const { source, target } = payload;
-        const sourcePlayer = newPlayers[source.playerId]!;
-        const targetPlayer = newPlayers[target.playerId]!;
-        const sourceCard = sourcePlayer.hand[source.cardIndex];
-        const targetCard = targetPlayer.hand[target.cardIndex];
-        sourcePlayer.hand[source.cardIndex] = targetCard;
-        targetPlayer.hand[target.cardIndex] = sourceCard;
         newAbilityStack.pop();
-        newLog = [
-          ...newLog,
-          createLogEntry(context, {
-            message: `${getPlayerNameForLog(playerId, context)} used Swap.`,
+        newLog.push(
+          createLogEntry(context.gameId, {
+            message: `${getPlayerNameForLog(playerId, context.players)} used Swap.`,
             type: "public",
             tags: ["player-action", "ability"],
           }),
-        ];
+        );
       }
+
       return {
-        players: newPlayers,
+        players: updatedPlayers,
         abilityStack: newAbilityStack,
         log: newLog,
       };
@@ -624,33 +860,35 @@ export const gameMachine = setup({
         : {};
     }),
     dealCards: assign(({ context }) => {
-      const shuffledDeck = shuffleDeck(createDeck());
-      const newPlayers = JSON.parse(JSON.stringify(context.players)) as Record<
-        PlayerId,
-        ServerPlayer
-      >;
-      Object.values(newPlayers).forEach((p) => {
-        p.hand = [];
-        p.isReady = false;
-      });
-      for (let i = 0; i < context.cardsPerPlayer; i++) {
-        for (const playerId of context.turnOrder) {
-          if (shuffledDeck.length)
-            newPlayers[playerId]!.hand.push(shuffledDeck.pop()!);
+      const deck = shuffleDeck(createDeck());
+      // Create next players object using Immer – mutation stays within draft
+      const playersAfterDeal = produce(context.players, (draft) => {
+        // reset
+        Object.values(draft).forEach((p) => {
+          p.hand = [];
+          p.isReady = false;
+        });
+        // deal cards round-robin
+        for (let i = 0; i < context.cardsPerPlayer; i++) {
+          for (const playerId of context.turnOrder) {
+            if (deck.length) {
+              draft[playerId]!.hand.push(deck.pop()!);
+            }
+          }
         }
-      }
+      });
       return {
-        deck: shuffledDeck,
-        players: newPlayers,
-        discardPile: [],
+        deck,
+        players: playersAfterDeal,
+        discardPile: [] as Card[],
         log: [
           ...context.log,
-          createLogEntry(context, {
-            message: `${getPlayerNameForLog(context.gameMasterId!, context)} dealt the cards.`,
+          createLogEntry(context.gameId, {
+            message: `${getPlayerNameForLog(context.gameMasterId!, context.players)} dealt the cards.`,
             type: "public",
             tags: ["game-event"],
           }),
-        ],
+        ] as RichGameLogMessage[],
         gameStage: GameStage.DEALING,
       };
     }),
@@ -714,29 +952,46 @@ export const gameMachine = setup({
         playerId,
         payload: { handCardIndex },
       } = event;
-      const player = context.players[playerId]!;
-      const drawn = player.pendingDrawnCard!;
-      const cardToDiscard = player.hand[handCardIndex]!;
-      const newHand = [...player.hand];
-      newHand[handCardIndex] = drawn.card;
+      const updatedPlayers = produce(context.players, (draft) => {
+        const player = draft[playerId]!;
+        const drawn = player.pendingDrawnCard!;
+        const cardToDiscard = player.hand[handCardIndex]!;
+        player.hand[handCardIndex] = drawn.card;
+        player.pendingDrawnCard = null;
+        Object.assign(draft[playerId]!, player);
+      });
+      const cardToDiscard = context.players[playerId]!.hand[handCardIndex]!; // original before mutation
       return {
-        players: {
-          ...context.players,
-          [playerId]: { ...player, hand: newHand, pendingDrawnCard: null },
-        },
-        ...applyDiscardLogic(context, cardToDiscard, playerId),
+        players: updatedPlayers,
+        ...applyDiscardLogic({
+          discardPile: context.discardPile,
+          abilityStack: context.abilityStack,
+          log: context.log,
+          gameId: context.gameId,
+          players: updatedPlayers,
+          cardToDiscard,
+          playerId,
+        }),
       };
     }),
     discardDrawnCard: assign(({ context, event }) => {
       assertEvent(event, PlayerActionType.DISCARD_DRAWN_CARD);
-      const player = context.players[event.playerId]!;
-      const cardToDiscard = player.pendingDrawnCard!.card;
+      const updatedPlayers = produce(context.players, (draft) => {
+        draft[event.playerId]!.pendingDrawnCard = null;
+      });
+      const cardToDiscard =
+        context.players[event.playerId]!.pendingDrawnCard!.card;
       return {
-        players: {
-          ...context.players,
-          [event.playerId]: { ...player, pendingDrawnCard: null },
-        },
-        ...applyDiscardLogic(context, cardToDiscard, event.playerId),
+        players: updatedPlayers,
+        ...applyDiscardLogic({
+          discardPile: context.discardPile,
+          abilityStack: context.abilityStack,
+          log: context.log,
+          gameId: context.gameId,
+          players: updatedPlayers,
+          cardToDiscard,
+          playerId: event.playerId,
+        }),
       };
     }),
     setNextPlayer: assign(({ context }) => {
@@ -821,16 +1076,19 @@ export const gameMachine = setup({
         playerId,
         payload: { handCardIndex },
       } = event;
+
+      // mutate players via Immer
+      const newPlayers = produce(context.players, (draft) => {
+        draft[playerId]!.hand.splice(handCardIndex, 1);
+      });
+
       const cardFromHand = context.players[playerId]!.hand[handCardIndex]!;
       const cardOnDiscard = context.matchingOpportunity!.cardToMatch;
       const originalDiscarderId = context.matchingOpportunity!.originalPlayerID;
-      let newPlayers = JSON.parse(JSON.stringify(context.players)) as Record<
-        PlayerId,
-        ServerPlayer
-      >;
-      newPlayers[playerId]!.hand.splice(handCardIndex, 1);
+
       let newCheckDetails = context.checkDetails;
       let gameStage = context.gameStage;
+
       if (newPlayers[playerId]!.hand.length === 0) {
         newPlayers[playerId]!.hasCalledCheck = true;
         newPlayers[playerId]!.isLocked = true;
@@ -848,6 +1106,7 @@ export const gameMachine = setup({
           gameStage = GameStage.FINAL_TURNS;
         }
       }
+
       let newAbilityStack = [...context.abilityStack];
       if (
         abilityRanks.has(cardFromHand.rank) &&
@@ -861,19 +1120,18 @@ export const gameMachine = setup({
               : "swap";
         const getAbilityStage = (type: AbilityType) =>
           type === "king" || type === "peek" ? "peeking" : "swapping";
-        const originalDiscarderAbilityType = getAbilityType(cardOnDiscard.rank);
-        const matcherAbilityType = getAbilityType(cardFromHand.rank);
+
         const ability1: ServerActiveAbility = {
-          type: originalDiscarderAbilityType,
-          stage: getAbilityStage(originalDiscarderAbilityType),
+          type: getAbilityType(cardOnDiscard.rank),
+          stage: getAbilityStage(getAbilityType(cardOnDiscard.rank)),
           playerId: originalDiscarderId,
           sourceCard: cardOnDiscard,
           source: "stackSecondOfPair",
         };
         const ability2: ServerActiveAbility = {
-          type: matcherAbilityType,
-          stage: getAbilityStage(matcherAbilityType),
-          playerId: playerId,
+          type: getAbilityType(cardFromHand.rank),
+          stage: getAbilityStage(getAbilityType(cardFromHand.rank)),
+          playerId,
           sourceCard: cardFromHand,
           source: "stack",
         };
@@ -881,9 +1139,9 @@ export const gameMachine = setup({
         else if (ability1.type === "peek") ability1.remainingPeeks = 1;
         if (ability2.type === "king") ability2.remainingPeeks = 2;
         else if (ability2.type === "peek") ability2.remainingPeeks = 1;
-        newAbilityStack.push(ability1);
-        newAbilityStack.push(ability2);
+        newAbilityStack.push(ability1, ability2);
       }
+
       return {
         players: newPlayers,
         discardPile: [...context.discardPile, cardFromHand],
@@ -892,8 +1150,8 @@ export const gameMachine = setup({
         abilityStack: newAbilityStack,
         log: [
           ...context.log,
-          createLogEntry(context, {
-            message: `${getPlayerNameForLog(playerId, context)} matched a ${cardFromHand.rank}.`,
+          createLogEntry(context.gameId, {
+            message: `${getPlayerNameForLog(playerId, context.players)} matched a ${cardFromHand.rank}.`,
             type: "public",
             tags: ["player-action", "game-event"],
           }),
@@ -917,67 +1175,58 @@ export const gameMachine = setup({
     }),
     clearMatchingOpportunity: assign({ matchingOpportunity: null }),
     calculateScores: assign(({ context }) => {
-      const newPlayers = JSON.parse(JSON.stringify(context.players)) as Record<
-        PlayerId,
-        ServerPlayer
-      >;
-      const playerScores: Record<PlayerId, number> = {};
-
-      Object.values(newPlayers).forEach((p) => {
-        const score = p.hand.reduce(
-          (acc, card) => acc + cardScoreValues[card.rank],
-          0,
-        );
-        playerScores[p.id] = score;
-        p.score = score; // Update the player object directly
+      const updatedPlayers = produce(context.players, (draft) => {
+        for (const p of Object.values(draft)) {
+          const score = p.hand.reduce(
+            (acc, card) => acc + cardScoreValues[card.rank],
+            0,
+          );
+          p.score = score;
+        }
       });
 
-      let minScore = Infinity;
-      let loserId: PlayerId | null = null;
-      let maxScore = -Infinity;
+      const playerScores: Record<PlayerId, number> = {};
+      Object.values(updatedPlayers).forEach((p) => {
+        playerScores[p.id] = p.score;
+      });
 
-      for (const playerId in playerScores) {
-        const score = playerScores[playerId]!;
-        if (score < minScore) {
-          minScore = score;
-        }
-        if (score > maxScore) {
-          maxScore = score;
-          loserId = playerId;
-        }
-      }
-
+      const minScore = Math.min(...Object.values(playerScores));
+      const maxScore = Math.max(...Object.values(playerScores));
       const winnerIds = Object.keys(playerScores).filter(
         (id) => playerScores[id] === minScore,
       );
+      const loserId =
+        Object.keys(playerScores).find((id) => playerScores[id] === maxScore) ??
+        null;
 
       return {
-        players: newPlayers, // Assign the updated players object
-        winnerId: winnerIds[0] || null,
+        players: updatedPlayers,
+        winnerId: winnerIds[0] ?? null,
         gameover: { winnerIds, loserId, playerScores },
         gameStage: GameStage.GAMEOVER,
       };
     }),
     resetForNewRound: assign(({ context }) => {
-      const newPlayers: Record<PlayerId, ServerPlayer> = {};
       const newDealerIndex =
         (context.turnOrder.indexOf(context.gameMasterId!) + 1) %
         context.turnOrder.length;
       const newDealerId = context.turnOrder[newDealerIndex]!;
-      for (const p of Object.values(context.players)) {
-        newPlayers[p.id] = {
-          ...p,
-          hand: [],
-          isReady: false,
-          isLocked: false,
-          hasCalledCheck: false,
-          pendingDrawnCard: null,
-          isDealer: p.id === newDealerId,
-          status: PlayerStatus.WAITING,
-        };
-      }
+
+      const updatedPlayers = produce(context.players, (draft) => {
+        for (const pId of Object.keys(draft)) {
+          const p = draft[pId]!;
+          p.hand = [];
+          p.isReady = false;
+          p.isLocked = false;
+          p.hasCalledCheck = false;
+          p.pendingDrawnCard = null;
+          p.isDealer = p.id === newDealerId;
+          p.status = PlayerStatus.WAITING;
+        }
+      });
+
       return {
-        players: newPlayers,
+        players: updatedPlayers,
         deck: [],
         discardPile: [],
         abilityStack: [],
@@ -1006,10 +1255,11 @@ export const gameMachine = setup({
     addPlayerDisconnectedLog: assign({
       log: ({ context, event }) => {
         assertEvent(event, "PLAYER_DISCONNECTED");
+        const playerName = getPlayerNameForLog(event.playerId, context.players);
         return [
           ...context.log,
-          createLogEntry(context, {
-            message: `${getPlayerNameForLog(event.playerId, context)} has disconnected.`,
+          createLogEntry(context.gameId, {
+            message: `${playerName} has disconnected.`,
             type: "public",
             tags: ["system-message"],
           }),
@@ -1087,7 +1337,6 @@ export const gameMachine = setup({
       let tempDiscard = [...context.discardPile];
       let logMessageText = "";
 
-      // If deck is empty, reshuffle discard pile into it
       if (tempDeck.length === 0) {
         const topCard = tempDiscard.pop();
         tempDeck = shuffleDeck(tempDiscard);
@@ -1096,13 +1345,11 @@ export const gameMachine = setup({
       }
 
       if (tempDeck.length === 0) {
-        // This case occurs if both deck and discard were empty.
-        // We cannot apply a penalty, so we just log it.
-        logMessageText += `${getPlayerNameForLog(playerId, context)} attempted an invalid match, but no penalty card could be drawn.`;
+        logMessageText += `${getPlayerNameForLog(playerId, context.players)} attempted an invalid match, but no penalty card could be drawn.`;
         return {
           log: [
             ...context.log,
-            createLogEntry(context, {
+            createLogEntry(context.gameId, {
               message: logMessageText,
               type: "public",
               tags: ["game-event", "error"],
@@ -1112,18 +1359,19 @@ export const gameMachine = setup({
       }
 
       const penaltyCard = tempDeck.pop()!;
-      const newPlayers = JSON.parse(JSON.stringify(context.players));
-      newPlayers[playerId]!.hand.push(penaltyCard);
+      const updatedPlayers = produce(context.players, (draft) => {
+        draft[playerId]!.hand.push(penaltyCard);
+      });
 
-      logMessageText += `${getPlayerNameForLog(playerId, context)} attempted an invalid match and received a penalty card.`;
+      logMessageText += `${getPlayerNameForLog(playerId, context.players)} attempted an invalid match and received a penalty card.`;
 
       return {
         deck: tempDeck,
         discardPile: tempDiscard,
-        players: newPlayers,
+        players: updatedPlayers,
         log: [
           ...context.log,
-          createLogEntry(context, {
+          createLogEntry(context.gameId, {
             message: logMessageText,
             type: "public",
             tags: ["player-action", "game-event"],
@@ -1191,15 +1439,45 @@ export const gameMachine = setup({
       log: ({ context }) => {
         const fizzledAbility = context.abilityStack.at(-1);
         if (!fizzledAbility) return context.log;
-        const message = `${getPlayerNameForLog(fizzledAbility.playerId, context)}'s ability fizzled because they are locked.`;
+        const message = `${getPlayerNameForLog(fizzledAbility.playerId, context.players)}'s ability fizzled because they are locked.`;
         return [
           ...context.log,
-          createLogEntry(context, {
+          createLogEntry(context.gameId, {
             message,
             type: "public",
             tags: ["game-event", "ability"],
           }),
         ];
+      },
+    }),
+    emitPeekResults,
+    // Schedule automatic transition from peeking to swapping after view duration
+    schedulePeekToSwap: enqueueActions(({ context, event, enqueue }) => {
+      // This action must be placed *after* performAbilityAction in the action list
+      // so that context reflects the updated abilityStack.
+      if (event.type !== PlayerActionType.USE_ABILITY) return;
+      const ability = context.abilityStack.at(-1);
+      if (!ability) return;
+      // If we are still in peeking stage but there are no remaining peeks, schedule the swap stage
+      if (
+        ability.stage === "peeking" &&
+        (!("remainingPeeks" in ability) || ability.remainingPeeks === undefined)
+      ) {
+        enqueue.raise(
+          { type: "TIMER.PEEK_TO_SWAP" },
+          { delay: ABILITY_PEEK_VIEW_DURATION_MS },
+        );
+      }
+    }) as any,
+    transitionToSwapStage: assign({
+      abilityStack: ({ context }) => {
+        const newAbilityStack = produce(context.abilityStack, (draft) => {
+          const currentAbility = draft.at(-1);
+          if (currentAbility && currentAbility.stage === "peeking") {
+            currentAbility.stage = "swapping";
+          }
+        });
+        return newAbilityStack;
       },
     }),
     // === Logging actions for observability ===
@@ -1301,6 +1579,9 @@ export const gameMachine = setup({
   }),
   initial: GameStage.WAITING_FOR_PLAYERS,
   on: {
+    "TIMER.PEEK_TO_SWAP": {
+      actions: ["transitionToSwapStage", "broadcastGameState"] as const,
+    },
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: [
         // 1. Add the message to the context
@@ -1430,26 +1711,26 @@ export const gameMachine = setup({
           always: {
             target: "peeking",
             guard: "allPlayersReadyForPeek",
+            actions: enqueueActions(({ context, enqueue }) => {
+              context.turnOrder.forEach((playerId) => {
+                const playerHand = context.players[playerId]!.hand;
+                const peekableCards = playerHand.slice(-2);
+                enqueue(
+                  emit({
+                    type: "SEND_EVENT_TO_PLAYER",
+                    payload: {
+                      playerId,
+                      eventName: SocketEventName.INITIAL_PEEK_INFO,
+                      eventData: { hand: peekableCards },
+                    },
+                  }) as any,
+                );
+              });
+              enqueue("broadcastGameState" as const);
+            }),
           },
         },
         peeking: {
-          entry: enqueueActions(({ context, enqueue }) => {
-            context.turnOrder.forEach((playerId) => {
-              const playerHand = context.players[playerId]!.hand;
-              const peekableCards = playerHand.slice(-2);
-              enqueue(
-                emit({
-                  type: "SEND_EVENT_TO_PLAYER",
-                  payload: {
-                    playerId,
-                    eventName: SocketEventName.INITIAL_PEEK_INFO,
-                    eventData: { hand: peekableCards },
-                  },
-                }),
-              );
-            });
-            enqueue("broadcastGameState" as const);
-          }),
           invoke: {
             src: "peekTimer",
             onDone: {
@@ -1487,163 +1768,10 @@ export const gameMachine = setup({
         },
       },
       states: {
-        turn: {
-          initial: TurnPhase.DRAW,
-          states: {
-            [TurnPhase.DRAW]: {
-              entry: [
-                "log_ENTER_TURN_DRAW",
-                assign({ currentTurnSegment: TurnPhase.DRAW }),
-                "unsealDiscardPile",
-                "broadcastGameState",
-              ],
-              on: {
-                [PlayerActionType.DRAW_FROM_DECK]: {
-                  target: "DISCARD",
-                  guard: and(["isPlayerTurn", not("isDeckEmpty")]),
-                  actions: "drawFromDeck",
-                },
-                [PlayerActionType.DRAW_FROM_DISCARD]: {
-                  target: "DISCARD",
-                  guard: and(["isPlayerTurn", "canDrawFromDiscard"]),
-                  actions: "drawFromDiscard",
-                },
-              },
-              always: {
-                target: `#game.error`,
-                guard: "isDeckEmpty",
-                actions: ({ event }: { event: GameEvent }) => ({
-                  type: "enterErrorState",
-                  params: { errorType: "DECK_EMPTY", event },
-                }),
-              },
-            },
-            [TurnPhase.DISCARD]: {
-              entry: [
-                "log_ENTER_TURN_DISCARD",
-                assign({ currentTurnSegment: TurnPhase.DISCARD }),
-                "broadcastGameState",
-              ],
-              on: {
-                [PlayerActionType.SWAP_AND_DISCARD]: {
-                  guard: and(["isPlayerTurn", "hasDrawnCard"]),
-                  actions: "swapAndDiscard",
-                  target: "postDiscard",
-                },
-                [PlayerActionType.DISCARD_DRAWN_CARD]: {
-                  guard: and([
-                    "isPlayerTurn",
-                    "hasDrawnCard",
-                    "wasDrawnFromDeck",
-                  ]),
-                  actions: "discardDrawnCard",
-                  target: "postDiscard",
-                },
-              },
-            },
-            discardAfterDiscardDraw: {
-              on: {
-                [PlayerActionType.SWAP_AND_DISCARD]: {
-                  guard: and(["isPlayerTurn", "hasDrawnCard"]),
-                  actions: "swapAndDiscard",
-                  target: "postDiscard",
-                },
-              },
-            },
-            postDiscard: {
-              entry: "broadcastGameState",
-              always: { target: "matching" },
-            },
-            ability: {
-              entry: "log_ENTER_TURN_ABILITY",
-              always: [
-                {
-                  guard: "isAbilityOwnerLocked" as const,
-                  actions: ["fizzleTopAbility", "broadcastGameState"] as const,
-                },
-                {
-                  target: "endOfTurn",
-                  guard: not("isAbilityCardOnTopOfAbilityStack"),
-                },
-              ] as const,
-              on: {
-                [PlayerActionType.USE_ABILITY]: {
-                  guard: "isValidAbilityAction" as const,
-                  actions: [
-                    "performAbilityAction",
-                    "broadcastGameState",
-                  ] as const,
-                },
-              },
-            },
-            matching: {
-              entry: [
-                "log_ENTER_TURN_MATCHING",
-                "setupMatchingOpportunity",
-                "broadcastGameState",
-              ] as const,
-              invoke: {
-                src: "matchingTimerActor",
-                onDone: {
-                  actions: ["clearMatchingOpportunity", "broadcastGameState"],
-                  target: "ability",
-                },
-              },
-              on: {
-                [PlayerActionType.ATTEMPT_MATCH]: [
-                  {
-                    guard: "canAttemptMatch" as const,
-                    actions: "handleSuccessfulMatch",
-                    target: "postMatch",
-                  },
-                  {
-                    actions: [
-                      "applyMatchPenalty",
-                      "broadcastGameState",
-                    ] as const,
-                  },
-                ],
-                [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
-                  actions: "handlePlayerPassedOnMatch",
-                },
-              },
-              always: [
-                {
-                  guard: ({ context }: { context: GameContext }) =>
-                    (!context.matchingOpportunity ||
-                      context.matchingOpportunity.remainingPlayerIDs.length ===
-                        0) &&
-                    context.abilityStack.length > 0,
-                  target: "ability",
-                  actions: ["clearMatchingOpportunity", "broadcastGameState"],
-                },
-                {
-                  guard: ({ context }: { context: GameContext }) =>
-                    (!context.matchingOpportunity ||
-                      context.matchingOpportunity.remainingPlayerIDs.length ===
-                        0) &&
-                    context.abilityStack.length === 0,
-                  target: "endOfTurn",
-                  actions: ["clearMatchingOpportunity", "broadcastGameState"],
-                },
-              ],
-            },
-            postMatch: {
-              always: [
-                {
-                  target: "ability",
-                  guard: "isAbilityCardOnTopOfAbilityStack" as const,
-                },
-                { target: "endOfTurn" },
-              ] as const,
-            },
-            endOfTurn: { type: "final" },
-          },
-          onDone: {
-            target: "turn",
-            actions: ["setNextPlayer"] as const,
-          },
-        },
+        turn: createTurnStateNode({
+          target: "turn",
+          actions: ["setNextPlayer"] as const,
+        }) as any,
         error: { id: "playing.error" /* ...error state logic... */ },
       },
     },
@@ -1675,169 +1803,14 @@ export const gameMachine = setup({
       },
       initial: "turn",
       states: {
-        turn: {
-          initial: TurnPhase.DRAW,
-          states: {
-            [TurnPhase.DRAW]: {
-              entry: [
-                "log_ENTER_TURN_DRAW",
-                assign({ currentTurnSegment: TurnPhase.DRAW }),
-                "unsealDiscardPile",
-                "broadcastGameState",
-              ] as const,
-              on: {
-                [PlayerActionType.DRAW_FROM_DECK]: {
-                  target: TurnPhase.DISCARD,
-                  guard: not("isDeckEmpty"),
-                  actions: "drawFromDeck",
-                },
-                [PlayerActionType.DRAW_FROM_DISCARD]: {
-                  target: "discardAfterDiscardDraw",
-                  guard: "canDrawFromDiscard" as const,
-                  actions: "drawFromDiscard",
-                },
-              },
-              always: {
-                target: `#game.error`,
-                guard: "isDeckEmpty" as const,
-                actions: ({ event }: { event: GameEvent }) => ({
-                  type: "enterErrorState",
-                  params: { errorType: "DECK_EMPTY", event },
-                }),
-              },
-            },
-            [TurnPhase.DISCARD]: {
-              entry: [
-                "log_ENTER_TURN_DISCARD",
-                assign({ currentTurnSegment: TurnPhase.DISCARD }),
-                "broadcastGameState",
-              ],
-              on: {
-                [PlayerActionType.SWAP_AND_DISCARD]: {
-                  guard: "hasDrawnCard" as const,
-                  actions: "swapAndDiscard",
-                  target: "postDiscard",
-                },
-                [PlayerActionType.DISCARD_DRAWN_CARD]: {
-                  guard: and(["hasDrawnCard", "wasDrawnFromDeck"]),
-                  actions: "discardDrawnCard",
-                  target: "postDiscard",
-                },
-              },
-            },
-            discardAfterDiscardDraw: {
-              on: {
-                [PlayerActionType.SWAP_AND_DISCARD]: {
-                  guard: "hasDrawnCard" as const,
-                  actions: "swapAndDiscard",
-                  target: "postDiscard",
-                },
-              },
-            },
-            postDiscard: {
-              entry: "broadcastGameState" as const,
-              always: [
-                {
-                  guard: "isAbilityCardOnTopOfAbilityStack" as const,
-                  target: "ability",
-                },
-                { target: "matching" },
-              ] as const,
-            },
-            ability: {
-              entry: "log_ENTER_TURN_ABILITY",
-              always: [
-                {
-                  guard: "isAbilityOwnerLocked" as const,
-                  actions: ["fizzleTopAbility", "broadcastGameState"] as const,
-                },
-                {
-                  target: "endOfTurn",
-                  guard: not("isAbilityCardOnTopOfAbilityStack"),
-                },
-              ] as const,
-              on: {
-                [PlayerActionType.USE_ABILITY]: {
-                  guard: "isValidAbilityAction" as const,
-                  actions: [
-                    "performAbilityAction",
-                    "broadcastGameState",
-                  ] as const,
-                },
-              },
-            },
-            matching: {
-              entry: [
-                "log_ENTER_TURN_MATCHING",
-                "setupMatchingOpportunity",
-                "broadcastGameState",
-              ] as const,
-              invoke: {
-                src: "matchingTimerActor",
-                onDone: {
-                  actions: ["clearMatchingOpportunity", "broadcastGameState"],
-                  target: "ability",
-                },
-              },
-              on: {
-                [PlayerActionType.ATTEMPT_MATCH]: [
-                  {
-                    guard: "canAttemptMatch" as const,
-                    actions: "handleSuccessfulMatch",
-                    target: "postMatch",
-                  },
-                  {
-                    actions: [
-                      "applyMatchPenalty",
-                      "broadcastGameState",
-                    ] as const,
-                  },
-                ],
-                [PlayerActionType.PASS_ON_MATCH_ATTEMPT]: {
-                  actions: "handlePlayerPassedOnMatch",
-                },
-              },
-              always: [
-                {
-                  guard: ({ context }: { context: GameContext }) =>
-                    (!context.matchingOpportunity ||
-                      context.matchingOpportunity.remainingPlayerIDs.length ===
-                        0) &&
-                    context.abilityStack.length > 0,
-                  target: "ability",
-                  actions: ["clearMatchingOpportunity", "broadcastGameState"],
-                },
-                {
-                  guard: ({ context }: { context: GameContext }) =>
-                    (!context.matchingOpportunity ||
-                      context.matchingOpportunity.remainingPlayerIDs.length ===
-                        0) &&
-                    context.abilityStack.length === 0,
-                  target: "endOfTurn",
-                  actions: ["clearMatchingOpportunity", "broadcastGameState"],
-                },
-              ],
-            },
-            postMatch: {
-              always: [
-                {
-                  target: "ability",
-                  guard: "isAbilityCardOnTopOfAbilityStack" as const,
-                },
-                { target: "endOfTurn" },
-              ] as const,
-            },
-            endOfTurn: { type: "final" },
-          },
-          onDone: {
-            target: "turn",
-            actions: [
-              "setNextPlayerInFinalTurns",
-              "setCurrentPlayerInFinalTurns",
-              "broadcastGameState",
-            ] as const,
-          },
-        },
+        turn: createTurnStateNode({
+          target: "turn",
+          actions: [
+            "setNextPlayerInFinalTurns",
+            "setCurrentPlayerInFinalTurns",
+            "broadcastGameState",
+          ] as const,
+        }) as any,
       },
     },
     [GameStage.SCORING]: {
@@ -1911,3 +1884,10 @@ export const gameMachine = setup({
     },
   },
 });
+
+// -----------------------------------------------------------------------------
+// Re-export server-side types for external modules that previously imported
+// them directly from this file. This maintains backward-compatibility without
+// duplicating definitions.
+// -----------------------------------------------------------------------------
+export type { GameContext, ServerPlayer } from "./types.js";

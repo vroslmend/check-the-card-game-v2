@@ -16,7 +16,7 @@ import {
 // Card draw actions
 export const createDrawDeckAction = (
   onClick: () => void,
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label: "Draw from Deck",
   onClick,
@@ -27,7 +27,7 @@ export const createDrawDeckAction = (
 
 export const createDrawDiscardAction = (
   onClick: () => void,
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label: "Draw from Discard",
   onClick,
@@ -39,7 +39,7 @@ export const createDrawDiscardAction = (
 // Card discard actions
 export const createDiscardDrawnCardAction = (
   onClick: () => void,
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label: "Discard Card",
   onClick,
@@ -50,26 +50,30 @@ export const createDiscardDrawnCardAction = (
 
 // Game control actions
 export const createCallCheckAction = (
-  onClick: () => void,
+  onPointerDown: React.PointerEventHandler<HTMLButtonElement>,
+  onPointerUp: React.PointerEventHandler<HTMLButtonElement>,
+  onPointerLeave: React.PointerEventHandler<HTMLButtonElement>,
   progressPercent: number = 0,
   disabled?: boolean,
-  showProgress?: boolean
+  showProgress?: boolean,
 ): Action => ({
   label: "CHECK!",
-  onClick,
+  onPointerDown,
+  onPointerUp,
+  onPointerLeave,
   disabled,
   className:
     "bg-amber-400 text-black hover:bg-amber-300 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 font-semibold tracking-wider",
   isProgressButton: showProgress,
   progressPercent,
-  progressFillClassName: "bg-amber-500/50",
+  progressFillClassName: "bg-black/60 dark:bg-white/60 mix-blend-multiply",
 });
 
 export const createPassMatchAction = (
   onClick: () => void,
   _progressPercent: number = 0,
   disabled?: boolean,
-  isPassed: boolean = false
+  isPassed: boolean = false,
 ): Action => ({
   label: isPassed ? "Passed" : "Pass Match",
   onClick,
@@ -81,7 +85,7 @@ export const createPassMatchAction = (
 export const createAttemptMatchAction = (
   onClick: () => void,
   disabled?: boolean,
-  _hasSelection: boolean = false
+  _hasSelection: boolean = false,
 ): Action => ({
   label: "Confirm Match",
   onClick,
@@ -94,7 +98,7 @@ export const createAttemptMatchAction = (
 export const createConfirmAbilityAction = (
   onClick: () => void,
   label: string, // Now accepts an explicit label
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label, // Use the provided label for the tooltip
   onClick,
@@ -106,7 +110,7 @@ export const createConfirmAbilityAction = (
 export const createSkipAbilityAction = (
   onClick: () => void,
   label: string, // Also modify this for consistency
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label, // Use the provided label
   onClick,
@@ -117,7 +121,7 @@ export const createSkipAbilityAction = (
 
 export const createCancelAbilityAction = (
   onClick: () => void,
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label: "Cancel Ability",
   onClick,
@@ -129,7 +133,7 @@ export const createCancelAbilityAction = (
 // Initial setup actions
 export const createReadyForPeekAction = (
   onClick: () => void,
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label: "Ready for Peek",
   onClick,
@@ -140,7 +144,7 @@ export const createReadyForPeekAction = (
 
 export const createPlayerReadyAction = (
   onClick: () => void,
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label: "Ready",
   onClick,
@@ -151,7 +155,7 @@ export const createPlayerReadyAction = (
 
 export const createStartGameAction = (
   onClick: () => void,
-  disabled?: boolean
+  disabled?: boolean,
 ): Action => ({
   label: "Start Game",
   onClick,
