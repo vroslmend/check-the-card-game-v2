@@ -1,19 +1,20 @@
 'use client';
 
 import React from 'react';
-import { Card as CardType } from 'shared-types';
+import { Card as CardType, PublicCard } from 'shared-types';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { DeckCard } from './CardPile';
 
 interface CardInPlayProps {
-  card: CardType;
+  card: PublicCard;
   index: number;
   isSelected?: boolean;
   isPeeking?: boolean;
   isInteractive?: boolean;
   onClick?: () => void;
   className?: string;
+  size?: 'xxs' | 'xs' | 'sm' | 'md' | 'lg';
 }
 
 export const CardInPlay: React.FC<CardInPlayProps> = ({
@@ -23,7 +24,8 @@ export const CardInPlay: React.FC<CardInPlayProps> = ({
   isPeeking = false,
   isInteractive = false,
   onClick,
-  className
+  className,
+  size = 'sm'
 }) => {
   // Function to determine if we can see the card face
   const canSeeCardFace = () => {

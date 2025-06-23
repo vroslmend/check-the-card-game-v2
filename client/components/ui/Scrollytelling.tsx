@@ -2,7 +2,9 @@
 
 import { useState, useRef } from "react"
 import { motion, useScroll, useTransform, useSpring, MotionValue } from "framer-motion"
-import { Spade, Heart, Diamond, Droplets, Wind, Zap } from "lucide-react"
+import { Spade, Heart, Diamond } from "lucide-react"
+import { FaBrain, FaEye } from "react-icons/fa";
+import { GiWhirlwind } from "react-icons/gi";
 import { PrincipleCard } from "@/components/ui/PrincipleCard"
 import { CardStack } from "@/components/ui/CardStack"
 import { AnimateOnView } from "@/components/ui/AnimateOnView"
@@ -63,40 +65,40 @@ export function Scrollytelling() {
 
   const features = [
     {
-      icon: Droplets,
-      title: "Seamless UI",
-      description: "A clean, intuitive interface that lets you focus on your strategy. No clutter, just pure gameplay.",
+      icon: FaBrain,
+      title: "Master Your Memory",
+      description: "Keep track of your cards and your opponents'. A sharp memory is your greatest weapon.",
     },
     {
-      icon: Wind,
-      title: "Fluid Animations",
-      description: "Every action, from drawing a card to calling 'Check', is accompanied by smooth, satisfying animations.",
+      icon: GiWhirlwind,
+      title: "Unleash Chaos",
+      description: "Use special abilities from Jacks, Queens, and Kings to peek, swap, and disrupt your way to victory.",
     },
     {
-      icon: Zap,
-      title: "Haptic Feedback",
-      description: "Feel the game with subtle vibrations and feedback that make the digital experience feel tangible.",
+      icon: FaEye,
+      title: "Call Their Bluff",
+      description: "Think you have the lowest score? Call 'Check' to end the round, but be careful—a wrong move could cost you the game.",
     },
   ];
 
   const rules = [
     {
       icon: Spade,
-      title: "Strategic Depth",
+      title: "Lowest Score Wins",
       description:
-        "Each suit carries unique powers and strategic implications. Master their interplay to dominate the table.",
+        "The goal is simple: have the lowest total score at the end of the round. Every card counts.",
     },
     {
       icon: Heart,
-      title: "The Check",
+      title: "Know Your Hand",
       description:
-        "Call 'Check' when confidence meets opportunity. But beware—miscalculation carries consequences.",
+        "You only get to see two of your cards at the start. From then on, it's all about memory and deduction.",
     },
     {
       icon: Diamond,
-      title: "Victory Path",
+      title: "Powers and Abilities",
       description:
-        "First to successfully check with the highest hand claims the round. Best of five determines the champion.",
+        "Leverage the special powers of face cards to peek at, swap, and manipulate the game to your advantage.",
     },
   ];
 
@@ -143,10 +145,10 @@ export function Scrollytelling() {
         >
           <div className="container mx-auto px-4 text-center">
             <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
-              Game Principles
+              The Art of the Game
             </h2>
             <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
-              Elegant rules that create infinite strategic possibilities
+              Simple rules give rise to complex strategies.
             </p>
           </div>
         </motion.div>
@@ -187,7 +189,7 @@ export function Scrollytelling() {
         >
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-4xl font-light tracking-tight text-stone-900 dark:text-stone-100 sm:text-5xl">
-              A more <span className="text-gradient">refined</span> experience
+              A beautiful interface for your <span className="text-gradient">questionable</span> decisions
             </h2>
           </div>
         </motion.div>

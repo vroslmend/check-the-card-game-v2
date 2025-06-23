@@ -1,97 +1,110 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
-import { type Card, TurnPhase, PlayerActionType } from 'shared-types';
-import { DrawnCardArea } from './DrawnCardArea';
-import { VisualCardStack } from '../cards/VisualCardStack';
-import logger from '@/lib/logger';
+import React from "react";
+import {
+  useUISelector,
+  useUIActorRef,
+  type UIMachineSnapshot,
+} from "@/context/GameUIContext";
+import { type PublicCard, TurnPhase, PlayerActionType } from "shared-types";
+import { DrawnCardArea } from "./DrawnCardArea";
+import { VisualCardStack } from "../cards/VisualCardStack";
+import { AnimatePresence, motion } from "framer-motion";
 
+// ✨ INTERFACE MODIFIED HERE
 export interface TableAreaProps {
-  drawnCard?: Card;
+  drawnCard?: PublicCard;
+  dealingDeck?: PublicCard[]; // This prop is now officially defined
 }
 
 const selectTableAreaProps = (state: UIMachineSnapshot) => {
   const { currentGameState, localPlayerId } = state.context;
   const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
-  const isDrawPhase = isMyTurn && currentGameState?.turnPhase === TurnPhase.DRAW;
-  
+  const isDrawPhase =
+    isMyTurn && currentGameState?.turnPhase === TurnPhase.DRAW;
+
   return {
     deckSize: currentGameState?.deckSize ?? 0,
+    deckTop: currentGameState?.deckTop ?? null,
     discardPile: currentGameState?.discardPile ?? [],
-    topDiscardCard: currentGameState?.discardPile && currentGameState.discardPile.length > 0 ? currentGameState.discardPile[currentGameState.discardPile.length - 1] : null,
+    topDiscardCard: currentGameState?.discardPile.at(-1) ?? null,
     discardPileIsSealed: currentGameState?.discardPileIsSealed ?? false,
     canDrawFromDeck: isDrawPhase,
     canDrawFromDiscard: isDrawPhase && !currentGameState?.discardPileIsSealed,
   };
 };
 
-export const TableArea = ({ drawnCard }: TableAreaProps) => {
+// ✨ COMPONENT SIGNATURE MODIFIED HERE
+export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
   const { send } = useUIActorRef();
   const {
     deckSize,
+    deckTop,
     discardPile,
     topDiscardCard,
     discardPileIsSealed,
     canDrawFromDeck,
     canDrawFromDiscard,
   } = useUISelector(selectTableAreaProps);
-  
+
   const handleDeckClick = () => {
-    if (canDrawFromDeck) {
-      logger.info('Player is drawing from deck');
+    // Prevent clicking the deck during the dealing animation
+    if (canDrawFromDeck && dealingDeck.length === 0) {
       send({ type: PlayerActionType.DRAW_FROM_DECK });
     }
-  }
+  };
 
   const handleDiscardClick = () => {
     if (canDrawFromDiscard) {
-      logger.info('Player is drawing from discard');
       send({ type: PlayerActionType.DRAW_FROM_DISCARD });
     }
-  }
+  };
+
+  // ✨ LOGIC TO COMBINE DECKS FOR DEALING ANIMATION
+  const deckForRender = deckSize > 0 && deckTop ? [deckTop] : [];
+  const combinedDeckForDealing = [...deckForRender, ...dealingDeck];
 
   return (
-    <div className="relative w-full h-auto max-h-60 md:max-h-full flex items-center justify-center p-1 sm:p-3 md:p-4 rounded-lg bg-stone-50 dark:bg-zinc-800/50 shadow-inner">
-      <div className="flex flex-row flex-wrap items-center justify-center gap-4 sm:gap-6 md:gap-10 lg:gap-16">
-        {/* Deck */}
-        <VisualCardStack 
-          title="Deck" 
-          count={deckSize} 
-          faceDown 
-          size={typeof window !== 'undefined' && window.innerWidth < 1024 ? 'sm' : 'md'}
-          canInteract={canDrawFromDeck}
-          onClick={handleDeckClick}
-        />
+    <div className="grid grid-cols-3 grid-rows-1 gap-x-4 justify-items-center items-start">
+      {/* Deck Pile */}
+      <VisualCardStack
+        title="Deck"
+        count={deckSize}
+        topCard={deckTop}
+        faceDown
+        canInteract={canDrawFromDeck}
+        onClick={handleDeckClick}
+        size="xs"
+      />
 
-        {/* Drawn Card Area - will appear between the piles */}
+      {/* Drawn Card Area */}
+      <div className="flex justify-center min-w-[64px] col-start-2">
         <AnimatePresence>
           {drawnCard && (
             <motion.div
-              layoutId={`drawn-card-${drawnCard.id}`}
-              initial={{ opacity: 0, scale: 0.7, y: -50 }}
+              layoutId={drawnCard.id}
+              initial={{ opacity: 0, scale: 0.5, y: -50 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.7, y: 50 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              exit={{ opacity: 0, scale: 0.5, y: 50 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              className="relative z-10"
             >
-              <DrawnCardArea card={drawnCard} />
+              <DrawnCardArea card={drawnCard} size="xs" />
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Discard Pile */}
-        <VisualCardStack 
-          title="Discard" 
-          cards={discardPile} 
-          count={discardPile.length} 
-          topCard={topDiscardCard}
-          isSealed={discardPileIsSealed}
-          canInteract={canDrawFromDiscard}
-          onClick={handleDiscardClick}
-          size={typeof window !== 'undefined' && window.innerWidth < 1024 ? 'sm' : 'md'}
-        />
       </div>
+
+      {/* Discard Pile */}
+      <VisualCardStack
+        title="Discard"
+        count={discardPile.length}
+        topCard={topDiscardCard}
+        isSealed={discardPileIsSealed}
+        canInteract={canDrawFromDiscard}
+        onClick={handleDiscardClick}
+        size="xs"
+      />
     </div>
   );
 };

@@ -1,224 +1,152 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
-import { cn } from "@/lib/utils"
-import type { Card } from 'shared-types';
-import { CardRank } from 'shared-types';
-import { CardBack } from "../ui/CardBack"
-import { useState, useEffect } from "react"
+import { cn } from "@/lib/utils";
+import type { Card } from "shared-types";
+import { CardRank } from "shared-types";
+import { CardBack } from "@/components/cards/CardBack";
+import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
 
-// This is the specific renderer for a face-up card's visuals.
-const PlayingCardRenderer = ({ card, size = "lg" }: { card: Card, size?: "xs" | "sm" | "md" | "lg" }) => {
+const sizeStyleMap = {
+  xxs: { tl: "text-[10px]", center: "text-2xl", padding: "p-1" },
+  xs: { tl: "text-xs", center: "text-3xl", padding: "p-1" },
+  sm: { tl: "text-sm", center: "text-4xl", padding: "p-2" },
+  md: { tl: "text-base", center: "text-5xl", padding: "p-2" },
+  lg: { tl: "text-lg", center: "text-6xl", padding: "p-2" },
+} as const;
+
+type CardSizeKey = keyof typeof sizeStyleMap;
+
+const PlayingCardRenderer = ({
+  card,
+  size,
+}: {
+  card: Card;
+  size: CardSizeKey;
+}) => {
   const suitSymbols: Record<string, string> = {
-    H: '♥', D: '♦', C: '♣', S: '♠',
+    H: "♥",
+    D: "♦",
+    C: "♣",
+    S: "♠",
   };
   const suitColors: Record<string, string> = {
-    H: 'text-red-500 dark:text-red-400', D: 'text-red-500 dark:text-red-400',
-    C: 'text-stone-900 dark:text-stone-100', S: 'text-stone-900 dark:text-stone-100',
+    H: "text-rose-600 dark:text-rose-400",
+    D: "text-rose-600 dark:text-rose-400",
+    C: "text-stone-800 dark:text-stone-300",
+    S: "text-stone-800 dark:text-stone-300",
   };
 
-  const colorClass = suitColors[card.suit] || 'text-stone-900 dark:text-stone-100';
-  const symbol = suitSymbols[card.suit] || '?';
-  const rankLabel = card.rank === CardRank.Ten ? '10' : card.rank;
-  
-  const sizeClasses = {
-    xs: "w-10 h-14 p-0.5 text-xs",
-    sm: "w-12 h-16 p-1 text-xs",
-    md: "w-16 h-24 p-1.5 text-sm",
-    lg: "w-20 h-28 p-2 text-base",
-  };
+  const colorClass =
+    suitColors[card.suit] || "text-stone-800 dark:text-stone-300";
+  const { tl: tlClass, center: centerClass, padding } = sizeStyleMap[size];
+  const symbol = suitSymbols[card.suit] || "?";
+  const rankLabel = card.rank === CardRank.Ten ? "10" : card.rank;
 
   return (
     <div
       className={cn(
-        'relative rounded-xl border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-md flex flex-col justify-between font-serif h-full w-full',
-        sizeClasses[size]
+        "relative h-full w-full rounded-md border bg-white dark:bg-zinc-900 flex flex-col justify-between font-serif",
+        padding,
+        "border-stone-200 dark:border-zinc-700",
+        colorClass,
       )}
     >
       {/* Top Left */}
-      <div className={cn('text-left', colorClass)}>
+      <div className={cn("text-left", tlClass)}>
         <div className="font-bold leading-none">{rankLabel}</div>
         <div className="leading-none">{symbol}</div>
       </div>
 
       {/* Center Symbol */}
-      <div className={cn(
-        'absolute inset-0 flex items-center justify-center', 
-        colorClass,
-        size === 'xs' ? 'text-3xl' : size === 'sm' ? 'text-4xl' : 'text-4xl sm:text-5xl'
-      )}>
+      <div
+        className={cn(
+          "absolute inset-0 flex items-center justify-center",
+          centerClass,
+        )}
+      >
         {symbol}
       </div>
 
       {/* Bottom Right (Rotated) */}
-      <div className={cn('self-end rotate-180 text-left', colorClass)}>
+      <div className={cn("self-end rotate-180 text-left", tlClass)}>
         <div className="font-bold leading-none">{rankLabel}</div>
         <div className="leading-none">{symbol}</div>
       </div>
     </div>
-  )
-}
+  );
+};
 
 interface PlayingCardProps {
   card?: Card;
-  isSelected?: boolean;
-  isTarget?: boolean;
-  isPeeked?: boolean;
-  isHighlighted?: boolean;
   onClick?: () => void;
-  canInteract?: boolean;
-  layoutId?: string;
-  size?: "xs" | "sm" | "md" | "lg";
   faceDown?: boolean;
   className?: string;
-  position?: number;
+  canInteract?: boolean;
+  size?: keyof typeof cardSizeClasses;
 }
+
+export const cardSizeClasses = {
+  xxs: "h-16 w-12",
+  xs: "h-22 w-16",
+  sm: "h-28 w-20",
+  md: "h-36 w-24",
+  lg: "h-40 w-28",
+};
 
 export function PlayingCard({
   card,
-  isSelected,
-  isTarget,
-  isPeeked,
-  isHighlighted,
   onClick,
-  canInteract = true,
-  layoutId,
   faceDown,
-  size = "md",
   className,
-  position
+  size = "md",
 }: PlayingCardProps) {
-  // Simply derive whether the card front should be visible
-  const showFront = !faceDown && !!card;
-  
-  const springConfig = { type: "spring", stiffness: 400, damping: 25 };
-  
-  // Define animation variants
-  const variants = {
-    initial: { 
-      opacity: 1, 
-      y: 20, 
-      scale: 0.95 
-    },
-    animate: { 
-      opacity: 1, 
-      y: 0, 
-      scale: 1,
-      transition: { 
-        duration: 0.3,
-        ...springConfig 
-      }
-    },
-    exit: { 
-      scale: 0.95,
-      transition: { 
-        duration: 0.2 
-      }
-    },
-    hover: canInteract ? {
-      y: -6,
-      boxShadow: "0 12px 20px -8px rgba(0,0,0,0.2)",
-      transition: { 
-        duration: 0.2 
-      }
-    } : {},
-    tap: canInteract ? { 
-      scale: 0.98 
-    } : {}
-  };
-  
-  // Animation states based on selection state
-  const animationState = isSelected 
-    ? {
-        y: -8,
-        boxShadow: "0 15px 20px rgba(0,0,0,0.15)"
-      }
-    : isTarget
-      ? {
-          y: -5,
-          boxShadow: "0 12px 18px rgba(0,0,0,0.12)"
-        }
-      : isPeeked
-        ? {
-            y: -4,
-            boxShadow: "0 12px 18px rgba(0,0,0,0.12)"
-          }
-        : isHighlighted
-          ? {
-              y: -3,
-              boxShadow: "0 10px 15px rgba(0,0,0,0.1)"
-            }
-          : {
-              y: 0,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.08)"
-            };
+  const showFront = !faceDown;
 
-  const sizeClasses = {
-    xs: "w-10 h-14",
-    sm: "w-12 h-16",
-    md: "w-16 h-24",
-    lg: "w-20 h-28",
+  // Keep a reference to the last non-undefined card so the front face doesn't become empty
+  const lastCardRef = useRef<Card | undefined>(card);
+  useEffect(() => {
+    if (card) lastCardRef.current = card;
+  }, [card]);
+
+  const variants = {
+    flipped: { rotateY: 180 },
+    unflipped: { rotateY: 0 },
   };
 
   return (
-    <motion.div
-      layoutId={layoutId}
-      variants={variants}
-      initial="initial"
-      animate={{
-        ...variants.animate,
-        ...animationState
-      }}
-      exit="exit"
-      whileHover="hover"
-      whileTap="tap"
-      className={cn(
-        "relative cursor-pointer transition-all duration-200 rounded-xl",
-        isSelected && "ring-1 ring-blue-500/50",
-        isTarget && "ring-1 ring-amber-500/50",
-        isPeeked && "ring-1 ring-green-500/50",
-        isHighlighted && "ring-1 ring-yellow-500/50",
-        !canInteract && "cursor-not-allowed opacity-70",
-        sizeClasses[size],
-        faceDown && "bg-emerald-700 dark:bg-emerald-300",
-        className
-      )}
-      onClick={canInteract ? onClick : undefined}
-      data-cursor-link={canInteract}
-      style={{ 
-        perspective: "1000px"
-      }}
+    <div
+      className={cn(cardSizeClasses[size], className, "perspective-[1000px]")}
+      onClick={onClick}
     >
-      <motion.div 
-        className="w-full h-full relative"
-        animate={{
-          rotateY: showFront ? "0deg" : "180deg",
-          transition: { duration: 0.5, ease: "easeInOut" }
-        }}
+      <motion.div
+        className="relative w-full h-full"
         style={{ transformStyle: "preserve-3d" }}
+        variants={variants}
+        animate={showFront ? "flipped" : "unflipped"}
+        transition={{ duration: 0.5, ease: "easeInOut" }}
       >
-        {/* Front of card */}
-        <motion.div 
+        {/* Card Front */}
+        <div
           className="absolute w-full h-full"
-          style={{ 
-            backfaceVisibility: "hidden",
-            transform: showFront ? "rotateY(0deg)" : "rotateY(180deg)"
-          }}
+          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
         >
-          {card && <PlayingCardRenderer card={card} size={size} />}
-        </motion.div>
-        
-        {/* Back of card */}
-        <motion.div 
+          {lastCardRef.current && (
+            <PlayingCardRenderer
+              card={lastCardRef.current}
+              size={size as CardSizeKey}
+            />
+          )}
+        </div>
+
+        {/* Card Back */}
+        <div
           className="absolute w-full h-full"
-          style={{ 
-            backfaceVisibility: "hidden",
-            transform: !showFront ? "rotateY(0deg)" : "rotateY(-180deg)"
-          }}
+          style={{ backfaceVisibility: "hidden" }}
         >
-          <CardBack size={size} />
-        </motion.div>
+          <CardBack />
+        </div>
       </motion.div>
-    </motion.div>
+    </div>
   );
-} 
+}

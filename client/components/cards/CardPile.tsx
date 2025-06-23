@@ -1,19 +1,19 @@
 'use client';
 
 import React from 'react';
-import { Card as CardType } from 'shared-types';
-import { PlayingCard } from './PlayingCard';
-import { CardBack } from '../ui/CardBack';
+import { Card as CardType, PublicCard } from 'shared-types';
+import { PlayingCard, cardSizeClasses } from './PlayingCard';
+import { CardBack } from './CardBack';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 type DeckCardProps = {
-  card?: CardType | { facedown: true } | null;
+  card?: PublicCard | null;
   count?: number;
   isInteractive?: boolean;
   onClick?: () => void;
   className?: string;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  size?: keyof typeof cardSizeClasses;
 };
 
 // Type guard to check if a card is a face-up card
@@ -29,18 +29,14 @@ export const DeckCard = ({
   isInteractive = false, 
   onClick, 
   className,
-  size = 'md'
+  size = 'xs'
 }: DeckCardProps) => {
   // Determine size classes based on the size prop
-  const sizeClasses = {
-    xs: "h-22 w-16",
-    sm: "h-26 w-18",
-    md: "h-32 w-24",
-    lg: "h-40 w-28"
-  };
+  const sizeClasses = cardSizeClasses;
 
   // Calculate stack offset based on size
   const stackOffset = {
+    xxs: 0.3,
     xs: 0.5,
     sm: 0.7,
     md: 1,
@@ -61,7 +57,7 @@ export const DeckCard = ({
             animate={{ opacity: 0.5, y: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <CardBack size={size} canInteract={false} />
+            <CardBack />
           </motion.div>
           {count > 2 && (
             <motion.div 
@@ -71,7 +67,7 @@ export const DeckCard = ({
               animate={{ opacity: 0.7, y: 0 }}
               transition={{ duration: 0.2, delay: 0.05 }}
             >
-              <CardBack size={size} canInteract={false} />
+              <CardBack />
             </motion.div>
           )}
         </>
@@ -88,7 +84,7 @@ export const DeckCard = ({
           {isFaceUpCard(card) ? (
             <PlayingCard key="face-up" card={card} canInteract={isInteractive} onClick={onClick} size={size} />
           ) : (
-            <CardBack key="face-down" size={size} canInteract={isInteractive} onClick={onClick} />
+            <CardBack key="face-down" />
           )}
         </AnimatePresence>
       </motion.div>

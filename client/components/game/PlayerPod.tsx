@@ -103,8 +103,7 @@ export const PlayerPod = ({
           player={player}
           isLocalPlayer={false}
           onCardClick={onCardClick}
-          abilityContext={abilityContext}
-          isTargetable={isTargetable}
+          canInteract={!!isTargetable}
           selectedCardIndex={selectedCardIndex}
         />
       </div>

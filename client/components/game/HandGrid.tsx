@@ -1,160 +1,173 @@
-"use client"
+"use client";
 
-import { AnimatePresence, motion, LayoutGroup } from "framer-motion"
-import { PlayingCard } from "@/components/cards/PlayingCard"
-import type { Card, PlayerId } from "shared-types"
-import { cn } from "@/lib/utils"
-import { useEffect, useMemo, useState } from 'react'
+import { PlayingCard } from "@/components/cards/PlayingCard";
+import type { PlayerId, PublicCard } from "shared-types";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import { useUISelector } from "@/context/GameUIContext";
 
 export interface HandGridProps {
-  ownerId: PlayerId
-  hand: (Card | { facedown: true })[]
-  isOpponent?: boolean
-  canInteract: boolean
-  onCardClick?: (card: Card | { facedown: true }, index: number) => void
-  selectedCardIndices?: number[]
-  highlightedCardIndices?: number[]
-  className?: string
-  initialPeekHighlight?: boolean
+  ownerId: PlayerId;
+  hand: PublicCard[];
+  canInteract: boolean;
+  onCardClick?: (card: PublicCard | null, index: number) => void;
+  selectedCardIndices?: number[];
+  className?: string;
+  cardSize?: "xxs" | "xs" | "sm" | "md" | "lg";
 }
 
 export const HandGrid = ({
   ownerId,
   hand,
-  isOpponent = false,
   canInteract,
   onCardClick,
   selectedCardIndices = [],
-  highlightedCardIndices = [],
   className,
-  initialPeekHighlight = false,
+  cardSize = "xs",
 }: HandGridProps) => {
-  // Organize cards into a grid
-  // For example: with 4 cards, we want a 2x2 grid
-  // With 5-6 cards, we want a 2x3 grid, etc.
-  const [cardSize, setCardSize] = useState<'xs' | 'sm' | 'md'>('sm')
+  const visibleCards = useUISelector((state) => state.context.visibleCards);
+  const localPlayerId = useUISelector((state) => state.context.localPlayerId);
 
-  useEffect(() => {
-    // Determine card size based on viewport width and hand size
-    const calculateCardSize = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+  const abilitySelectionInfo = useUISelector((state) => {
+    const ability = state.context.currentAbilityContext;
+    return {
+      stage: ability?.stage ?? null,
+      selectedPeekTargets: ability?.selectedPeekTargets ?? [],
+      selectedSwapTargets: ability?.selectedSwapTargets ?? [],
+    };
+  });
 
-      if (width < 768) {
-        // Phones – always use xs
-        return 'xs';
-      }
+  // The grid size is the maximum number of cards a player can have.
+  // We will always render at least 4 slots, or more if the hand grows.
+  const totalSlots = Math.max(4, hand.length);
+  const slots = Array.from({ length: totalSlots });
 
-      if (width < 1024) {
-        // Tablets – sm unless very crowded
-        return hand.length > 6 ? 'xs' : 'sm';
-      }
-
-      // Desktop – md but fall back when too many cards or limited vertical space
-      if (height < 750) return 'sm';
-
-      return hand.length > 8 ? 'sm' : 'md';
-    }
-    
-    // Set initial size
-    setCardSize(calculateCardSize())
-    
-    // Add window resize listener
-    const handleResize = () => setCardSize(calculateCardSize())
-    window.addEventListener('resize', handleResize)
-    
-    // Cleanup
-    return () => window.removeEventListener('resize', handleResize)
-  }, [hand.length])
-  
-  const gridCells = useMemo(() => {
-    // Figure out how many cards per row
-    // We aim for a max of 2 cards per row, expanding to more columns as needed
-    const cardsPerRow = 2
-    const numRows = Math.ceil(hand.length / cardsPerRow)
-    
-    // Create a 2D array to represent rows and columns
-    return Array.from({ length: numRows }, (_, rowIndex) => {
-      return Array.from({ length: cardsPerRow }, (_, colIndex) => {
-        const cardIndex = rowIndex * cardsPerRow + colIndex
-        return cardIndex < hand.length ? hand[cardIndex] : null
-      })
-    })
-  }, [hand])
-  
-  // Calculate the gap between cards based on the card size
-  const gapClass = {
-    'xs': 'gap-1',
-    'sm': 'gap-1.5',
-    'md': 'gap-2'
-  }[cardSize]
+  // The number of columns is half the number of slots, rounded up.
+  const numColumns = Math.ceil(totalSlots / 2);
 
   return (
-    <LayoutGroup id={`hand-${ownerId}`}>
-      <div className={cn(
-        "grid", 
-        gapClass, 
-        hand.length > 0 ? "" : "min-h-[60px]",
-        isOpponent ? "opacity-95 scale-90" : ""
-      )} style={{ gridTemplateRows: `repeat(${gridCells.length}, auto)` }}>
-        {gridCells.map((row, rowIndex) => (
-          <div key={`row-${rowIndex}`} className={cn("flex", gapClass)}>
-            {row.map((card, colIndex) => {
-              const cardIndex = rowIndex * 2 + colIndex
-              
-              if (!card) return <div key={`empty-${cardIndex}`} className="invisible" />
+    <div
+      className={cn("grid gap-1", className)}
+      style={{
+        gridTemplateColumns: `repeat(${numColumns}, minmax(0, 1fr))`,
+      }}
+    >
+      {slots.map((_, index) => {
+        const card = hand[index];
 
-              const cardKey = 'facedown' in card ? `${ownerId}-facedown-${cardIndex}` : `${ownerId}-${card.suit}-${card.rank}-${cardIndex}`
-              const isSelected = selectedCardIndices.includes(cardIndex);
-              const isHighlighted = highlightedCardIndices.includes(cardIndex);
-              
-              return (
-                <div 
-                  key={cardKey}
+        const cardSlotSizer = cn(
+          "relative",
+          cardSize === "xxs" && "h-16 w-12",
+          cardSize === "xs" && "h-22 w-16",
+          cardSize === "sm" && "h-28 w-20",
+          cardSize === "md" && "h-36 w-24",
+          cardSize === "lg" && "h-40 w-28",
+        );
+
+        // If there's no card at this index (e.g., hand has 3 cards, but we're rendering the 4th slot),
+        // render an empty placeholder to maintain grid structure.
+        if (!card) {
+          return (
+            <div
+              key={`empty-slot-${ownerId}-${index}`}
+              className={cardSlotSizer}
+            />
+          );
+        }
+
+        const isCardVisible = visibleCards.some(
+          (vc) => vc.playerId === ownerId && vc.cardIndex === index,
+        );
+
+        // If the original card lacks rank info (facedown) but we have a visible version, replace it
+        const visibleCardData = isCardVisible
+          ? visibleCards.find(
+              (vc) => vc.playerId === ownerId && vc.cardIndex === index,
+            )?.card
+          : undefined;
+
+        const cardToRender = (
+          "rank" in card ? card : (visibleCardData ?? card)
+        ) as PublicCard;
+
+        const isFaceUp = "rank" in cardToRender;
+
+        const isMatchSelected = selectedCardIndices.includes(index);
+        const isAbilityPeekSelected =
+          abilitySelectionInfo.stage === "peeking" &&
+          abilitySelectionInfo.selectedPeekTargets.some(
+            (t) => t.playerId === ownerId && t.cardIndex === index,
+          );
+        const isAbilitySwapSelected =
+          abilitySelectionInfo.stage === "swapping" &&
+          abilitySelectionInfo.selectedSwapTargets.some(
+            (t) => t.playerId === ownerId && t.cardIndex === index,
+          );
+        const abilityRingClass = isAbilityPeekSelected
+          ? "ring-yellow-300/70"
+          : isAbilitySwapSelected
+            ? "ring-pink-400/70"
+            : "";
+        const isSelected =
+          isMatchSelected || isAbilityPeekSelected || isAbilitySwapSelected;
+
+        return (
+          // This div acts as the stable grid cell.
+          <div key={`slot-${ownerId}-${index}`} className={cardSlotSizer}>
+            <AnimatePresence>
+              {card && (
+                // This motion.div animates within the stable slot.
+                <motion.div
+                  key={card.id}
+                  layoutId={card.id}
+                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
                   className={cn(
-                    "relative",
-                    canInteract && 'cursor-pointer',
-                    // Bottom row gets a special highlight in the initial peek phase
-                    rowIndex === gridCells.length - 1 && !isOpponent && initialPeekHighlight && "z-10 border-2 border-dashed border-yellow-400 dark:border-yellow-500 rounded-lg"
+                    "absolute inset-0", // Positioned absolutely within the parent slot
+                    canInteract && "cursor-pointer",
+                    canInteract && "hover:brightness-110",
                   )}
-                  onClick={() => canInteract && onCardClick?.(card, cardIndex)}
+                  onClick={() => canInteract && onCardClick?.(card, index)}
+                  whileHover={
+                    canInteract
+                      ? {
+                          y: -8,
+                          scale: 1.05,
+                          filter: "brightness(1.15)",
+                        }
+                      : {}
+                  }
                 >
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={cardKey}
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ 
-                        scale: isSelected ? 1.05 : 1, 
-                        opacity: 1,
-                        y: isSelected ? -4 : 0 
-                      }}
-                      exit={{ scale: 0.8, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className={cn(
-                        "relative transition-transform rounded-xl",
-                        canInteract && "hover:scale-105 hover:-translate-y-1 active:scale-95",
-                        isSelected && "ring-2 ring-blue-500 rounded-xl ring-offset-2 ring-offset-stone-100 dark:ring-offset-zinc-900",
-                        isHighlighted && "ring-2 ring-purple-500 rounded-xl ring-offset-2 ring-offset-stone-100 dark:ring-offset-zinc-900"
-                      )}
-                    >
-                      <PlayingCard
-                        card={'facedown' in card ? undefined : card}
-                        size={cardSize}
-                        faceDown={'facedown' in card}
+                  {/* Animated selection ring */}
+                  <AnimatePresence>
+                    {isSelected && (
+                      <motion.div
+                        key="sel-ring"
                         className={cn(
-                          "shadow-sm rounded-xl", 
-                          canInteract && "cursor-pointer card-hover",
-                          (isSelected || isHighlighted) && "shadow-md"
+                          "absolute inset-0.5 rounded-md pointer-events-none",
+                          "ring-[4px]",
+                          isMatchSelected
+                            ? "ring-sky-400/80"
+                            : abilityRingClass,
                         )}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
                       />
-                    </motion.div>
+                    )}
                   </AnimatePresence>
-                </div>
-              )
-            })}
+                  <PlayingCard
+                    card={isFaceUp ? (cardToRender as any) : undefined}
+                    faceDown={!isFaceUp}
+                    className="card-fluid"
+                    size={cardSize}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        ))}
-      </div>
-    </LayoutGroup>
-  )
-} 
+        );
+      })}
+    </div>
+  );
+};

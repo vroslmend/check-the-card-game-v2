@@ -1,93 +1,67 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
-import { HandGrid } from './HandGrid';
-import { type Player, TurnPhase, GameStage, type ClientAbilityContext, type PeekTarget, type SwapTarget, type Card } from 'shared-types';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
-import { Eye } from 'lucide-react';
+import React from "react";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
+import { HandGrid } from "./HandGrid";
+import { type Player, type Card, type PublicCard } from "shared-types";
+import { cn } from "@/lib/utils";
 
 interface PlayerHandProps {
   player: Player;
   isLocalPlayer: boolean;
   onCardClick: (cardIndex: number) => void;
   className?: string;
-  isTargetable?: boolean;
-  abilityContext?: ClientAbilityContext;
+  canInteract: boolean;
+  isLocked?: boolean;
   selectedCardIndex?: number | null;
+  cardSize?: "xxs" | "xs" | "sm" | "md" | "lg";
 }
 
-const selectPlayerHandProps = (state: UIMachineSnapshot) => {
-  const { currentGameState, currentAbilityContext, localPlayerId, visibleCards } = state.context;
-  const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
-  const isMatchingPhase = currentGameState?.turnPhase === TurnPhase.MATCHING;
-  const isMyDiscardPhase = isMyTurn && currentGameState?.turnPhase === TurnPhase.DISCARD;
-  const inAbilityState = !!currentAbilityContext;
-  
-  const baseCanInteract = inAbilityState || isMatchingPhase || isMyDiscardPhase;
+const selectVisibleCards = (state: UIMachineSnapshot) =>
+  state.context.visibleCards;
 
-  return {
-    baseCanInteract,
-    gameStage: currentGameState?.gameStage,
-    visibleCards,
-  }
-};
-
-const PlayerHand: React.FC<PlayerHandProps> = ({ 
-  player, 
+const PlayerHand: React.FC<PlayerHandProps> = ({
+  player,
   isLocalPlayer,
   onCardClick,
   className,
-  isTargetable = false,
-  abilityContext,
-  selectedCardIndex = null
+  canInteract,
+  isLocked = false,
+  selectedCardIndex = null,
+  cardSize = "xs",
 }) => {
-  const { baseCanInteract, gameStage, visibleCards } = useUISelector(selectPlayerHandProps);
-  
-  const canInteract = isLocalPlayer ? (baseCanInteract || isTargetable) : isTargetable;
-  
+  const visibleCards = useUISelector(selectVisibleCards);
+
+  // For the local player, we have the full card data, but we need to decide
+  // whether to show it as face-up or face-down. A card is only face-up if
+  // it's in the `visibleCards` list. Otherwise, it's face-down.
   const handToDisplay = isLocalPlayer
     ? player.hand.map((card, index) => {
-        const visibleCard = visibleCards.find(
-          vc => vc.playerId === player.id && vc.cardIndex === index
+        const isVisible = visibleCards.some(
+          (vc) => vc.playerId === player.id && vc.cardIndex === index,
         );
-        return visibleCard ? visibleCard.card : ({ facedown: true } as const);
+        // We must ensure the card object has a rank for it to be rendered face-up.
+        if (isVisible && "rank" in card) {
+          return card;
+        }
+        return { facedown: true as const, id: card.id };
       })
     : player.hand;
 
-  const isInitialPeek = gameStage === GameStage.INITIAL_PEEK;
-
-  const getHighlightedIndices = (): number[] => {
-    if (!abilityContext || !isTargetable) return [];
-
-    // Combine both peek and swap targets from the context
-    const selectedTargets = [
-      ...(abilityContext.selectedPeekTargets || []),
-      ...(abilityContext.selectedSwapTargets || []),
-    ];
-
-    // Filter for targets that belong to the current player and return their indices
-    return selectedTargets
-      .filter((target) => target.playerId === player.id)
-      .map((target) => target.cardIndex);
-  };
+  const combinedClass = cn(className, isLocked && "grayscale opacity-60");
 
   return (
-    <div className={cn("relative flex flex-col items-center justify-center", className)}>
-      {/* Removed outer dashed overlay, individual cards now highlighted */}
-      
-      <HandGrid
-        ownerId={player.id}
-        hand={handToDisplay}
-        isOpponent={!isLocalPlayer}
-        canInteract={canInteract}
-        onCardClick={(_, index) => onCardClick(index)}
-        selectedCardIndices={selectedCardIndex !== null ? [selectedCardIndex] : []}
-        highlightedCardIndices={getHighlightedIndices()}
-        initialPeekHighlight={isInitialPeek && isLocalPlayer}
-      />
-    </div>
+    <HandGrid
+      ownerId={player.id}
+      hand={handToDisplay}
+      canInteract={canInteract && !isLocked}
+      onCardClick={(_, index) => onCardClick(index)}
+      selectedCardIndices={
+        selectedCardIndex !== null ? [selectedCardIndex] : []
+      }
+      className={combinedClass}
+      cardSize={cardSize}
+    />
   );
 };
 

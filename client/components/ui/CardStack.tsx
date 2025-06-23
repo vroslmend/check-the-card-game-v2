@@ -1,18 +1,18 @@
 "use client"
 
 import { motion, useTransform, MotionValue } from "framer-motion"
-import { LucideIcon } from "lucide-react"
+import React from 'react';
 
 interface Feature {
-  icon: LucideIcon;
+  icon: React.ElementType;
   title: string;
   description: string;
 }
 
 const cardColors = [
-  "from-red-200 to-red-300 dark:from-red-800 dark:to-red-900",
-  "from-blue-200 to-blue-300 dark:from-blue-800 dark:to-blue-900",
-  "from-green-200 to-green-300 dark:from-green-800 dark:to-green-900",
+  "from-stone-200 to-stone-300 dark:from-zinc-800 dark:to-zinc-700",
+  "from-stone-300 to-stone-400 dark:from-zinc-700 dark:to-zinc-600",
+  "from-stone-400 to-stone-500 dark:from-zinc-600 dark:to-zinc-500",
 ];
 
 export function CardStack({
@@ -36,7 +36,7 @@ export function CardStack({
       style={{ perspective: "1000px" }}
       className="relative h-96 w-full"
     >
-      <div className="absolute inset-0 rounded-2xl overflow-hidden">
+      <div className="absolute inset-0 rounded-2xl overflow-hidden shadow-lg">
         {cardColors.map((color, index) => (
           <motion.div
             key={color}
@@ -101,8 +101,10 @@ function Card({
       }}
       className={`absolute h-full w-full rounded-2xl bg-transparent p-4 shadow-xl flex flex-col items-center justify-center`}
     >
-      <Icon className="h-16 w-16 text-white/80 mb-4" />
-      <h3 className="text-2xl font-light text-white">{feature.title}</h3>
+      <div className="bg-white/20 dark:bg-black/20 backdrop-blur-sm p-4 rounded-full">
+        <Icon className="h-12 w-12 text-stone-900 dark:text-stone-100" />
+      </div>
+      <h3 className="text-2xl font-serif mt-4 text-stone-900 dark:text-stone-100">{feature.title}</h3>
     </motion.div>
   )
 }

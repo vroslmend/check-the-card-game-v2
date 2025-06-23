@@ -1,172 +1,195 @@
-'use client';
+"use client";
 
-import { WifiOff, Loader, AlertCircle } from 'lucide-react';
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { TableArea } from './TableArea';
-import PlayerHandStrip from './PlayerHandStrip';
-import { type Card, TurnPhase } from 'shared-types';
-import { ActionController } from './ActionController';
-import { isDrawnCard } from '@/lib/types';
+import { WifiOff } from "lucide-react";
+import {
+  useUISelector,
+  useUIActorRef,
+  type UIMachineSnapshot,
+} from "@/context/GameUIContext";
+import { TableArea } from "./TableArea";
+import PlayerHandStrip from "./PlayerHandStrip";
+import { GameStage, PlayerActionType, type PublicCard } from "shared-types";
+import { ActionController } from "./ActionController";
+import { GamePhaseIndicator } from "./GamePhaseIndicator";
+import { ActionControllerView } from "./ActionControllerView";
+import { AnimatePresence } from "framer-motion";
+import { GameEndScreen } from "./GameEndScreen";
+import { GameHeader } from "./GameHeader";
 
-const selectIsDisconnected = (state: UIMachineSnapshot) => state.matches({ inGame: 'disconnected' });
-const selectIsReconnecting = (state: UIMachineSnapshot) => state.matches({ inGame: 'reconnecting' });
-const selectLocalPlayerId = (state: UIMachineSnapshot) => state.context.localPlayerId;
+const selectIsDisconnected = (state: UIMachineSnapshot) =>
+  state.matches({ inGame: "disconnected" });
+const selectIsReconnecting = (state: UIMachineSnapshot) =>
+  state.matches({ inGame: "reconnecting" });
 
+// ✨ MODIFIED SELECTOR
 const selectGameBoardProps = (state: UIMachineSnapshot) => {
   const { currentGameState: gameState, localPlayerId } = state.context;
-  const localPlayer = gameState && localPlayerId ? gameState.players[localPlayerId] : null;
+  const playerWithPendingCard = Object.values(gameState?.players ?? {}).find(
+    (p) => p.pendingDrawnCard
+  );
 
   return {
-    gameStage: gameState?.gameStage,
-    hasPlayers: gameState && Object.keys(gameState.players).length > 0,
-    hasGameState: !!gameState,
-    pendingDrawnCard: localPlayer?.pendingDrawnCard,
-    isPlayerTurn: gameState?.currentPlayerId === localPlayerId,
-    turnPhase: gameState?.turnPhase,
+    gameState: gameState,
+    localPlayerId: localPlayerId,
+    playerWithPendingCard: playerWithPendingCard,
+    isMyTurn: gameState?.currentPlayerId === localPlayerId,
   };
 };
+
+const selectGameEndProps = (state: UIMachineSnapshot) => ({
+  gameStage: state.context.currentGameState?.gameStage,
+  players: Object.values(state.context.currentGameState?.players ?? {}),
+  winnerId: state.context.currentGameState?.winnerId ?? null,
+});
 
 const ConnectionStatusBanner = () => {
   const isDisconnected = useUISelector(selectIsDisconnected);
   const isReconnecting = useUISelector(selectIsReconnecting);
-
+  if (!isDisconnected && !isReconnecting) return null;
   return (
-    <AnimatePresence>
-      {(isDisconnected || isReconnecting) && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          className="absolute top-2 left-1/2 -translate-x-1/2 z-50 w-auto"
-        >
-          <Alert variant="destructive" className="py-2 px-4 rounded-lg shadow-lg bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm">
-            <div className="flex items-center gap-3">
-              {isReconnecting ? (
-                <Loader className="h-4 w-4 animate-spin text-amber-500" />
-              ) : (
-                <WifiOff className="h-4 w-4 text-red-500" />
-              )}
-              <AlertTitle className="mb-0 text-sm font-semibold text-stone-900 dark:text-stone-100">
-                {isReconnecting ? 'Reconnecting...' : 'Connection Lost'}
-              </AlertTitle>
-            </div>
-          </Alert>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg z-50">
+      {isReconnecting ? "Reconnecting..." : "Connection Lost"}
+    </div>
   );
 };
 
-const GameStateError = ({ hasPlayers, hasGameState }: { hasPlayers: boolean | undefined; hasGameState: boolean }) => (
-  <AnimatePresence>
-    {!hasPlayers && hasGameState && (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm z-40"
-      >
-        <Alert variant="destructive" className="max-w-md shadow-lg">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Game State Error</AlertTitle>
-          <AlertDescription>
-            Could not load player data. The game state may be corrupted. Please refresh the page.
-          </AlertDescription>
-        </Alert>
-      </motion.div>
-    )}
-  </AnimatePresence>
-);
+const GameStateError = ({
+  hasPlayers,
+  hasGameState,
+}: {
+  hasPlayers: boolean | undefined;
+  hasGameState: boolean;
+}) => {
+  if (hasPlayers || !hasGameState) return null;
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
+      <div className="bg-white p-4 rounded-lg shadow-lg">
+        <h3 className="font-bold">Game State Error</h3>
+        <p>Could not load player data. Please refresh the page.</p>
+      </div>
+    </div>
+  );
+};
 
 const LoadingIndicator = () => (
-  <div className="flex items-center justify-center min-h-screen w-full bg-stone-50 dark:bg-zinc-950">
-    <div className="flex flex-col items-center font-serif text-stone-600 dark:text-stone-400">
-      <Loader className="h-8 w-8 animate-spin mb-4" />
-      <p>Loading Game...</p>
-    </div>
+  <div className="flex items-center justify-center h-screen w-full bg-stone-50 dark:bg-zinc-950">
+    <p className="font-serif text-stone-600 dark:text-stone-400">
+      Loading Game...
+    </p>
   </div>
 );
 
-
 export function GameBoard() {
-  const localPlayerId = useUISelector(selectLocalPlayerId);
-  const {
-    hasPlayers,
-    hasGameState,
-    pendingDrawnCard,
-    isPlayerTurn,
-    turnPhase,
-  } = useUISelector(selectGameBoardProps);
+  const { send } = useUIActorRef();
+  const { gameState, localPlayerId, playerWithPendingCard, isMyTurn } =
+    useUISelector(selectGameBoardProps);
+  const { gameStage, players, winnerId } = useUISelector(selectGameEndProps);
 
-  if (!localPlayerId || !hasGameState) {
+  if (!localPlayerId || !gameState) {
     return <LoadingIndicator />;
   }
 
-  const drawnCardData =
-    isPlayerTurn &&
-    turnPhase === TurnPhase.DISCARD &&
-    isDrawnCard(pendingDrawnCard)
-      ? pendingDrawnCard.card
-      : undefined;
+  // --- ✨ NEW ANIMATION LOGIC ✨ ---
+  const isDealing = gameState.gameStage === GameStage.DEALING;
 
-  const gameState = useUISelector((state) => state.context.currentGameState);
-  const abilityContext = useUISelector((state) => state.context.currentAbilityContext);
-  const opponentPlayers = gameState && localPlayerId ? Object.values(gameState.players).filter((p) => p.id !== localPlayerId) : [];
+  const dealingDeck: PublicCard[] = isDealing
+    ? Object.values(gameState.players).flatMap((p) =>
+        p.hand.map((card) => ({ id: card.id, facedown: true as const }))
+      )
+    : [];
+
+  const drawnCardData = playerWithPendingCard?.pendingDrawnCard?.card;
+  // --- END ANIMATION LOGIC ---
+
+  const opponentPlayers = Object.values(gameState.players).filter(
+    (p) => p.id !== localPlayerId
+  );
+
+  const handlePlayAgain = () => {
+    send({ type: PlayerActionType.PLAY_AGAIN });
+  };
 
   return (
-    <div className="relative w-full md:max-w-7xl glass rounded-none md:rounded-[2.5rem] shadow-xl md:shadow-2xl border-t md:border md:border-stone-200 dark:md:border-zinc-800 pb-32 md:pb-10 mt-24 md:mt-28 max-h-[calc(100vh-5rem)] overflow-y-auto overflow-x-visible">
-    
-      <ConnectionStatusBanner />
-      <GameStateError hasPlayers={hasPlayers} hasGameState={hasGameState} />
-      
-      <ActionController>
-        <div
-          className="flex flex-col md:grid h-full p-1 sm:p-3 md:p-6 gap-2 sm:gap-4 md:gap-8 min-h-0"
-          style={{ gridTemplateRows: 'auto minmax(140px,1fr) auto' }}
-        >
-          {/* Opponents */}
-          <div className="min-h-0 flex items-center justify-center overflow-x-auto">
-            {opponentPlayers && opponentPlayers.length > 0 ? (
-              <div className="flex flex-row items-center justify-center gap-4 h-full w-full">
-                {opponentPlayers.map((op) => (
-                  <PlayerHandStrip
-                    key={op.id}
-                    player={op}
-                    isLocalPlayer={false}
-                    isCurrentTurn={gameState?.currentPlayerId === op.id}
-                    isTargetable={!!abilityContext && !op.isLocked}
-                    abilityContext={abilityContext}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center rounded-lg bg-stone-50 dark:bg-zinc-800/50 shadow-inner">
-                <p className="font-serif text-stone-500">Waiting for opponents...</p>
-              </div>
-            )}
-          </div>
+    <div className="h-screen w-full bg-stone-50 dark:bg-zinc-950 flex flex-col overflow-hidden">
+      <GameHeader />
+      <div className="relative flex-1 flex flex-col">
+        <AnimatePresence>
+          {(gameStage === GameStage.GAMEOVER ||
+            gameStage === GameStage.SCORING) && (
+            <GameEndScreen
+              players={players}
+              winnerId={winnerId}
+              localPlayerId={localPlayerId}
+              onPlayAgain={handlePlayAgain}
+            />
+          )}
+        </AnimatePresence>
 
-          {/* Table */}
-          <div className="min-h-0 flex-1">
-            <TableArea drawnCard={drawnCardData} />
-          </div>
+        <ConnectionStatusBanner />
+        <GamePhaseIndicator />
+        <GameStateError
+          hasPlayers={opponentPlayers.length > 0}
+          hasGameState={!!gameState}
+        />
 
-          {/* Local player */}
-          <div className="min-h-0 flex items-center justify-center overflow-x-auto pb-2">
-            {localPlayerId && gameState ? (
-              <PlayerHandStrip
-                player={gameState.players[localPlayerId]}
-                isLocalPlayer={true}
-                isCurrentTurn={isPlayerTurn}
-                isTargetable={false}
-                abilityContext={abilityContext}
+        <ActionController>
+          <div className="h-full flex flex-col">
+            {/* Opponents area */}
+            <div className="flex-none flex justify-center items-center py-2">
+              {opponentPlayers.length > 0 ? (
+                <div className="flex flex-wrap justify-center gap-2">
+                  {opponentPlayers.map((op) => (
+                    <PlayerHandStrip
+                      key={op.id}
+                      player={{
+                        ...op,
+                        // ✨ If dealing, render an empty hand. Otherwise, render the real hand.
+                        hand: isDealing ? [] : op.hand,
+                      }}
+                      isLocalPlayer={false}
+                      isCurrentTurn={gameState.currentPlayerId === op.id}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="font-serif text-stone-500 dark:text-stone-400">
+                  Waiting for opponents...
+                </p>
+              )}
+            </div>
+
+            {/* Table Area - takes up remaining space */}
+            <div className="flex-1 flex items-center justify-center">
+              <TableArea
+                drawnCard={drawnCardData}
+                dealingDeck={dealingDeck} // ✨ Pass the dealing deck down
               />
-            ) : null}
+            </div>
+
+            {/* Local player area */}
+            <div className="flex-none flex flex-col items-center py-2 pb-6">
+              {localPlayerId && gameState.players[localPlayerId] ? (
+                <PlayerHandStrip
+                  player={{
+                    ...gameState.players[localPlayerId],
+                    // ✨ Same logic for the local player's hand
+                    hand: isDealing
+                      ? []
+                      : gameState.players[localPlayerId].hand,
+                  }}
+                  isLocalPlayer={true}
+                  isCurrentTurn={isMyTurn}
+                />
+              ) : null}
+
+              {/* Action bar */}
+              <div className="mt-2 mb-4 h-16 flex items-center justify-center transition-all duration-300 ease-in-out">
+                <ActionControllerView />
+              </div>
+            </div>
           </div>
-        </div>
-      </ActionController>
+        </ActionController>
+      </div>
     </div>
   );
 }

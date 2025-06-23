@@ -1,53 +1,27 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { PlayingCard } from '../cards/PlayingCard';
-import type { Card } from 'shared-types';
+import React from "react";
+import { PlayingCard, cardSizeClasses } from "../cards/PlayingCard";
+import type { PublicCard } from "shared-types"; // ✨ 1. Import PublicCard
 
+// ✨ 2. Update the interface to accept PublicCard
 interface DrawnCardAreaProps {
-  card: Card | { facedown: true };
+  card: PublicCard;
+  size?: keyof typeof cardSizeClasses;
 }
 
-export const DrawnCardArea = ({ 
-  card
-}: DrawnCardAreaProps) => {
-  // Responsive card size
-  const [cardSize, setCardSize] = useState<'sm' | 'md'>('sm');
-  
-  useEffect(() => {
-    const handleResize = () => {
-      setCardSize(window.innerWidth < 768 ? 'sm' : 'md');
-    };
-    
-    // Set initial size
-    handleResize();
-    
-    // Add event listener
-    window.addEventListener('resize', handleResize);
-    
-    // Clean up
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+export const DrawnCardArea = ({ card, size = "xs" }: DrawnCardAreaProps) => {
+  // ✨ 3. Add logic to check if the card is face up or face down
+  const isFaceUp = "rank" in card;
 
   return (
-    <div className="relative">
-      {/* Card in holding area */}
-      <motion.div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-        initial={{ y: -50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      >
-        <div className="relative">
-          <PlayingCard 
-            card={'facedown' in card ? undefined : card}
-            size={cardSize}
-            faceDown={'facedown' in card}
-            className="shadow-sm"
-          />
-        </div>
-      </motion.div>
-    </div>
+    <PlayingCard
+      // If it's face up, pass the full card object. If not, pass undefined.
+      card={isFaceUp ? card : undefined}
+      // Tell the PlayingCard component explicitly whether to show its back.
+      faceDown={!isFaceUp}
+      className="card-fluid"
+      size={size}
+    />
   );
-}; 
+};

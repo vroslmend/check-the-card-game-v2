@@ -45,6 +45,7 @@ const createMockContext = (overrides: Partial<GameContext> = {}): GameContext =>
   matchingOpportunity: null,
   abilityStack: [],
   checkDetails: null,
+  winnerId: null,
   gameover: null,
   lastRoundLoserId: null,
   log: [],
