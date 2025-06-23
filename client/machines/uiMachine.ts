@@ -36,10 +36,7 @@ import { toast } from "sonner";
 import logger from "@/lib/logger";
 import { createGameActor, joinGameActor, rejoinActor } from "@/lib/actors";
 
-// Constants
 const PEEK_ABILITY_DURATION_MS = 5000;
-
-// #region ----- TYPE DEFINITIONS -----
 
 type ServerToClientEvents =
   | { type: "CLIENT_GAME_STATE_UPDATED"; gameState: ClientCheckGameState }
@@ -145,8 +142,6 @@ export type UIMachineEvents =
   | { type: PlayerActionType.CALL_CHECK }
   | { type: PlayerActionType.DECLARE_READY_FOR_PEEK }
   | { type: PlayerActionType.PLAY_AGAIN };
-
-// #endregion
 
 export const uiMachine = setup({
   types: {
@@ -364,7 +359,7 @@ export const uiMachine = setup({
         return event.hand.map((card, idx) => {
           const calculatedIndex = handSize
             ? handSize - event.hand.length + idx
-            : idx; // Fallback when hand size unknown
+            : idx;
           return {
             playerId: localPlayerId,
             cardIndex: calculatedIndex,
@@ -403,11 +398,11 @@ export const uiMachine = setup({
               maxPeekTargets = 2;
               maxSwapTargets = 2;
               break;
-            case "peek": // Queen ability
+            case "peek":
               maxPeekTargets = 1;
               maxSwapTargets = 2;
               break;
-            case "swap": // Jack ability
+            case "swap":
               maxSwapTargets = 2;
               break;
           }
@@ -712,7 +707,6 @@ export const uiMachine = setup({
     inGame: {
       id: "inGame",
       initial: "routing",
-      // Centralize card visibility cleanup actor across all in-game substates
       invoke: { src: "cardVisibilityCleanup" },
       on: {
         LEAVE_GAME: { target: ".leaving" },
@@ -753,7 +747,6 @@ export const uiMachine = setup({
         DISMISS_MODAL: { actions: "dismissModal" },
         SKIP_ABILITY_STAGE: { actions: "emitSkipAbilityStage" },
         CANCEL_ABILITY: { actions: "clearAbilityContext" },
-        // Cleanup visible cards triggered by the centralized actor
         CLEANUP_EXPIRED_CARDS: { actions: "cleanupExpiredVisibleCards" },
         DISCONNECT: { target: ".disconnected" },
       },
@@ -824,7 +817,6 @@ export const uiMachine = setup({
                 context.currentGameState?.turnPhase === TurnPhase.ABILITY,
             },
           ],
-          // No specific event handlers needed here; handled at the parent level
         },
         finalTurns: {
           tags: ["playing"],
@@ -842,9 +834,6 @@ export const uiMachine = setup({
           initial: "selecting",
           on: {
             CLIENT_GAME_STATE_UPDATED: {
-              // This local handler overrides the parent `inGame` handler.
-              // By omitting `target`, we prevent a disruptive re-route
-              // while an ability is in progress, which was resetting the peek/swap flow.
               actions: [
                 assign({ hasPassedMatch: false }),
                 "setCurrentGameState",
@@ -871,7 +860,6 @@ export const uiMachine = setup({
             },
             SKIP_ABILITY_STAGE: {
               actions: "emitSkipAbilityStage",
-              // The server will send a game state update which will trigger a re-evaluation
             },
             CANCEL_ABILITY: {
               target: "playing",
@@ -883,7 +871,6 @@ export const uiMachine = setup({
               tags: ["ability-selecting"],
               always: [
                 {
-                  // If context somehow desyncs, exit ability flow
                   target: "#inGame.routing",
                   guard: ({ context }) => !context.currentAbilityContext,
                 },
@@ -892,27 +879,18 @@ export const uiMachine = setup({
             resolving: {
               initial: "waiting",
               states: {
-                waiting: {
-                  // Waiting for server to send back results (e.g. ABILITY_PEEK_RESULT)
-                  // or an updated game state to transition to the next stage (e.g. swapping)
-                },
+                waiting: {},
                 viewingPeek: {
                   entry: assign({ viewingPeekStartTime: () => Date.now() }),
                   after: {
                     [PEEK_ABILITY_DURATION_MS]: {
-                      // Auto-skip only for King abilities that allow multiple peeks. For Queen/Jack we
-                      // rely on the server-side timer (TIMER.PEEK_TO_SWAP) or the player's manual
-                      // confirmation to proceed, so that the subsequent swap stage isn't skipped.
                       guard: ({ context }) =>
                         context.currentAbilityContext?.type === "king" &&
                         context.currentAbilityContext?.stage === "peeking",
                       actions: "emitSkipAbilityStage",
-                      // The server will send a game state update which will trigger a re-evaluation
-                      // back through the 'selecting' state.
                     },
                   },
                   always: {
-                    // If server context changes (e.g. moves to swap), re-evaluate
                     guard: ({ context }) =>
                       context.currentAbilityContext?.stage !== "peeking",
                     target: "#inGame.ability.selecting",

@@ -1,18 +1,41 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import { useUISelector, useUIActorRef, type UIMachineSnapshot } from '@/context/GameUIContext';
-import { Button } from '@/components/ui/button';
-import { CheckCircle, Users, WifiOff, Clock, Copy, PartyPopper, UserMinus, MoreHorizontal, RefreshCw } from 'lucide-react';
-import { type Player, PlayerActionType } from 'shared-types';
-import { cn } from '@/lib/utils';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import Magnetic from '@/components/ui/Magnetic';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { CopyToClipboardButton } from '../ui/CopyToClipboardButton';
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence, useAnimation } from "framer-motion";
+import {
+  useUISelector,
+  useUIActorRef,
+  type UIMachineSnapshot,
+} from "@/context/GameUIContext";
+import { Button } from "@/components/ui/button";
+import {
+  CheckCircle,
+  Users,
+  WifiOff,
+  Clock,
+  Copy,
+  PartyPopper,
+  UserMinus,
+  MoreHorizontal,
+  RefreshCw,
+} from "lucide-react";
+import { type Player, PlayerActionType } from "shared-types";
+import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import Magnetic from "@/components/ui/Magnetic";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CopyToClipboardButton } from "../ui/CopyToClipboardButton";
 
-// Add CSS animation for spinner
 const spinnerStyle = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
@@ -23,7 +46,15 @@ const spinnerStyle = `
   }
 `;
 
-const StatusIndicator = ({ icon: Icon, text, colorClass }: { icon: React.ElementType, text: string, colorClass: string }) => (
+const StatusIndicator = ({
+  icon: Icon,
+  text,
+  colorClass,
+}: {
+  icon: React.ElementType;
+  text: string;
+  colorClass: string;
+}) => (
   <motion.div
     initial={{ opacity: 0, y: -10 }}
     animate={{ opacity: 1, y: 0 }}
@@ -41,42 +72,57 @@ const playerCardVariants = {
     y: 0,
     transition: {
       delay: i * 0.1,
-      type: 'spring',
+      type: "spring",
       stiffness: 100,
-      damping: 15
-    }
+      damping: 15,
+    },
   }),
-  exit: { opacity: 0, x: -20, transition: { duration: 0.3 } }
+  exit: { opacity: 0, x: -20, transition: { duration: 0.3 } },
 };
 
-const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPlayer: boolean, index: number }) => {
+const PlayerRow = ({
+  player,
+  isLocalPlayer,
+  index,
+}: {
+  player: Player;
+  isLocalPlayer: boolean;
+  index: number;
+}) => {
   const { send } = useUIActorRef();
-  const snapshot = useUISelector(state => state);
-  const isGameMaster = snapshot.context.currentGameState?.gameMasterId === snapshot.context.localPlayerId;
-  
+  const snapshot = useUISelector((state) => state);
+  const isGameMaster =
+    snapshot.context.currentGameState?.gameMasterId ===
+    snapshot.context.localPlayerId;
+
   const [isHolding, setIsHolding] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
-  const holdTimeRequired = 1.5; // seconds required to hold
+  const holdTimeRequired = 1.5;
   const holdTimer = useRef<NodeJS.Timeout | null>(null);
   const canRemove = isGameMaster && !isLocalPlayer && !player.isConnected;
 
-  // Use this to track progress
   useEffect(() => {
     if (isHolding) {
       const startTime = Date.now();
       const interval = setInterval(() => {
         const elapsedTime = Date.now() - startTime;
-        const progress = Math.min(100, (elapsedTime / (holdTimeRequired * 1000)) * 100);
+        const progress = Math.min(
+          100,
+          (elapsedTime / (holdTimeRequired * 1000)) * 100,
+        );
         setHoldProgress(progress);
-        
+
         if (progress >= 100) {
           clearInterval(interval);
-          send({ type: PlayerActionType.REMOVE_PLAYER, payload: { playerIdToRemove: player.id } });
+          send({
+            type: PlayerActionType.REMOVE_PLAYER,
+            payload: { playerIdToRemove: player.id },
+          });
           setIsHolding(false);
           setHoldProgress(0);
         }
       }, 50);
-      
+
       return () => {
         clearInterval(interval);
       };
@@ -85,12 +131,30 @@ const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPl
 
   const getStatus = () => {
     if (!player.isConnected) {
-      return <StatusIndicator icon={WifiOff} text="Disconnected" colorClass="text-red-500" />;
+      return (
+        <StatusIndicator
+          icon={WifiOff}
+          text="Disconnected"
+          colorClass="text-red-500"
+        />
+      );
     }
     if (player.isReady) {
-      return <StatusIndicator icon={CheckCircle} text="Ready" colorClass="text-emerald-500" />;
+      return (
+        <StatusIndicator
+          icon={CheckCircle}
+          text="Ready"
+          colorClass="text-emerald-500"
+        />
+      );
     }
-    return <StatusIndicator icon={Clock} text="Waiting" colorClass="text-stone-500 dark:text-stone-400" />;
+    return (
+      <StatusIndicator
+        icon={Clock}
+        text="Waiting"
+        colorClass="text-stone-500 dark:text-stone-400"
+      />
+    );
   };
 
   return (
@@ -104,25 +168,35 @@ const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPl
       key={player.id}
       className={cn(
         "flex items-center justify-between p-4 px-5 rounded-2xl bg-white/60 dark:bg-zinc-900/60 border border-stone-200 dark:border-zinc-800 backdrop-blur-md shadow-sm relative",
-        !player.isConnected && "opacity-60 grayscale"
+        !player.isConnected && "opacity-60 grayscale",
       )}
-      whileHover={{ 
-        y: -4, 
+      whileHover={{
+        y: -4,
         boxShadow: "0px 8px 20px -5px rgba(0,0,0,0.1)",
-        opacity: player.isConnected ? 1 : 0.7, // Increase opacity slightly on hover for disconnected players
-        transition: { type: "spring", stiffness: 300, damping: 20 } 
+        opacity: player.isConnected ? 1 : 0.7,
+        transition: { type: "spring", stiffness: 300, damping: 20 },
       }}
     >
       <div className="flex items-center gap-3">
-        <div className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
-          player.isReady ? "bg-emerald-100 dark:bg-emerald-900/50" : 
-          !player.isConnected ? "bg-red-100/50 dark:bg-red-900/30" :
-          "bg-stone-100 dark:bg-zinc-800"
-        )}>
+        <div
+          className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+            player.isReady
+              ? "bg-emerald-100 dark:bg-emerald-900/50"
+              : !player.isConnected
+                ? "bg-red-100/50 dark:bg-red-900/30"
+                : "bg-stone-100 dark:bg-zinc-800",
+          )}
+        >
           <motion.div
-            animate={player.isReady && player.isConnected ? { scale: [1, 1.2, 1] } : {}}
-            transition={{ duration: 2, repeat: player.isReady && player.isConnected ? Infinity : 0, repeatDelay: 2 }}
+            animate={
+              player.isReady && player.isConnected ? { scale: [1, 1.2, 1] } : {}
+            }
+            transition={{
+              duration: 2,
+              repeat: player.isReady && player.isConnected ? Infinity : 0,
+              repeatDelay: 2,
+            }}
           >
             {!player.isConnected ? (
               <WifiOff className="h-4 w-4 text-red-500/70" />
@@ -133,24 +207,33 @@ const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPl
             )}
           </motion.div>
         </div>
-        <span className={cn(
-          "font-serif text-lg text-stone-800 dark:text-stone-200",
-          !player.isConnected && "text-stone-500 dark:text-stone-500"
-        )}>
-          {player.name} {isLocalPlayer && <span className="text-xs font-light text-stone-500">(You)</span>}
-          {!player.isConnected && <span className="text-xs font-light italic ml-2 text-stone-400">(disconnected)</span>}
+        <span
+          className={cn(
+            "font-serif text-lg text-stone-800 dark:text-stone-200",
+            !player.isConnected && "text-stone-500 dark:text-stone-500",
+          )}
+        >
+          {player.name}{" "}
+          {isLocalPlayer && (
+            <span className="text-xs font-light text-stone-500">(You)</span>
+          )}
+          {!player.isConnected && (
+            <span className="text-xs font-light italic ml-2 text-stone-400">
+              (disconnected)
+            </span>
+          )}
         </span>
       </div>
       <div className="flex items-center gap-3">
         {getStatus()}
-        
+
         {canRemove && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0.6 }}
             whileHover={{ opacity: 1 }}
             className="relative"
           >
-            <motion.div 
+            <motion.div
               className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/20 cursor-pointer"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.98 }}
@@ -163,7 +246,7 @@ const PlayerRow = ({ player, isLocalPlayer, index }: { player: Player, isLocalPl
               <span className="text-xs font-medium text-red-500">
                 {isHolding ? `${Math.round(holdProgress)}%` : "Remove"}
               </span>
-              
+
               {isHolding && (
                 <motion.div
                   className="absolute left-0 top-0 bottom-0 bg-red-500/20 h-full rounded-full"
@@ -197,15 +280,24 @@ const selectLobbyProps = (state: UIMachineSnapshot) => {
   }
 
   const players = currentGameState.turnOrder
-    ? currentGameState.turnOrder.map((id: string) => currentGameState.players[id])
+    ? currentGameState.turnOrder.map(
+        (id: string) => currentGameState.players[id],
+      )
     : Object.values(currentGameState.players);
-  const localPlayer = localPlayerId ? currentGameState.players[localPlayerId] : null;
+  const localPlayer = localPlayerId
+    ? currentGameState.players[localPlayerId]
+    : null;
   const isGameMaster = localPlayerId === currentGameState.gameMasterId;
 
   const playerCount = players.length;
-  const readyAndConnectedCount = players.filter((p: Player) => p.isReady && p.isConnected).length;
+  const readyAndConnectedCount = players.filter(
+    (p: Player) => p.isReady && p.isConnected,
+  ).length;
   const hasDisconnectedPlayers = players.some((p: Player) => !p.isConnected);
-  const allPlayersReady = readyAndConnectedCount === playerCount && playerCount > 1 && !hasDisconnectedPlayers;
+  const allPlayersReady =
+    readyAndConnectedCount === playerCount &&
+    playerCount > 1 &&
+    !hasDisconnectedPlayers;
 
   return {
     isLoading: false,
@@ -239,17 +331,17 @@ export const GameLobby = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [reconnectionTimeout, setReconnectionTimeout] = useState(false);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Add timeout for loading state
+
   useEffect(() => {
     if (isLoading) {
       const timer = setTimeout(() => {
-        // Show timeout message if loading takes too long
         setReconnectionTimeout(true);
-        // Force transition to error state
-        send({ type: 'CONNECTION_ERROR', message: 'Reconnection taking too long' });
-      }, 8000); // 8 second timeout
-      
+        send({
+          type: "CONNECTION_ERROR",
+          message: "Reconnection taking too long",
+        });
+      }, 8000);
+
       return () => clearTimeout(timer);
     } else {
       setReconnectionTimeout(false);
@@ -267,22 +359,18 @@ export const GameLobby = () => {
   if (isLoading) {
     return (
       <div className="w-full max-w-2xl mx-auto">
-        {/* Add the CSS animation style */}
         <style>{spinnerStyle}</style>
-        <motion.div 
+        <motion.div
           className="w-full font-serif"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
         >
           <div className="flex flex-col items-center gap-4">
-            {/* Replace the motion.div animation with CSS animation */}
-            <div 
-              className="h-10 w-10 rounded-full border-2 border-stone-200 dark:border-zinc-800 border-t-stone-900 dark:border-t-stone-100 loading-spinner"
-            />
+            <div className="h-10 w-10 rounded-full border-2 border-stone-200 dark:border-zinc-800 border-t-stone-900 dark:border-t-stone-100 loading-spinner" />
             <p className="text-stone-600 dark:text-stone-400">
-              {reconnectionTimeout 
-                ? "Reconnection is taking longer than expected..." 
+              {reconnectionTimeout
+                ? "Reconnection is taking longer than expected..."
                 : "Opening lobby..."}
             </p>
             {reconnectionTimeout && (
@@ -300,46 +388,78 @@ export const GameLobby = () => {
       </div>
     );
   }
-  
-  const inviteLink = typeof window !== 'undefined' ? `${window.location.origin}/game/${gameId}` : '';
 
-  const handlePlayerReady = () => send({ type: PlayerActionType.DECLARE_LOBBY_READY });
+  const inviteLink =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/game/${gameId}`
+      : "";
+
+  const handlePlayerReady = () =>
+    send({ type: PlayerActionType.DECLARE_LOBBY_READY });
   const handleStartGame = () => send({ type: PlayerActionType.START_GAME });
-  const handleLeaveGame = () => send({ type: 'LEAVE_GAME' });
-  
+  const handleLeaveGame = () => send({ type: "LEAVE_GAME" });
+
   const handleRefreshGameState = () => {
     if (isRefreshing) return;
-    
+
     setIsRefreshing(true);
-    
-    // Force a CLIENT_GAME_STATE_UPDATED event by sending the appropriate message
-    send({ type: 'CONNECT' });
-    
-    // Set a timeout to reset the refreshing state after 3 seconds to prevent the animation from getting stuck
+
+    send({ type: "CONNECT" });
+
     refreshTimeoutRef.current = setTimeout(() => {
       setIsRefreshing(false);
     }, 3000);
   };
-  
+
   const getLobbyStatus = () => {
     if (!hasEnoughPlayers) {
-      return <StatusIndicator icon={Users} text="Waiting for more players..." colorClass="text-stone-500 dark:text-stone-400" />;
+      return (
+        <StatusIndicator
+          icon={Users}
+          text="Waiting for more players..."
+          colorClass="text-stone-500 dark:text-stone-400"
+        />
+      );
     }
     if (!allPlayersReady) {
-      return <StatusIndicator icon={Clock} text="Waiting for players to ready up..." colorClass="text-stone-500 dark:text-stone-400" />;
+      return (
+        <StatusIndicator
+          icon={Clock}
+          text="Waiting for players to ready up..."
+          colorClass="text-stone-500 dark:text-stone-400"
+        />
+      );
     }
     if (hasDisconnectedPlayers) {
-      return <StatusIndicator icon={WifiOff} text="Some players are disconnected but you can still start." colorClass="text-amber-500" />;
+      return (
+        <StatusIndicator
+          icon={WifiOff}
+          text="Some players are disconnected but you can still start."
+          colorClass="text-amber-500"
+        />
+      );
     }
     if (allPlayersReady && isGameMaster) {
-      return <StatusIndicator icon={PartyPopper} text="All players ready! You can start the game." colorClass="text-emerald-500" />;
+      return (
+        <StatusIndicator
+          icon={PartyPopper}
+          text="All players ready! You can start the game."
+          colorClass="text-emerald-500"
+        />
+      );
     }
-     return <StatusIndicator icon={CheckCircle} text="Ready! Waiting for the host to start." colorClass="text-stone-500 dark:text-stone-400" />;
+    return (
+      <StatusIndicator
+        icon={CheckCircle}
+        text="Ready! Waiting for the host to start."
+        colorClass="text-stone-500 dark:text-stone-400"
+      />
+    );
   };
 
   const canStartGame = isGameMaster && allPlayersReady && hasEnoughPlayers;
   const isPlayerReady = localPlayer?.isReady;
-  
+
   const getButtonConfig = () => {
     if (isGameMaster) {
       if (!isPlayerReady) {
@@ -348,28 +468,29 @@ export const GameLobby = () => {
           action: handlePlayerReady,
           disabled: false,
           icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
-          colors: "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 text-white"
+          colors:
+            "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 text-white",
         };
       }
-      
-      // Game master is ready. Only show "Start Game" if lobby is actually startable.
+
       if (hasEnoughPlayers && allPlayersReady) {
         return {
           text: "Start Game",
           action: handleStartGame,
           disabled: false,
           icon: <PartyPopper className="h-4 w-4 pointer-events-none" />,
-          colors: "bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white"
+          colors:
+            "bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white",
         };
       }
 
-      // Otherwise fallback to a disabled "Ready!" indicator just like other players.
       return {
         text: "Ready!",
         action: () => {},
         disabled: true,
         icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
-        colors: "bg-stone-300 dark:bg-zinc-700 text-stone-500 dark:text-stone-400 cursor-default"
+        colors:
+          "bg-stone-300 dark:bg-zinc-700 text-stone-500 dark:text-stone-400 cursor-default",
       };
     } else {
       return {
@@ -379,7 +500,7 @@ export const GameLobby = () => {
         icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
         colors: isPlayerReady
           ? "bg-stone-300 dark:bg-zinc-700 text-stone-500 dark:text-stone-400 cursor-default"
-          : "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 text-white"
+          : "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 text-white",
       };
     }
   };
@@ -388,7 +509,6 @@ export const GameLobby = () => {
 
   return (
     <>
-      {/* Add the CSS animation style */}
       <style>{spinnerStyle}</style>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -397,20 +517,18 @@ export const GameLobby = () => {
         className="h-full flex items-center justify-center font-serif"
       >
         <div className="w-full max-w-xl mx-auto relative overflow-hidden bg-white/80 dark:bg-zinc-950/80 rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl">
-          {/* Decorative elements */}
-          <motion.div 
+          <motion.div
             className="absolute -top-10 -right-10 w-64 h-64 bg-gradient-to-br from-stone-100 dark:from-zinc-900 rounded-full blur-3xl"
             animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
             transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
           />
-          <motion.div 
+          <motion.div
             className="absolute -bottom-10 -left-10 w-72 h-72 bg-gradient-to-t from-stone-100 dark:from-zinc-900 rounded-full blur-3xl"
             animate={{ x: [0, -30, 0], y: [0, 20, 0] }}
             transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
           />
 
           <div className="relative p-8 md:p-10">
-            {/* Leave Game button (top-right corner) */}
             <motion.div
               className="absolute top-5 right-5"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -430,12 +548,12 @@ export const GameLobby = () => {
                   <motion.div
                     className="absolute inset-0 bg-gradient-to-r from-transparent via-rose-100/20 dark:via-rose-900/20 to-transparent"
                     initial={{ x: "-100%" }}
-                    animate={{ 
-                      x: leaveButtonHovered ? "100%" : "-100%"
+                    animate={{
+                      x: leaveButtonHovered ? "100%" : "-100%",
                     }}
-                    transition={{ 
-                      duration: 1, 
-                      ease: "easeInOut"
+                    transition={{
+                      duration: 1,
+                      ease: "easeInOut",
                     }}
                   />
                   <span className="relative z-10 flex items-center gap-1">
@@ -456,7 +574,6 @@ export const GameLobby = () => {
               </Magnetic>
             </motion.div>
 
-            {/* Add Refresh button (top-left corner) */}
             <motion.div
               className="absolute top-5 left-5"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -474,17 +591,20 @@ export const GameLobby = () => {
                 >
                   <motion.div
                     animate={isRefreshing ? { rotate: 360 } : {}}
-                    transition={{ 
+                    transition={{
                       duration: 1,
                       ease: "linear",
                       repeat: isRefreshing ? Infinity : 0,
-                      repeatType: "loop"
+                      repeatType: "loop",
                     }}
                     onAnimationComplete={() => {
                       if (!isRefreshing) {
-                        document.querySelector('.refresh-icon')?.getAnimations().forEach(animation => {
-                          animation.cancel();
-                        });
+                        document
+                          .querySelector(".refresh-icon")
+                          ?.getAnimations()
+                          .forEach((animation) => {
+                            animation.cancel();
+                          });
                       }
                     }}
                     className="refresh-icon"
@@ -496,7 +616,7 @@ export const GameLobby = () => {
             </motion.div>
 
             <div className="flex flex-col items-center text-center mb-10">
-              <motion.h2 
+              <motion.h2
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.2 }}
@@ -504,7 +624,7 @@ export const GameLobby = () => {
               >
                 Game Lobby
               </motion.h2>
-              <motion.p 
+              <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.7, delay: 0.3 }}
@@ -515,18 +635,22 @@ export const GameLobby = () => {
             </div>
 
             {gameId && (
-              <motion.div 
+              <motion.div
                 className="mb-10"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.4 }}
               >
                 <div className="text-center">
-                  <h2 className="text-lg font-medium text-stone-700 dark:text-stone-300">Invite Friends</h2>
-                  <p className="mt-1 text-sm text-stone-500">Share the Game ID or send the link below.</p>
+                  <h2 className="text-lg font-medium text-stone-700 dark:text-stone-300">
+                    Invite Friends
+                  </h2>
+                  <p className="mt-1 text-sm text-stone-500">
+                    Share the Game ID or send the link below.
+                  </p>
                   <div className="mt-4 flex justify-center">
-                    <CopyToClipboardButton 
-                      textToCopy={inviteLink} 
+                    <CopyToClipboardButton
+                      textToCopy={inviteLink}
                       buttonText={gameId}
                       className="text-lg tracking-widest"
                     />
@@ -535,7 +659,7 @@ export const GameLobby = () => {
               </motion.div>
             )}
 
-            <motion.div 
+            <motion.div
               className="space-y-3 mb-8"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -543,12 +667,17 @@ export const GameLobby = () => {
             >
               <AnimatePresence>
                 {players.map((p, i) => (
-                  <PlayerRow key={p.id} player={p} isLocalPlayer={p.id === localPlayer?.id} index={i} />
+                  <PlayerRow
+                    key={p.id}
+                    player={p}
+                    isLocalPlayer={p.id === localPlayer?.id}
+                    index={i}
+                  />
                 ))}
               </AnimatePresence>
             </motion.div>
 
-            <motion.div 
+            <motion.div
               className="flex flex-col items-center"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -557,7 +686,7 @@ export const GameLobby = () => {
               <div className="h-10 mb-6 flex items-center justify-center">
                 {getLobbyStatus()}
               </div>
-              
+
               <Magnetic>
                 <motion.button
                   key="lobby-main-action"
@@ -566,7 +695,7 @@ export const GameLobby = () => {
                   className={cn(
                     "h-14 min-w-64 rounded-full shadow-xl px-8 relative overflow-hidden flex items-center justify-center gap-2",
                     buttonConfig.colors,
-                    buttonConfig.disabled && "opacity-70 cursor-not-allowed"
+                    buttonConfig.disabled && "opacity-70 cursor-not-allowed",
                   )}
                   data-cursor-link
                   onMouseEnter={() => setButtonHovered(true)}
@@ -575,7 +704,12 @@ export const GameLobby = () => {
                   whileTap={{ scale: 0.97 }}
                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20, duration: 0.4 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 20,
+                    duration: 0.4,
+                  }}
                 >
                   <motion.div
                     className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
@@ -594,9 +728,20 @@ export const GameLobby = () => {
                       {buttonConfig.text}
                     </motion.span>
                     <motion.div
-                      key={buttonConfig.disabled ? "disabled-icon" : "enabled-icon"}
-                      animate={buttonHovered ? { rotate: [0, 15, -15, 0] } : { x: [0, 5, 0] }}
-                      transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1, ease: "easeInOut" }}
+                      key={
+                        buttonConfig.disabled ? "disabled-icon" : "enabled-icon"
+                      }
+                      animate={
+                        buttonHovered
+                          ? { rotate: [0, 15, -15, 0] }
+                          : { x: [0, 5, 0] }
+                      }
+                      transition={{
+                        duration: 1.2,
+                        repeat: Infinity,
+                        repeatDelay: 1,
+                        ease: "easeInOut",
+                      }}
                     >
                       {buttonConfig.icon}
                     </motion.div>
@@ -609,4 +754,4 @@ export const GameLobby = () => {
       </motion.div>
     </>
   );
-}; 
+};

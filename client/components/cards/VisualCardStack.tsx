@@ -1,5 +1,3 @@
-// client/src/components/cards/VisualCardStack.tsx
-
 "use client";
 
 import React from "react";

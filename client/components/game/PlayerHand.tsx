@@ -32,15 +32,11 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
 }) => {
   const visibleCards = useUISelector(selectVisibleCards);
 
-  // For the local player, we have the full card data, but we need to decide
-  // whether to show it as face-up or face-down. A card is only face-up if
-  // it's in the `visibleCards` list. Otherwise, it's face-down.
   const handToDisplay = isLocalPlayer
     ? player.hand.map((card, index) => {
         const isVisible = visibleCards.some(
           (vc) => vc.playerId === player.id && vc.cardIndex === index,
         );
-        // We must ensure the card object has a rank for it to be rendered face-up.
         if (isVisible && "rank" in card) {
           return card;
         }

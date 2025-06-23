@@ -48,14 +48,11 @@ export const generatePlayerView = (
       return { facedown: true as const, id: card.id };
     });
 
-    // Correctly redact the pending drawn card according to our new shared type
-    let clientPendingDrawnCard: { card: PublicCard } | null = null; // ✨ Use PublicCard
+    let clientPendingDrawnCard: { card: PublicCard } | null = null;
     if (serverPlayer.pendingDrawnCard) {
       if (isViewingPlayer) {
-        // The viewing player sees the full card
         clientPendingDrawnCard = { card: serverPlayer.pendingDrawnCard.card };
       } else {
-        // ✨ Opponents see a facedown card placeholder with the correct ID
         clientPendingDrawnCard = {
           card: { id: serverPlayer.pendingDrawnCard.card.id, facedown: true },
         };

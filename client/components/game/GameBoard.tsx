@@ -21,11 +21,10 @@ const selectIsDisconnected = (state: UIMachineSnapshot) =>
 const selectIsReconnecting = (state: UIMachineSnapshot) =>
   state.matches({ inGame: "reconnecting" });
 
-// ✨ MODIFIED SELECTOR
 const selectGameBoardProps = (state: UIMachineSnapshot) => {
   const { currentGameState: gameState, localPlayerId } = state.context;
   const playerWithPendingCard = Object.values(gameState?.players ?? {}).find(
-    (p) => p.pendingDrawnCard
+    (p) => p.pendingDrawnCard,
   );
 
   return {
@@ -89,20 +88,18 @@ export function GameBoard() {
     return <LoadingIndicator />;
   }
 
-  // --- ✨ NEW ANIMATION LOGIC ✨ ---
   const isDealing = gameState.gameStage === GameStage.DEALING;
 
   const dealingDeck: PublicCard[] = isDealing
     ? Object.values(gameState.players).flatMap((p) =>
-        p.hand.map((card) => ({ id: card.id, facedown: true as const }))
+        p.hand.map((card) => ({ id: card.id, facedown: true as const })),
       )
     : [];
 
   const drawnCardData = playerWithPendingCard?.pendingDrawnCard?.card;
-  // --- END ANIMATION LOGIC ---
 
   const opponentPlayers = Object.values(gameState.players).filter(
-    (p) => p.id !== localPlayerId
+    (p) => p.id !== localPlayerId,
   );
 
   const handlePlayAgain = () => {
@@ -143,7 +140,6 @@ export function GameBoard() {
                       key={op.id}
                       player={{
                         ...op,
-                        // ✨ If dealing, render an empty hand. Otherwise, render the real hand.
                         hand: isDealing ? [] : op.hand,
                       }}
                       isLocalPlayer={false}
@@ -160,10 +156,7 @@ export function GameBoard() {
 
             {/* Table Area - takes up remaining space */}
             <div className="flex-1 flex items-center justify-center">
-              <TableArea
-                drawnCard={drawnCardData}
-                dealingDeck={dealingDeck} // ✨ Pass the dealing deck down
-              />
+              <TableArea drawnCard={drawnCardData} dealingDeck={dealingDeck} />
             </div>
 
             {/* Local player area */}
@@ -172,7 +165,6 @@ export function GameBoard() {
                 <PlayerHandStrip
                   player={{
                     ...gameState.players[localPlayerId],
-                    // ✨ Same logic for the local player's hand
                     hand: isDealing
                       ? []
                       : gameState.players[localPlayerId].hand,

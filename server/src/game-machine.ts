@@ -38,7 +38,6 @@ import type {
 } from "./types.js";
 import { produce } from "immer";
 
-// #region Types and Constants
 const PEEK_TOTAL_DURATION_MS = parseInt(
   process.env.PEEK_DURATION_MS || "10000",
   10,
@@ -91,10 +90,9 @@ const cardScoreValues: Record<CardRank, number> = {
 };
 const specialRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
 const abilityRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
-// #endregion
 
 // -----------------------------------------------------------------------------
-// Action & Event Type Unions (restored)
+// Action & Event Type Unions
 // -----------------------------------------------------------------------------
 
 type PlayerActionEvents =
@@ -178,7 +176,6 @@ type EmittedEvent =
       playerId?: PlayerId;
     };
 
-// Pure helper – no GameContext dependency
 interface DiscardLogicParams {
   discardPile: Card[];
   abilityStack: ServerActiveAbility[];
@@ -389,7 +386,6 @@ const baseTurnStateNode = {
   },
 } as const;
 
-// Define type alias from constant
 type TurnStateNode = typeof baseTurnStateNode;
 
 type OnDoneConfig = { target: string; actions: readonly string[] };
@@ -398,19 +394,12 @@ const createTurnStateNode = (onDone: OnDoneConfig) => ({
   onDone,
 });
 
-// -----------------------------------------------------------------------------
-// Dedicated action: emitPeekResults – sends ABILITY_PEEK_RESULT events only to
-// the acting player, using strong runtime narrowing via assertEvent to keep
-// TypeScript happy without broad `any` casts.
-// -----------------------------------------------------------------------------
-
 type UseAbilityEvent = Extract<
   GameEvent,
   { type: PlayerActionType.USE_ABILITY }
 >;
 
 const emitPeekResults = enqueueActions(({ context, event, enqueue }) => {
-  // Ensure this action only processes valid peek ability events
   if (event.type !== PlayerActionType.USE_ABILITY) {
     return;
   }
@@ -429,7 +418,6 @@ const emitPeekResults = enqueueActions(({ context, event, enqueue }) => {
   for (const target of targets) {
     const targetPlayer = context.players[target.playerId];
 
-    // Validate target player and card index bounds
     if (!targetPlayer || target.cardIndex >= targetPlayer.hand.length) {
       logger.warn(
         { target, gameId: context.gameId },
@@ -573,7 +561,6 @@ export const gameMachine = setup({
 
       if (event.payload.action !== "peek") return false;
 
-      // Ensure there are remaining peeks available
       const remaining = currentAbility.remainingPeeks ?? 0;
       const requested = Array.isArray(event.payload.targets)
         ? event.payload.targets.length
@@ -678,12 +665,9 @@ export const gameMachine = setup({
       const newTurnOrder = context.turnOrder.filter((id) => id !== playerId);
 
       let newGameMasterId = context.gameMasterId;
-      // If the disconnected player was the Game Master, and there are other players left...
       if (playerId === context.gameMasterId && newTurnOrder.length > 0) {
-        // ...make the next player in the list the new Game Master.
         newGameMasterId = newTurnOrder[0]!;
       } else if (newTurnOrder.length === 0) {
-        // If no players are left, there's no Game Master.
         newGameMasterId = null;
       }
 
@@ -766,7 +750,6 @@ export const gameMachine = setup({
       const currentAbility = newAbilityStack.at(-1);
       if (!currentAbility || currentAbility.playerId !== playerId) return {};
 
-      // Start with current players – will mutate draft only when necessary
       const updatedPlayers = produce(context.players, (draft) => {
         if (payload.action === "swap" && currentAbility.stage === "swapping") {
           const { source, target } = payload;
@@ -861,14 +844,11 @@ export const gameMachine = setup({
     }),
     dealCards: assign(({ context }) => {
       const deck = shuffleDeck(createDeck());
-      // Create next players object using Immer – mutation stays within draft
       const playersAfterDeal = produce(context.players, (draft) => {
-        // reset
         Object.values(draft).forEach((p) => {
           p.hand = [];
           p.isReady = false;
         });
-        // deal cards round-robin
         for (let i = 0; i < context.cardsPerPlayer; i++) {
           for (const playerId of context.turnOrder) {
             if (deck.length) {
@@ -910,7 +890,6 @@ export const gameMachine = setup({
       assertEvent(event, PlayerActionType.DRAW_FROM_DECK);
       const newDeck = [...context.deck];
       const drawnCard = newDeck.pop()!;
-      // FIX: Explicitly type the pendingDrawnCard object
       const pendingDrawnCard: { card: Card; source: "deck" | "discard" } = {
         card: drawnCard,
         source: "deck",
@@ -930,7 +909,6 @@ export const gameMachine = setup({
       assertEvent(event, PlayerActionType.DRAW_FROM_DISCARD);
       const newDiscard = [...context.discardPile];
       const drawnCard = newDiscard.pop()!;
-      // FIX: Explicitly type the pendingDrawnCard object
       const pendingDrawnCard: { card: Card; source: "deck" | "discard" } = {
         card: drawnCard,
         source: "discard",
@@ -960,7 +938,7 @@ export const gameMachine = setup({
         player.pendingDrawnCard = null;
         Object.assign(draft[playerId]!, player);
       });
-      const cardToDiscard = context.players[playerId]!.hand[handCardIndex]!; // original before mutation
+      const cardToDiscard = context.players[playerId]!.hand[handCardIndex]!;
       return {
         players: updatedPlayers,
         ...applyDiscardLogic({
@@ -1078,7 +1056,6 @@ export const gameMachine = setup({
         payload: { handCardIndex },
       } = event;
 
-      // mutate players via Immer
       const newPlayers = produce(context.players, (draft) => {
         draft[playerId]!.hand.splice(handCardIndex, 1);
       });
@@ -1452,14 +1429,10 @@ export const gameMachine = setup({
       },
     }),
     emitPeekResults,
-    // Schedule automatic transition from peeking to swapping after view duration
     schedulePeekToSwap: enqueueActions(({ context, event, enqueue }) => {
-      // This action must be placed *after* performAbilityAction in the action list
-      // so that context reflects the updated abilityStack.
       if (event.type !== PlayerActionType.USE_ABILITY) return;
       const ability = context.abilityStack.at(-1);
       if (!ability) return;
-      // If we are still in peeking stage but there are no remaining peeks, schedule the swap stage
       if (
         ability.stage === "peeking" &&
         (!("remainingPeeks" in ability) || ability.remainingPeeks === undefined)
@@ -1481,7 +1454,6 @@ export const gameMachine = setup({
         return newAbilityStack;
       },
     }),
-    // === Logging actions for observability ===
     log_ENTER_WAITING: () =>
       logger.info(
         { machine: "game", state: "WAITING_FOR_PLAYERS" },
@@ -1519,7 +1491,6 @@ export const gameMachine = setup({
       ),
     log_ENTER_ERROR: () =>
       logger.info({ machine: "game", state: "error" }, "Entered ERROR state"),
-    // Turn-phase logging
     log_ENTER_TURN_DRAW: () =>
       logger.info({ machine: "game", substate: "DRAW" }, "Turn phase: DRAW"),
     log_ENTER_TURN_DISCARD: () =>
@@ -1585,7 +1556,6 @@ export const gameMachine = setup({
     },
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: [
-        // 1. Add the message to the context
         assign({
           chat: ({ context, event }) => {
             assertEvent(event, PlayerActionType.SEND_CHAT_MESSAGE);
@@ -1597,7 +1567,6 @@ export const gameMachine = setup({
             return [...context.chat, newChatMessage];
           },
         }),
-        // 2. Emit an event telling the server to broadcast ONLY the chat message
         emit(({ event }) => {
           assertEvent(event, PlayerActionType.SEND_CHAT_MESSAGE);
           const newChatMessage: ChatMessage = {
@@ -1773,7 +1742,7 @@ export const gameMachine = setup({
           target: "turn",
           actions: ["setNextPlayer"] as const,
         }) as any,
-        error: { id: "playing.error" /* ...error state logic... */ },
+        error: { id: "playing.error" },
       },
     },
     [GameStage.FINAL_TURNS]: {
@@ -1886,9 +1855,4 @@ export const gameMachine = setup({
   },
 });
 
-// -----------------------------------------------------------------------------
-// Re-export server-side types for external modules that previously imported
-// them directly from this file. This maintains backward-compatibility without
-// duplicating definitions.
-// -----------------------------------------------------------------------------
 export type { GameContext, ServerPlayer } from "./types.js";

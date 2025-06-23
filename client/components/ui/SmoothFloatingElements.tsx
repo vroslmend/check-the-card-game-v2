@@ -1,93 +1,155 @@
-"use client"
+"use client";
 
-import { motion, useTransform, useSpring, useTime, type MotionValue, AnimatePresence } from "framer-motion"
-import { Spade, Heart, Diamond, Club } from "lucide-react"
-import { useMemo, useState, useEffect, FC } from "react"
-import { FloatingSuitIcon } from "./FloatingSuitIcon"
-import { AnimatedBlob } from "./AnimatedBlob"
-import { useTheme } from "next-themes"
+import {
+  motion,
+  useTransform,
+  useSpring,
+  useTime,
+  type MotionValue,
+  AnimatePresence,
+} from "framer-motion";
+import { Spade, Heart, Diamond, Club } from "lucide-react";
+import { useMemo, useState, useEffect, FC } from "react";
+import { FloatingSuitIcon } from "./FloatingSuitIcon";
+import { AnimatedBlob } from "./AnimatedBlob";
+import { useTheme } from "next-themes";
 
 interface SmoothFloatingElementsProps {
-  mouseX: MotionValue<number>
-  mouseY: MotionValue<number>
-  isVisible: boolean
-  isCheckHovered: boolean
-  shouldReduceMotion: boolean
+  mouseX: MotionValue<number>;
+  mouseY: MotionValue<number>;
+  isVisible: boolean;
+  isCheckHovered: boolean;
+  shouldReduceMotion: boolean;
 }
 
 const suitConfigs = [
-  { Icon: Spade, x: -160, y: -220, rotate: -15, startX: -30, startY: -60, z: -50 },
+  {
+    Icon: Spade,
+    x: -160,
+    y: -220,
+    rotate: -15,
+    startX: -30,
+    startY: -60,
+    z: -50,
+  },
   { Icon: Heart, x: 100, y: -200, rotate: 15, startX: 30, startY: -60, z: -50 },
-  { Icon: Diamond, x: -160, y: 220, rotate: 15, startX: -30, startY: 60, z: -50 },
+  {
+    Icon: Diamond,
+    x: -160,
+    y: 220,
+    rotate: 15,
+    startX: -30,
+    startY: 60,
+    z: -50,
+  },
   { Icon: Club, x: 120, y: 200, rotate: -15, startX: 30, startY: 60, z: -50 },
-]
+];
 
 interface SuitProps {
-  mouseX: MotionValue<number>
-  mouseY: MotionValue<number>
-  isCheckHovered: boolean
-  config: typeof suitConfigs[0]
-  delay: number
-  shouldReduceMotion: boolean
+  mouseX: MotionValue<number>;
+  mouseY: MotionValue<number>;
+  isCheckHovered: boolean;
+  config: (typeof suitConfigs)[0];
+  delay: number;
+  shouldReduceMotion: boolean;
 }
 
-const Suit: FC<SuitProps> = ({ mouseX, mouseY, isCheckHovered, config, delay, shouldReduceMotion }) => {
-  const { theme } = useTheme()
-  const popOut = useSpring(0, { stiffness: 100, damping: 15 })
+const Suit: FC<SuitProps> = ({
+  mouseX,
+  mouseY,
+  isCheckHovered,
+  config,
+  delay,
+  shouldReduceMotion,
+}) => {
+  const { theme } = useTheme();
+  const popOut = useSpring(0, { stiffness: 100, damping: 15 });
 
   useEffect(() => {
-    const timer = setTimeout(() => popOut.set(isCheckHovered ? 1 : 0), (isCheckHovered ? delay : 0) * 1000)
-    return () => clearTimeout(timer)
-  }, [isCheckHovered, popOut, delay])
-  
-  const time = useTime()
-  const idleY = useTransform(time, (t) => shouldReduceMotion ? 0 : Math.sin(t / 1000 + delay * 10) * 5)
-  const swivel = useTransform(time, (t) => shouldReduceMotion ? 0 : Math.sin(t / 1200 + delay * 8) * 15)
+    const timer = setTimeout(
+      () => popOut.set(isCheckHovered ? 1 : 0),
+      (isCheckHovered ? delay : 0) * 1000,
+    );
+    return () => clearTimeout(timer);
+  }, [isCheckHovered, popOut, delay]);
+
+  const time = useTime();
+  const idleY = useTransform(time, (t) =>
+    shouldReduceMotion ? 0 : Math.sin(t / 1000 + delay * 10) * 5,
+  );
+  const swivel = useTransform(time, (t) =>
+    shouldReduceMotion ? 0 : Math.sin(t / 1200 + delay * 8) * 15,
+  );
 
   // Parallax transforms
-  const paraX = useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15])
-  const paraY = useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15])
+  const paraX = useTransform(
+    mouseX,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [-15, 15],
+  );
+  const paraY = useTransform(
+    mouseY,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [-15, 15],
+  );
 
   // Pop-out transform from start to end positions
-  const popOutX = useTransform(popOut, [0, 1], [config.startX, config.x])
-  const popOutY = useTransform(popOut, [0, 1], [config.startY, config.y])
+  const popOutX = useTransform(popOut, [0, 1], [config.startX, config.x]);
+  const popOutY = useTransform(popOut, [0, 1], [config.startY, config.y]);
 
   // Scale idle animation with popOut value
-  const scaledIdleY = useTransform([popOut, idleY], (latest) => (latest[0] as number) * (latest[1] as number))
+  const scaledIdleY = useTransform(
+    [popOut, idleY],
+    (latest) => (latest[0] as number) * (latest[1] as number),
+  );
 
   // Combined position transforms
-  const x = useTransform([popOutX, paraX], (latest) => (latest[0] as number) + (latest[1] as number))
-  const y = useTransform([popOutY, paraY, scaledIdleY], (latest) => (latest[0] as number) + (latest[1] as number) + (latest[2] as number))
+  const x = useTransform(
+    [popOutX, paraX],
+    (latest) => (latest[0] as number) + (latest[1] as number),
+  );
+  const y = useTransform(
+    [popOutY, paraY, scaledIdleY],
+    (latest) =>
+      (latest[0] as number) + (latest[1] as number) + (latest[2] as number),
+  );
 
   // Other property transforms
-  const scale = useTransform(popOut, [0, 1], [0.5, 1.1])
-  const opacity = popOut
-  const z = useTransform(popOut, [0, 1], [0, config.z])
+  const scale = useTransform(popOut, [0, 1], [0.5, 1.1]);
+  const opacity = popOut;
+  const z = useTransform(popOut, [0, 1], [0, config.z]);
 
   const rotate = useTransform([popOut, swivel], (latest) => {
-    const p = latest[0] as number
-    const s = latest[1] as number
-    return p * config.rotate + p * s
-  })
+    const p = latest[0] as number;
+    const s = latest[1] as number;
+    return p * config.rotate + p * s;
+  });
 
   return (
     <motion.div
       className="absolute left-1/2 top-1/2 flex h-16 w-16 items-center justify-center rounded-2xl backdrop-blur-sm"
       style={{ x, y, scale, opacity, rotate, z }}
-      whileHover={{ scale: shouldReduceMotion ? 1 : 1.2, transition: { duration: 0.2 } }}
+      whileHover={{
+        scale: shouldReduceMotion ? 1 : 1.2,
+        transition: { duration: 0.2 },
+      }}
     >
       <FloatingSuitIcon Icon={config.Icon} />
     </motion.div>
-  )
-}
+  );
+};
 
-export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHovered, shouldReduceMotion }: SmoothFloatingElementsProps) {
-  const { theme } = useTheme()
-  const [currentSuitConfigs, setCurrentSuitConfigs] = useState(suitConfigs)
+export function SmoothFloatingElements({
+  mouseX,
+  mouseY,
+  isVisible,
+  isCheckHovered,
+  shouldReduceMotion,
+}: SmoothFloatingElementsProps) {
+  const { theme } = useTheme();
+  const [currentSuitConfigs, setCurrentSuitConfigs] = useState(suitConfigs);
 
-  // When the card appears, randomize the icon positions slightly for a more dynamic feel.
-  // Adjust the number (e.g., 80) to increase or decrease the randomization range.
-  const RANDOMNESS_FACTOR = 80
+  const RANDOMNESS_FACTOR = 80;
 
   useEffect(() => {
     if (isCheckHovered && !shouldReduceMotion) {
@@ -95,17 +157,17 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
         ...config,
         x: config.x + (Math.random() - 0.5) * RANDOMNESS_FACTOR,
         y: config.y + (Math.random() - 0.5) * RANDOMNESS_FACTOR,
-      }))
-      setCurrentSuitConfigs(newConfigs)
+      }));
+      setCurrentSuitConfigs(newConfigs);
     }
-  }, [isCheckHovered, shouldReduceMotion])
-  const suits = [Spade, Heart, Diamond, Club]
-  const [particles, setParticles] = useState<any[]>([])
+  }, [isCheckHovered, shouldReduceMotion]);
+  const suits = [Spade, Heart, Diamond, Club];
+  const [particles, setParticles] = useState<any[]>([]);
 
   useEffect(() => {
     if (shouldReduceMotion) {
-      setParticles([])
-      return
+      setParticles([]);
+      return;
     }
     setParticles(
       Array.from({ length: 8 }, (_, i) => ({
@@ -122,20 +184,36 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
         duration: 4 + i * 0.3,
         delay: i * 0.4,
       })),
-    )
-  }, [shouldReduceMotion])
+    );
+  }, [shouldReduceMotion]);
 
   // Smooth mouse tracking
-  const smoothMouseX = useSpring(mouseX, { stiffness: 150, damping: 30 })
-  const smoothMouseY = useSpring(mouseY, { stiffness: 150, damping: 30 })
+  const smoothMouseX = useSpring(mouseX, { stiffness: 150, damping: 30 });
+  const smoothMouseY = useSpring(mouseY, { stiffness: 150, damping: 30 });
 
   // Central shape transforms
-  const centralRotateX = useTransform(smoothMouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-8, 8])
-  const centralRotateY = useTransform(smoothMouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-8, 8])
-  
+  const centralRotateX = useTransform(
+    smoothMouseY,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [-8, 8],
+  );
+  const centralRotateY = useTransform(
+    smoothMouseX,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [-8, 8],
+  );
+
   // Parallax for suits and particles
-  const particleX = useTransform(smoothMouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [30, -30])
-  const particleY = useTransform(smoothMouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [30, -30])
+  const particleX = useTransform(
+    smoothMouseX,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [30, -30],
+  );
+  const particleY = useTransform(
+    smoothMouseY,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [30, -30],
+  );
 
   return (
     <motion.div
@@ -207,7 +285,9 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
                   opacity: 1,
                   scale: 1,
                   rotateY: 0,
-                  rotateZ: shouldReduceMotion ? 0 : [0, 1.5, -1.5, 1.5, -1.5, 0],
+                  rotateZ: shouldReduceMotion
+                    ? 0
+                    : [0, 1.5, -1.5, 1.5, -1.5, 0],
                   y: shouldReduceMotion ? 0 : [0, -6, 0],
                 }}
                 exit={{
@@ -219,7 +299,10 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
                 transition={{
                   opacity: { duration: 0.5, ease: "easeInOut" },
                   scale: { duration: 0.5, ease: "easeInOut" },
-                  rotateY: { duration: shouldReduceMotion ? 0 : 0.5, ease: "easeInOut" },
+                  rotateY: {
+                    duration: shouldReduceMotion ? 0 : 0.5,
+                    ease: "easeInOut",
+                  },
                   rotateZ: {
                     duration: 15,
                     repeat: shouldReduceMotion ? 0 : Infinity,
@@ -237,7 +320,10 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
                 {/* Card Back (initially visible) */}
                 <motion.div
                   className="absolute inset-0 h-80 w-56 rounded-lg border-2 border-stone-200 bg-gradient-to-br from-stone-100 to-stone-200/60 shadow-xl dark:border-stone-800 dark:from-stone-800 dark:to-stone-900/60"
-                  style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+                  style={{
+                    backfaceVisibility: "hidden",
+                    transform: "rotateY(180deg)",
+                  }}
                 >
                   {/* Card Back Pattern */}
                   <div className="absolute inset-4 rounded border border-stone-300/30 dark:border-stone-700/30">
@@ -343,5 +429,5 @@ export function SmoothFloatingElements({ mouseX, mouseY, isVisible, isCheckHover
         }}
       />
     </motion.div>
-  )
+  );
 }

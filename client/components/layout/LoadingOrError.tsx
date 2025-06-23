@@ -1,6 +1,5 @@
-'use client';
+"use client";
 
-// CSS animation for loading spinner
 const spinnerStyle = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
@@ -22,15 +21,21 @@ const LoadingOrError = ({ message, isError = false }: LoadingOrErrorProps) => {
       <>
         <style>{spinnerStyle}</style>
         <div className="mb-4">
-          <div className={`w-12 h-12 rounded-full border-4 ${isError ? 'border-destructive' : 'border-primary'} border-t-transparent loading-spinner`} />
+          <div
+            className={`w-12 h-12 rounded-full border-4 ${isError ? "border-destructive" : "border-primary"} border-t-transparent loading-spinner`}
+          />
         </div>
       </>
-      <h2 className={`text-xl font-semibold ${isError ? 'text-destructive' : ''}`}>
-        {isError ? 'An Error Occurred' : 'Loading'}
+      <h2
+        className={`text-xl font-semibold ${isError ? "text-destructive" : ""}`}
+      >
+        {isError ? "An Error Occurred" : "Loading"}
       </h2>
-      <p className="text-muted-foreground mt-2" suppressHydrationWarning>{message}</p>
+      <p className="text-muted-foreground mt-2" suppressHydrationWarning>
+        {message}
+      </p>
     </div>
   );
 };
 
-export default LoadingOrError; 
+export default LoadingOrError;

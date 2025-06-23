@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 interface SidePanelProps {
   // Props for game log and chat will be added here later
@@ -8,7 +8,9 @@ const SidePanel = ({}: SidePanelProps) => {
   return (
     <div className="w-80 h-full bg-background border-l border-border flex flex-col">
       <div className="flex-grow p-4">
-        <h2 className="text-lg font-bold text-foreground mb-4">[Activity Log]</h2>
+        <h2 className="text-lg font-bold text-foreground mb-4">
+          [Activity Log]
+        </h2>
         {/* Game log content will go here */}
         <p className="text-sm text-muted-foreground">Game started...</p>
       </div>
@@ -21,4 +23,4 @@ const SidePanel = ({}: SidePanelProps) => {
   );
 };
 
-export default SidePanel; 
+export default SidePanel;

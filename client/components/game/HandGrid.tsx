@@ -37,12 +37,9 @@ export const HandGrid = ({
     };
   });
 
-  // The grid size is the maximum number of cards a player can have.
-  // We will always render at least 4 slots, or more if the hand grows.
   const totalSlots = Math.max(4, hand.length);
   const slots = Array.from({ length: totalSlots });
 
-  // The number of columns is half the number of slots, rounded up.
   const numColumns = Math.ceil(totalSlots / 2);
 
   return (
@@ -64,8 +61,6 @@ export const HandGrid = ({
           cardSize === "lg" && "h-40 w-28",
         );
 
-        // If there's no card at this index (e.g., hand has 3 cards, but we're rendering the 4th slot),
-        // render an empty placeholder to maintain grid structure.
         if (!card) {
           return (
             <div
@@ -79,7 +74,6 @@ export const HandGrid = ({
           (vc) => vc.playerId === ownerId && vc.cardIndex === index,
         );
 
-        // If the original card lacks rank info (facedown) but we have a visible version, replace it
         const visibleCardData = isCardVisible
           ? visibleCards.find(
               (vc) => vc.playerId === ownerId && vc.cardIndex === index,
@@ -112,17 +106,15 @@ export const HandGrid = ({
           isMatchSelected || isAbilityPeekSelected || isAbilitySwapSelected;
 
         return (
-          // This div acts as the stable grid cell.
           <div key={`slot-${ownerId}-${index}`} className={cardSlotSizer}>
             <AnimatePresence>
               {card && (
-                // This motion.div animates within the stable slot.
                 <motion.div
                   key={card.id}
                   layoutId={card.id}
                   transition={{ type: "spring", stiffness: 350, damping: 25 }}
                   className={cn(
-                    "absolute inset-0", // Positioned absolutely within the parent slot
+                    "absolute inset-0",
                     canInteract && "cursor-pointer",
                     canInteract && "hover:brightness-110",
                   )}
@@ -137,7 +129,6 @@ export const HandGrid = ({
                       : {}
                   }
                 >
-                  {/* Animated selection ring */}
                   <AnimatePresence>
                     {isSelected && (
                       <motion.div

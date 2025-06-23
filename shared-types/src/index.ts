@@ -1,7 +1,3 @@
-// This file contains all the shared types for the Check card game application.
-// By keeping them in a separate package, we can ensure that the client and server
-// have a consistent understanding of the data structures being passed between them.
-
 // ================================================================================================
 //                                      CORE ID & STATE TYPES
 // ================================================================================================
@@ -69,7 +65,6 @@ export enum CardRank {
   King = "K",
 }
 
-// AFTER CARD, define facedown card and public card types
 export interface FacedownCard {
   id: string;
   facedown: true;
@@ -153,7 +148,6 @@ export interface ServerToClientEvents {
   }) => void;
   [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
   [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;
-  // FIX: Added event for server broadcasting a new chat message
   [SocketEventName.NEW_CHAT_MESSAGE]: (chatMessage: ChatMessage) => void;
 }
 
@@ -197,7 +191,6 @@ export enum SocketEventName {
   ABILITY_PEEK_RESULT = "ABILITY_PEEK_RESULT",
   SERVER_LOG_ENTRY = "SERVER_LOG_ENTRY",
   INITIAL_LOGS = "INITIAL_LOGS",
-  // FIX: Added event name for server broadcasting a new chat message
   NEW_CHAT_MESSAGE = "NEW_CHAT_MESSAGE",
 }
 
@@ -236,7 +229,7 @@ export interface ChatMessage {
   senderId: PlayerId;
   senderName: string;
   message: string;
-  timestamp: string; // ISO 8601 format
+  timestamp: string;
 }
 
 // ================================================================================================

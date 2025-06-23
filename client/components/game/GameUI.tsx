@@ -1,5 +1,3 @@
-// client/components/game/GameUI.tsx
-
 "use client";
 
 import React from "react";
@@ -29,7 +27,6 @@ const selectStableView = (s: any) => {
 };
 
 export default function GameUI() {
-  // Select only the parts of state needed for view routing.
   const { state, gameStage, modalType, view } = useUISelector((s) => ({
     state: s,
     gameStage: s.context.currentGameState?.gameStage,
@@ -38,21 +35,17 @@ export default function GameUI() {
   }));
 
   const renderContent = () => {
-    // 1. If we are prompting the user to join/rejoin, the modal takes precedence.
     if (modalType === "rejoin" || state.matches({ inGame: "promptToJoin" })) {
       return <LoadingOrError message="Awaiting your input..." />;
     }
 
-    // 2. We have gameStage information – route accordingly.
     if (gameStage) {
       if (gameStage === GameStage.WAITING_FOR_PLAYERS) {
         return <GameLobby />;
       }
-      // Any active gameplay stage renders the GameBoard.
       return <GameBoard />;
     }
 
-    // 3. Fallback – no gameStage yet, show connecting spinner.
     return <LoadingOrError message="Connecting..." />;
   };
 
@@ -72,7 +65,6 @@ export default function GameUI() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Rejoin modal controls its own visibility based on machine context */}
         <RejoinModal />
       </main>
     </CardAnimationRoot>

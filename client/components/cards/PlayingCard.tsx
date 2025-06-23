@@ -52,13 +52,11 @@ const PlayingCardRenderer = ({
         colorClass,
       )}
     >
-      {/* Top Left */}
       <div className={cn("text-left", tlClass)}>
         <div className="font-bold leading-none">{rankLabel}</div>
         <div className="leading-none">{symbol}</div>
       </div>
 
-      {/* Center Symbol */}
       <div
         className={cn(
           "absolute inset-0 flex items-center justify-center",
@@ -68,7 +66,6 @@ const PlayingCardRenderer = ({
         {symbol}
       </div>
 
-      {/* Bottom Right (Rotated) */}
       <div className={cn("self-end rotate-180 text-left", tlClass)}>
         <div className="font-bold leading-none">{rankLabel}</div>
         <div className="leading-none">{symbol}</div>
@@ -103,7 +100,6 @@ export function PlayingCard({
 }: PlayingCardProps) {
   const showFront = !faceDown;
 
-  // Keep a reference to the last non-undefined card so the front face doesn't become empty
   const lastCardRef = useRef<Card | undefined>(card);
   useEffect(() => {
     if (card) lastCardRef.current = card;
@@ -126,7 +122,6 @@ export function PlayingCard({
         animate={showFront ? "flipped" : "unflipped"}
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
-        {/* Card Front */}
         <div
           className="absolute w-full h-full"
           style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
@@ -139,7 +134,6 @@ export function PlayingCard({
           )}
         </div>
 
-        {/* Card Back */}
         <div
           className="absolute w-full h-full"
           style={{ backfaceVisibility: "hidden" }}

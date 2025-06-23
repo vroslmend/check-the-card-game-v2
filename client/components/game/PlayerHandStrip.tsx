@@ -50,7 +50,6 @@ const PlayerInfoBadge = ({
         text: "Check Called",
         color: "text-sky-600 dark:text-sky-400",
       };
-    // 'isReady' is more of a lobby state, so we check connection/check status first in-game.
     return {
       Icon: Clock,
       text: "Waiting",
@@ -109,7 +108,6 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
   const { selectedCardIndex, setSelectedCardIndex } = useActionController();
 
   const handleCardClick = (cardIndex: number) => {
-    // An ability is active, and this player's cards can be targeted.
     if (isTargetableForAbility) {
       send({
         type: "PLAYER_SLOT_CLICKED_FOR_ABILITY",
@@ -119,7 +117,6 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
       return;
     }
 
-    // No ability, check for turn-based actions for the local player.
     if (isLocalPlayer) {
       if (canSwap) {
         send({
@@ -136,13 +133,10 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     }
   };
 
-  // A player's hand is interactive if an ability is targeting them,
-  // or if it's the local player's turn for swapping or matching.
   const canInteract =
     !player.isLocked &&
     (isTargetableForAbility || (isLocalPlayer && (canSwap || canMatch)));
 
-  // Use a larger card size for the local player; smaller for opponents.
   const cardSize: "xs" = "xs";
 
   return (

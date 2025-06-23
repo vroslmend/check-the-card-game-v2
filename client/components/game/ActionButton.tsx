@@ -34,10 +34,8 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
   const buttonContent = (
     <>
       {icon ? (
-        // Primary case: Icon is present
         <span className="relative z-20">{icon}</span>
       ) : (
-        // Fallback case: No icon, show label on button
         <span className="relative z-20 text-xs font-semibold px-2">
           {label}
         </span>
@@ -105,7 +103,6 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             whileTap={{ scale: disabled ? 1 : 0.9 }}
             className={cn(
               "relative h-10 shrink-0 rounded-full flex items-center justify-center overflow-hidden",
-              // If there's an icon, it's a circle. If not, it's a pill with padding.
               icon ? "w-10" : "px-4",
               "bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20",
               "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-black/10 dark:disabled:hover:bg-white/10",
@@ -126,7 +123,6 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             {buttonContent}
           </motion.button>
         </TooltipTrigger>
-        {/* Only show tooltip if there's an icon to hide the label for */}
         {icon && (
           <TooltipContent>
             <p>{label}</p>

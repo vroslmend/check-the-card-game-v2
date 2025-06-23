@@ -1,77 +1,87 @@
-// client/components/modals/RejoinModal.tsx
+"use client";
 
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useUIActorRef, useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Loader, Users, ArrowRight } from 'lucide-react';
-import { toast } from 'sonner';
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  useUIActorRef,
+  useUISelector,
+  type UIMachineSnapshot,
+} from "@/context/GameUIContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Loader, Users, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
 
 const selectRejoinModalProps = (state: UIMachineSnapshot) => {
   return {
     gameId: state.context.gameId,
-    modalInfo: state.context.modal, 
-    isLoading: state.hasTag('loading'), 
-  }
-}
+    modalInfo: state.context.modal,
+    isLoading: state.hasTag("loading"),
+  };
+};
 
 export function RejoinModal() {
   const { send } = useUIActorRef();
-  const { gameId, modalInfo, isLoading } = useUISelector(selectRejoinModalProps);
-  
-  // Use local state for the input field, initialized from localStorage
+  const { gameId, modalInfo, isLoading } = useUISelector(
+    selectRejoinModalProps,
+  );
+
   const [playerName, setPlayerName] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('localPlayerName') || '';
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("localPlayerName") || "";
     }
-    return '';
+    return "";
   });
 
-  // This effect ensures that if the modal becomes visible, the input is focused.
   useEffect(() => {
-    if (modalInfo?.type === 'rejoin') {
+    if (modalInfo?.type === "rejoin") {
       setTimeout(() => {
-        document.getElementById('player-name-rejoin')?.focus();
+        document.getElementById("player-name-rejoin")?.focus();
       }, 100);
     }
   }, [modalInfo]);
 
-  const isVisible = modalInfo?.type === 'rejoin';
+  const isVisible = modalInfo?.type === "rejoin";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (playerName.trim().length < 2) {
-      toast.error('Please enter a name with at least 2 characters.');
+      toast.error("Please enter a name with at least 2 characters.");
       return;
     }
     if (!gameId) {
-      toast.error('Game ID is missing. Cannot join.');
+      toast.error("Game ID is missing. Cannot join.");
       return;
     }
-    
-    // Persist the name for future joins
-    localStorage.setItem('localPlayerName', playerName.trim());
-    
+
+    localStorage.setItem("localPlayerName", playerName.trim());
+
     send({
-      type: 'JOIN_GAME_REQUESTED',
+      type: "JOIN_GAME_REQUESTED",
       playerName: playerName.trim(),
       gameId,
     });
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && playerName.trim() && !isLoading) {
+    if (e.key === "Enter" && playerName.trim() && !isLoading) {
       handleSubmit(e);
     }
   };
 
   return (
-    <Dialog open={isVisible} onOpenChange={(open) => !open && send({ type: 'DISMISS_MODAL' })}>
+    <Dialog
+      open={isVisible}
+      onOpenChange={(open) => !open && send({ type: "DISMISS_MODAL" })}
+    >
       <AnimatePresence>
         {isVisible && (
           <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-zinc-950 border-stone-200 dark:border-zinc-800 rounded-xl border">
@@ -79,7 +89,7 @@ export function RejoinModal() {
               initial={{ opacity: 0, scale: 0.95, y: -30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 30 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
             >
               <form onSubmit={handleSubmit} className="relative p-6 md:p-8">
                 <DialogHeader className="mb-6 text-center">
@@ -87,16 +97,22 @@ export function RejoinModal() {
                     <div className="rounded-full bg-stone-100 dark:bg-zinc-900 p-2">
                       <Users className="h-5 w-5 text-stone-600 dark:text-stone-400" />
                     </div>
-                    <DialogTitle className="text-3xl font-light">{modalInfo?.title || 'Join Game'}</DialogTitle>
+                    <DialogTitle className="text-3xl font-light">
+                      {modalInfo?.title || "Join Game"}
+                    </DialogTitle>
                   </div>
                   <DialogDescription className="text-stone-500 dark:text-stone-400 mt-2">
-                    {modalInfo?.message || `You've been invited to game ${gameId}`}
+                    {modalInfo?.message ||
+                      `You've been invited to game ${gameId}`}
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 mb-8">
                   <div className="space-y-2">
-                    <Label htmlFor="player-name-rejoin" className="text-sm font-normal text-stone-600 dark:text-stone-400">
+                    <Label
+                      htmlFor="player-name-rejoin"
+                      className="text-sm font-normal text-stone-600 dark:text-stone-400"
+                    >
                       What should we call you?
                     </Label>
                     <Input

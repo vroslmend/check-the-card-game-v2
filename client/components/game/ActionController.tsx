@@ -75,11 +75,6 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       topDiscardCard.rank,
     );
 
-  // Determine if we should show ability action buttons:
-  // 1. Client owns the ability
-  // 2. Ability stage requires input (peeking or swapping)
-  // 3. We are NOT currently in the automatic peek-reveal sub-state
-
   const isViewingPeek = state.matches(
     "inGame.ability.resolving.viewingPeek" as any,
   );
@@ -121,13 +116,10 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
 }) => {
   const props = useUISelector(selectActionControllerProps);
 
-  // Access the underlying actor(ref) so we can inspect the raw XState snapshot
   const actorRef = useUIActorRef();
   const { send } = actorRef;
 
-  // Emit a debug-level log whenever the ability-flow related flags change.
   useEffect(() => {
-    // Only log during development to avoid noisy production logs
     if (process.env.NODE_ENV === "production") return;
 
     const snapshot = actorRef.getSnapshot();
@@ -183,7 +175,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       }
     };
 
-    // kick off
     update();
 
     return () => {
@@ -248,7 +239,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     const actions: Action[] = [];
     if (!localPlayer || !gameStage) return actions;
 
-    // PRIORITY 1: MATCHING STAGE
     if (
       matchingOpportunity &&
       matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id) &&
@@ -282,7 +272,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       return actions;
     }
 
-    // PRIORITY 2: ABILITY RESOLUTION
     if (abilityContext && isAbilityPlayer && isAbilitySelecting) {
       const {
         type,
@@ -319,7 +308,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         const selected = selectedSwapTargets?.length ?? 0;
         const isDisabled = selected !== required;
 
-        // ✨ FIX: Pass explicit labels to the factories
         actions.push(
           createConfirmAbilityAction(
             () => sendEvent({ type: "CONFIRM_ABILITY_ACTION" }),
@@ -337,7 +325,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       return actions;
     }
 
-    // PRIORITY 3: REGULAR TURN/GAME ACTIONS
     switch (gameStage) {
       case GameStage.WAITING_FOR_PLAYERS:
         if (!localPlayer.isReady)
@@ -371,7 +358,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
                 ),
               );
           }
-          // ✨ FIX: Check if a card is pending, regardless of source. The server validates the action.
+
           if (drawnCardInfo) {
             actions.push(
               createDiscardDrawnCardAction(() =>

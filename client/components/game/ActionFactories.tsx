@@ -13,7 +13,6 @@ import {
   ArrowUpFromLine,
 } from "lucide-react";
 
-// Card draw actions
 export const createDrawDeckAction = (
   onClick: () => void,
   disabled?: boolean,
@@ -36,7 +35,6 @@ export const createDrawDiscardAction = (
   className: "text-sky-200",
 });
 
-// Card discard actions
 export const createDiscardDrawnCardAction = (
   onClick: () => void,
   disabled?: boolean,
@@ -48,7 +46,6 @@ export const createDiscardDrawnCardAction = (
   className: "text-rose-300",
 });
 
-// Game control actions
 export const createCallCheckAction = (
   onPointerDown: React.PointerEventHandler<HTMLButtonElement>,
   onPointerUp: React.PointerEventHandler<HTMLButtonElement>,
@@ -101,13 +98,12 @@ export const createAttemptMatchAction = (
   className: "text-teal-300",
 });
 
-// Special ability actions
 export const createConfirmAbilityAction = (
   onClick: () => void,
-  label: string, // Now accepts an explicit label
+  label: string,
   disabled?: boolean,
 ): Action => ({
-  label, // Use the provided label for the tooltip
+  label,
   onClick,
   disabled,
   icon: <CheckCircle className="h-5 w-5" />,
@@ -116,10 +112,10 @@ export const createConfirmAbilityAction = (
 
 export const createSkipAbilityAction = (
   onClick: () => void,
-  label: string, // Also modify this for consistency
+  label: string,
   disabled?: boolean,
 ): Action => ({
-  label, // Use the provided label
+  label,
   onClick,
   disabled,
   icon: <SkipForward className="h-5 w-5" />,
@@ -137,7 +133,6 @@ export const createCancelAbilityAction = (
   className: "text-rose-300",
 });
 
-// Initial setup actions
 export const createReadyForPeekAction = (
   onClick: () => void,
   disabled?: boolean,

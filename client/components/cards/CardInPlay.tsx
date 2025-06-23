@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { Card as CardType, PublicCard } from 'shared-types';
-import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
-import { DeckCard } from './CardPile';
+import React from "react";
+import { Card as CardType, PublicCard } from "shared-types";
+import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
+import { DeckCard } from "./CardPile";
 
 interface CardInPlayProps {
   card: PublicCard;
@@ -14,7 +14,7 @@ interface CardInPlayProps {
   isInteractive?: boolean;
   onClick?: () => void;
   className?: string;
-  size?: 'xxs' | 'xs' | 'sm' | 'md' | 'lg';
+  size?: "xxs" | "xs" | "sm" | "md" | "lg";
 }
 
 export const CardInPlay: React.FC<CardInPlayProps> = ({
@@ -25,16 +25,13 @@ export const CardInPlay: React.FC<CardInPlayProps> = ({
   isInteractive = false,
   onClick,
   className,
-  size = 'sm'
+  size = "sm",
 }) => {
-  // Function to determine if we can see the card face
   const canSeeCardFace = () => {
-    // If it's facedown and not peeking, we can't see it
-    if ('facedown' in card && !isPeeking) {
+    if ("facedown" in card && !isPeeking) {
       return false;
     }
-    
-    // Otherwise we can see it (if peeking or if it's a normal card)
+
     return true;
   };
 
@@ -43,29 +40,29 @@ export const CardInPlay: React.FC<CardInPlayProps> = ({
       whileHover={isInteractive ? { y: -10, scale: 1.05, zIndex: 10 } : {}}
       whileTap={isInteractive ? { scale: 0.98 } : {}}
       animate={isSelected ? { y: -15 } : { y: 0 }}
-      transition={{ 
-        type: "spring", 
-        stiffness: 300, 
-        damping: 20
+      transition={{
+        type: "spring",
+        stiffness: 300,
+        damping: 20,
       }}
       className={cn(
         "relative transition-all duration-200",
         isInteractive && "cursor-pointer",
-        className
+        className,
       )}
     >
-      <DeckCard 
-        card={isPeeking ? card : card} // We use the same card regardless in this component
+      <DeckCard
+        card={isPeeking ? card : card}
         isInteractive={isInteractive}
         onClick={onClick}
         className={cn(
           isPeeking && "ring-2 ring-yellow-400 dark:ring-yellow-500",
-          isSelected && "ring-2 ring-blue-400 dark:ring-blue-500"
+          isSelected && "ring-2 ring-blue-400 dark:ring-blue-500",
         )}
       />
-      
+
       {isSelected && (
-        <motion.div 
+        <motion.div
           className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs font-medium px-2 py-0.5 rounded-md"
           initial={{ opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
@@ -75,4 +72,4 @@ export const CardInPlay: React.FC<CardInPlayProps> = ({
       )}
     </motion.div>
   );
-}; 
+};

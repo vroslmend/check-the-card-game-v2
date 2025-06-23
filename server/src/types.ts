@@ -11,25 +11,9 @@ import {
   ChatMessage,
 } from "shared-types";
 
-// -----------------------------------------------------------------------------
-// Server-only type definitions. These were previously declared in
-// `game-machine.ts` but do not belong in the shared-types package because they
-// describe server-side state and implementation details.
-// -----------------------------------------------------------------------------
-
 export interface ServerActiveAbility extends Omit<ActiveAbility, "stage"> {
-  /**
-   * The current execution phase of the ability. Kings & Peeks have a _peeking_
-   * stage first, followed by a _swapping_ stage. Jacks only have _swapping_.
-   */
   stage: "peeking" | "swapping";
-  /**
-   * Where the ability-triggering card originated, used for replay/debugging.
-   */
   source: "discard" | "stack" | "stackSecondOfPair";
-  /**
-   * Remaining peeks for King/Peek abilities. Undefined for Swap (Jack).
-   */
   remainingPeeks?: number;
 }
 

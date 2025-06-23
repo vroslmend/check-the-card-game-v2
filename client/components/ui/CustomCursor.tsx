@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React, { useEffect, useRef, useState } from 'react';
-import { motion, useSpring, useMotionValue, Variants } from 'framer-motion';
-import { useCursor } from '@/components/providers/CursorProvider';
-import { useTheme } from 'next-themes';
-import { usePathname } from 'next/navigation';
+import React, { useEffect, useRef, useState } from "react";
+import { motion, useSpring, useMotionValue, Variants } from "framer-motion";
+import { useCursor } from "@/components/providers/CursorProvider";
+import { useTheme } from "next-themes";
+import { usePathname } from "next/navigation";
 
 const CustomCursor = () => {
   const { variant, setVariant } = useCursor();
@@ -12,33 +12,30 @@ const CustomCursor = () => {
   const [mounted, setMounted] = useState(false);
   const [isPointerInViewport, setIsPointerInViewport] = useState(false);
   const [isIdle, setIsIdle] = useState(false);
-  const previousVariant = useRef('default');
+  const previousVariant = useRef("default");
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pathname = usePathname();
 
-  // The cursor is active if we are not on a game page.
-  const isCursorActive = !pathname.startsWith('/game');
+  const isCursorActive = !pathname.startsWith("/game");
 
   useEffect(() => {
     setMounted(true);
 
-    // Dynamically add/remove class to body to show/hide native cursor
     if (isCursorActive) {
-      document.body.classList.add('no-native-cursor');
+      document.body.classList.add("no-native-cursor");
     } else {
-      document.body.classList.remove('no-native-cursor');
+      document.body.classList.remove("no-native-cursor");
     }
 
-    // Cleanup on component unmount or when isCursorActive changes
     return () => {
-      document.body.classList.remove('no-native-cursor');
+      document.body.classList.remove("no-native-cursor");
     };
   }, [isCursorActive]);
 
   const getCursorVariants = (theme: string | undefined): Variants => {
-    const isDark = theme === 'dark';
-    const fg = isDark ? 'hsl(60 9% 98%)' : 'hsl(20 14% 8%)';
-    const fgText = isDark ? 'hsl(60 9% 98%)' : 'hsl(20 14% 8%)';
+    const isDark = theme === "dark";
+    const fg = isDark ? "hsl(60 9% 98%)" : "hsl(20 14% 8%)";
+    const fgText = isDark ? "hsl(60 9% 98%)" : "hsl(20 14% 8%)";
 
     return {
       hidden: {
@@ -46,7 +43,7 @@ const CustomCursor = () => {
         scale: 0.8,
         transition: {
           duration: 0.3,
-          ease: 'easeOut',
+          ease: "easeOut",
         },
       },
       default: {
@@ -56,7 +53,7 @@ const CustomCursor = () => {
         width: 32,
         backgroundColor: `${fg.slice(0, -1)} / 0.1)`,
         borderColor: fg,
-        borderWidth: '1px',
+        borderWidth: "1px",
       },
       link: {
         opacity: 1,
@@ -65,18 +62,18 @@ const CustomCursor = () => {
         width: 48,
         backgroundColor: `${fg.slice(0, -1)} / 0.2)`,
         borderColor: fg,
-        borderWidth: '1px',
+        borderWidth: "1px",
       },
       text: {
         opacity: 1,
         scale: 1,
         height: 40,
         width: 2,
-        borderRadius: '1px',
+        borderRadius: "1px",
         backgroundColor: fgText,
         borderColor: fgText,
-        borderWidth: '1px',
-        mixBlendMode: 'difference',
+        borderWidth: "1px",
+        mixBlendMode: "difference",
       },
       pressed: {
         scale: 0.9,
@@ -89,7 +86,7 @@ const CustomCursor = () => {
         width: 80,
         backgroundColor: `${fg.slice(0, -1)} / 0.2)`,
         borderColor: fg,
-        borderWidth: '1px',
+        borderWidth: "1px",
       },
       icon: {
         opacity: 1,
@@ -97,7 +94,7 @@ const CustomCursor = () => {
         height: 8,
         width: 8,
         backgroundColor: fg,
-        borderWidth: '0px',
+        borderWidth: "0px",
       },
       area: {
         opacity: 1,
@@ -106,7 +103,7 @@ const CustomCursor = () => {
         width: 64,
         backgroundColor: `${fg.slice(0, -1)} / 0.05)`,
         borderColor: `${fg.slice(0, -1)} / 0.2)`,
-        borderWidth: '1px',
+        borderWidth: "1px",
       },
     };
   };
@@ -138,75 +135,81 @@ const CustomCursor = () => {
       resetIdleTimeout();
 
       const target = e.target as HTMLElement;
-      
-      const area = target.closest('[data-cursor-area]');
+
+      const area = target.closest("[data-cursor-area]");
       if (area) {
-        if (variant !== 'area' && variant !== 'pressed') setVariant('area');
-        return;
-      }
-      
-      const iconLink = target.closest('[data-cursor-icon]');
-      if (iconLink) {
-        if (variant !== 'icon' && variant !== 'pressed') setVariant('icon');
-        return;
-      }
-      
-      const clickableLink = target.closest('[data-cursor-link]');
-      if (clickableLink) {
-        if (variant !== 'link' && variant !== 'pressed') setVariant('link');
+        if (variant !== "area" && variant !== "pressed") setVariant("area");
         return;
       }
 
-      const textInput = target.closest('[data-cursor-text]');
-      if (textInput) {
-        if (variant !== 'text' && variant !== 'pressed') setVariant('text');
+      const iconLink = target.closest("[data-cursor-icon]");
+      if (iconLink) {
+        if (variant !== "icon" && variant !== "pressed") setVariant("icon");
         return;
       }
-  
+
+      const clickableLink = target.closest("[data-cursor-link]");
+      if (clickableLink) {
+        if (variant !== "link" && variant !== "pressed") setVariant("link");
+        return;
+      }
+
+      const textInput = target.closest("[data-cursor-text]");
+      if (textInput) {
+        if (variant !== "text" && variant !== "pressed") setVariant("text");
+        return;
+      }
+
       if (target.matches('a, button, [role="button"], [data-clickable]')) {
-        if (variant !== 'link' && variant !== 'pressed') setVariant('link');
+        if (variant !== "link" && variant !== "pressed") setVariant("link");
       } else {
-        if (variant !== 'default' && variant !== 'pressed') setVariant('default');
+        if (variant !== "default" && variant !== "pressed")
+          setVariant("default");
       }
     };
 
     const handleMouseLeave = () => setIsPointerInViewport(false);
-    
+
     const handleMouseDown = () => {
       previousVariant.current = variant;
-      setVariant('pressed');
+      setVariant("pressed");
     };
-    
+
     const handleMouseUp = () => {
       setVariant(previousVariant.current as any);
     };
 
-    document.documentElement.addEventListener('mouseleave', handleMouseLeave);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mouseup', handleMouseUp);
-    
-    // Set initial state
+    document.documentElement.addEventListener("mouseleave", handleMouseLeave);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mouseup", handleMouseUp);
+
     resetIdleTimeout();
 
     return () => {
       if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
-      document.documentElement.removeEventListener('mouseleave', handleMouseLeave);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.documentElement.removeEventListener(
+        "mouseleave",
+        handleMouseLeave,
+      );
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [setVariant, isPointerInViewport, variant, mouseX, mouseY]);
-  
+
   if (!mounted || !isCursorActive) {
     return null;
   }
 
   return (
-    <div key={resolvedTheme} className="fixed inset-0 pointer-events-none z-[9999]">
+    <div
+      key={resolvedTheme}
+      className="fixed inset-0 pointer-events-none z-[9999]"
+    >
       <motion.div
         variants={cursorVariants}
-        animate={isPointerInViewport && !isIdle ? variant : 'hidden'}
+        animate={isPointerInViewport && !isIdle ? variant : "hidden"}
         style={{
           translateX: springX,
           translateY: springY,

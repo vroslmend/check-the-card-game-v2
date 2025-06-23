@@ -1,25 +1,44 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef, useCallback } from "react"
-import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue, AnimatePresence, useMotionValueEvent, MotionValue, useMotionTemplate, useReducedMotion } from "framer-motion"
-import { useTheme } from "next-themes"
-import { ThemeToggle } from "@/components/ui/ThemeToggle"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { ChevronDown, Spade, Heart, Diamond, Users, ArrowRight } from "lucide-react"
-import { FaGithub, FaSpotify, FaDiscord } from "react-icons/fa"
-import { OptimizedShapes } from "@/components/ui/OptimizedShapes"
-import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements"
-import { PrincipleCard } from "@/components/ui/PrincipleCard"
-import { CardStack } from "@/components/ui/CardStack"
-import { AnimateOnView } from "@/components/ui/AnimateOnView"
-import Magnetic from "@/components/ui/Magnetic"
-import { Signature } from "@/components/ui/Signature"
-import { Scrollytelling } from "@/components/ui/Scrollytelling"
-import { socket } from "@/lib/socket"
-import { useRouter } from "next/navigation"
-import { NewGameModal } from "@/components/modals/NewGameModal"
-import { JoinGameModal } from "@/components/modals/JoinGameModal"
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  motion,
+  useScroll,
+  useTransform,
+  useSpring,
+  useInView,
+  useMotionValue,
+  AnimatePresence,
+  useMotionValueEvent,
+  MotionValue,
+  useMotionTemplate,
+  useReducedMotion,
+} from "framer-motion";
+import { useTheme } from "next-themes";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import {
+  ChevronDown,
+  Spade,
+  Heart,
+  Diamond,
+  Users,
+  ArrowRight,
+} from "lucide-react";
+import { FaGithub, FaSpotify, FaDiscord } from "react-icons/fa";
+import { OptimizedShapes } from "@/components/ui/OptimizedShapes";
+import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements";
+import { PrincipleCard } from "@/components/ui/PrincipleCard";
+import { CardStack } from "@/components/ui/CardStack";
+import { AnimateOnView } from "@/components/ui/AnimateOnView";
+import Magnetic from "@/components/ui/Magnetic";
+import { Signature } from "@/components/ui/Signature";
+import { Scrollytelling } from "@/components/ui/Scrollytelling";
+import { socket } from "@/lib/socket";
+import { useRouter } from "next/navigation";
+import { NewGameModal } from "@/components/modals/NewGameModal";
+import { JoinGameModal } from "@/components/modals/JoinGameModal";
 
 const textContainerVariants = {
   hover: {
@@ -49,29 +68,39 @@ function FeatureItem({
   feature,
   continuousActiveCard,
 }: {
-  index: number
-  feature: { title: string; description: string }
-  continuousActiveCard: MotionValue<number>
+  index: number;
+  feature: { title: string; description: string };
+  continuousActiveCard: MotionValue<number>;
 }) {
-  const diff = useTransform(continuousActiveCard, latest => index - latest)
+  const diff = useTransform(continuousActiveCard, (latest) => index - latest);
 
-  const opacity = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.5, 1, 1, 1, 0.5])
-  const scale = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.9, 1, 1, 1, 0.9])
+  const opacity = useTransform(
+    diff,
+    [-1, -0.5, 0, 0.5, 1],
+    [0.5, 1, 1, 1, 0.5],
+  );
+  const scale = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.9, 1, 1, 1, 0.9]);
 
-  const bgOpacity = useTransform(diff, [-0.5, 0, 0.5], [0, 1, 0])
+  const bgOpacity = useTransform(diff, [-0.5, 0, 0.5], [0, 1, 0]);
 
-  const backgroundColor = useTransform(bgOpacity, v => `rgba(var(--feature-item-bg-rgb), ${v})`)
+  const backgroundColor = useTransform(
+    bgOpacity,
+    (v) => `rgba(var(--feature-item-bg-rgb), ${v})`,
+  );
 
   const textColor = useTransform(
     bgOpacity,
     [0, 1],
-    [`hsl(var(--foreground))`, `hsl(var(--feature-item-text-color-hsl))`]
-  )
+    [`hsl(var(--foreground))`, `hsl(var(--feature-item-text-color-hsl))`],
+  );
   const mutedTextColor = useTransform(
     bgOpacity,
     [0, 1],
-    [`hsl(var(--muted-foreground))`, `hsl(var(--feature-item-text-color-hsl) / 0.7)`]
-  )
+    [
+      `hsl(var(--muted-foreground))`,
+      `hsl(var(--feature-item-text-color-hsl) / 0.7)`,
+    ],
+  );
 
   return (
     <motion.div
@@ -82,142 +111,189 @@ function FeatureItem({
         backgroundColor,
       }}
     >
-      <motion.h3 style={{ color: textColor }} className="text-2xl font-normal text-stone-900 dark:text-stone-100 mb-3">{feature.title}</motion.h3>
-      <motion.p style={{ color: mutedTextColor }} className="text-stone-600 dark:text-stone-400 font-light leading-relaxed">{feature.description}</motion.p>
+      <motion.h3
+        style={{ color: textColor }}
+        className="text-2xl font-normal text-stone-900 dark:text-stone-100 mb-3"
+      >
+        {feature.title}
+      </motion.h3>
+      <motion.p
+        style={{ color: mutedTextColor }}
+        className="text-stone-600 dark:text-stone-400 font-light leading-relaxed"
+      >
+        {feature.description}
+      </motion.p>
     </motion.div>
-  )
+  );
 }
 
 function HomePage() {
-  const [showNewGame, setShowNewGame] = useState(false)
-  const [showJoinGame, setShowJoinGame] = useState(false)
-  const [isCheckHovered, setIsCheckHovered] = useState(false)
-  const [isAtTop, setIsAtTop] = useState(true)
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
-  const [isSignatureVisible, setIsSignatureVisible] = useState(false)
-  const [isPrecisionHovered, setIsPrecisionHovered] = useState(false)
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const router = useRouter()
+  const [showNewGame, setShowNewGame] = useState(false);
+  const [showJoinGame, setShowJoinGame] = useState(false);
+  const [isCheckHovered, setIsCheckHovered] = useState(false);
+  const [isAtTop, setIsAtTop] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [isSignatureVisible, setIsSignatureVisible] = useState(false);
+  const [isPrecisionHovered, setIsPrecisionHovered] = useState(false);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const router = useRouter();
 
-  const containerRef = useRef<HTMLDivElement>(null)
-  const heroRef = useRef<HTMLDivElement>(null)
-  const endOfPageRef = useRef<HTMLDivElement>(null)
-  const isHeroInView = useInView(heroRef, { amount: 0.3 })
-  const { theme } = useTheme()
-  const isDark = theme === "dark"
-  const shouldReduceMotion = useReducedMotion()
+  const containerRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
+  const endOfPageRef = useRef<HTMLDivElement>(null);
+  const isHeroInView = useInView(heroRef, { amount: 0.3 });
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+  const shouldReduceMotion = useReducedMotion();
 
-  const isModalOpen = showNewGame || showJoinGame
+  const isModalOpen = showNewGame || showJoinGame;
 
   const features = [
     {
       title: "Master Your Memory",
-      description: "Keep track of your cards and your opponents'. A sharp memory is your greatest weapon.",
+      description:
+        "Keep track of your cards and your opponents'. A sharp memory is your greatest weapon.",
     },
     {
       title: "Unleash Chaos",
-      description: "Use special abilities from Jacks, Queens, and Kings to peek, swap, and disrupt your way to victory.",
+      description:
+        "Use special abilities from Jacks, Queens, and Kings to peek, swap, and disrupt your way to victory.",
     },
     {
       title: "Call Their Bluff",
-      description: "Think you have the lowest score? Call 'Check' to end the round, but be careful—a wrong move could cost you the game.",
+      description:
+        "Think you have the lowest score? Call 'Check' to end the round, but be careful—a wrong move could cost you the game.",
     },
   ];
 
   const { scrollYProgress: footerScrollYProgress } = useScroll({
     target: endOfPageRef,
     offset: ["start end", "end end"],
-  })
+  });
 
   const smoothFooterScrollYProgress = useSpring(footerScrollYProgress, {
     stiffness: 50,
     damping: 25,
-  })
+  });
 
-  const footerY = useTransform(smoothFooterScrollYProgress, [0, 0.6], ["100%", "0%"])
+  const footerY = useTransform(
+    smoothFooterScrollYProgress,
+    [0, 0.6],
+    ["100%", "0%"],
+  );
 
-  const signatureTriggerProgress = useTransform(smoothFooterScrollYProgress, [0.5, 0.9], [0, 1])
+  const signatureTriggerProgress = useTransform(
+    smoothFooterScrollYProgress,
+    [0.5, 0.9],
+    [0, 1],
+  );
 
   useMotionValueEvent(signatureTriggerProgress, "change", (latest: number) => {
-    setIsSignatureVisible(latest > 0)
-  })
+    setIsSignatureVisible(latest > 0);
+  });
 
-  const checkText = (isCheckHovered ? "Check!" : "Check").split("")
+  const checkText = (isCheckHovered ? "Check!" : "Check").split("");
 
-  const mouseX = useMotionValue(0)
-  const mouseY = useMotionValue(0)
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
 
-  const springConfig = { damping: 40, stiffness: 200, mass: 0.7 }
+  const springConfig = { damping: 40, stiffness: 200, mass: 0.7 };
 
-  const textX1 = useSpring(useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15]), springConfig)
-  const textY1 = useSpring(useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15]), springConfig)
-  const textX2 = useSpring(useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-25, 25]), springConfig)
-  const textY2 = useSpring(useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-25, 25]), springConfig)
+  const textX1 = useSpring(
+    useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15]),
+    springConfig,
+  );
+  const textY1 = useSpring(
+    useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15]),
+    springConfig,
+  );
+  const textX2 = useSpring(
+    useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-25, 25]),
+    springConfig,
+  );
+  const textY2 = useSpring(
+    useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-25, 25]),
+    springConfig,
+  );
 
-  const { scrollY, scrollYProgress } = useScroll()
+  const { scrollY, scrollYProgress } = useScroll();
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 100,
     damping: 30,
     restDelta: 0.001,
-  })
+  });
 
-  useMotionValueEvent(scrollY, "change", latest => {
-    const atTop = latest < 50
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    const atTop = latest < 50;
     if (atTop !== isAtTop) {
-      setIsAtTop(atTop)
+      setIsAtTop(atTop);
     }
     if (!atTop && isInitialLoad) {
-      setIsInitialLoad(false)
+      setIsInitialLoad(false);
     }
-  })
+  });
 
-  const heroY = useTransform(smoothProgress, [0, 1], shouldReduceMotion ? ["0%", "0%"] : ["0%", "-30%"])
-  const shapeY = useTransform(smoothProgress, [0, 1], shouldReduceMotion ? ["0%", "0%"] : ["0%", "20%"])
+  const heroY = useTransform(
+    smoothProgress,
+    [0, 1],
+    shouldReduceMotion ? ["0%", "0%"] : ["0%", "-30%"],
+  );
+  const shapeY = useTransform(
+    smoothProgress,
+    [0, 1],
+    shouldReduceMotion ? ["0%", "0%"] : ["0%", "20%"],
+  );
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth) * 2 - 1
-      const y = (e.clientY / window.innerHeight) * 2 - 1
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = (e.clientY / window.innerHeight) * 2 - 1;
 
-      mouseX.set(x)
-      mouseY.set(y)
+      mouseX.set(x);
+      mouseY.set(y);
     },
     [mouseX, mouseY],
-  )
+  );
 
   useEffect(() => {
-    if ('scrollRestoration' in history) {
-      history.scrollRestoration = 'manual';
+    if ("scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
     }
     window.scrollTo(0, 0);
   }, []);
 
-  // Add the missing event listener for mouse movement
   useEffect(() => {
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener("mousemove", handleMouseMove);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener("mousemove", handleMouseMove);
     };
   }, [handleMouseMove]);
 
   const handleCreateGame = () => {
     setShowNewGame(true);
-  }
+  };
 
   const handleJoinGame = () => {
-    setShowJoinGame(true)
-  }
+    setShowJoinGame(true);
+  };
 
   return (
-
     <div
       ref={containerRef}
       className="relative flex min-h-screen flex-col bg-stone-50 dark:bg-zinc-950 noselect"
     >
       <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
-      <JoinGameModal isModalOpen={showJoinGame} setIsModalOpen={setShowJoinGame} />
-      <OptimizedShapes mouseX={mouseX} mouseY={mouseY} scrollY={shapeY} shouldReduceMotion={shouldReduceMotion ?? false} />
+      <JoinGameModal
+        isModalOpen={showJoinGame}
+        setIsModalOpen={setShowJoinGame}
+      />
+      <OptimizedShapes
+        mouseX={mouseX}
+        mouseY={mouseY}
+        scrollY={shapeY}
+        shouldReduceMotion={shouldReduceMotion ?? false}
+      />
 
       <motion.header
         initial={{ y: -100, opacity: 0 }}
@@ -233,10 +309,14 @@ function HomePage() {
             className="flex items-center gap-4"
           >
             <motion.div
-              animate={!shouldReduceMotion ? {
-                rotate: [0, 3, -3, 0],
-                scale: [1, 1.02, 1],
-              } : {}}
+              animate={
+                !shouldReduceMotion
+                  ? {
+                      rotate: [0, 3, -3, 0],
+                      scale: [1, 1.02, 1],
+                    }
+                  : {}
+              }
               transition={{
                 duration: 6,
                 repeat: Number.POSITIVE_INFINITY,
@@ -246,7 +326,9 @@ function HomePage() {
             >
               <Spade className="h-5 w-5 text-stone-900 dark:text-stone-100" />
             </motion.div>
-            <span className="text-3xl font-light tracking-tight text-stone-900 dark:text-stone-100">Check</span>
+            <span className="text-3xl font-light tracking-tight text-stone-900 dark:text-stone-100">
+              Check
+            </span>
           </motion.div>
 
           <motion.nav
@@ -283,16 +365,27 @@ function HomePage() {
       </motion.header>
 
       <main className="flex-1">
-        <section ref={heroRef} className="relative flex min-h-screen items-center justify-center">
-          <motion.div style={{ y: heroY }} className="container relative z-10 mx-auto px-4">
-            <div className="grid min-h-screen items-center lg:grid-cols-2" style={{ perspective: '1000px' }}>
-              <motion.div
-                className="flex flex-col justify-center space-y-12"
-              >
+        <section
+          ref={heroRef}
+          className="relative flex min-h-screen items-center justify-center"
+        >
+          <motion.div
+            style={{ y: heroY }}
+            className="container relative z-10 mx-auto px-4"
+          >
+            <div
+              className="grid min-h-screen items-center lg:grid-cols-2"
+              style={{ perspective: "1000px" }}
+            >
+              <motion.div className="flex flex-col justify-center space-y-12">
                 <motion.div
                   initial={{ opacity: 0, y: 60 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 1.2, delay: 1, ease: [0.6, 0.01, 0.05, 0.95] }}
+                  transition={{
+                    duration: 1.2,
+                    delay: 1,
+                    ease: [0.6, 0.01, 0.05, 0.95],
+                  }}
                   className="space-y-8"
                 >
                   <motion.div
@@ -318,15 +411,17 @@ function HomePage() {
                   </motion.div>
 
                   <div className="space-y-10">
-                    <h1
-                      className="text-7xl font-light leading-none tracking-tighter text-stone-900 dark:text-stone-100 md:text-8xl lg:text-9xl"
-                    >
+                    <h1 className="text-7xl font-light leading-none tracking-tighter text-stone-900 dark:text-stone-100 md:text-8xl lg:text-9xl">
                       <motion.span
                         className="block"
                         initial={{ opacity: 0, y: 40 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 1, delay: 1.2 }}
-                        style={{ x: textX1, y: textY1, willChange: "transform" }}
+                        style={{
+                          x: textX1,
+                          y: textY1,
+                          willChange: "transform",
+                        }}
                       >
                         The
                       </motion.span>
@@ -334,8 +429,16 @@ function HomePage() {
                         className="relative ml-8 inline-block font-normal italic"
                         initial={{ opacity: 0, x: -60 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 1.2, delay: 1.5, ease: [0.6, 0.01, 0.05, 0.95] }}
-                        style={{ x: textX2, y: textY2, willChange: "transform" }}
+                        transition={{
+                          duration: 1.2,
+                          delay: 1.5,
+                          ease: [0.6, 0.01, 0.05, 0.95],
+                        }}
+                        style={{
+                          x: textX2,
+                          y: textY2,
+                          willChange: "transform",
+                        }}
                       >
                         <motion.span
                           variants={textContainerVariants}
@@ -367,9 +470,16 @@ function HomePage() {
                                     key={index}
                                     className="inline-block"
                                     initial={{ opacity: 0, width: 0, x: -10 }}
-                                    animate={{ opacity: 1, width: "auto", x: 0 }}
+                                    animate={{
+                                      opacity: 1,
+                                      width: "auto",
+                                      x: 0,
+                                    }}
                                     exit={{ opacity: 0, width: 0, x: 10 }}
-                                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                                    transition={{
+                                      duration: 0.3,
+                                      ease: "easeInOut",
+                                    }}
                                   >
                                     {char}
                                   </motion.span>
@@ -390,7 +500,11 @@ function HomePage() {
                         <motion.div
                           initial={{ scaleX: 0, originX: 0.5 }}
                           animate={{ scaleX: 1 }}
-                          transition={{ duration: 1.5, delay: 2.2, ease: [0.6, 0.01, 0.05, 0.95] }}
+                          transition={{
+                            duration: 1.5,
+                            delay: 2.2,
+                            ease: [0.6, 0.01, 0.05, 0.95],
+                          }}
                           className="absolute -bottom-3 left-[52%] h-1 w-[96%] -translate-x-1/2 bg-gradient-to-r from-stone-900 to-stone-600 dark:from-stone-100 dark:to-stone-400"
                         />
                       </motion.span>
@@ -402,7 +516,9 @@ function HomePage() {
                       transition={{ duration: 1, delay: 1.8 }}
                       className="max-w-lg text-xl font-light leading-relaxed text-stone-600 dark:text-stone-400"
                     >
-                      Outwit your friends in a tense game of memory, strategy, and pure luck. Keep your cards close, your score low, and call "Check" at the perfect moment to snatch victory.
+                      Outwit your friends in a tense game of memory, strategy,
+                      and pure luck. Keep your cards close, your score low, and
+                      call "Check" at the perfect moment to snatch victory.
                     </motion.p>
                   </div>
 
@@ -427,7 +543,9 @@ function HomePage() {
                           <span className="pointer-events-none relative z-10 flex items-center gap-2">
                             Create a Lobby
                             <motion.div
-                              animate={!shouldReduceMotion ? { x: [0, 4, 0] } : {}}
+                              animate={
+                                !shouldReduceMotion ? { x: [0, 4, 0] } : {}
+                              }
                               transition={{
                                 duration: 2,
                                 repeat: Number.POSITIVE_INFINITY,
@@ -470,7 +588,13 @@ function HomePage() {
               </motion.div>
 
               <div className="relative hidden h-full items-center justify-center lg:flex">
-                <SmoothFloatingElements mouseX={mouseX} mouseY={mouseY} isVisible={isHeroInView} isCheckHovered={isCheckHovered} shouldReduceMotion={shouldReduceMotion ?? false} />
+                <SmoothFloatingElements
+                  mouseX={mouseX}
+                  mouseY={mouseY}
+                  isVisible={isHeroInView}
+                  isCheckHovered={isCheckHovered}
+                  shouldReduceMotion={shouldReduceMotion ?? false}
+                />
               </div>
             </div>
 
@@ -478,7 +602,9 @@ function HomePage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: isAtTop ? 1 : 0 }}
               transition={
-                isInitialLoad ? { delay: 3, duration: 1.5 } : { duration: 0.5, ease: "easeOut" }
+                isInitialLoad
+                  ? { delay: 3, duration: 1.5 }
+                  : { duration: 0.5, ease: "easeOut" }
               }
               className="absolute bottom-12 left-1/2 -translate-x-1/2"
             >
@@ -491,10 +617,14 @@ function HomePage() {
                 }}
                 className="flex cursor-pointer flex-col items-center gap-2 text-stone-500 transition-colors duration-300 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300"
                 onClick={() => {
-                  document.getElementById("game-principles-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  document
+                    .getElementById("game-principles-anchor")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
               >
-                <span className="text-sm font-light tracking-wide">Discover more</span>
+                <span className="text-sm font-light tracking-wide">
+                  Discover more
+                </span>
                 <ChevronDown className="h-4 w-4" />
               </motion.div>
             </motion.div>
@@ -510,7 +640,8 @@ function HomePage() {
                 Your Turn to Play
               </h2>
               <p className="mb-16 text-xl font-light text-stone-600 dark:text-stone-400">
-                The table is set, the cards are shuffled. All that's missing is you.
+                The table is set, the cards are shuffled. All that's missing is
+                you.
               </p>
 
               <div className="flex flex-col gap-6 sm:flex-row sm:justify-center">
@@ -557,7 +688,9 @@ function HomePage() {
         <div className="container mx-auto grid grid-cols-1 items-center gap-4 px-4 py-4 text-center sm:grid-cols-3 sm:text-left">
           <div className="flex items-center gap-3 justify-self-center sm:justify-self-start">
             <Spade className="h-5 w-5 text-stone-700 dark:text-stone-300" />
-            <span className="text-lg font-light text-stone-900 dark:text-stone-100">Check</span>
+            <span className="text-lg font-light text-stone-900 dark:text-stone-100">
+              Check
+            </span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm font-light text-stone-500 dark:text-stone-500 sm:gap-x-2">
             <div className="flex items-center">
@@ -608,10 +741,7 @@ function HomePage() {
                 </AnimatePresence>
               </div>
             </div>
-            <div
-              className="flex items-center"
-              data-cursor-icon
-            >
+            <div className="flex items-center" data-cursor-icon>
               <span>Made by&nbsp;</span>
               <div className="relative h-6 min-w-[5rem] ml-2">
                 <motion.div
@@ -664,9 +794,9 @@ function HomePage() {
         </div>
       </motion.footer>
     </div>
-  )
+  );
 }
 
 export default function Home() {
-  return <HomePage />
+  return <HomePage />;
 }

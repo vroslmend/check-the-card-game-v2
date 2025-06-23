@@ -1,28 +1,61 @@
-"use client"
+"use client";
 
-import { motion, useTransform, useSpring, type MotionValue } from "framer-motion"
-import { useMemo } from "react"
+import {
+  motion,
+  useTransform,
+  useSpring,
+  type MotionValue,
+} from "framer-motion";
+import { useMemo } from "react";
 
 interface OptimizedShapesProps {
-  mouseX: MotionValue<number>
-  mouseY: MotionValue<number>
-  scrollY: MotionValue<string>
-  shouldReduceMotion: boolean
+  mouseX: MotionValue<number>;
+  mouseY: MotionValue<number>;
+  scrollY: MotionValue<string>;
+  shouldReduceMotion: boolean;
 }
 
-export function OptimizedShapes({ mouseX, mouseY, scrollY, shouldReduceMotion }: OptimizedShapesProps) {
-  // Pre-calculate transforms to avoid recalculation
-  const smoothMouseX = useSpring(mouseX, { stiffness: 100, damping: 30 })
-  const smoothMouseY = useSpring(mouseY, { stiffness: 100, damping: 30 })
+export function OptimizedShapes({
+  mouseX,
+  mouseY,
+  scrollY,
+  shouldReduceMotion,
+}: OptimizedShapesProps) {
+  const smoothMouseX = useSpring(mouseX, { stiffness: 100, damping: 30 });
+  const smoothMouseY = useSpring(mouseY, { stiffness: 100, damping: 30 });
 
-  const shape1X = useTransform(smoothMouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-90, 90])
-  const shape1Y = useTransform(smoothMouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-60, 60])
+  const shape1X = useTransform(
+    smoothMouseX,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [-90, 90],
+  );
+  const shape1Y = useTransform(
+    smoothMouseY,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [-60, 60],
+  );
 
-  const shape2X = useTransform(smoothMouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [60, -60])
-  const shape2Y = useTransform(smoothMouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [45, -45])
+  const shape2X = useTransform(
+    smoothMouseX,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [60, -60],
+  );
+  const shape2Y = useTransform(
+    smoothMouseY,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [45, -45],
+  );
 
-  const shape3X = useTransform(smoothMouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-45, 45])
-  const shape3Y = useTransform(smoothMouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-30, 30])
+  const shape3X = useTransform(
+    smoothMouseX,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [-45, 45],
+  );
+  const shape3Y = useTransform(
+    smoothMouseY,
+    [-1, 1],
+    shouldReduceMotion ? [0, 0] : [-30, 30],
+  );
 
   // Memoize shape configurations to prevent unnecessary re-renders
   const shapes = useMemo(
@@ -56,7 +89,7 @@ export function OptimizedShapes({ mouseX, mouseY, scrollY, shouldReduceMotion }:
       },
     ],
     [shape1X, shape1Y, shape2X, shape2Y, shape3X, shape3Y, shouldReduceMotion],
-  )
+  );
 
   return (
     <div className="fixed inset-0 z-0 overflow-hidden will-change-transform pointer-events-none">
@@ -83,5 +116,5 @@ export function OptimizedShapes({ mouseX, mouseY, scrollY, shouldReduceMotion }:
         />
       ))}
     </div>
-  )
-} 
+  );
+}

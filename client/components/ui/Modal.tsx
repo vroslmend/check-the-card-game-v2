@@ -1,17 +1,17 @@
-"use client"
+"use client";
 
-import React, { useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react'
+import React, { useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X } from "lucide-react";
 
 interface ModalProps {
-  isOpen: boolean
-  onClose?: () => void
-  children: React.ReactNode
-  title?: string
-  description?: string
-  className?: string
-  showCloseButton?: boolean
+  isOpen: boolean;
+  onClose?: () => void;
+  children: React.ReactNode;
+  title?: string;
+  description?: string;
+  className?: string;
+  showCloseButton?: boolean;
 }
 
 export function Modal({
@@ -23,38 +23,40 @@ export function Modal({
   showCloseButton = true,
   children,
 }: ModalProps) {
-  const modalRef = useRef<HTMLDivElement>(null)
+  const modalRef = useRef<HTMLDivElement>(null);
 
-  // Only use outside click if onClose is provided
   useEffect(() => {
     if (!onClose || !modalRef.current) return;
-    
+
     const handleOutsideClick = (event: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+      if (
+        modalRef.current &&
+        !modalRef.current.contains(event.target as Node)
+      ) {
         onClose();
       }
     };
-    
-    document.addEventListener('mousedown', handleOutsideClick);
+
+    document.addEventListener("mousedown", handleOutsideClick);
     return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, [onClose]);
 
   useEffect(() => {
     if (!onClose) return;
-    
+
     const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         onClose();
       }
-    }
-    document.addEventListener('keydown', handleEsc)
+    };
+    document.addEventListener("keydown", handleEsc);
 
     return () => {
-      document.removeEventListener('keydown', handleEsc)
-    }
-  }, [onClose])
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [onClose]);
 
   return (
     <AnimatePresence>
@@ -86,8 +88,16 @@ export function Modal({
             <div className="flex flex-col gap-6">
               {(title || description) && (
                 <div className="flex flex-col gap-2 text-center">
-                  {title && <h2 className="text-2xl font-light tracking-tight text-stone-900 dark:text-stone-100">{title}</h2>}
-                  {description && <p className="text-md font-light leading-relaxed text-stone-600 dark:text-stone-400">{description}</p>}
+                  {title && (
+                    <h2 className="text-2xl font-light tracking-tight text-stone-900 dark:text-stone-100">
+                      {title}
+                    </h2>
+                  )}
+                  {description && (
+                    <p className="text-md font-light leading-relaxed text-stone-600 dark:text-stone-400">
+                      {description}
+                    </p>
+                  )}
                 </div>
               )}
               {children}
@@ -96,5 +106,5 @@ export function Modal({
         </motion.div>
       )}
     </AnimatePresence>
-  )
-} 
+  );
+}

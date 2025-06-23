@@ -11,10 +11,9 @@ import { DrawnCardArea } from "./DrawnCardArea";
 import { VisualCardStack } from "../cards/VisualCardStack";
 import { AnimatePresence, motion } from "framer-motion";
 
-// ✨ INTERFACE MODIFIED HERE
 export interface TableAreaProps {
   drawnCard?: PublicCard;
-  dealingDeck?: PublicCard[]; // This prop is now officially defined
+  dealingDeck?: PublicCard[];
 }
 
 const selectTableAreaProps = (state: UIMachineSnapshot) => {
@@ -34,7 +33,6 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
   };
 };
 
-// ✨ COMPONENT SIGNATURE MODIFIED HERE
 export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
   const { send } = useUIActorRef();
   const {
@@ -48,7 +46,6 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
   } = useUISelector(selectTableAreaProps);
 
   const handleDeckClick = () => {
-    // Prevent clicking the deck during the dealing animation
     if (canDrawFromDeck && dealingDeck.length === 0) {
       send({ type: PlayerActionType.DRAW_FROM_DECK });
     }
@@ -60,13 +57,11 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
     }
   };
 
-  // ✨ LOGIC TO COMBINE DECKS FOR DEALING ANIMATION
   const deckForRender = deckSize > 0 && deckTop ? [deckTop] : [];
   const combinedDeckForDealing = [...deckForRender, ...dealingDeck];
 
   return (
     <div className="grid grid-cols-3 grid-rows-1 gap-x-4 justify-items-center items-start">
-      {/* Deck Pile */}
       <VisualCardStack
         title="Deck"
         count={deckSize}
@@ -77,7 +72,6 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
         size="xs"
       />
 
-      {/* Drawn Card Area */}
       <div className="flex justify-center min-w-[64px] col-start-2">
         <AnimatePresence>
           {drawnCard && (
@@ -95,7 +89,6 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
         </AnimatePresence>
       </div>
 
-      {/* Discard Pile */}
       <VisualCardStack
         title="Discard"
         count={discardPile.length}
