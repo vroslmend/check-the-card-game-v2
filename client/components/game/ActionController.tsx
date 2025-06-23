@@ -87,6 +87,7 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
   const isAbilitySelecting =
     !!currentAbilityContext &&
     currentAbilityContext.playerId === localPlayerId &&
+    currentGameState.turnPhase === TurnPhase.ABILITY &&
     ["peeking", "swapping"].includes(
       (currentAbilityContext as any).stage ?? "",
     ) &&
@@ -152,13 +153,44 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
   const [isHoldingCallCheck, setIsHoldingCallCheck] = useState(false);
   const callCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [matchProgress, setMatchProgress] = useState(0);
+  const matchRafRef = useRef<number | null>(null);
+
   useEffect(() => {
     setSelectedCardIndex(null);
     setCallCheckProgress(0);
     setIsHoldingCallCheck(false);
     if (callCheckIntervalRef.current)
       clearInterval(callCheckIntervalRef.current);
-  }, [props.gameStage, props.isMyTurn, props.matchingOpportunity]);
+    setMatchProgress(0);
+    if (matchRafRef.current !== null) cancelAnimationFrame(matchRafRef.current);
+  }, [props.gameStage, props.isMyTurn]);
+
+  useEffect(() => {
+    const DURATION = 5000;
+
+    const update = () => {
+      if (!props.matchingOpportunity || props.hasPassedMatch) {
+        setMatchProgress(0);
+        return;
+      }
+      const startTs = props.matchingOpportunity.startTimestamp ?? Date.now();
+      const elapsed = Date.now() - startTs;
+      const pct = Math.min((elapsed / DURATION) * 100, 100);
+      setMatchProgress(pct);
+      if (pct < 100) {
+        matchRafRef.current = requestAnimationFrame(update);
+      }
+    };
+
+    // kick off
+    update();
+
+    return () => {
+      if (matchRafRef.current !== null)
+        cancelAnimationFrame(matchRafRef.current);
+    };
+  }, [props.matchingOpportunity, props.hasPassedMatch]);
 
   const clearCallCheckTimers = useCallback(() => {
     setIsHoldingCallCheck(false);
@@ -232,9 +264,19 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
           ),
         );
       }
+      const remainingMs = props.matchingOpportunity
+        ? Math.max(
+            0,
+            5000 - (Date.now() - props.matchingOpportunity.startTimestamp!),
+          )
+        : 0;
       actions.push(
-        createPassMatchAction(() =>
-          sendEvent({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }),
+        createPassMatchAction(
+          () => sendEvent({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }),
+          matchProgress,
+          remainingMs,
+          false,
+          props.hasPassedMatch,
         ),
       );
       return actions;
@@ -348,6 +390,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
                 handleEndCallCheckHold,
                 handleEndCallCheckHold,
                 callCheckProgress,
+                0,
                 false,
                 isHoldingCallCheck,
               ),
@@ -418,6 +461,13 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     }
     if (props.gameStage === GameStage.INITIAL_PEEK && !localPlayer.isReady) {
       return "Memorize your bottom two cards, then press Ready.";
+    }
+    if (
+      props.gameStage === GameStage.INITIAL_PEEK &&
+      localPlayer.isReady &&
+      !props.allPlayersReady
+    ) {
+      return "Waiting for other players to get ready…";
     }
     if (matchingOpportunity && !hasPassedMatch) {
       return `MATCH: A ${matchingOpportunity.cardToMatch.rank} was played. Match it from your hand.`;

@@ -104,9 +104,9 @@ export const HandGrid = ({
             (t) => t.playerId === ownerId && t.cardIndex === index,
           );
         const abilityRingClass = isAbilityPeekSelected
-          ? "ring-yellow-400"
+          ? "ring-yellow-300/70"
           : isAbilitySwapSelected
-            ? "ring-pink-500"
+            ? "ring-pink-400/70"
             : "";
         const isSelected =
           isMatchSelected || isAbilityPeekSelected || isAbilitySwapSelected;
@@ -120,25 +120,42 @@ export const HandGrid = ({
                 <motion.div
                   key={card.id}
                   layoutId={card.id}
-                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                  exit={{
-                    opacity: 0,
-                    scale: 0.5,
-                    transition: { duration: 0.2 },
-                  }}
+                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
                   className={cn(
                     "absolute inset-0", // Positioned absolutely within the parent slot
                     canInteract && "cursor-pointer",
-                    isSelected &&
-                      "ring-4 ring-offset-2 ring-offset-stone-900 rounded-lg dark:ring-offset-stone-900",
-                    isMatchSelected && "ring-sky-400",
-                    abilityRingClass,
+                    canInteract && "hover:brightness-110",
                   )}
                   onClick={() => canInteract && onCardClick?.(card, index)}
                   whileHover={
-                    canInteract ? { y: -8, scale: 1.05, zIndex: 10 } : {}
+                    canInteract
+                      ? {
+                          y: -8,
+                          scale: 1.05,
+                          filter: "brightness(1.15)",
+                        }
+                      : {}
                   }
                 >
+                  {/* Animated selection ring */}
+                  <AnimatePresence>
+                    {isSelected && (
+                      <motion.div
+                        key="sel-ring"
+                        className={cn(
+                          "absolute inset-0.5 rounded-md pointer-events-none",
+                          "ring-[4px]",
+                          isMatchSelected
+                            ? "ring-sky-400/80"
+                            : abilityRingClass,
+                        )}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
+                      />
+                    )}
+                  </AnimatePresence>
                   <PlayingCard
                     card={isFaceUp ? (cardToRender as any) : undefined}
                     faceDown={!isFaceUp}

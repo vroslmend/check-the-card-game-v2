@@ -33,13 +33,18 @@ export const generatePlayerView = (
     const serverPlayer = fullGameContext.players[pId];
     const isViewingPlayer = pId === viewingPlayerId;
 
+    const revealAll =
+      fullGameContext.gameStage === GameStage.SCORING ||
+      fullGameContext.gameStage === GameStage.GAMEOVER;
+
     const clientHand: PublicCard[] = serverPlayer.hand.map((card: Card) => {
-      // The viewing player always sees their own cards' details.
-      // The UI will decide whether to render them face-up or face-down.
-      if (isViewingPlayer) {
-        return card;
-      }
-      // Opponents' cards are always redacted.
+      // During scoring/gameover everyone can see all cards
+      if (revealAll) return card;
+
+      // Otherwise, only the owner sees their cards.
+      if (isViewingPlayer) return card;
+
+      // Opponents' cards remain hidden.
       return { facedown: true as const, id: card.id };
     });
 

@@ -15,7 +15,9 @@ export interface Action {
   isLoading?: boolean;
   isProgressButton?: boolean;
   progressPercent?: number;
+  remainingMs?: number;
   progressFillClassName?: string;
+  isCircularProgress?: boolean;
   progressLabelClassName?: string;
 }
 

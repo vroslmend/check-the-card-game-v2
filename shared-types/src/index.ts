@@ -119,6 +119,7 @@ export interface ClientCheckGameState {
     cardToMatch: Card;
     originalPlayerID: PlayerId;
     remainingPlayerIDs: PlayerId[];
+    startTimestamp?: number;
   } | null;
   checkDetails: {
     callerId: PlayerId | null;

@@ -54,6 +54,7 @@ export const createCallCheckAction = (
   onPointerUp: React.PointerEventHandler<HTMLButtonElement>,
   onPointerLeave: React.PointerEventHandler<HTMLButtonElement>,
   progressPercent: number = 0,
+  remainingMs: number = 0,
   disabled?: boolean,
   showProgress?: boolean,
 ): Action => ({
@@ -66,12 +67,14 @@ export const createCallCheckAction = (
     "bg-amber-400 text-black hover:bg-amber-300 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 font-semibold tracking-wider",
   isProgressButton: showProgress,
   progressPercent,
-  progressFillClassName: "bg-black/60 dark:bg-white/60 mix-blend-multiply",
+  remainingMs,
+  progressFillClassName: "bg-black/70 dark:bg-white/70",
 });
 
 export const createPassMatchAction = (
   onClick: () => void,
-  _progressPercent: number = 0,
+  progressPercent: number = 0,
+  remainingMs: number = 0,
   disabled?: boolean,
   isPassed: boolean = false,
 ): Action => ({
@@ -80,6 +83,10 @@ export const createPassMatchAction = (
   disabled: disabled || isPassed,
   icon: <Ban className="h-5 w-5" />,
   className: "text-stone-300",
+  isCircularProgress: true,
+  isProgressButton: true,
+  progressPercent,
+  remainingMs,
 });
 
 export const createAttemptMatchAction = (

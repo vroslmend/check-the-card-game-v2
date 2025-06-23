@@ -1067,6 +1067,7 @@ export const gameMachine = setup({
           remainingPlayerIDs: context.turnOrder.filter(
             (id) => !context.players[id]!.isLocked,
           ),
+          startTimestamp: Date.now(),
         },
       };
     }),

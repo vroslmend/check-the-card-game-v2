@@ -1,5 +1,5 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Action } from "./ActionBarComponent";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
     isProgressButton = false,
     progressPercent = 0,
     progressFillClassName = "bg-sky-500/50",
+    isCircularProgress = false,
   } = action;
 
   const buttonContent = (
@@ -44,18 +45,53 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
 
       {isLoading && <Loader2 className="absolute h-4 w-4 animate-spin z-10" />}
 
-      {isProgressButton && progressPercent > 0 && (
-        <motion.div
-          className={cn(
-            "absolute inset-0 rounded-full",
-            progressFillClassName,
-            "z-10",
-          )}
-          initial={{ width: "0%" }}
-          animate={{ width: `${progressPercent}%` }}
-          transition={{ duration: 0.1, ease: "linear" }}
-          style={{ transformOrigin: "left" }}
-        />
+      <AnimatePresence>
+        {isProgressButton && progressPercent > 0 && !isCircularProgress && (
+          <motion.div
+            key="progress-fill"
+            className={cn(
+              "absolute inset-0 rounded-full z-10",
+              progressFillClassName,
+            )}
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: `${progressPercent}%`, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.15, ease: "linear" }}
+            style={{ transformOrigin: "left" }}
+          />
+        )}
+      </AnimatePresence>
+
+      {isCircularProgress && isProgressButton && (
+        <svg
+          className="absolute inset-0 z-10"
+          viewBox="0 0 36 36"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <circle
+            cx="18"
+            cy="18"
+            r="15.5"
+            fill="none"
+            stroke="rgba(255,255,255,0.15)"
+            strokeWidth="3"
+          />
+          <motion.circle
+            cx="18"
+            cy="18"
+            r="15.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            transform="rotate(-90 18 18)"
+            initial={{ pathLength: progressPercent / 100 }}
+            animate={{ pathLength: 1 }}
+            transition={{
+              duration: (action.remainingMs ?? 0) / 1000,
+              ease: "linear",
+            }}
+          />
+        </svg>
       )}
     </>
   );
@@ -68,7 +104,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             whileHover={{ scale: disabled ? 1 : 1.1 }}
             whileTap={{ scale: disabled ? 1 : 0.9 }}
             className={cn(
-              "relative h-10 shrink-0 rounded-full flex items-center justify-center",
+              "relative h-10 shrink-0 rounded-full flex items-center justify-center overflow-hidden",
               // If there's an icon, it's a circle. If not, it's a pill with padding.
               icon ? "w-10" : "px-4",
               "bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20",

@@ -361,13 +361,18 @@ export const uiMachine = setup({
           context.currentGameState?.players[localPlayerId!]?.hand.length ?? 0;
         if (!localPlayerId || event.hand.length === 0) return [];
         const peekDuration = 10000;
-        return event.hand.map((card, idx) => ({
-          playerId: localPlayerId,
-          cardIndex: handSize - event.hand.length + idx,
-          card,
-          source: "initial-peek" as const,
-          expireAt: Date.now() + peekDuration,
-        }));
+        return event.hand.map((card, idx) => {
+          const calculatedIndex = handSize
+            ? handSize - event.hand.length + idx
+            : idx; // Fallback when hand size unknown
+          return {
+            playerId: localPlayerId,
+            cardIndex: calculatedIndex,
+            card,
+            source: "initial-peek" as const,
+            expireAt: Date.now() + peekDuration,
+          };
+        });
       },
     }),
     clearTemporaryCardStates: assign({

@@ -12,6 +12,7 @@ interface PlayerHandProps {
   onCardClick: (cardIndex: number) => void;
   className?: string;
   canInteract: boolean;
+  isLocked?: boolean;
   selectedCardIndex?: number | null;
   cardSize?: "xxs" | "xs" | "sm" | "md" | "lg";
 }
@@ -25,6 +26,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   onCardClick,
   className,
   canInteract,
+  isLocked = false,
   selectedCardIndex = null,
   cardSize = "xs",
 }) => {
@@ -46,16 +48,18 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
       })
     : player.hand;
 
+  const combinedClass = cn(className, isLocked && "grayscale opacity-60");
+
   return (
     <HandGrid
       ownerId={player.id}
       hand={handToDisplay}
-      canInteract={canInteract}
+      canInteract={canInteract && !isLocked}
       onCardClick={(_, index) => onCardClick(index)}
       selectedCardIndices={
         selectedCardIndex !== null ? [selectedCardIndex] : []
       }
-      className={className}
+      className={combinedClass}
       cardSize={cardSize}
     />
   );
