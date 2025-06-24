@@ -327,6 +327,7 @@ const baseTurnStateNode = {
     matching: {
       entry: [
         "log_ENTER_TURN_MATCHING",
+        assign({ currentTurnSegment: TurnPhase.MATCHING }),
         "setupMatchingOpportunity",
         "broadcastGameState",
       ],

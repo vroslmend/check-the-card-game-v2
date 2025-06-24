@@ -34,6 +34,10 @@ import logger from "@/lib/logger";
 type ActionControllerContextType = {
   selectedCardIndex: number | null;
   setSelectedCardIndex: React.Dispatch<React.SetStateAction<number | null>>;
+  matchAttempt: { cardIndex: number } | null;
+  setMatchAttempt: React.Dispatch<
+    React.SetStateAction<{ cardIndex: number } | null>
+  >;
   getActions: () => Action[];
   getPromptText: () => string | null;
 };
@@ -141,6 +145,9 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
   const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(
     null,
   );
+  const [matchAttempt, setMatchAttempt] = useState<{
+    cardIndex: number;
+  } | null>(null);
   const [callCheckProgress, setCallCheckProgress] = useState(0);
   const [isHoldingCallCheck, setIsHoldingCallCheck] = useState(false);
   const callCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -150,6 +157,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
 
   useEffect(() => {
     setSelectedCardIndex(null);
+    setMatchAttempt(null);
     setCallCheckProgress(0);
     setIsHoldingCallCheck(false);
     if (callCheckIntervalRef.current)
@@ -244,14 +252,15 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id) &&
       !hasPassedMatch
     ) {
-      if (selectedCardIndex !== null) {
+      if (matchAttempt) {
         actions.push(
-          createAttemptMatchAction(() =>
+          createAttemptMatchAction(() => {
             sendEvent({
               type: PlayerActionType.ATTEMPT_MATCH,
-              payload: { handCardIndex: selectedCardIndex },
-            }),
-          ),
+              payload: { handCardIndex: matchAttempt.cardIndex },
+            });
+            setMatchAttempt(null);
+          }),
         );
       }
       const remainingMs = props.matchingOpportunity
@@ -399,6 +408,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
   }, [
     props,
     selectedCardIndex,
+    matchAttempt,
     callCheckProgress,
     isHoldingCallCheck,
     sendEvent,
@@ -456,9 +466,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     ) {
       return "Waiting for other players to get ready…";
     }
-    if (matchingOpportunity && !hasPassedMatch) {
-      return `MATCH: A ${matchingOpportunity.cardToMatch.rank} was played. Match it from your hand.`;
-    }
     return null;
   }, [props]);
 
@@ -467,6 +474,8 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       value={{
         selectedCardIndex,
         setSelectedCardIndex,
+        matchAttempt,
+        setMatchAttempt,
         getActions,
         getPromptText,
       }}

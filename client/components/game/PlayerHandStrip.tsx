@@ -18,13 +18,23 @@ interface PlayerHandStripProps {
 }
 
 const selectStripContext = (state: UIMachineSnapshot) => {
-  const { currentGameState, currentAbilityContext, localPlayerId } =
-    state.context;
+  const {
+    currentGameState,
+    currentAbilityContext,
+    localPlayerId,
+    hasPassedMatch,
+  } = state.context;
   const turnPhase = currentGameState?.turnPhase;
   const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
 
   const canSwap = isMyTurn && turnPhase === TurnPhase.DISCARD;
-  const canMatch = isMyTurn && turnPhase === TurnPhase.MATCHING;
+
+  const canParticipateInMatch =
+    !!currentGameState?.matchingOpportunity?.remainingPlayerIDs.includes(
+      localPlayerId!,
+    );
+  const canMatch = canParticipateInMatch && !hasPassedMatch;
+
   const isTargetableForAbility = !!currentAbilityContext;
 
   return { canSwap, canMatch, isTargetableForAbility };
@@ -105,9 +115,19 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     useUISelector(selectStripContext);
 
   const { send } = useUIActorRef();
-  const { selectedCardIndex, setSelectedCardIndex } = useActionController();
+  const {
+    selectedCardIndex,
+    setSelectedCardIndex,
+    setMatchAttempt,
+    matchAttempt,
+  } = useActionController();
 
   const handleCardClick = (cardIndex: number) => {
+    if (isLocalPlayer && canMatch) {
+      setMatchAttempt({ cardIndex });
+      return;
+    }
+
     if (isTargetableForAbility) {
       send({
         type: "PLAYER_SLOT_CLICKED_FOR_ABILITY",
@@ -123,11 +143,6 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
           type: PlayerActionType.SWAP_AND_DISCARD,
           payload: { handCardIndex: cardIndex },
         });
-        return;
-      }
-
-      if (canMatch) {
-        setSelectedCardIndex(cardIndex);
         return;
       }
     }
@@ -152,7 +167,13 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         onCardClick={handleCardClick}
         canInteract={canInteract}
         isLocked={player.isLocked}
-        selectedCardIndex={isLocalPlayer ? selectedCardIndex : undefined}
+        selectedCardIndex={
+          isLocalPlayer
+            ? canMatch
+              ? matchAttempt?.cardIndex
+              : selectedCardIndex
+            : undefined
+        }
         cardSize={cardSize}
       />
     </div>

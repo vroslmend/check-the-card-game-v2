@@ -115,16 +115,16 @@ export const HandGrid = ({
                   transition={{ type: "spring", stiffness: 350, damping: 25 }}
                   className={cn(
                     "absolute inset-0",
-                    canInteract && "cursor-pointer",
-                    canInteract && "hover:brightness-110",
+                    "data-[interactive=true]:cursor-pointer",
+                    "data-[interactive=true]:hover:filter-[brightness(1.15)]",
                   )}
+                  data-interactive={canInteract}
                   onClick={() => canInteract && onCardClick?.(card, index)}
                   whileHover={
                     canInteract
                       ? {
                           y: -8,
                           scale: 1.05,
-                          filter: "brightness(1.15)",
                         }
                       : {}
                   }

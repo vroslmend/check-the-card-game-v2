@@ -7,7 +7,7 @@ export function CardBack() {
     <div
       className={cn(
         "relative w-full h-full rounded-md overflow-hidden shadow-md border",
-        "bg-zinc-900 border-zinc-800 dark:bg-zinc-800 dark:border-zinc-700",
+        "bg-zinc-900 border-zinc-700",
       )}
     >
       <div className="absolute inset-0 z-10 pointer-events-none opacity-[0.03] bg-[url('/noise.svg')] bg-repeat" />

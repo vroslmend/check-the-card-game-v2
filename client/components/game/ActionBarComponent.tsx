@@ -2,6 +2,7 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ActionButton from "./ActionButton";
 import Magnetic from "@/components/ui/Magnetic";
+import { useActionController } from "./ActionController";
 
 export interface Action {
   label: string;
@@ -21,15 +22,11 @@ export interface Action {
   progressLabelClassName?: string;
 }
 
-interface ActionBarComponentProps {
-  actions: Action[];
-  children?: React.ReactNode;
-}
+const ActionBarComponent: React.FC = () => {
+  const { getActions, getPromptText } = useActionController();
+  const actions = getActions();
+  const promptText = getPromptText();
 
-const ActionBarComponent: React.FC<ActionBarComponentProps> = ({
-  actions,
-  children,
-}) => {
   return (
     <motion.div
       className="flex flex-col items-center w-full"
@@ -53,7 +50,7 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({
       </motion.div>
 
       <AnimatePresence mode="popLayout">
-        {children && (
+        {promptText && (
           <motion.div
             layout
             key="prompt-text"
@@ -63,7 +60,9 @@ const ActionBarComponent: React.FC<ActionBarComponentProps> = ({
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
           >
-            {children}
+            <p className="text-sm font-medium text-stone-900 dark:text-stone-100 px-3 py-1 bg-black/10 dark:bg-white/10 rounded-full">
+              {promptText}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
