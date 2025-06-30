@@ -10,7 +10,6 @@ import { TableArea } from "./TableArea";
 import PlayerHandStrip from "./PlayerHandStrip";
 import { GameStage, PlayerActionType, type PublicCard } from "shared-types";
 import { ActionController } from "./ActionController";
-import { GamePhaseIndicator } from "./GamePhaseIndicator";
 import { ActionControllerView } from "./ActionControllerView";
 import { AnimatePresence } from "framer-motion";
 import { GameEndScreen } from "./GameEndScreen";
@@ -107,9 +106,9 @@ export function GameBoard() {
   };
 
   return (
-    <div className="h-screen w-full bg-stone-50 dark:bg-zinc-950 flex flex-col overflow-hidden">
+    <div className="h-screen w-full bg-stone-50 dark:bg-zinc-950 flex flex-col overflow-hidden @container">
       <GameHeader />
-      <div className="relative flex-1 flex flex-col">
+      <div className="relative flex-1 grid grid-rows-[auto_1fr_auto_auto]">
         <AnimatePresence>
           {(gameStage === GameStage.GAMEOVER ||
             gameStage === GameStage.SCORING) && (
@@ -123,18 +122,17 @@ export function GameBoard() {
         </AnimatePresence>
 
         <ConnectionStatusBanner />
-        <GamePhaseIndicator />
         <GameStateError
           hasPlayers={opponentPlayers.length > 0}
           hasGameState={!!gameState}
         />
 
         <ActionController>
-          <div className="h-full flex flex-col">
+          <div className="contents">
             {/* Opponents area */}
-            <div className="flex-none flex justify-center items-center py-2">
+            <div className="flex justify-center items-center py-2">
               {opponentPlayers.length > 0 ? (
-                <div className="flex flex-wrap justify-center gap-2">
+                <div className="w-full flex flex-wrap justify-evenly gap-2">
                   {opponentPlayers.map((op) => (
                     <PlayerHandStrip
                       key={op.id}
@@ -155,12 +153,12 @@ export function GameBoard() {
             </div>
 
             {/* Table Area - takes up remaining space */}
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex items-center justify-center @container">
               <TableArea drawnCard={drawnCardData} dealingDeck={dealingDeck} />
             </div>
 
             {/* Local player area */}
-            <div className="flex-none flex flex-col items-center py-2 pb-6">
+            <div className="flex flex-col items-center justify-center py-2">
               {localPlayerId && gameState.players[localPlayerId] ? (
                 <PlayerHandStrip
                   player={{
@@ -173,11 +171,10 @@ export function GameBoard() {
                   isCurrentTurn={isMyTurn}
                 />
               ) : null}
-
-              {/* Action bar */}
-              <div className="mt-2 mb-4 h-16 flex items-center justify-center transition-all duration-300 ease-in-out">
-                <ActionControllerView />
-              </div>
+            </div>
+            {/* Action bar */}
+            <div className="min-h-16 flex items-center justify-center transition-all duration-300 ease-in-out pb-4">
+              <ActionControllerView />
             </div>
           </div>
         </ActionController>

@@ -151,7 +151,11 @@ export const GameEndScreen = ({
                   )
                   .map((card, cardIndex) => (
                     <motion.div key={cardIndex} variants={cardItemVariants}>
-                      <PlayingCard card={card} faceDown={false} size="xxs" />
+                      <PlayingCard
+                        card={card}
+                        faceDown={false}
+                        className="w-10 aspect-[5/7]"
+                      />
                     </motion.div>
                   ))}
               </motion.div>

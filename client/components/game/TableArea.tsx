@@ -6,10 +6,15 @@ import {
   useUIActorRef,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
-import { type PublicCard, TurnPhase, PlayerActionType } from "shared-types";
-import { DrawnCardArea } from "./DrawnCardArea";
+import {
+  type PublicCard,
+  TurnPhase,
+  PlayerActionType,
+  Card,
+} from "shared-types";
 import { VisualCardStack } from "../cards/VisualCardStack";
 import { AnimatePresence, motion } from "framer-motion";
+import { PlayingCard } from "../cards/PlayingCard";
 
 export interface TableAreaProps {
   drawnCard?: PublicCard;
@@ -29,7 +34,7 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
     topDiscardCard: currentGameState?.discardPile.at(-1) ?? null,
     discardPileIsSealed: currentGameState?.discardPileIsSealed ?? false,
     canDrawFromDeck: isDrawPhase,
-    canDrawFromDiscard: isDrawPhase && !currentGameState?.discardPileIsSealed,
+    canDrawFromDiscard: isDrawPhase && !currentGameState?.discardPileIsSealed && !!currentGameState?.discardPile.length,
   };
 };
 
@@ -61,18 +66,24 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
   const combinedDeckForDealing = [...deckForRender, ...dealingDeck];
 
   return (
-    <div className="grid grid-cols-3 grid-rows-1 gap-x-4 justify-items-center items-start">
-      <VisualCardStack
-        title="Deck"
-        count={deckSize}
-        topCard={deckTop}
-        faceDown
-        canInteract={canDrawFromDeck}
-        onClick={handleDeckClick}
-        size="xs"
-      />
+    <div className="grid h-full w-full grid-cols-[1fr_auto_1fr] items-center gap-4">
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        className="flex justify-end w-full justify-self-end"
+      >
+        <VisualCardStack
+          title="Deck"
+          count={deckSize}
+          topCard={deckTop}
+          faceDown
+          canInteract={canDrawFromDeck}
+          onClick={handleDeckClick}
+          className="landscape:w-[8vh] portrait:w-[15vw]"
+        />
+      </motion.div>
 
-      <div className="flex justify-center min-w-[64px] col-start-2">
+      <div className="flex items-center justify-center">
         <AnimatePresence>
           {drawnCard && (
             <motion.div
@@ -81,23 +92,32 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.5, y: 50 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="relative z-10"
+              className="relative z-10 landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7]"
             >
-              <DrawnCardArea card={drawnCard} size="xs" />
+              <PlayingCard
+                card={"rank" in drawnCard ? (drawnCard as Card) : undefined}
+                faceDown={"facedown" in drawnCard}
+                className="w-full h-full"
+              />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      <VisualCardStack
-        title="Discard"
-        count={discardPile.length}
-        topCard={topDiscardCard}
-        isSealed={discardPileIsSealed}
-        canInteract={canDrawFromDiscard}
-        onClick={handleDiscardClick}
-        size="xs"
-      />
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        className="flex justify-start w-full justify-self-start"
+      >
+        <VisualCardStack
+          title="Discard"
+          count={discardPile.length}
+          topCard={topDiscardCard}
+          isSealed={discardPileIsSealed}
+          canInteract={canDrawFromDiscard}
+          onClick={handleDiscardClick}
+          className="landscape:w-[8vh] portrait:w-[15vw]"
+        />
+      </motion.div>
     </div>
   );
 };
