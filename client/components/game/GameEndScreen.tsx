@@ -102,25 +102,25 @@ export const GameEndScreen = ({
 
         <motion.div
           variants={containerVariants}
-          className="w-full grid grid-cols-1 md:grid-cols-2 gap-4"
+          className="w-full flex flex-col gap-4"
         >
-          {sortedPlayers.map((player, index) => (
+          {sortedPlayers.map((player) => (
             <motion.div
               key={player.id}
               variants={itemVariants}
               className={cn(
-                "p-4 rounded-2xl transition-all duration-300",
+                "p-4 rounded-2xl transition-all duration-300 flex flex-col md:flex-row md:items-center gap-4",
                 player.id === winnerId
                   ? "bg-amber-100/60 dark:bg-amber-900/30 border-2 border-amber-400/80"
                   : "bg-white/60 dark:bg-zinc-900/60 border border-stone-200 dark:border-zinc-800",
               )}
             >
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex-shrink-0 flex justify-between items-center md:flex-col md:w-32 md:items-start">
                 <div className="flex items-center gap-2 font-bold text-xl text-zinc-800 dark:text-zinc-200">
                   {player.id === winnerId && (
                     <Crown className="w-6 h-6 text-amber-500" />
                   )}
-                  <span>
+                  <span className="truncate max-w-[120px]">
                     {player.name}{" "}
                     {player.id === localPlayerId && (
                       <span className="text-sm font-light text-stone-500">
@@ -139,26 +139,28 @@ export const GameEndScreen = ({
                 </div>
               </div>
 
-              <motion.div
-                className="flex flex-wrap items-center justify-center gap-2"
-                variants={cardContainerVariants}
-                initial="hidden"
-                animate="visible"
-              >
-                {player.hand
-                  .filter(
-                    (c): c is Card => typeof c === "object" && "rank" in c,
-                  )
-                  .map((card, cardIndex) => (
-                    <motion.div key={cardIndex} variants={cardItemVariants}>
-                      <PlayingCard
-                        card={card}
-                        faceDown={false}
-                        className="w-10 aspect-[5/7]"
-                      />
-                    </motion.div>
-                  ))}
-              </motion.div>
+              <div className="flex-grow border-t border-stone-200 dark:border-zinc-800 md:border-t-0 md:border-l md:pl-4">
+                <motion.div
+                  className="flex items-center justify-center overflow-x-auto gap-2 pt-4 md:pt-0 pb-2"
+                  variants={cardContainerVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  {player.hand
+                    .filter(
+                      (c): c is Card => typeof c === "object" && "rank" in c,
+                    )
+                    .map((card, cardIndex) => (
+                      <motion.div key={cardIndex} variants={cardItemVariants}>
+                        <PlayingCard
+                          card={card}
+                          faceDown={false}
+                          className="w-16 aspect-[5/7]"
+                        />
+                      </motion.div>
+                    ))}
+                </motion.div>
+              </div>
             </motion.div>
           ))}
         </motion.div>

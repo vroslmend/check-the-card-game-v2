@@ -11,6 +11,7 @@ import {
   TurnPhase,
   PlayerActionType,
   Card,
+  CardRank,
 } from "shared-types";
 import { VisualCardStack } from "../cards/VisualCardStack";
 import { AnimatePresence, motion } from "framer-motion";
@@ -26,15 +27,27 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
   const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
   const isDrawPhase =
     isMyTurn && currentGameState?.turnPhase === TurnPhase.DRAW;
+  const topDiscardCard = currentGameState?.discardPile.at(-1) ?? null;
+
+  const isSpecialCard =
+    !!topDiscardCard &&
+    "rank" in topDiscardCard &&
+    [CardRank.King, CardRank.Queen, CardRank.Jack].includes(
+      topDiscardCard.rank,
+    );
 
   return {
     deckSize: currentGameState?.deckSize ?? 0,
     deckTop: currentGameState?.deckTop ?? null,
     discardPile: currentGameState?.discardPile ?? [],
-    topDiscardCard: currentGameState?.discardPile.at(-1) ?? null,
+    topDiscardCard: topDiscardCard,
     discardPileIsSealed: currentGameState?.discardPileIsSealed ?? false,
     canDrawFromDeck: isDrawPhase,
-    canDrawFromDiscard: isDrawPhase && !currentGameState?.discardPileIsSealed && !!currentGameState?.discardPile.length,
+    canDrawFromDiscard:
+      isDrawPhase &&
+      !currentGameState?.discardPileIsSealed &&
+      !!currentGameState?.discardPile.length &&
+      !isSpecialCard,
   };
 };
 
