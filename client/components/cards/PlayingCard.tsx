@@ -34,14 +34,13 @@ const PlayingCardRenderer = ({ card }: { card: Card }) => {
         colorClass,
       )}
     >
-      <div className={cn("text-left text-[clamp(0.5rem,15cqw,1rem)]")}>
+      <div className={cn("text-left text-[clamp(0.875rem,40cqw,1.25rem)]")}>
         <div className="font-bold leading-none">{rankLabel}</div>
-        <div className="leading-none">{symbol}</div>
       </div>
 
       <div
         className={cn(
-          "absolute inset-0 flex items-center justify-center text-[clamp(1.5rem,40cqw,3rem)]",
+          "absolute inset-0 flex items-center justify-center text-[clamp(0.875rem,20cqw,3rem)]",
         )}
       >
         {symbol}
@@ -49,11 +48,10 @@ const PlayingCardRenderer = ({ card }: { card: Card }) => {
 
       <div
         className={cn(
-          "self-end rotate-180 text-left text-[clamp(0.5rem,15cqw,1rem)]",
+          "self-end rotate-180 text-left text-[clamp(0.875rem,40cqw,1.25rem)]",
         )}
       >
         <div className="font-bold leading-none">{rankLabel}</div>
-        <div className="leading-none">{symbol}</div>
       </div>
     </div>
   );

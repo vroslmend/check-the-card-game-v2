@@ -240,6 +240,8 @@ export function SmoothFloatingElements({
             <motion.div
               key="blob"
               className="h-96 w-96"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1, transition: { duration: 0.4, ease: "easeInOut" } }}
               exit={{
                 opacity: 0,
                 scale: 0.8,

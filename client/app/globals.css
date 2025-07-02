@@ -244,6 +244,23 @@ html {
     user-select: none;
   }
 
+  @keyframes hue-rotate {
+    from {
+      filter: hue-rotate(0deg);
+    }
+    to {
+      filter: hue-rotate(360deg);
+    }
+  }
+
+  .animate-hue-rotate {
+    animation: hue-rotate 20s linear infinite;
+  }
+
+  .animation-delay-n5 {
+    animation-delay: -5s;
+  }
+
   /* --- Container Query Helper ------------------------------------------- */
   /* The @container class is used throughout the app to scope container-query
      breakpoints (e.g. @md:, @lg:).  Declare it here so every element marked

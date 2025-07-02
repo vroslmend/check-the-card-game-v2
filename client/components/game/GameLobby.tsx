@@ -1,39 +1,25 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence, useAnimation } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   useUISelector,
   useUIActorRef,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
-import { Button } from "@/components/ui/button";
 import {
   CheckCircle,
   Users,
   WifiOff,
   Clock,
-  Copy,
   PartyPopper,
   UserMinus,
-  MoreHorizontal,
   RefreshCw,
+  LogOut,
 } from "lucide-react";
 import { type Player, PlayerActionType } from "shared-types";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import Magnetic from "@/components/ui/Magnetic";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { CopyToClipboardButton } from "../ui/CopyToClipboardButton";
 
 const spinnerStyle = `
@@ -98,7 +84,6 @@ const PlayerRow = ({
   const [isHolding, setIsHolding] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const holdTimeRequired = 1.5;
-  const holdTimer = useRef<NodeJS.Timeout | null>(null);
   const canRemove = isGameMaster && !isLocalPlayer && !player.isConnected;
 
   useEffect(() => {
@@ -327,7 +312,6 @@ export const GameLobby = () => {
   } = useUISelector(selectLobbyProps);
   const [buttonHovered, setButtonHovered] = useState(false);
   const [leaveButtonHovered, setLeaveButtonHovered] = useState(false);
-  const [prevButtonType, setPrevButtonType] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [reconnectionTimeout, setReconnectionTimeout] = useState(false);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -514,9 +498,9 @@ export const GameLobby = () => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-        className="h-full flex items-center justify-center font-serif"
+        className="min-h-screen flex items-center justify-center font-serif p-4 sm:p-6 md:p-10"
       >
-        <div className="w-full max-w-xl mx-auto relative overflow-hidden bg-white/80 dark:bg-zinc-950/80 rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl">
+        <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto relative overflow-hidden bg-white/80 dark:bg-zinc-950/80 rounded-3xl sm:rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl">
           <motion.div
             className="absolute -top-10 -right-10 w-64 h-64 bg-gradient-to-br from-stone-100 dark:from-zinc-900 rounded-full blur-3xl"
             animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
@@ -557,15 +541,18 @@ export const GameLobby = () => {
                     }}
                   />
                   <span className="relative z-10 flex items-center gap-1">
+                    <LogOut className="h-4 w-4 md:hidden" />
                     <motion.span
                       animate={leaveButtonHovered ? { x: -2 } : { x: 0 }}
                       transition={{ duration: 0.2 }}
+                      className="hidden md:inline"
                     >
                       Exit
                     </motion.span>
                     <motion.span
                       animate={leaveButtonHovered ? { x: 2 } : { x: 0 }}
                       transition={{ duration: 0.2 }}
+                      className="hidden md:inline"
                     >
                       Lobby
                     </motion.span>
@@ -620,7 +607,7 @@ export const GameLobby = () => {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.2 }}
-                className="text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100"
+                className="text-4xl sm:text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100"
               >
                 Game Lobby
               </motion.h2>
@@ -628,7 +615,7 @@ export const GameLobby = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.7, delay: 0.3 }}
-                className="text-stone-500 dark:text-stone-400 mt-2 text-lg"
+                className="text-stone-500 dark:text-stone-400 mt-2 text-base sm:text-lg"
               >
                 Assemble your party
               </motion.p>
@@ -660,7 +647,7 @@ export const GameLobby = () => {
             )}
 
             <motion.div
-              className="space-y-3 mb-8"
+              className="space-y-3 mb-8 max-h-[50vh] md:max-h-[60vh] overflow-y-auto pr-1"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ staggerChildren: 0.1, delayChildren: 0.5 }}
@@ -693,7 +680,7 @@ export const GameLobby = () => {
                   onClick={buttonConfig.action}
                   disabled={buttonConfig.disabled}
                   className={cn(
-                    "h-14 min-w-64 rounded-full shadow-xl px-8 relative overflow-hidden flex items-center justify-center gap-2",
+                    "h-14 min-w-[12rem] sm:min-w-[16rem] rounded-full shadow-xl px-8 relative overflow-hidden flex items-center justify-center gap-2",
                     buttonConfig.colors,
                     buttonConfig.disabled && "opacity-70 cursor-not-allowed",
                   )}

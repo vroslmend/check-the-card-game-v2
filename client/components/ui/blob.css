@@ -1,0 +1,36 @@
+@property --base-hue {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 220;
+}
+
+.blob {
+  --base-hue: 220;
+  width: 300px;
+  height: 300px;
+  background: linear-gradient(0deg, hsl(var(--base-hue), 80%, 85%), hsl(calc(var(--base-hue) + 60), 80%, 90%));
+  border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+  animation: morph 10s ease-in-out infinite, color-shift 40s linear infinite alternate;
+  filter: blur(40px);
+}
+
+@keyframes morph {
+  0% {
+    border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+  }
+  50% {
+    border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%;
+  }
+  100% {
+    border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+  }
+}
+
+@keyframes color-shift {
+  from {
+    --base-hue: 220;
+  }
+  to {
+    --base-hue: 280;
+  }
+}

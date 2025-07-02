@@ -63,7 +63,7 @@ export function OptimizedShapes({
       {
         id: 1,
         className:
-          "absolute -right-1/4 top-1/4 h-[800px] w-[800px] rounded-full bg-gradient-to-br from-stone-200/30 to-stone-300/30 blur-3xl dark:from-stone-800/30 dark:to-stone-900/30",
+          "absolute -right-1/4 top-1/4 h-[800px] w-[800px] rounded-full bg-gradient-to-br from-stone-200/30 to-stone-300/30 blur-2xl dark:from-stone-800/30 dark:to-stone-900/30",
         x: shape1X,
         y: shape1Y,
         scale: shouldReduceMotion ? 1 : [1, 1.05, 1],
@@ -72,7 +72,7 @@ export function OptimizedShapes({
       {
         id: 2,
         className:
-          "absolute -left-1/4 bottom-1/4 h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-stone-100/25 to-stone-200/25 blur-2xl dark:from-stone-900/25 dark:to-stone-800/25",
+          "absolute -left-1/4 bottom-1/4 h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-stone-100/25 to-stone-200/25 blur-xl dark:from-stone-900/25 dark:to-stone-800/25",
         x: shape2X,
         y: shape2Y,
         scale: shouldReduceMotion ? 1 : [1, 0.95, 1],
@@ -81,7 +81,7 @@ export function OptimizedShapes({
       {
         id: 3,
         className:
-          "absolute right-1/3 top-1/3 h-[300px] w-[300px] rounded-full bg-gradient-to-bl from-stone-300/15 to-stone-400/15 blur-xl dark:from-stone-700/15 dark:to-stone-600/15",
+          "absolute right-1/3 top-1/3 h-[300px] w-[300px] rounded-full bg-gradient-to-bl from-stone-300/15 to-stone-400/15 blur-lg dark:from-stone-700/15 dark:to-stone-600/15",
         x: shape3X,
         y: shape3Y,
         scale: shouldReduceMotion ? 1 : [1, 1.1, 1],

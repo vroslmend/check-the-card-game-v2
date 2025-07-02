@@ -84,7 +84,10 @@ export function RejoinModal() {
     >
       <AnimatePresence>
         {isVisible && (
-          <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-zinc-950 border-stone-200 dark:border-zinc-800 rounded-xl border">
+          <DialogContent
+            preventInteractOutside
+            className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-zinc-950 border-stone-200 dark:border-zinc-800 rounded-xl border"
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: -30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}

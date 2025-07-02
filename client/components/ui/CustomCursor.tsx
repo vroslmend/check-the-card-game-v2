@@ -5,11 +5,13 @@ import { motion, useSpring, useMotionValue, Variants } from "framer-motion";
 import { useCursor } from "@/components/providers/CursorProvider";
 import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
+import { useDevice } from "@/context/DeviceContext";
 
 const CustomCursor = () => {
   const { variant, setVariant } = useCursor();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const { isMobile } = useDevice();
   const [isPointerInViewport, setIsPointerInViewport] = useState(false);
   const [isIdle, setIsIdle] = useState(false);
   const previousVariant = useRef("default");
@@ -20,8 +22,10 @@ const CustomCursor = () => {
 
   useEffect(() => {
     setMounted(true);
+  }, []);
 
-    if (isCursorActive) {
+  useEffect(() => {
+    if (isCursorActive && !isMobile) {
       document.body.classList.add("no-native-cursor");
     } else {
       document.body.classList.remove("no-native-cursor");
@@ -30,7 +34,7 @@ const CustomCursor = () => {
     return () => {
       document.body.classList.remove("no-native-cursor");
     };
-  }, [isCursorActive]);
+  }, [isCursorActive, isMobile]);
 
   const getCursorVariants = (theme: string | undefined): Variants => {
     const isDark = theme === "dark";
@@ -198,7 +202,7 @@ const CustomCursor = () => {
     };
   }, [setVariant, isPointerInViewport, variant, mouseX, mouseY]);
 
-  if (!mounted || !isCursorActive) {
+  if (!mounted || !isCursorActive || isMobile) {
     return null;
   }
 
