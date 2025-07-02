@@ -1,122 +1,37 @@
 "use client";
 
 import React from "react";
-import { Card as CardType, PublicCard } from "shared-types";
-import { PlayingCard, cardSizeClasses } from "./PlayingCard";
-import { CardBack } from "./CardBack";
-import { motion, AnimatePresence } from "framer-motion";
+import { type Card, type PublicCard } from "shared-types";
+import { PlayingCard } from "./PlayingCard";
 import { cn } from "@/lib/utils";
 
-type DeckCardProps = {
+interface DeckCardProps {
   card?: PublicCard | null;
-  count?: number;
-  isInteractive?: boolean;
-  onClick?: () => void;
   className?: string;
-  size?: keyof typeof cardSizeClasses;
-};
+  onClick?: () => void;
+  isInteractive?: boolean;
+}
 
-function isFaceUpCard(card: DeckCardProps["card"]): card is CardType {
+function isFaceUpCard(card: DeckCardProps["card"]): card is Card {
   return !!card && "suit" in card;
 }
 
 export const DeckCard = ({
   card,
-  count,
-  isInteractive = false,
-  onClick,
   className,
-  size = "xs",
+  onClick,
+  isInteractive,
 }: DeckCardProps) => {
-  const sizeClasses = cardSizeClasses;
-
-  const stackOffset = {
-    xxs: 0.3,
-    xs: 0.5,
-    sm: 0.7,
-    md: 1,
-    lg: 1.5,
-  }[size];
-
-  const cardSizeClass = sizeClasses[size];
-
   return (
-    <div className={cn("relative", cardSizeClass, className)}>
-      {count && count > 1 && (
-        <>
-          <motion.div
-            className={cn("absolute z-0", cardSizeClass)}
-            style={{ top: `${stackOffset}rem`, left: `${stackOffset}rem` }}
-            initial={{ opacity: 0, y: -3 }}
-            animate={{ opacity: 0.5, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <CardBack />
-          </motion.div>
-          {count > 2 && (
-            <motion.div
-              className={cn("absolute z-0", cardSizeClass)}
-              style={{
-                top: `${stackOffset / 2}rem`,
-                left: `${stackOffset / 2}rem`,
-              }}
-              initial={{ opacity: 0, y: -3 }}
-              animate={{ opacity: 0.7, y: 0 }}
-              transition={{ duration: 0.2, delay: 0.05 }}
-            >
-              <CardBack />
-            </motion.div>
-          )}
-        </>
-      )}
-
-      <motion.div
-        className="relative z-10"
-        whileHover={
-          isInteractive ? { y: -4, transition: { duration: 0.2 } } : {}
-        }
-        onClick={isInteractive ? onClick : undefined}
-        data-cursor-link={isInteractive}
-      >
-        <AnimatePresence mode="wait">
-          {isFaceUpCard(card) ? (
-            <PlayingCard
-              key="face-up"
-              card={card}
-              canInteract={isInteractive}
-              onClick={onClick}
-              size={size}
-            />
-          ) : (
-            <CardBack key="face-down" />
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-      {count !== undefined && count > 0 && (
-        <motion.div
-          className={cn(
-            "absolute -bottom-1.5 -right-1.5 z-20 flex items-center justify-center rounded-full bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 shadow-sm",
-            size === "xs" ? "h-4 w-4" : size === "sm" ? "h-5 w-5" : "h-6 w-6",
-          )}
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", damping: 12, stiffness: 200 }}
-        >
-          <span
-            className={cn(
-              "font-medium",
-              size === "xs"
-                ? "text-[8px]"
-                : size === "sm"
-                  ? "text-[10px]"
-                  : "text-xs",
-            )}
-          >
-            {count}
-          </span>
-        </motion.div>
-      )}
+    <div
+      className={cn("relative aspect-[5/7]", className)}
+      onClick={isInteractive ? onClick : undefined}
+    >
+      <PlayingCard
+        card={isFaceUpCard(card) ? card : undefined}
+        faceDown={!isFaceUpCard(card)}
+        className="h-full w-full"
+      />
     </div>
   );
 };

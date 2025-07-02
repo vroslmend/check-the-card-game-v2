@@ -1201,6 +1201,8 @@ export const gameMachine = setup({
           p.pendingDrawnCard = null;
           p.isDealer = p.id === newDealerId;
           p.status = PlayerStatus.WAITING;
+          p.isConnected = context.players[pId]?.isConnected ?? false;
+          p.socketId = context.players[pId]?.socketId;
         }
       });
 
@@ -1212,6 +1214,7 @@ export const gameMachine = setup({
         checkDetails: null,
         gameover: null,
         currentPlayerId: newDealerId,
+        currentTurnSegment: null,
         lastRoundLoserId: context.gameover?.loserId || null,
         gameMasterId: newDealerId,
         gameStage: GameStage.WAITING_FOR_PLAYERS,

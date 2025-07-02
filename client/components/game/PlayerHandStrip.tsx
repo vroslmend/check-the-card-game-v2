@@ -71,7 +71,7 @@ const PlayerInfoBadge = ({
 
   return (
     <div className="flex flex-col items-center gap-2 font-serif">
-      <h3 className="flex items-center gap-2 text-lg text-stone-900 dark:text-stone-100">
+      <h3 className="flex items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] text-stone-900 dark:text-stone-100">
         <User
           size={16}
           className={cn(
@@ -97,7 +97,10 @@ const PlayerInfoBadge = ({
       </h3>
 
       <div
-        className={cn("flex items-center gap-1.5 text-xs font-medium", color)}
+        className={cn(
+          "flex items-center gap-1.5 text-[clamp(0.7rem,2vw,0.75rem)] font-medium",
+          color,
+        )}
       >
         <Icon className="h-3 w-3" />
         <span>{text}</span>
@@ -152,14 +155,8 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     !player.isLocked &&
     (isTargetableForAbility || (isLocalPlayer && (canSwap || canMatch)));
 
-  const cardSize: "xs" = "xs";
-
   return (
-    <div
-      className={cn(
-        "relative flex flex-col items-center justify-center p-2 gap-2",
-      )}
-    >
+    <div className="flex flex-col items-center gap-2">
       <PlayerInfoBadge player={player} isCurrentTurn={isCurrentTurn} />
       <PlayerHand
         player={player}
@@ -174,7 +171,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
               : selectedCardIndex
             : undefined
         }
-        cardSize={cardSize}
+        className="w-full max-w-md"
       />
     </div>
   );

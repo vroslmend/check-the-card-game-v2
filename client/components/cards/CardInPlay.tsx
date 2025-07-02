@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Card as CardType, PublicCard } from "shared-types";
+import { type PublicCard } from "shared-types";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { DeckCard } from "./CardPile";
@@ -14,7 +14,6 @@ interface CardInPlayProps {
   isInteractive?: boolean;
   onClick?: () => void;
   className?: string;
-  size?: "xxs" | "xs" | "sm" | "md" | "lg";
 }
 
 export const CardInPlay: React.FC<CardInPlayProps> = ({
@@ -25,7 +24,6 @@ export const CardInPlay: React.FC<CardInPlayProps> = ({
   isInteractive = false,
   onClick,
   className,
-  size = "sm",
 }) => {
   const canSeeCardFace = () => {
     if ("facedown" in card && !isPeeking) {
@@ -47,12 +45,13 @@ export const CardInPlay: React.FC<CardInPlayProps> = ({
       }}
       className={cn(
         "relative transition-all duration-200",
+        "w-20",
         isInteractive && "cursor-pointer",
         className,
       )}
     >
       <DeckCard
-        card={isPeeking ? card : card}
+        card={card}
         isInteractive={isInteractive}
         onClick={onClick}
         className={cn(

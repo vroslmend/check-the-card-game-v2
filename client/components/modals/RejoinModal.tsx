@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   useUIActorRef,
@@ -33,6 +34,7 @@ export function RejoinModal() {
   const { gameId, modalInfo, isLoading } = useUISelector(
     selectRejoinModalProps,
   );
+  const router = useRouter();
 
   const [playerName, setPlayerName] = useState(() => {
     if (typeof window !== "undefined") {
@@ -80,11 +82,18 @@ export function RejoinModal() {
   return (
     <Dialog
       open={isVisible}
-      onOpenChange={(open) => !open && send({ type: "DISMISS_MODAL" })}
+      onOpenChange={(open) => {
+        if (!open) {
+          router.push("/");
+        }
+      }}
     >
       <AnimatePresence>
         {isVisible && (
-          <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-zinc-950 border-stone-200 dark:border-zinc-800 rounded-xl border">
+          <DialogContent
+            onInteractOutside={(e) => e.preventDefault()}
+            className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-zinc-950 border-stone-200 dark:border-zinc-800 rounded-xl border"
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: -30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}

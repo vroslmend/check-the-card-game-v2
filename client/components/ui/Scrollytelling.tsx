@@ -1,323 +1,358 @@
 "use client";
 
-import { useState, useRef } from "react";
-import {
-  motion,
-  useScroll,
-  useTransform,
-  useSpring,
-  MotionValue,
-} from "framer-motion";
-import { Spade, Heart, Diamond } from "lucide-react";
+import { useRef } from "react";
+import { motion, useScroll, useTransform, useSpring } from "motion/react";
 import { FaBrain, FaEye } from "react-icons/fa";
 import { GiWhirlwind } from "react-icons/gi";
 import { PrincipleCard } from "@/components/ui/PrincipleCard";
-import { CardStack } from "@/components/ui/CardStack";
 import { AnimateOnView } from "@/components/ui/AnimateOnView";
+import { useDevice } from "@/context/DeviceContext";
+import { Spade, Heart, Diamond } from "lucide-react";
 
-function FeatureItem({
-  index,
+const features = [
+  {
+    icon: FaBrain,
+    title: "Master Your Memory",
+    description:
+      "Keep track of your cards and your opponents'. A sharp memory is your greatest weapon.",
+  },
+  {
+    icon: GiWhirlwind,
+    title: "Unleash Chaos",
+    description:
+      "Use special abilities from Jacks, Queens, and Kings to peek, swap, and disrupt your way to victory.",
+  },
+  {
+    icon: FaEye,
+    title: "Call Their Bluff",
+    description:
+      "Think you have the lowest score? Call 'Check' to end the round, but be careful—a wrong move could cost you the game.",
+  },
+];
+
+const rules = [
+  {
+    icon: Spade,
+    title: "Lowest Score Wins",
+    description:
+      "The goal is simple: have the lowest total score at the end of the round. Every card counts.",
+  },
+  {
+    icon: Heart,
+    title: "Know Your Hand",
+    description:
+      "You only get to see two of your cards at the start. From then on, it's all about memory and deduction.",
+  },
+  {
+    icon: Diamond,
+    title: "Powers and Abilities",
+    description:
+      "Leverage the special powers of face cards to peek at, swap, and manipulate the game to your advantage.",
+  },
+];
+
+interface FeatureCardProps {
+  feature: (typeof features)[0];
+  i: number;
+  scrollXProgress: any;
+  isMobile: boolean;
+}
+
+const FeatureCard = ({
   feature,
-  continuousActiveCard,
-}: {
-  index: number;
-  feature: { title: string; description: string };
-  continuousActiveCard: MotionValue<number>;
-}) {
-  const diff = useTransform(continuousActiveCard, (latest) => index - latest);
+  i,
+  scrollXProgress,
+  isMobile,
+}: FeatureCardProps) => {
+  const numFeatures = features.length;
+  const scale = useTransform(
+    scrollXProgress,
+    [
+      (i - 1) / (numFeatures - 1),
+      i / (numFeatures - 1),
+      (i + 1) / (numFeatures - 1),
+    ],
+    isMobile ? [1, 1, 1] : [0.6, 1, 0.6],
+  );
+
+  const rotate = useTransform(
+    scrollXProgress,
+    [
+      (i - 1) / (numFeatures - 1),
+      i / (numFeatures - 1),
+      (i + 1) / (numFeatures - 1),
+    ],
+    isMobile ? [0, 0, 0] : [-20, 0, 20],
+  );
 
   const opacity = useTransform(
-    diff,
-    [-1, -0.5, 0, 0.5, 1],
-    [0.5, 1, 1, 1, 0.5],
-  );
-  const scale = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.9, 1, 1, 1, 0.9]);
-
-  const bgOpacity = useTransform(diff, [-0.5, 0, 0.5], [0, 1, 0]);
-
-  const backgroundColor = useTransform(
-    bgOpacity,
-    (v) => `rgba(var(--feature-item-bg-rgb), ${v})`,
-  );
-
-  const textColor = useTransform(
-    bgOpacity,
-    [0, 1],
-    [`hsl(var(--foreground))`, `hsl(var(--feature-item-text-color-hsl))`],
-  );
-  const mutedTextColor = useTransform(
-    bgOpacity,
-    [0, 1],
+    scrollXProgress,
     [
-      `hsl(var(--muted-foreground))`,
-      `hsl(var(--feature-item-text-color-hsl) / 0.7)`,
+      (i - 1) / (numFeatures - 1),
+      i / (numFeatures - 1),
+      (i + 1) / (numFeatures - 1),
     ],
+    isMobile ? [1, 1, 1] : [0.3, 1, 0.3],
+  );
+
+  const textOpacity = useTransform(
+    scrollXProgress,
+    [
+      (i - 0.5) / (numFeatures - 1),
+      i / (numFeatures - 1),
+      (i + 0.5) / (numFeatures - 1),
+    ],
+    [0, 1, 0],
   );
 
   return (
     <motion.div
-      className="p-8 rounded-3xl"
       style={{
+        scale: isMobile ? 1 : scale,
+        rotateY: isMobile ? 0 : rotate,
         opacity,
-        scale,
-        backgroundColor,
       }}
+      className="relative w-full h-[350px] bg-stone-100 dark:bg-zinc-900 border border-stone-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col justify-between"
     >
-      <motion.h3
-        style={{ color: textColor }}
-        className="text-2xl font-normal text-stone-900 dark:text-stone-100 mb-3"
-      >
-        {feature.title}
-      </motion.h3>
+      <div>
+        <feature.icon className="w-10 h-10 mb-4 text-stone-500" />
+        <h3 className="text-3xl font-light text-stone-900 dark:text-stone-100">
+          {feature.title}
+        </h3>
+      </div>
       <motion.p
-        style={{ color: mutedTextColor }}
-        className="text-stone-600 dark:text-stone-400 font-light leading-relaxed"
+        style={{ opacity: isMobile ? 1 : textOpacity }}
+        className="text-lg font-light text-stone-600 dark:text-stone-400"
       >
         {feature.description}
       </motion.p>
     </motion.div>
   );
-}
+};
 
-export function Scrollytelling() {
-  const scrollyRef = useRef<HTMLDivElement>(null);
+function DesktopScrollytelling() {
+  const { isMobile } = useDevice();
 
-  const { scrollYProgress: localScrollYProgress } = useScroll({
-    target: scrollyRef,
+  // Ref and scroll progress for the Principles Title
+  const principlesTitleRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress: principlesTitleScrollYProgress } = useScroll({
+    target: principlesTitleRef,
+    offset: ["start end", "end start"],
+  });
+
+  // Ref and scroll progress for the Principles Cards
+  const principlesCardsRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress: principlesCardsScrollYProgress } = useScroll({
+    target: principlesCardsRef,
+    offset: ["start end", "end start"],
+  });
+
+  // Ref and scroll progress for the Features Carousel
+  const featuresContainerRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress: featuresScrollYProgress } = useScroll({
+    target: featuresContainerRef,
     offset: ["start start", "end end"],
   });
 
-  const scrollProgress = localScrollYProgress;
-
-  const features = [
-    {
-      icon: FaBrain,
-      title: "Master Your Memory",
-      description:
-        "Keep track of your cards and your opponents'. A sharp memory is your greatest weapon.",
-    },
-    {
-      icon: GiWhirlwind,
-      title: "Unleash Chaos",
-      description:
-        "Use special abilities from Jacks, Queens, and Kings to peek, swap, and disrupt your way to victory.",
-    },
-    {
-      icon: FaEye,
-      title: "Call Their Bluff",
-      description:
-        "Think you have the lowest score? Call 'Check' to end the round, but be careful—a wrong move could cost you the game.",
-    },
-  ];
-
-  const rules = [
-    {
-      icon: Spade,
-      title: "Lowest Score Wins",
-      description:
-        "The goal is simple: have the lowest total score at the end of the round. Every card counts.",
-    },
-    {
-      icon: Heart,
-      title: "Know Your Hand",
-      description:
-        "You only get to see two of your cards at the start. From then on, it's all about memory and deduction.",
-    },
-    {
-      icon: Diamond,
-      title: "Powers and Abilities",
-      description:
-        "Leverage the special powers of face cards to peek at, swap, and manipulate the game to your advantage.",
-    },
-  ];
-
-  const continuousActiveCard = useTransform(
-    scrollProgress,
-    [0.75, 0.95],
-    [0, features.length - 1],
-  );
-  const smoothContinuousActiveCard = useSpring(continuousActiveCard, {
-    stiffness: 100,
-    damping: 20,
-    mass: 0.5,
-  });
-
-  // Principles Title
+  // Animation for Principles Title
   const principlesTitleOpacity = useTransform(
-    scrollProgress,
-    [0, 0.05, 0.2, 0.25],
+    principlesTitleScrollYProgress,
+    [0, 0.2, 0.8, 1],
     [0, 1, 1, 0],
   );
   const principlesTitleY = useTransform(
-    scrollProgress,
-    [0, 0.05, 0.2, 0.25],
-    ["20%", "0%", "0%", "-20%"],
+    principlesTitleScrollYProgress,
+    [0, 0.2, 0.8, 1],
+    [20, 0, 0, -20],
   );
 
-  // Principles Cards
+  // Animation for Principles Cards
   const principlesCardsOpacity = useTransform(
-    scrollProgress,
-    [0.2, 0.25, 0.45, 0.5],
+    principlesCardsScrollYProgress,
+    [0, 0.2, 0.8, 1],
     [0, 1, 1, 0],
   );
   const principlesCardsY = useTransform(
-    scrollProgress,
-    [0.2, 0.25, 0.45, 0.5],
-    ["20%", "0%", "0%", "-20%"],
-  );
-  const principlesCardsPointerEvents = useTransform(
-    principlesCardsOpacity,
-    (v) => (v > 0 ? "auto" : "none"),
+    principlesCardsScrollYProgress,
+    [0, 0.2, 0.8, 1],
+    [20, 0, 0, -20],
   );
 
-  // Features Title
-  const featuresTitleOpacity = useTransform(
-    scrollProgress,
-    [0.45, 0.5, 0.7, 0.75],
-    [0, 1, 1, 0],
-  );
-  const featuresTitleY = useTransform(
-    scrollProgress,
-    [0.45, 0.5, 0.7, 0.75],
-    ["20%", "0%", "0%", "-20%"],
-  );
-  const featuresTitlePointerEvents = useTransform(featuresTitleOpacity, (v) =>
-    v > 0 ? "auto" : "none",
+  const carouselProgress = useTransform(
+    featuresScrollYProgress,
+    [0.1, 0.2, 0.8, 0.9],
+    [-0.5, 0, 1, 1.5],
   );
 
-  // Features Content
-  const featuresContentOpacity = useTransform(
-    scrollProgress,
-    [0.7, 0.75, 0.95, 1.0],
-    [0, 1, 1, 0],
+  const animatedX = useTransform(
+    carouselProgress,
+    [-0.5, 0, 1, 1.5],
+    ["100vw", "25vw", "-75vw", "-150vw"],
   );
-  const featuresContentY = useTransform(
-    scrollProgress,
-    [0.7, 0.75, 0.95, 1.0],
-    ["20%", "0%", "0%", "-20%"],
-  );
-  const featuresContentPointerEvents = useTransform(
-    featuresContentOpacity,
-    (v) => (v > 0 ? "auto" : "none"),
-  );
-  const cardEntryProgress = useTransform(scrollProgress, [0.7, 0.85], [0, 1]);
+
+  const smoothAnimatedX = useSpring(animatedX, {
+    stiffness: 200,
+    damping: 40,
+  });
 
   return (
-    <section ref={scrollyRef} className="relative h-[700vh]">
+    <section id="features" className="relative py-32">
       <div
         id="game-principles-anchor"
         className="absolute"
         style={{ top: "20vh" }}
       />
-      <div
-        id="scrollytelling-track"
-        className="sticky top-0 flex h-screen items-center justify-center overflow-hidden"
-      >
+      <div className="container mx-auto px-4 space-y-32">
         {/* Principles Section */}
-        <motion.div
-          style={{
-            opacity: principlesTitleOpacity,
-            y: principlesTitleY,
-            pointerEvents: useTransform(principlesTitleOpacity, (v) =>
-              v > 0 ? "auto" : "none",
-            ),
-            zIndex: useTransform(principlesTitleOpacity, (v) =>
-              v > 0 ? 10 : 0,
-            ),
-          }}
-          className="absolute inset-x-0"
-        >
-          <div className="container mx-auto px-4 text-center">
-            <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
-              The Art of the Game
-            </h2>
-            <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
-              Simple rules give rise to complex strategies.
-            </p>
-          </div>
-        </motion.div>
-
-        <motion.div
-          style={{
-            opacity: principlesCardsOpacity,
-            y: principlesCardsY,
-            pointerEvents: principlesCardsPointerEvents,
-            zIndex: useTransform(principlesCardsOpacity, (v) =>
-              v > 0 ? 10 : 0,
-            ),
-          }}
-          className="absolute inset-x-0"
-        >
-          <div className="container mx-auto px-4">
-            <div
-              className="grid justify-items-center gap-8 lg:grid-cols-3"
-              style={{ perspective: "1000px" }}
+        <div ref={principlesTitleRef} style={{ height: "120vh" }}>
+          <div className="sticky top-1/2 -translate-y-1/2">
+            <motion.div
+              style={{ opacity: principlesTitleOpacity, y: principlesTitleY }}
+              className="text-center"
             >
-              {rules.map((rule, index) => (
-                <PrincipleCard
-                  key={index}
-                  icon={rule.icon}
-                  title={rule.title}
-                  description={rule.description}
-                  scrollYProgress={localScrollYProgress}
-                />
-              ))}
-            </div>
+              <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+                The Art of the Game
+              </h2>
+              <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
+                Simple rules give rise to complex strategies.
+              </p>
+            </motion.div>
           </div>
-        </motion.div>
+        </div>
+
+        <div ref={principlesCardsRef} style={{ height: "120vh" }}>
+          <div className="sticky top-1/2 -translate-y-1/2">
+            <motion.div
+              style={{ opacity: principlesCardsOpacity, y: principlesCardsY }}
+            >
+              <div className="grid justify-items-center gap-8 lg:grid-cols-3">
+                {rules.map((rule, index) => (
+                  <PrincipleCard
+                    key={index}
+                    icon={rule.icon}
+                    title={rule.title}
+                    description={rule.description}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </div>
 
         {/* Features Section */}
-        <motion.div
-          style={{
-            opacity: featuresTitleOpacity,
-            y: featuresTitleY,
-            pointerEvents: featuresTitlePointerEvents,
-            zIndex: useTransform(featuresTitleOpacity, (v) => (v > 0 ? 10 : 0)),
-          }}
-          className="absolute inset-x-0"
-        >
-          <div className="container mx-auto px-4 text-center">
-            <h2 className="text-4xl font-light tracking-tight text-stone-900 dark:text-stone-100 sm:text-5xl">
-              A beautiful interface for your{" "}
-              <span className="text-gradient">questionable</span> decisions
-            </h2>
-          </div>
-        </motion.div>
+        <div className="relative h-[300vh]" ref={featuresContainerRef}>
+          <div className="sticky top-1/4 left-0 overflow-hidden">
+            <AnimateOnView className="text-center mb-16">
+              <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+                Built for Strategy
+              </h2>
+              <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
+                Every card holds the potential for a game-changing move.
+              </p>
+            </AnimateOnView>
 
-        <motion.div
-          style={{
-            opacity: featuresContentOpacity,
-            y: featuresContentY,
-            pointerEvents: featuresContentPointerEvents,
-            zIndex: useTransform(featuresContentOpacity, (v) =>
-              v > 0 ? 10 : 0,
-            ),
-          }}
-          className="absolute h-full w-full"
-        >
-          <div className="container mx-auto grid h-full w-full grid-cols-1 gap-8 lg:grid-cols-2">
-            <div className="flex flex-col items-center justify-center gap-12 py-24">
-              {features.map((feature, index) => (
-                <FeatureItem
-                  key={index}
-                  index={index}
-                  feature={feature}
-                  continuousActiveCard={smoothContinuousActiveCard}
-                />
-              ))}
-            </div>
-            <div className="flex h-full items-center justify-center">
-              <div className="w-full">
-                <CardStack
-                  features={features}
-                  continuousActiveCard={smoothContinuousActiveCard}
-                  cardEntryProgress={cardEntryProgress}
-                />
-              </div>
+            <div
+              style={{
+                maskImage:
+                  "linear-gradient(to right, transparent, black 20%, black 80%, transparent)",
+                WebkitMaskImage:
+                  "linear-gradient(to right, transparent, black 20%, black 80%, transparent)",
+              }}
+            >
+              <motion.div
+                style={{ x: smoothAnimatedX }}
+                className="flex items-center gap-8"
+              >
+                {features.map((feature, i) => (
+                  <div key={i} className="min-w-[50vw]">
+                    <FeatureCard
+                      i={i}
+                      feature={feature}
+                      scrollXProgress={carouselProgress}
+                      isMobile={isMobile}
+                    />
+                  </div>
+                ))}
+              </motion.div>
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );
+}
+
+function MobileScrollytelling() {
+  return (
+    <section id="features" className="relative py-32">
+      <div
+        id="game-principles-anchor"
+        className="absolute"
+        style={{ top: "20vh" }}
+      />
+      <div className="container mx-auto px-4 space-y-24">
+        {/* Principles Section */}
+        <AnimateOnView className="text-center">
+          <h2 className="mb-6 text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+            The Art of the Game
+          </h2>
+          <p className="mx-auto max-w-2xl text-lg font-light text-stone-600 dark:text-stone-400">
+            Simple rules give rise to complex strategies.
+          </p>
+        </AnimateOnView>
+
+        <AnimateOnView>
+          <div className="grid justify-items-center gap-8 md:grid-cols-3">
+            {rules.map((rule, index) => (
+              <PrincipleCard
+                key={index}
+                icon={rule.icon}
+                title={rule.title}
+                description={rule.description}
+              />
+            ))}
+          </div>
+        </AnimateOnView>
+
+        {/* Features Section */}
+        <div className="space-y-16">
+          <AnimateOnView className="text-center">
+            <h2 className="mb-6 text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+              Built for Strategy
+            </h2>
+            <p className="mx-auto max-w-2xl text-lg font-light text-stone-600 dark:text-stone-400">
+              Every card holds the potential for a game-changing move.
+            </p>
+          </AnimateOnView>
+
+          <div className="flex flex-col gap-12">
+            {features.map((feature, i) => (
+              <AnimateOnView
+                key={i}
+                className="bg-stone-100 dark:bg-zinc-900 border border-stone-200 dark:border-zinc-800 rounded-3xl p-8"
+              >
+                <div>
+                  <feature.icon className="w-10 h-10 mb-4 text-stone-500" />
+                  <h3 className="text-3xl font-light text-stone-900 dark:text-stone-100">
+                    {feature.title}
+                  </h3>
+                </div>
+                <p className="text-lg font-light text-stone-600 dark:text-stone-400 mt-4">
+                  {feature.description}
+                </p>
+              </AnimateOnView>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function Scrollytelling() {
+  const { isMobile } = useDevice();
+  if (isMobile) {
+    return <MobileScrollytelling />;
+  }
+  return <DesktopScrollytelling />;
 }

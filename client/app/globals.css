@@ -75,11 +75,14 @@
 }
 
 body {
-  font-feature-settings: "rlig" 1, "calt" 1;
+  font-feature-settings:
+    "rlig" 1,
+    "calt" 1;
 }
 
 html {
   scroll-behavior: smooth;
+  font-size: clamp(0.8rem, 1.5vw + 0.1rem, 1.125rem);
 }
 
 ::-webkit-scrollbar {
@@ -160,7 +163,11 @@ html {
   }
 
   .text-gradient {
-    background: linear-gradient(135deg, hsl(var(--foreground)), hsl(var(--muted-foreground)));
+    background: linear-gradient(
+      135deg,
+      hsl(var(--foreground)),
+      hsl(var(--muted-foreground))
+    );
     background-size: 200% 100%;
     background-clip: text;
     -webkit-background-clip: text;
@@ -227,15 +234,39 @@ html {
     backface-visibility: hidden;
     perspective: 1000px;
   }
-  
+
   .noselect {
-    -webkit-touch-callout: none; /* iOS Safari */
-    -webkit-user-select: none; /* Safari */
-    -khtml-user-select: none; /* Konqueror HTML */
-    -moz-user-select: none; /* Old versions of Firefox */
-    -ms-user-select: none; /* Internet Explorer/Edge */
-    user-select: none; /* Non-prefixed version, currently
-                                  supported by Chrome, Edge, Opera and Firefox */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  @keyframes hue-rotate {
+    from {
+      filter: hue-rotate(0deg);
+    }
+    to {
+      filter: hue-rotate(360deg);
+    }
+  }
+
+  .animate-hue-rotate {
+    animation: hue-rotate 20s linear infinite;
+  }
+
+  .animation-delay-n5 {
+    animation-delay: -5s;
+  }
+
+  /* --- Container Query Helper ------------------------------------------- */
+  /* The @container class is used throughout the app to scope container-query
+     breakpoints (e.g. @md:, @lg:).  Declare it here so every element marked
+     with `@container` becomes a size container. */
+  .\@container {
+    container-type: inline-size;
   }
 }
 
