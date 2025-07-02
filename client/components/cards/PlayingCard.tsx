@@ -29,7 +29,7 @@ const PlayingCardRenderer = ({ card }: { card: Card }) => {
   return (
     <div
       className={cn(
-        "relative h-full w-full rounded-md border bg-white dark:bg-zinc-900 flex flex-col justify-between font-serif p-1 @container/card",
+        "relative h-full w-full rounded-lg border bg-white dark:bg-zinc-900 flex flex-col justify-between font-serif p-1 @container/card",
         "border-stone-200 dark:border-zinc-700",
         colorClass,
       )}

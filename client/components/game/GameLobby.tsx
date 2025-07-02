@@ -66,6 +66,16 @@ const playerCardVariants = {
   exit: { opacity: 0, x: -20, transition: { duration: 0.3 } },
 };
 
+const glowVariants = {
+  hidden: { opacity: 0, scale: 0 },
+  visible: { opacity: 0, scale: 0, transition: { duration: 0.2 } },
+  hover: {
+    opacity: 0.6,
+    scale: 3,
+    transition: { duration: 0.3, ease: "easeOut" },
+  },
+};
+
 const PlayerRow = ({
   player,
   isLocalPlayer,
@@ -150,97 +160,105 @@ const PlayerRow = ({
       initial="hidden"
       animate="visible"
       exit="exit"
+      whileHover="hover"
       key={player.id}
       className={cn(
-        "flex items-center justify-between p-4 px-5 rounded-2xl bg-white/60 dark:bg-zinc-900/60 border border-stone-200 dark:border-zinc-800 backdrop-blur-md shadow-sm relative",
+        "group relative overflow-hidden rounded-2xl border border-stone-200 bg-white/60 p-[1px] shadow-sm backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/60",
         !player.isConnected && "opacity-60 grayscale",
       )}
-      whileHover={{
-        y: -4,
-        boxShadow: "0px 8px 20px -5px rgba(0,0,0,0.1)",
-        opacity: player.isConnected ? 1 : 0.7,
-        transition: { type: "spring", stiffness: 300, damping: 20 },
-      }}
     >
-      <div className="flex items-center gap-3">
-        <div
-          className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
-            player.isReady
-              ? "bg-emerald-100 dark:bg-emerald-900/50"
-              : !player.isConnected
-                ? "bg-red-100/50 dark:bg-red-900/30"
-                : "bg-stone-100 dark:bg-zinc-800",
-          )}
-        >
-          <motion.div
-            animate={
-              player.isReady && player.isConnected ? { scale: [1, 1.2, 1] } : {}
-            }
-            transition={{
-              duration: 2,
-              repeat: player.isReady && player.isConnected ? Infinity : 0,
-              repeatDelay: 2,
-            }}
-          >
-            {!player.isConnected ? (
-              <WifiOff className="h-4 w-4 text-red-500/70" />
-            ) : player.isReady ? (
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-            ) : (
-              <Clock className="h-4 w-4 text-stone-500 dark:text-stone-400" />
+      <motion.div
+        variants={glowVariants}
+        className="absolute inset-0 blur-2xl"
+        style={{
+          background:
+            "radial-gradient(circle at center, white, transparent 50%)",
+          borderRadius: "100%",
+        }}
+      />
+      <div className="relative z-10 flex w-full items-center justify-between rounded-2xl bg-white p-4 px-5 dark:bg-zinc-900">
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+              player.isReady
+                ? "bg-emerald-100 dark:bg-emerald-900/50"
+                : !player.isConnected
+                  ? "bg-red-100/50 dark:bg-red-900/30"
+                  : "bg-stone-100 dark:bg-zinc-800",
             )}
-          </motion.div>
-        </div>
-        <span
-          className={cn(
-            "font-serif text-lg text-stone-800 dark:text-stone-200",
-            !player.isConnected && "text-stone-500 dark:text-stone-500",
-          )}
-        >
-          {player.name}{" "}
-          {isLocalPlayer && (
-            <span className="text-xs font-light text-stone-500">(You)</span>
-          )}
-          {!player.isConnected && (
-            <span className="text-xs font-light italic ml-2 text-stone-400">
-              (disconnected)
-            </span>
-          )}
-        </span>
-      </div>
-      <div className="flex items-center gap-3">
-        {getStatus()}
-
-        {canRemove && (
-          <motion.div
-            initial={{ opacity: 0.6 }}
-            whileHover={{ opacity: 1 }}
-            className="relative"
           >
             <motion.div
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/20 cursor-pointer"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.98 }}
-              onTapStart={() => setIsHolding(true)}
-              onTap={() => setIsHolding(false)}
-              onHoverEnd={() => setIsHolding(false)}
-              onTapCancel={() => setIsHolding(false)}
+              animate={
+                player.isReady && player.isConnected
+                  ? { scale: [1, 1.2, 1] }
+                  : {}
+              }
+              transition={{
+                duration: 2,
+                repeat: player.isReady && player.isConnected ? Infinity : 0,
+                repeatDelay: 2,
+              }}
             >
-              <UserMinus className="h-4 w-4 text-red-500" />
-              <span className="text-xs font-medium text-red-500">
-                {isHolding ? `${Math.round(holdProgress)}%` : "Remove"}
-              </span>
-
-              {isHolding && (
-                <motion.div
-                  className="absolute left-0 top-0 bottom-0 bg-red-500/20 h-full rounded-full"
-                  style={{ width: `${holdProgress}%`, originX: 0 }}
-                />
+              {!player.isConnected ? (
+                <WifiOff className="h-4 w-4 text-red-500/70" />
+              ) : player.isReady ? (
+                <CheckCircle className="h-4 w-4 text-emerald-500" />
+              ) : (
+                <Clock className="h-4 w-4 text-stone-500 dark:text-stone-400" />
               )}
             </motion.div>
-          </motion.div>
-        )}
+          </div>
+          <span
+            className={cn(
+              "font-serif text-lg text-stone-800 dark:text-stone-200",
+              !player.isConnected && "text-stone-500 dark:text-stone-500",
+            )}
+          >
+            {player.name}{" "}
+            {isLocalPlayer && (
+              <span className="text-xs font-light text-stone-500">(You)</span>
+            )}
+            {!player.isConnected && (
+              <span className="text-xs font-light italic ml-2 text-stone-400">
+                (disconnected)
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          {getStatus()}
+
+          {canRemove && (
+            <motion.div
+              initial={{ opacity: 0.6 }}
+              whileHover={{ opacity: 1 }}
+              className="relative"
+            >
+              <motion.div
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/20 cursor-pointer"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.98 }}
+                onTapStart={() => setIsHolding(true)}
+                onTap={() => setIsHolding(false)}
+                onHoverEnd={() => setIsHolding(false)}
+                onTapCancel={() => setIsHolding(false)}
+              >
+                <UserMinus className="h-4 w-4 text-red-500" />
+                <span className="text-xs font-medium text-red-500">
+                  {isHolding ? `${Math.round(holdProgress)}%` : "Remove"}
+                </span>
+
+                {isHolding && (
+                  <motion.div
+                    className="absolute left-0 top-0 bottom-0 bg-red-500/20 h-full rounded-full"
+                    style={{ width: `${holdProgress}%`, originX: 0 }}
+                  />
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </div>
       </div>
     </motion.div>
   );

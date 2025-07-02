@@ -40,6 +40,9 @@ import { useRouter } from "next/navigation";
 import { NewGameModal } from "@/components/modals/NewGameModal";
 import { JoinGameModal } from "@/components/modals/JoinGameModal";
 import { useDevice } from "@/context/DeviceContext";
+import { PlayingCard } from "@/components/cards/PlayingCard";
+import type { Card } from "shared-types";
+import { Suit, CardRank } from "shared-types";
 
 const textContainerVariants = {
   hover: {
@@ -152,6 +155,62 @@ function HomePage() {
   const shouldReduceMotion = useReducedMotion();
 
   const isModalOpen = showNewGame || showJoinGame;
+
+  const getRandomCard = useCallback((): Card => {
+    const suits = Object.values(Suit);
+    const ranks = Object.values(CardRank);
+    const randomSuit = suits[Math.floor(Math.random() * suits.length)];
+    const randomRank = ranks[Math.floor(Math.random() * ranks.length)];
+    return {
+      id: `random-${randomSuit}-${randomRank}-${Math.random()}`,
+      suit: randomSuit,
+      rank: randomRank,
+    };
+  }, []);
+
+  const [lobbyCard, setLobbyCard] = useState<Card | null>(null);
+  const [joinCard, setJoinCard] = useState<Card | null>(null);
+
+  useEffect(() => {
+    setLobbyCard(getRandomCard());
+    setJoinCard(getRandomCard());
+  }, [getRandomCard]);
+
+  const buttonWithCardVariants = {
+    initial: { y: 0 },
+    hover: { y: -2 },
+  };
+
+  const dealtCardVariants = {
+    initial: {
+      x: "-50%",
+      y: "-100%",
+      rotate: 0,
+      opacity: 0,
+      scale: 0.85,
+      transition: {
+        opacity: { duration: 0, ease: "linear" },
+        y: { duration: 0.2, ease: "easeOut" },
+        rotate: { duration: 0.2, ease: "easeOut" },
+        scale: { duration: 0.2, ease: "easeOut" },
+      },
+    },
+    hover: {
+      x: "-50%",
+      y: "-130%",
+      rotate: 8,
+      opacity: 1,
+      scale: 1,
+      transition: {
+        type: "spring",
+        stiffness: 260,
+        damping: 15,
+        mass: 0.7,
+        delay: 0.1,
+        opacity: { delay: 0.2, duration: 0.2 },
+      },
+    },
+  };
 
   const features = [
     {
@@ -272,6 +331,11 @@ function HomePage() {
   }, [isMobileMenuOpen, isMobile]);
 
   useEffect(() => {
+    if (isModalOpen) {
+      mouseX.set(0);
+      mouseY.set(0);
+    }
+
     const throttle = (func: (e: MouseEvent) => void, limit: number) => {
       let inThrottle: boolean;
       return function (this: any, e: MouseEvent) {
@@ -286,13 +350,13 @@ function HomePage() {
 
     const throttledMouseMove = throttle(handleMouseMove, 16);
 
-    if (!isMobile) {
+    if (!isMobile && !isModalOpen) {
       window.addEventListener("mousemove", throttledMouseMove);
       return () => {
         window.removeEventListener("mousemove", throttledMouseMove);
       };
     }
-  }, [isMobile, handleMouseMove]);
+  }, [isMobile, handleMouseMove, isModalOpen, mouseX, mouseY]);
 
   const handleCreateGame = () => {
     startTransition(() => {
@@ -647,12 +711,18 @@ function HomePage() {
                       </>
                     ) : (
                       <>
-                        <motion.div whileHover={{ y: -2 }}>
+                        <motion.div
+                          variants={buttonWithCardVariants}
+                          className="relative"
+                          initial="initial"
+                          whileHover="hover"
+                          onHoverStart={() => setLobbyCard(getRandomCard())}
+                        >
                           <Button
                             size="lg"
                             onClick={handleCreateGame}
                             data-cursor-link
-                            className="group relative overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+                            className="group relative z-10 overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
                           >
                             <span className="pointer-events-none relative z-10 flex items-center gap-2">
                               Create a Lobby
@@ -676,18 +746,46 @@ function HomePage() {
                               transition={{ duration: 0.4, ease: "easeOut" }}
                             />
                           </Button>
+                          <motion.div
+                            variants={dealtCardVariants}
+                            className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
+                          >
+                            {lobbyCard && (
+                              <PlayingCard
+                                card={lobbyCard}
+                                className="h-full w-full"
+                              />
+                            )}
+                          </motion.div>
                         </motion.div>
-                        <motion.div whileHover={{ y: -2 }}>
+                        <motion.div
+                          variants={buttonWithCardVariants}
+                          className="relative"
+                          initial="initial"
+                          whileHover="hover"
+                          onHoverStart={() => setJoinCard(getRandomCard())}
+                        >
                           <Button
                             variant="outline"
                             size="lg"
                             onClick={handleJoinGame}
                             data-cursor-link
-                            className="rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+                            className="relative z-10 rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
                           >
                             <Users className="mr-2 h-4 w-4" />
                             Join a Lobby
                           </Button>
+                          <motion.div
+                            variants={dealtCardVariants}
+                            className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
+                          >
+                            {joinCard && (
+                              <PlayingCard
+                                card={joinCard}
+                                className="h-full w-full"
+                              />
+                            )}
+                          </motion.div>
                         </motion.div>
                       </>
                     )}
