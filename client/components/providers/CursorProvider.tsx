@@ -1,8 +1,15 @@
-'use client';
+"use client";
 
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useContext, ReactNode } from "react";
 
-type CursorVariant = 'default' | 'link' | 'text' | 'pressed' | 'button' | 'icon' | 'area';
+export type CursorVariant =
+  | "default"
+  | "link"
+  | "text"
+  | "pressed"
+  | "button"
+  | "icon"
+  | "area";
 
 interface CursorContextType {
   variant: CursorVariant;
@@ -12,7 +19,7 @@ interface CursorContextType {
 const CursorContext = createContext<CursorContextType | undefined>(undefined);
 
 export const CursorProvider = ({ children }: { children: ReactNode }) => {
-  const [variant, setVariant] = useState<CursorVariant>('default');
+  const [variant, setVariant] = useState<CursorVariant>("default");
 
   return (
     <CursorContext.Provider value={{ variant, setVariant }}>
@@ -24,7 +31,7 @@ export const CursorProvider = ({ children }: { children: ReactNode }) => {
 export const useCursor = (): CursorContextType => {
   const context = useContext(CursorContext);
   if (!context) {
-    throw new Error('useCursor must be used within a CursorProvider');
+    throw new Error("useCursor must be used within a CursorProvider");
   }
   return context;
-}; 
+};

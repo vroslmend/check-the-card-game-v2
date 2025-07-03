@@ -79,17 +79,16 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       topDiscardCard.rank,
     );
 
-  const isViewingPeek = state.matches(
-    "inGame.ability.resolving.viewingPeek" as any,
-  );
+  // Type of deep state path is not covered by xstate typing; cast for compile.
+  const isViewingPeek = state.matches({
+    inGame: { ability: { resolving: "viewingPeek" } },
+  } as any);
 
   const isAbilitySelecting =
     !!currentAbilityContext &&
     currentAbilityContext.playerId === localPlayerId &&
     currentGameState.turnPhase === TurnPhase.ABILITY &&
-    ["peeking", "swapping"].includes(
-      (currentAbilityContext as any).stage ?? "",
-    ) &&
+    ["peeking", "swapping"].includes(currentAbilityContext?.stage ?? "") &&
     !isViewingPeek;
 
   return {
@@ -130,7 +129,9 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     logger.debug({
       component: "ActionController",
       stateValue: snapshot.value,
-      statePaths: (snapshot as any).toStrings?.() ?? [],
+      statePaths:
+        (snapshot as unknown as { toStrings?: () => string[] }).toStrings?.() ??
+        [],
       abilityContext: props.abilityContext,
       isAbilityPlayer: props.isAbilityPlayer,
       isAbilitySelecting: props.isAbilitySelecting,

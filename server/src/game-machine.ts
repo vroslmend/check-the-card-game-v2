@@ -1558,6 +1558,9 @@ export const gameMachine = setup({
     "TIMER.PEEK_TO_SWAP": {
       actions: ["transitionToSwapStage", "broadcastGameState"] as const,
     },
+    PLAYER_RECONNECTED: {
+      actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+    },
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: [
         assign({
@@ -1625,14 +1628,6 @@ export const gameMachine = setup({
               { delay: LOBBY_DISCONNECT_TIMEOUT_MS },
             ),
           ],
-        },
-        PLAYER_RECONNECTED: {
-          actions: ["markPlayerAsConnected", "broadcastGameState"],
-        },
-        LOBBY_DISCONNECT_TIMEOUT: {
-          guard: ({ context, event }) =>
-            !context.players[event.playerId]?.isConnected,
-          actions: ["removePlayerAndHandleGM", "broadcastGameState"],
         },
       },
     },
@@ -1822,6 +1817,10 @@ export const gameMachine = setup({
         },
       },
     },
+    history: {
+      type: "history",
+      history: "deep",
+    },
     error: {
       id: "game.error",
       entry: "log_ENTER_ERROR",
@@ -1835,12 +1834,12 @@ export const gameMachine = setup({
               "reshuffleDiscardIntoDeck",
               "broadcastGameState",
             ] as const,
-            target: "#game",
+            target: "#game.history",
           },
           invoke: { src: "reconnectTimer", onDone: "failedRecovery" },
           on: {
             PLAYER_RECONNECTED: {
-              target: "#game",
+              target: "#game.history",
               actions: [
                 "markPlayerAsConnected",
                 "clearErrorState",

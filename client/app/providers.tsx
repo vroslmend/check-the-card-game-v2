@@ -62,9 +62,18 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     const pr = (d: any) => actor.send({ type: "ABILITY_PEEK_RESULT", ...d });
     const er = (e: { message: string }) =>
       actor.send({ type: "ERROR_RECEIVED", error: e.message });
+    const ce = (err: any) =>
+      actor.send({
+        type: "CONNECTION_ERROR",
+        message: err.message ?? "connection error",
+      });
     const il = (l: any[]) =>
       actor.send({ type: "INITIAL_LOGS_RECEIVED", logs: l });
-    const onConnect = () => actor.send({ type: "CONNECT" });
+    const onConnect = () =>
+      actor.send({
+        type: "CONNECT",
+        recovered: (socket as { recovered?: boolean }).recovered === true,
+      });
     const onDisconnect = () => actor.send({ type: "DISCONNECT" });
 
     socket.on(SocketEventName.GAME_STATE_UPDATE, gs);
@@ -75,10 +84,16 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     socket.on(SocketEventName.ERROR_MESSAGE, er);
     socket.on(SocketEventName.INITIAL_LOGS, il);
     socket.on("connect", onConnect);
+    socket.on("connect_error", ce);
     socket.on("disconnect", onDisconnect);
 
     if (!socket.connected) socket.connect();
     else onConnect();
+
+    // manager-level reconnect failure event (no args)
+    const rf = () =>
+      actor.send({ type: "CONNECTION_ERROR", message: "reconnection failed" });
+    socket.io?.on("reconnect_failed", rf);
 
     return () => {
       socketSub.unsubscribe();
@@ -91,7 +106,9 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
       socket.off(SocketEventName.ERROR_MESSAGE, er);
       socket.off(SocketEventName.INITIAL_LOGS, il);
       socket.off("connect", onConnect);
+      socket.off("connect_error", ce);
       socket.off("disconnect", onDisconnect);
+      socket.io?.off("reconnect_failed", rf);
     };
   }, [actor, router]);
 
@@ -115,16 +132,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
         if (id) initial.gameId = id;
       }
 
-      // Restore session storage data if present
-      if (typeof window !== "undefined") {
+      // Restore session only when we're on a game route; prevents endless
+      // re-join attempts from the landing page when the saved game no longer exists.
+      if (pathname.startsWith("/game/") && typeof window !== "undefined") {
         try {
-          const sessionJSON = sessionStorage.getItem("playerSession");
+          const sessionJSON =
+            localStorage.getItem("playerSession") ??
+            sessionStorage.getItem("playerSession");
           const session = sessionJSON ? JSON.parse(sessionJSON) : null;
-          if (session?.playerId) {
-            if (!initial.gameId || initial.gameId === session.gameId) {
-              initial.localPlayerId = session.playerId;
-              if (!initial.gameId) initial.gameId = session.gameId;
-            }
+          if (
+            session?.playerId &&
+            (!initial.gameId || initial.gameId === session.gameId)
+          ) {
+            initial.localPlayerId = session.playerId;
+            if (!initial.gameId) initial.gameId = session.gameId;
           }
         } catch (e) {
           logger.error(
@@ -148,31 +169,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   const actor = actorRef.current!;
 
-  // Hydrate after hard refresh on game page
-  useEffect(() => {
-    const snap = actor.getSnapshot();
-    const gameIdFromUrl = pathname.startsWith("/game/")
-      ? pathname.split("/").pop()
-      : undefined;
-
-    if (
-      gameIdFromUrl &&
-      snap.context.localPlayerId &&
-      !snap.context.currentGameState
-    ) {
-      const gsJSON = sessionStorage.getItem("initialGameState");
-      if (gsJSON) {
-        try {
-          actor.send({
-            type: "CLIENT_GAME_STATE_UPDATED",
-            gameState: JSON.parse(gsJSON),
-          });
-        } catch {
-          logger.error("Failed to parse initialGameState during hydration");
-        }
-      }
-    }
-  }, [pathname, actor]);
+  // Hydration path removed: we now rely on automatic rejoin for state after refresh
 
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>

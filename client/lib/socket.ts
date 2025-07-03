@@ -13,7 +13,11 @@ logger.info({ socketUrl: URL }, "Initializing Socket.IO client");
 const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(URL, {
   autoConnect: false,
   reconnection: true,
-  reconnectionAttempts: 5,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  tryAllTransports: true,
+  timeout: 20_000,
 });
 
 socket.on("connect", () => {

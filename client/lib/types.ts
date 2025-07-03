@@ -37,6 +37,6 @@ export function isDrawnCard(card: unknown): card is { card: Card } {
     typeof card === "object" &&
     card !== null &&
     "card" in card &&
-    isCard((card as any).card)
+    isCard((card as { card: unknown }).card)
   );
 }

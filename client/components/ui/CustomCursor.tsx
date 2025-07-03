@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, useSpring, useMotionValue, Variants } from "framer-motion";
 import { useCursor } from "@/components/providers/CursorProvider";
+import type { CursorVariant } from "@/components/providers/CursorProvider";
 import { useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
 import { useDevice } from "@/context/DeviceContext";
@@ -180,7 +181,7 @@ const CustomCursor = () => {
     };
 
     const handleMouseUp = () => {
-      setVariant(previousVariant.current as any);
+      setVariant(previousVariant.current as CursorVariant);
     };
 
     document.documentElement.addEventListener("mouseleave", handleMouseLeave);
