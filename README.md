@@ -12,8 +12,6 @@ Be the player with the lowest total card value in your hand when a round ends. A
 
 ## ✨ Key Game Mechanics
 
-(Refer to the documentation in the `/docs` directory for full details)
-
 *   **Hand Management:** Players manage their cards (initially four) in a conceptual grid, with an initial peek at two of them.
 *   **Turn Actions:** Draw from the deck or discard pile, then discard a card by either swapping with a hand card or discarding the drawn card directly.
 *   **Matching:** Discarding a card creates an opportunity for any player to match its rank with a card from their hand.
