@@ -269,6 +269,18 @@ html {
   .\@container {
     container-type: inline-size;
   }
+
+  /* Override Tailwind's default screen height utility to use dynamic viewport
+     height. This prevents mobile viewport height issues related to the URL bar
+     showing / hiding. */
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+
+  /* Override Tailwind's h-screen utility to ensure dynamic viewport height. */
+  .h-screen {
+    height: 100dvh;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
