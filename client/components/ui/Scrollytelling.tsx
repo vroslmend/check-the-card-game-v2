@@ -202,7 +202,7 @@ function DesktopScrollytelling() {
         className="absolute"
         style={{ top: "20vh" }}
       />
-      <div className="container mx-auto px-4 space-y-32">
+      <div className="container mx-auto px-4 space-y-32 relative">
         {/* Principles Section */}
         <div ref={principlesTitleRef} style={{ height: "120vh" }}>
           <div className="sticky top-1/2 -translate-y-1/2">

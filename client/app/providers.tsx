@@ -21,28 +21,22 @@ import {
   type PlayerActionType,
 } from "shared-types";
 import { DeviceProvider } from "@/context/DeviceContext";
-import { useDevice } from "@/context/DeviceContext";
-
-// ============================================================================
-//  Smooth scroll conditional wrapper – desktop only
-// ============================================================================
-/**
- * Conditionally applies smooth scrolling for desktop. Mobile devices fall back
- * to native scrolling to avoid conflicts with touch-based dynamic viewports.
- */
-function ConditionalSmoothScroll({ children }: { children: React.ReactNode }) {
-  const { isMobile } = useDevice();
-  if (isMobile) return <>{children}</>;
-  return <SmoothScrollProvider>{children}</SmoothScrollProvider>;
-}
 
 // ============================================================================
 //  EFFECTS BRIDGE COMPONENT – connects the actor to sockets and routing
 // ============================================================================
 function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
   const router = useRouter();
+  // Guard against double-execution in React.StrictMode during development
+  const effectRan = useRef(false);
 
   useEffect(() => {
+    // In development React 18 StrictMode mounts, unmounts, then mounts again.
+    // Prevent registering duplicate listeners or multiple socket.connect calls.
+    if (effectRan.current && process.env.NODE_ENV === "development") {
+      return;
+    }
+
     type EmittedEvent = Parameters<Parameters<typeof actor.on>[1]>[0];
 
     const socketSub = actor.on("EMIT_TO_SOCKET", (emitted: EmittedEvent) => {
@@ -101,8 +95,13 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     socket.on("connect_error", ce);
     socket.on("disconnect", onDisconnect);
 
-    if (!socket.connected) socket.connect();
-    else onConnect();
+    // Only initiate connection if not already connected/connecting
+    // @ts-ignore connecting is internal property but useful here
+    if (!socket.connected && !(socket as any).connecting) {
+      socket.connect();
+    } else if (socket.connected) {
+      onConnect();
+    }
 
     // manager-level reconnect failure event (no args)
     const rf = () =>
@@ -110,6 +109,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     socket.io?.on("reconnect_failed", rf);
 
     return () => {
+      effectRan.current = true; // mark that effect has run for StrictMode guard
       socketSub.unsubscribe();
       navSub.unsubscribe();
       socket.off(SocketEventName.GAME_STATE_UPDATE, gs);
@@ -191,7 +191,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <GameUIActorContext.Provider value={actor}>
           <UIMachineEffects actor={actor} />
           <CursorProvider>
-            <ConditionalSmoothScroll>{children}</ConditionalSmoothScroll>
+            <SmoothScrollProvider>{children}</SmoothScrollProvider>
             <CustomCursor />
             <Toaster />
           </CursorProvider>

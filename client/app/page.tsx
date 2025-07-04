@@ -375,6 +375,7 @@ function HomePage() {
       ref={containerRef}
       className="relative flex min-h-screen flex-col noselect"
     >
+      <DeviceStateLogger />
       <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
       <JoinGameModal
         isModalOpen={showJoinGame}
@@ -526,7 +527,7 @@ function HomePage() {
         )}
       </AnimatePresence>
 
-      <main className="flex-1">
+      <main className="flex-1 relative">
         <section
           ref={heroRef}
           className="relative flex min-h-screen items-center justify-center"
@@ -1032,3 +1033,19 @@ function HomePage() {
 export default function Home() {
   return <HomePage />;
 }
+
+// ============================================================================
+//  Debug utility – logs final isMobile value after hydration
+// ============================================================================
+const DeviceStateLogger = () => {
+  const { isMobile } = useDevice();
+
+  useEffect(() => {
+    console.log(
+      `%c[VERIFICATION] Final client-side isMobile state: ${isMobile}`,
+      "color: #22c55e; font-weight: bold; font-size: 14px;",
+    );
+  }, [isMobile]);
+
+  return null;
+};
