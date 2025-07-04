@@ -8,8 +8,15 @@ import { type Player, TurnPhase, PlayerActionType } from "shared-types";
 import PlayerHand from "./PlayerHand";
 import { cn } from "@/lib/utils";
 import { useActionController } from "./ActionController";
-import { User, CheckCircle, WifiOff, Clock } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  User,
+  CheckCircle,
+  WifiOff,
+  Clock,
+  PlayCircle,
+  ArrowRightCircle,
+} from "lucide-react";
+import { motion } from "framer-motion";
 
 interface PlayerHandStripProps {
   player: Player;
@@ -43,9 +50,11 @@ const selectStripContext = (state: UIMachineSnapshot) => {
 const PlayerInfoBadge = ({
   player,
   isCurrentTurn,
+  isLocalPlayer,
 }: {
   player: Player;
   isCurrentTurn: boolean;
+  isLocalPlayer: boolean;
 }) => {
   const getStatus = () => {
     if (!player.isConnected)
@@ -53,6 +62,12 @@ const PlayerInfoBadge = ({
         Icon: WifiOff,
         text: "Disconnected",
         color: "text-rose-700 dark:text-rose-400",
+      };
+    if (isCurrentTurn)
+      return {
+        Icon: isLocalPlayer ? PlayCircle : ArrowRightCircle,
+        text: isLocalPlayer ? "Your Turn" : "Playing",
+        color: "text-teal-500 dark:text-teal-400/80",
       };
     if (player.hasCalledCheck)
       return {
@@ -71,29 +86,30 @@ const PlayerInfoBadge = ({
 
   return (
     <div className="flex flex-col items-center gap-2 font-serif">
-      <h3 className="flex items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] text-stone-900 dark:text-stone-100">
+      <h3
+        className={cn(
+          "flex items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] transition-colors",
+          isCurrentTurn
+            ? "text-teal-500 dark:text-teal-400/80"
+            : "text-stone-900 dark:text-stone-100",
+        )}
+      >
         <User
           size={16}
           className={cn(
             "transition-colors",
-            isCurrentTurn && "text-teal-500 dark:text-teal-400",
+            isCurrentTurn
+              ? "text-teal-500 dark:text-teal-400/80"
+              : "text-stone-600 dark:text-stone-400",
           )}
         />
-        <span className="relative">
+        <motion.span
+          className="inline-block"
+          animate={isCurrentTurn ? { scale: 1.05 } : { scale: 1 }}
+          transition={{ type: "spring", stiffness: 500, damping: 35 }}
+        >
           {player.name}
-          <AnimatePresence>
-            {isCurrentTurn && (
-              <motion.div
-                className="absolute bottom-[-4px] left-0 right-0 h-0.5 bg-teal-500 dark:bg-teal-400"
-                layoutId={`turn-indicator-${player.id}`}
-                initial={{ scaleX: 0 }}
-                animate={{ scaleX: 1, originX: "50%" }}
-                exit={{ scaleX: 0, originX: "50%" }}
-                transition={{ type: "spring", stiffness: 500, damping: 40 }}
-              />
-            )}
-          </AnimatePresence>
-        </span>
+        </motion.span>
       </h3>
 
       <div
@@ -156,8 +172,16 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     (isTargetableForAbility || (isLocalPlayer && (canSwap || canMatch)));
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <PlayerInfoBadge player={player} isCurrentTurn={isCurrentTurn} />
+    <motion.div
+      layout
+      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+      className="flex flex-col items-center gap-2"
+    >
+      <PlayerInfoBadge
+        player={player}
+        isCurrentTurn={isCurrentTurn}
+        isLocalPlayer={isLocalPlayer}
+      />
       <PlayerHand
         player={player}
         isLocalPlayer={isLocalPlayer}
@@ -173,7 +197,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         }
         className="w-full max-w-md"
       />
-    </div>
+    </motion.div>
   );
 };
 

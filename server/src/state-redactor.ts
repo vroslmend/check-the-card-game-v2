@@ -48,13 +48,17 @@ export const generatePlayerView = (
       return { facedown: true as const, id: card.id };
     });
 
-    let clientPendingDrawnCard: { card: PublicCard } | null = null;
+    let clientPendingDrawnCard: { card: PublicCard; source: "deck" | "discard" } | null = null;
     if (serverPlayer.pendingDrawnCard) {
       if (isViewingPlayer) {
-        clientPendingDrawnCard = { card: serverPlayer.pendingDrawnCard.card };
+        clientPendingDrawnCard = { 
+          card: serverPlayer.pendingDrawnCard.card,
+          source: serverPlayer.pendingDrawnCard.source,
+        };
       } else {
         clientPendingDrawnCard = {
           card: { id: serverPlayer.pendingDrawnCard.card.id, facedown: true },
+          source: serverPlayer.pendingDrawnCard.source,
         };
       }
     }

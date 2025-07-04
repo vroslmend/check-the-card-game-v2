@@ -6,7 +6,7 @@ import { PlayingCard } from "./PlayingCard";
 import { CardBack } from "./CardBack";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock } from "lucide-react";
+
 
 interface VisualCardStackProps {
   title: string;
@@ -88,9 +88,7 @@ export const VisualCardStack = ({
           )}
         </AnimatePresence>
         {isSealed && (
-          <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center z-20">
-            <Lock className="text-white/80 h-8 w-8" />
-          </div>
+          <div className="absolute inset-0 rounded-lg z-20 bg-black/40 grayscale" />
         )}
         {canInteract && (
           <motion.div

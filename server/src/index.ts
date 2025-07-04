@@ -67,12 +67,20 @@ export const io = new SocketIOServer<
     origin: CORS_ORIGIN,
     methods: ["GET", "POST"],
   },
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes buffer
+    skipMiddlewares: true, // keep auth cost low during recovery
+  },
 });
 
 io.on("connection", (socket: Socket) => {
   logger.info({ socketId: socket.id }, "New connection");
 
   const registerSocketSession = (gameId: GameId, playerId: PlayerId) => {
+    // Remove any previous socketId mapped to this player
+    for (const [sid, sess] of socketSessionMap.entries()) {
+      if (sess.playerId === playerId) socketSessionMap.delete(sid);
+    }
     socketSessionMap.set(socket.id, { gameId, playerId });
   };
 
@@ -85,30 +93,20 @@ io.on("connection", (socket: Socket) => {
     gameActor: GameMachineActorRef,
   ) => {
     const snapshot = gameActor.getSnapshot();
-    const socketsInRoom = io.sockets.adapter.rooms.get(gameId);
-    if (!socketsInRoom) {
-      logger.warn(
-        { gameId },
-        "Broadcast state failed: room does not exist or is empty.",
-      );
-      return;
-    }
 
     logger.debug(
-      { gameId, players: Array.from(socketsInRoom) },
-      "Broadcasting game state",
+      {
+        gameId,
+        players: Object.keys(snapshot.context.players),
+      },
+      "Broadcasting game state (player-centric)",
     );
 
-    socketsInRoom.forEach((socketId) => {
-      const session = socketSessionMap.get(socketId);
-      if (session?.playerId) {
-        const playerSpecificView = generatePlayerView(
-          snapshot,
-          session.playerId,
-        );
-        io.to(socketId).emit(
+    Object.values(snapshot.context.players).forEach((player) => {
+      if (player.socketId && player.isConnected) {
+        io.to(player.socketId).emit(
           SocketEventName.GAME_STATE_UPDATE,
-          playerSpecificView,
+          generatePlayerView(snapshot, player.id),
         );
       }
     });
@@ -389,6 +387,18 @@ io.on("connection", (socket: Socket) => {
         }
 
         broadcastGameState(gameId, gameActor);
+
+        // If the player reconnects during INITIAL_PEEK they may have missed the private
+        // INITIAL_PEEK_INFO packet.  Re-emit it so their client can flip the two cards.
+        if (snapshot.context.gameStage === GameStage.INITIAL_PEEK) {
+          const peekHand =
+            snapshot.context.players[playerId]?.hand.slice(-2) ?? [];
+          if (peekHand.length > 0) {
+            io.to(socket.id).emit(SocketEventName.INITIAL_PEEK_INFO, {
+              hand: peekHand,
+            });
+          }
+        }
       } catch (e: any) {
         logger.error({ err: e }, `[Server-Rejoin] Error`);
         if (callback)

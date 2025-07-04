@@ -122,7 +122,8 @@ export type UIMachineEvents =
   | { type: "DISMISS_MODAL" }
   | { type: "RECOVERY_FAILED" }
   | { type: "CONNECTION_ERROR"; message: string }
-  | { type: "CONNECT" }
+  | { type: "CONNECT"; recovered?: boolean }
+  | { type: "RETRY_REJOIN" }
   | { type: "DISCONNECT" }
   | { type: PlayerActionType.START_GAME }
   | { type: PlayerActionType.DECLARE_LOBBY_READY }
@@ -174,6 +175,32 @@ export const uiMachine = setup({
           "gameState" in event.response
         )
           return event.response.gameState;
+        return undefined;
+      },
+      localPlayerId: ({ context, event }) => {
+        if (context.localPlayerId) return context.localPlayerId;
+        if (event.type === "CLIENT_GAME_STATE_UPDATED") {
+          return event.gameState.viewingPlayerId;
+        }
+        if (
+          event.type === "_SESSION_ESTABLISHED" &&
+          "playerId" in event.response
+        ) {
+          return event.response.playerId;
+        }
+        return undefined;
+      },
+      gameId: ({ context, event }) => {
+        if (context.gameId) return context.gameId;
+        if (event.type === "CLIENT_GAME_STATE_UPDATED") {
+          return event.gameState.gameId;
+        }
+        if (
+          event.type === "_SESSION_ESTABLISHED" &&
+          "gameId" in event.response
+        ) {
+          return event.response.gameId;
+        }
         return undefined;
       },
     }),
@@ -231,29 +258,21 @@ export const uiMachine = setup({
         !event.response.playerId
       )
         return;
-      const sessionData = {
-        gameId: event.response.gameId,
-        playerId: event.response.playerId,
-      };
-      sessionStorage.setItem("playerSession", JSON.stringify(sessionData));
-      if ("gameState" in event.response && event.response.gameState) {
-        sessionStorage.setItem(
-          "initialGameState",
-          JSON.stringify(event.response.gameState),
-        );
-      }
-    },
-    clearInitialGameStateFromSession: () => {
       if (typeof window !== "undefined") {
-        logger.info(
-          "Hydration successful. Clearing one-time initialGameState from sessionStorage.",
-        );
-        sessionStorage.removeItem("initialGameState");
+        const sessionData = {
+          gameId: event.response.gameId,
+          playerId: event.response.playerId,
+        };
+        const sessionJSON = JSON.stringify(sessionData);
+    localStorage.setItem("playerSession", sessionJSON);
+    sessionStorage.setItem("playerSession", sessionJSON); // store in sessionStorage too
       }
     },
     clearSession: () => {
-      sessionStorage.removeItem("playerSession");
-      sessionStorage.removeItem("initialGameState");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("playerSession");
+        sessionStorage.removeItem("playerSession");
+      }
     },
     emitChatMessage: emit(({ context, event }) => {
       assertEvent(event, "SUBMIT_CHAT_MESSAGE");
@@ -572,6 +591,14 @@ export const uiMachine = setup({
         { machine: "ui", view: "Game Over" },
         "UI state entered Game Over",
       ),
+    incrementReconnectionAttemptsAndScheduleRetry: enqueueActions(
+      ({ context, enqueue }) => {
+        const attempts = context.reconnectionAttempts + 1;
+        enqueue.assign({ reconnectionAttempts: attempts });
+        const delay = Math.min(1000 * 2 ** (attempts - 1), 15000);
+        enqueue.raise({ type: "RETRY_REJOIN" }, { delay });
+      },
+    ),
   },
   guards: {
     isAbilityActionComplete: ({ context }) => {
@@ -625,7 +652,7 @@ export const uiMachine = setup({
           guard: ({ context }) => !!context.currentGameState,
           description:
             "Has initial game state provided via input. Hydrate immediately.",
-          actions: ["clearInitialGameStateFromSession", "logToInGame"],
+          actions: ["logToInGame"],
         },
         {
           target: "inGame.promptToJoin",
@@ -634,7 +661,7 @@ export const uiMachine = setup({
           actions: "logToPromptToJoin",
         },
         {
-          target: "inGame.reconnecting",
+          target: "inGame.disconnected",
           guard: ({ context }) =>
             !!context.localPlayerId && !context.currentGameState,
           actions: "logToReconnecting",
@@ -917,10 +944,33 @@ export const uiMachine = setup({
         },
         disconnected: {
           tags: ["recovering"],
-          entry: "incrementReconnectionAttempts",
+          entry: "incrementReconnectionAttemptsAndScheduleRetry",
           on: {
-            CONNECT: { target: "reconnecting" },
+            CONNECT: [
+              {
+                target: "routing",
+                guard: ({ event }) =>
+                  event.type === "CONNECT" &&
+                  "recovered" in event &&
+                  event.recovered === true,
+                actions: "resetReconnectionAttempts",
+              },
+              { target: "reconnecting" },
+            ],
+            RETRY_REJOIN: { target: "reconnecting" },
           },
+          onError: [
+            {
+              target: "recoveryFailed",
+              guard: ({ event }: { event: any }) =>
+                (event.error as Error)?.message
+                  ?.toLowerCase?.()
+                  .includes("not found"),
+            },
+            {
+              target: "disconnected",
+            },
+          ],
         },
         reconnecting: {
           tags: ["recovering", "loading"],
@@ -936,7 +986,9 @@ export const uiMachine = setup({
                 assign({
                   currentGameState: ({ event }) => event.output.gameState,
                   reconnectionAttempts: 0,
+                  hasPassedMatch: false,
                 }),
+                "syncAbilityContext",
                 enqueueActions(({ event, enqueue }) => {
                   if (event.output.logs && event.output.logs.length > 0) {
                     enqueue.raise({
@@ -963,6 +1015,12 @@ export const uiMachine = setup({
                 "You have been invited to a game. Please enter your name to join.",
             },
           }),
+          always: [
+            {
+              target: "routing",
+              guard: ({ context }) => !!context.currentGameState,
+            },
+          ],
           on: {
             JOIN_GAME_REQUESTED: {
               target: "joiningGame",

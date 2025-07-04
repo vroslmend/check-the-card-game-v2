@@ -7,6 +7,7 @@ import { type Player, type Card, type PublicCard } from "shared-types";
 import { cn } from "@/lib/utils";
 import { PlayingCard } from "../cards/PlayingCard";
 import { motion, AnimatePresence } from "framer-motion";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 interface PlayerHandProps {
   player: Player;
@@ -40,6 +41,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   selectedCardIndex = null,
 }) => {
   const { visibleCards, abilitySelectionInfo } = useUISelector(selectContext);
+  const canHover = useMediaQuery("(hover: hover) and (pointer: fine)");
 
   const handToDisplay = isLocalPlayer
     ? player.hand.map((card) => ({ facedown: true as const, id: card.id }))
@@ -108,11 +110,8 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               data-interactive={canInteract && !isLocked}
               onClick={() => canInteract && !isLocked && onCardClick?.(index)}
               whileHover={
-                canInteract && !isLocked
-                  ? {
-                      y: -8,
-                      scale: 1.05,
-                    }
+                canInteract && !isLocked && canHover
+                  ? { y: -8, scale: 1.05 }
                   : {}
               }
             >

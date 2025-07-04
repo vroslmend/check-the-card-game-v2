@@ -195,7 +195,8 @@ const applyDiscardLogic = ({
   playerId,
 }: DiscardLogicParams) => {
   const newAbilityStack = [...abilityStack];
-  if (abilityRanks.has(cardToDiscard.rank)) {
+  const isSealed = abilityRanks.has(cardToDiscard.rank);
+  if (isSealed) {
     const type: AbilityType =
       cardToDiscard.rank === CardRank.King
         ? "king"
@@ -215,6 +216,7 @@ const applyDiscardLogic = ({
   }
   return {
     discardPile: [...discardPile, cardToDiscard] as Card[],
+    discardPileIsSealed: isSealed,
     log: [
       ...log,
       createLogEntry(gameId, {
@@ -234,7 +236,6 @@ const baseTurnStateNode = {
       entry: [
         "log_ENTER_TURN_DRAW",
         assign({ currentTurnSegment: TurnPhase.DRAW }),
-        "unsealDiscardPile",
         "broadcastGameState",
       ],
       on: {
@@ -942,6 +943,7 @@ export const gameMachine = setup({
       const cardToDiscard = context.players[playerId]!.hand[handCardIndex]!;
       return {
         players: updatedPlayers,
+        
         ...applyDiscardLogic({
           discardPile: context.discardPile,
           abilityStack: context.abilityStack,
@@ -962,6 +964,7 @@ export const gameMachine = setup({
         context.players[event.playerId]!.pendingDrawnCard!.card;
       return {
         players: updatedPlayers,
+        
         ...applyDiscardLogic({
           discardPile: context.discardPile,
           abilityStack: context.abilityStack,
@@ -1558,6 +1561,29 @@ export const gameMachine = setup({
     "TIMER.PEEK_TO_SWAP": {
       actions: ["transitionToSwapStage", "broadcastGameState"] as const,
     },
+    PLAYER_RECONNECTED: [
+      {
+        target: "." + GameStage.PLAYING,
+        reenter: true,
+        guard: ({ context }) => context.gameStage === GameStage.PLAYING,
+        actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      },
+      {
+        target: "." + GameStage.FINAL_TURNS,
+        reenter: true,
+        guard: ({ context }) => context.gameStage === GameStage.FINAL_TURNS,
+        actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      },
+      {
+        target: "." + GameStage.INITIAL_PEEK,
+        reenter: true,
+        guard: ({ context }) => context.gameStage === GameStage.INITIAL_PEEK,
+        actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      },
+      {
+        actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      },
+    ],
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: [
         assign({
@@ -1625,14 +1651,6 @@ export const gameMachine = setup({
               { delay: LOBBY_DISCONNECT_TIMEOUT_MS },
             ),
           ],
-        },
-        PLAYER_RECONNECTED: {
-          actions: ["markPlayerAsConnected", "broadcastGameState"],
-        },
-        LOBBY_DISCONNECT_TIMEOUT: {
-          guard: ({ context, event }) =>
-            !context.players[event.playerId]?.isConnected,
-          actions: ["removePlayerAndHandleGM", "broadcastGameState"],
         },
       },
     },
@@ -1822,6 +1840,10 @@ export const gameMachine = setup({
         },
       },
     },
+    history: {
+      type: "history",
+      history: "deep",
+    },
     error: {
       id: "game.error",
       entry: "log_ENTER_ERROR",
@@ -1835,12 +1857,12 @@ export const gameMachine = setup({
               "reshuffleDiscardIntoDeck",
               "broadcastGameState",
             ] as const,
-            target: "#game",
+            target: "#game.history",
           },
           invoke: { src: "reconnectTimer", onDone: "failedRecovery" },
           on: {
             PLAYER_RECONNECTED: {
-              target: "#game",
+              target: "#game.history",
               actions: [
                 "markPlayerAsConnected",
                 "clearErrorState",
