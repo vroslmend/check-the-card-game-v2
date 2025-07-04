@@ -369,7 +369,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
               );
           }
 
-          if (drawnCardInfo) {
+          if (isDrawnCard(drawnCardInfo) && drawnCardInfo.source === "deck") {
             actions.push(
               createDiscardDrawnCardAction(() =>
                 sendEvent({ type: PlayerActionType.DISCARD_DRAWN_CARD }),
@@ -455,8 +455,13 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       }
     }
     if (isMyTurn && isDrawnCard(localPlayer.pendingDrawnCard)) {
-      return "Swap with a card in your hand or discard the drawn card.";
+      if (localPlayer.pendingDrawnCard.source === "deck") {
+        return "Swap with a card in your hand or discard the drawn card.";
+      } else {
+        return "You must swap the card from the discard pile with a card in your hand.";
+      }
     }
+  
     if (props.gameStage === GameStage.INITIAL_PEEK && !localPlayer.isReady) {
       return "Memorize your bottom two cards, then press Ready.";
     }

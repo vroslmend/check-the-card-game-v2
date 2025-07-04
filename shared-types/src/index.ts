@@ -90,7 +90,7 @@ export interface Player {
   isLocked: boolean;
   score: number;
   isConnected: boolean;
-  pendingDrawnCard: { card: PublicCard } | null;
+  pendingDrawnCard: { card: PublicCard; source: "deck" | "discard" } | null;
 }
 
 /**

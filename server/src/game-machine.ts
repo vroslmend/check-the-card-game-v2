@@ -195,7 +195,8 @@ const applyDiscardLogic = ({
   playerId,
 }: DiscardLogicParams) => {
   const newAbilityStack = [...abilityStack];
-  if (abilityRanks.has(cardToDiscard.rank)) {
+  const isSealed = abilityRanks.has(cardToDiscard.rank);
+  if (isSealed) {
     const type: AbilityType =
       cardToDiscard.rank === CardRank.King
         ? "king"
@@ -215,6 +216,7 @@ const applyDiscardLogic = ({
   }
   return {
     discardPile: [...discardPile, cardToDiscard] as Card[],
+    discardPileIsSealed: isSealed,
     log: [
       ...log,
       createLogEntry(gameId, {
@@ -234,7 +236,6 @@ const baseTurnStateNode = {
       entry: [
         "log_ENTER_TURN_DRAW",
         assign({ currentTurnSegment: TurnPhase.DRAW }),
-        "unsealDiscardPile",
         "broadcastGameState",
       ],
       on: {
@@ -942,6 +943,7 @@ export const gameMachine = setup({
       const cardToDiscard = context.players[playerId]!.hand[handCardIndex]!;
       return {
         players: updatedPlayers,
+        
         ...applyDiscardLogic({
           discardPile: context.discardPile,
           abilityStack: context.abilityStack,
@@ -962,6 +964,7 @@ export const gameMachine = setup({
         context.players[event.playerId]!.pendingDrawnCard!.card;
       return {
         players: updatedPlayers,
+        
         ...applyDiscardLogic({
           discardPile: context.discardPile,
           abilityStack: context.abilityStack,
