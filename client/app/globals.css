@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+@layer base {
+  :root {
+    --app-height: 100dvh;
+  }
+}
+
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
@@ -78,8 +85,15 @@ body {
   font-feature-settings:
     "rlig" 1,
     "calt" 1;
-  overscroll-behavior-y: contain;
 }
+
+/* Viewport Virtualization: main document is now a static frame */
+html.mobile-lock,
+body.mobile-lock {
+  height: 100%;
+  overflow: hidden;
+}
+
 
 html {
   scroll-behavior: smooth;

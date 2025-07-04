@@ -20,12 +20,45 @@ import {
   type ClientCheckGameState,
   type PlayerActionType,
 } from "shared-types";
-import { DeviceProvider } from "@/context/DeviceContext";
+import { DeviceProvider, useDevice } from "@/context/DeviceContext";
+
+// ============================================================================
+//  LAYOUT CONTROLLER – applies mobile-only virtualization
+// ============================================================================
+const LayoutController = ({ children }: { children: React.ReactNode }) => {
+  const { isMobile } = useDevice();
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    if (isMobile) {
+      html.classList.add("mobile-lock");
+      body.classList.add("mobile-lock");
+    } else {
+      html.classList.remove("mobile-lock");
+      body.classList.remove("mobile-lock");
+    }
+    return () => {
+      html.classList.remove("mobile-lock");
+      body.classList.remove("mobile-lock");
+    };
+  }, [isMobile]);
+
+  // If mobile, wrap children in a scrollable container; else render as-is
+  return isMobile ? (
+    <div className="h-full w-full overflow-y-auto overflow-x-hidden bg-stone-50 dark:bg-zinc-950">
+      {children}
+    </div>
+  ) : (
+    <>{children}</>
+  );
+};
 
 // ============================================================================
 //  EFFECTS BRIDGE COMPONENT – connects the actor to sockets and routing
 // ============================================================================
 function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
+  const pathname = usePathname();
   const router = useRouter();
   // Guard against double-execution in React.StrictMode during development
   const effectRan = useRef(false);
@@ -56,6 +89,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
 
     const navSub = actor.on("NAVIGATE", (event: EmittedEvent) => {
       if (event.type !== "NAVIGATE") return;
+      // Use window.location for navigation to ensure a full page reload for context reset
       router.push(event.path);
     });
 
@@ -124,7 +158,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
       socket.off("disconnect", onDisconnect);
       socket.io?.off("reconnect_failed", rf);
     };
-  }, [actor, router]);
+  }, [actor, pathname, router]);
 
   return null;
 }
@@ -134,7 +168,21 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
 // ============================================================================
 export function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  
   const actorRef = useRef<UIMachineActorRef | null>(null);
+
+  useEffect(() => {
+    const setAppHeight = () => {
+      const doc = document.documentElement;
+      doc.style.setProperty("--app-height", `${window.innerHeight}px`);
+    };
+
+    window.addEventListener("resize", setAppHeight);
+    setAppHeight();
+
+    return () => window.removeEventListener("resize", setAppHeight);
+  }, []);
 
   if (actorRef.current === null) {
     const getInitialInput = (): UIMachineInput => {
@@ -190,11 +238,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <DeviceProvider>
         <GameUIActorContext.Provider value={actor}>
           <UIMachineEffects actor={actor} />
-          <CursorProvider>
-            <SmoothScrollProvider>{children}</SmoothScrollProvider>
-            <CustomCursor />
-            <Toaster />
-          </CursorProvider>
+          <LayoutController>
+              <CursorProvider>
+                <SmoothScrollProvider>{children}</SmoothScrollProvider>
+                <CustomCursor />
+                <Toaster />
+              </CursorProvider>
+            </LayoutController>
         </GameUIActorContext.Provider>
       </DeviceProvider>
     </ThemeProvider>

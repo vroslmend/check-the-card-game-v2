@@ -230,31 +230,13 @@ function HomePage() {
     },
   ];
 
-  const { scrollYProgress: footerScrollYProgress } = useScroll({
-    target: endOfPageRef,
-    offset: ["start end", "end end"],
+  const isFooterInView = useInView(endOfPageRef, {
+    margin: "100px 0px 0px 0px",
   });
 
-  const smoothFooterScrollYProgress = useSpring(footerScrollYProgress, {
-    stiffness: 50,
-    damping: 25,
-  });
-
-  const footerY = useTransform(
-    smoothFooterScrollYProgress,
-    [0, 0.6],
-    ["100%", "0%"],
-  );
-
-  const signatureTriggerProgress = useTransform(
-    smoothFooterScrollYProgress,
-    [0.5, 0.9],
-    [0, 1],
-  );
-
-  useMotionValueEvent(signatureTriggerProgress, "change", (latest: number) => {
-    setIsSignatureVisible(latest > 0);
-  });
+  useEffect(() => {
+    setIsSignatureVisible(isFooterInView);
+  }, [isFooterInView]);
 
   const checkText = (isCheckHovered ? "Check!" : "Check").split("");
 
@@ -297,15 +279,18 @@ function HomePage() {
     }
   });
 
+  // Conditionally compute parallax transforms while still respecting React hook rules
+  const zeroProgress = useMotionValue(0);
   const heroY = useTransform(
-    smoothProgress,
+    !isMobile && !shouldReduceMotion ? smoothProgress : zeroProgress,
     [0, 1],
-    isMobile || shouldReduceMotion ? ["0%", "0%"] : ["0%", "-30%"],
+    !isMobile && !shouldReduceMotion ? ["0%", "-30%"] : ["0%", "0%"],
   );
+
   const shapeY = useTransform(
-    smoothProgress,
+    !isMobile && !shouldReduceMotion ? smoothProgress : zeroProgress,
     [0, 1],
-    isMobile || shouldReduceMotion ? ["0%", "0%"] : ["0%", "20%"],
+    !isMobile && !shouldReduceMotion ? ["0%", "20%"] : ["0%", "0%"],
   );
 
   const handleMouseMove = useCallback(
@@ -373,7 +358,7 @@ function HomePage() {
   return (
     <div
       ref={containerRef}
-      className={`relative flex flex-col noselect ${!isMobile ? "min-h-screen" : ""}`}
+      className="relative flex flex-col noselect w-full" style={{ height: 'var(--app-height)' }}
     >
       <DeviceStateLogger />
       <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
@@ -914,7 +899,10 @@ function HomePage() {
       </main>
 
       <motion.footer
-        style={{ y: footerY, contain: "layout paint" }}
+        style={{ contain: "layout paint" }}
+        initial={{ y: "100%" }}
+        animate={isFooterInView ? { y: "0%" } : { y: "100%" }}
+        transition={{ type: "spring", stiffness: 200, damping: 30 }}
         className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/60 bg-white/80 backdrop-blur-sm dark:border-stone-800/60 dark:bg-zinc-950/80"
       >
         <div className="container mx-auto flex flex-col items-center gap-y-4 px-4 py-4 text-center md:flex-row md:justify-between md:text-left lg:grid lg:grid-cols-3 lg:items-center">

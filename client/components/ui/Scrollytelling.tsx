@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { motion, useScroll, useTransform, useSpring } from "motion/react";
 import { FaBrain, FaEye } from "react-icons/fa";
 import { GiWhirlwind } from "react-icons/gi";
@@ -204,8 +204,8 @@ function DesktopScrollytelling() {
       />
       <div className="container mx-auto px-4 space-y-32 relative">
         {/* Principles Section */}
-        <div ref={principlesTitleRef} style={{ height: "120dvh" }}>
-          <div className="sticky top-1/2 -translate-y-1/2">
+        <div ref={principlesTitleRef} className="py-32">
+          <div className="sticky top-1/4 h-[50vh]">
             <motion.div
               style={{ opacity: principlesTitleOpacity, y: principlesTitleY }}
               className="text-center"
@@ -220,8 +220,8 @@ function DesktopScrollytelling() {
           </div>
         </div>
 
-        <div ref={principlesCardsRef} style={{ height: "120dvh" }}>
-          <div className="sticky top-1/2 -translate-y-1/2">
+        <div ref={principlesCardsRef} className="py-32">
+          <div className="sticky top-1/4 h-[50vh]">
             <motion.div
               style={{ opacity: principlesCardsOpacity, y: principlesCardsY }}
             >
@@ -240,8 +240,8 @@ function DesktopScrollytelling() {
         </div>
 
         {/* Features Section */}
-        <div className="relative h-[300dvh]" ref={featuresContainerRef}>
-          <div className="sticky top-1/4 left-0 overflow-hidden">
+        <div className="relative pt-32 pb-[150vh]" ref={featuresContainerRef}>
+          <div className="sticky top-1/4 left-0 w-full overflow-hidden">
             <AnimateOnView className="text-center mb-16">
               <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
                 Built for Strategy
@@ -350,9 +350,17 @@ function MobileScrollytelling() {
 }
 
 export function Scrollytelling() {
+  const [isClient, setIsClient] = useState(false);
   const { isMobile } = useDevice();
-  if (isMobile) {
-    return <MobileScrollytelling />;
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return null; // Prevent mismatch during hydration
   }
-  return <DesktopScrollytelling />;
+
+  return isMobile ? <MobileScrollytelling /> : <DesktopScrollytelling />;
 }
+
