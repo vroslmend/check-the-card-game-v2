@@ -373,7 +373,7 @@ function HomePage() {
   return (
     <div
       ref={containerRef}
-      className="relative flex min-h-screen flex-col noselect"
+      className={`relative flex flex-col noselect ${!isMobile ? "min-h-screen" : ""}`}
     >
       <DeviceStateLogger />
       <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
@@ -389,10 +389,11 @@ function HomePage() {
       />
 
       <motion.header
+        style={{ contain: "layout paint" }}
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-        className="fixed top-0 z-50 w-full backdrop-blur-xl transition-all duration-700"
+        className="sticky top-0 z-50 w-full backdrop-blur-xl transition-all duration-700"
       >
         <div className="container mx-auto flex h-24 items-center justify-between px-4">
           <a
@@ -913,7 +914,7 @@ function HomePage() {
       </main>
 
       <motion.footer
-        style={{ y: footerY }}
+        style={{ y: footerY, contain: "layout paint" }}
         className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/60 bg-white/80 backdrop-blur-sm dark:border-stone-800/60 dark:bg-zinc-950/80"
       >
         <div className="container mx-auto flex flex-col items-center gap-y-4 px-4 py-4 text-center md:flex-row md:justify-between md:text-left lg:grid lg:grid-cols-3 lg:items-center">

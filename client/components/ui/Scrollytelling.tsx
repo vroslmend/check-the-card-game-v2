@@ -204,7 +204,7 @@ function DesktopScrollytelling() {
       />
       <div className="container mx-auto px-4 space-y-32 relative">
         {/* Principles Section */}
-        <div ref={principlesTitleRef} style={{ height: "120vh" }}>
+        <div ref={principlesTitleRef} style={{ height: "120dvh" }}>
           <div className="sticky top-1/2 -translate-y-1/2">
             <motion.div
               style={{ opacity: principlesTitleOpacity, y: principlesTitleY }}
@@ -220,7 +220,7 @@ function DesktopScrollytelling() {
           </div>
         </div>
 
-        <div ref={principlesCardsRef} style={{ height: "120vh" }}>
+        <div ref={principlesCardsRef} style={{ height: "120dvh" }}>
           <div className="sticky top-1/2 -translate-y-1/2">
             <motion.div
               style={{ opacity: principlesCardsOpacity, y: principlesCardsY }}
@@ -240,7 +240,7 @@ function DesktopScrollytelling() {
         </div>
 
         {/* Features Section */}
-        <div className="relative h-[300vh]" ref={featuresContainerRef}>
+        <div className="relative h-[300dvh]" ref={featuresContainerRef}>
           <div className="sticky top-1/4 left-0 overflow-hidden">
             <AnimateOnView className="text-center mb-16">
               <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
