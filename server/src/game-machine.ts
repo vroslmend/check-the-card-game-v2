@@ -1558,9 +1558,29 @@ export const gameMachine = setup({
     "TIMER.PEEK_TO_SWAP": {
       actions: ["transitionToSwapStage", "broadcastGameState"] as const,
     },
-    PLAYER_RECONNECTED: {
-      actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
-    },
+    PLAYER_RECONNECTED: [
+      {
+        target: "." + GameStage.PLAYING,
+        reenter: true,
+        guard: ({ context }) => context.gameStage === GameStage.PLAYING,
+        actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      },
+      {
+        target: "." + GameStage.FINAL_TURNS,
+        reenter: true,
+        guard: ({ context }) => context.gameStage === GameStage.FINAL_TURNS,
+        actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      },
+      {
+        target: "." + GameStage.INITIAL_PEEK,
+        reenter: true,
+        guard: ({ context }) => context.gameStage === GameStage.INITIAL_PEEK,
+        actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      },
+      {
+        actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      },
+    ],
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: [
         assign({

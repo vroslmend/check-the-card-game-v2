@@ -263,7 +263,9 @@ export const uiMachine = setup({
           gameId: event.response.gameId,
           playerId: event.response.playerId,
         };
-        localStorage.setItem("playerSession", JSON.stringify(sessionData));
+        const sessionJSON = JSON.stringify(sessionData);
+    localStorage.setItem("playerSession", sessionJSON);
+    sessionStorage.setItem("playerSession", sessionJSON); // store in sessionStorage too
       }
     },
     clearSession: () => {
@@ -659,7 +661,7 @@ export const uiMachine = setup({
           actions: "logToPromptToJoin",
         },
         {
-          target: "inGame.reconnecting",
+          target: "inGame.disconnected",
           guard: ({ context }) =>
             !!context.localPlayerId && !context.currentGameState,
           actions: "logToReconnecting",

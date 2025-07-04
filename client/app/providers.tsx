@@ -137,8 +137,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       if (pathname.startsWith("/game/") && typeof window !== "undefined") {
         try {
           const sessionJSON =
-            localStorage.getItem("playerSession") ??
-            sessionStorage.getItem("playerSession");
+            sessionStorage.getItem("playerSession") ?? // prefer sessionStorage first
+            localStorage.getItem("playerSession");
           const session = sessionJSON ? JSON.parse(sessionJSON) : null;
           if (
             session?.playerId &&
