@@ -300,12 +300,12 @@ function HomePage() {
   const heroY = useTransform(
     smoothProgress,
     [0, 1],
-    shouldReduceMotion ? ["0%", "0%"] : ["0%", "-30%"],
+    isMobile || shouldReduceMotion ? ["0%", "0%"] : ["0%", "-30%"],
   );
   const shapeY = useTransform(
     smoothProgress,
     [0, 1],
-    shouldReduceMotion ? ["0%", "0%"] : ["0%", "20%"],
+    isMobile || shouldReduceMotion ? ["0%", "0%"] : ["0%", "20%"],
   );
 
   const handleMouseMove = useCallback(
@@ -373,7 +373,7 @@ function HomePage() {
   return (
     <div
       ref={containerRef}
-      className="relative flex min-h-screen flex-col bg-stone-50 dark:bg-zinc-950 noselect"
+      className="relative flex min-h-screen flex-col noselect"
     >
       <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
       <JoinGameModal
@@ -915,14 +915,14 @@ function HomePage() {
         style={{ y: footerY }}
         className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/60 bg-white/80 backdrop-blur-sm dark:border-stone-800/60 dark:bg-zinc-950/80"
       >
-        <div className="container mx-auto grid grid-cols-1 items-center gap-y-4 px-4 py-4 text-center sm:grid-cols-3 sm:text-left">
-          <div className="hidden sm:flex items-center gap-3 justify-self-start">
+        <div className="container mx-auto flex flex-col items-center gap-y-4 px-4 py-4 text-center md:flex-row md:justify-between md:text-left lg:grid lg:grid-cols-3 lg:items-center">
+          <div className="flex items-center gap-3 justify-self-start">
             <Spade className="h-5 w-5 text-stone-700 dark:text-stone-300" />
             <span className="text-lg font-light text-stone-900 dark:text-stone-100">
               Check
             </span>
           </div>
-          <div className="flex flex-col items-center justify-center gap-y-1 text-sm font-light text-stone-500 dark:text-stone-500">
+          <div className="flex flex-col items-center justify-center gap-y-1 text-sm font-light text-stone-500 dark:text-stone-500 lg:justify-self-center">
             <div className="flex flex-row items-center gap-x-2">
               <div className="flex items-center">
                 <span>© {new Date().getFullYear()} Check Card Game.</span>
@@ -985,7 +985,7 @@ function HomePage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-center gap-6 sm:justify-self-end">
+          <div className="flex items-center justify-center gap-6 lg:justify-self-end">
             <motion.a
               href="https://github.com/vroslmend"
               target="_blank"

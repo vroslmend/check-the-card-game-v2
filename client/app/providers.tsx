@@ -21,6 +21,20 @@ import {
   type PlayerActionType,
 } from "shared-types";
 import { DeviceProvider } from "@/context/DeviceContext";
+import { useDevice } from "@/context/DeviceContext";
+
+// ============================================================================
+//  Smooth scroll conditional wrapper – desktop only
+// ============================================================================
+/**
+ * Conditionally applies smooth scrolling for desktop. Mobile devices fall back
+ * to native scrolling to avoid conflicts with touch-based dynamic viewports.
+ */
+function ConditionalSmoothScroll({ children }: { children: React.ReactNode }) {
+  const { isMobile } = useDevice();
+  if (isMobile) return <>{children}</>;
+  return <SmoothScrollProvider>{children}</SmoothScrollProvider>;
+}
 
 // ============================================================================
 //  EFFECTS BRIDGE COMPONENT – connects the actor to sockets and routing
@@ -177,10 +191,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <GameUIActorContext.Provider value={actor}>
           <UIMachineEffects actor={actor} />
           <CursorProvider>
-            <SmoothScrollProvider>
-              {children}
-              <CustomCursor />
-            </SmoothScrollProvider>
+            <ConditionalSmoothScroll>{children}</ConditionalSmoothScroll>
+            <CustomCursor />
             <Toaster />
           </CursorProvider>
         </GameUIActorContext.Provider>
