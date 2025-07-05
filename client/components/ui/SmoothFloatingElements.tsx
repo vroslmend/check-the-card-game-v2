@@ -231,7 +231,7 @@ export function SmoothFloatingElements({
     >
       {/* Central Interactive Blob/Card */}
       <motion.div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        className="absolute inset-0 flex items-center justify-center -mt-16"
         style={{
           rotateX: centralRotateX,
           rotateY: centralRotateY,
@@ -243,7 +243,6 @@ export function SmoothFloatingElements({
             // Blob State
             <motion.div
               key="blob"
-              className="h-96 w-96"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{
                 opacity: 1,

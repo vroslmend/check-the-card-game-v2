@@ -131,6 +131,65 @@ function FeatureItem({
   );
 }
 
+function MobileHeroLayout({
+  handleCreateGame,
+  handleJoinGame,
+}: {
+  handleCreateGame: () => void;
+  handleJoinGame: () => void;
+}) {
+  return (
+    <section className="relative flex min-h-screen flex-col items-center justify-center px-6 pt-24 text-center">
+      <motion.div
+        initial={{ opacity: 0, y: 60 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
+        className="space-y-8"
+      >
+        <div className="inline-flex items-center gap-3 rounded-full border border-stone-200/60 bg-white/40 px-6 py-3 backdrop-blur-sm dark:border-stone-800/60 dark:bg-stone-900/40">
+          <div className="h-2 w-2 rounded-full bg-emerald-500" />
+          <span className="text-sm font-light tracking-wide text-stone-700 dark:text-stone-300">
+            Multiplayer Card Experience
+          </span>
+        </div>
+
+        <div className="space-y-8">
+          <h1 className="text-5xl font-light leading-none tracking-tight text-stone-900 dark:text-stone-100 sm:text-6xl">
+            <span className="block">The</span>
+            <span className="relative inline-block font-normal italic">
+              Check
+            </span>
+          </h1>
+          <p className="mx-auto max-w-lg text-lg font-light leading-relaxed text-stone-600 dark:text-stone-400">
+            Outwit your friends in a tense game of memory, strategy, and pure
+            luck. Keep your cards close, your score low, and call
+            &quot;Check&quot; at the perfect moment to snatch victory.
+          </p>
+        </div>
+
+        <div className="flex w-full max-w-xs flex-col items-center gap-4">
+          <Button
+            size="lg"
+            onClick={handleCreateGame}
+            className="w-full bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+          >
+            Create a Lobby
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleJoinGame}
+            className="w-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+          >
+            <Users className="mr-2 h-4 w-4" />
+            Join a Lobby
+          </Button>
+        </div>
+      </motion.div>
+    </section>
+  );
+}
+
 function HomePage() {
   const [showNewGame, setShowNewGame] = useState(false);
   const [showJoinGame, setShowJoinGame] = useState(false);
@@ -528,317 +587,326 @@ function HomePage() {
       </AnimatePresence>
 
       <main className="flex-1">
-        <section
-          ref={heroRef}
-          className="relative flex min-h-screen items-center justify-center pt-24 md:pt-28 lg:pt-0"
-        >
-          <motion.div
-            style={{ y: heroY }}
-            className="container relative z-10 mx-auto px-6 md:px-8 lg:px-12"
+        {!useMobileLayout && (
+          <section
+            ref={heroRef}
+            className="relative flex min-h-screen items-center justify-center pt-24 md:pt-28 lg:items-stretch lg:pt-0"
           >
-            <div
-              className="grid min-h-screen items-center lg:grid-cols-2 text-center lg:text-left"
-              style={{ perspective: "1000px" }}
+            <motion.div
+              style={{ y: heroY }}
+              className="container relative z-10 mx-auto px-6 md:px-8 lg:px-12"
             >
-              <motion.div className="flex flex-col justify-center items-center lg:items-start space-y-12">
-                <motion.div
-                  initial={{ opacity: 0, y: 60 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 1.2,
-                    delay: 1,
-                    ease: [0.6, 0.01, 0.05, 0.95],
-                  }}
-                  className="space-y-8"
-                >
+              <div
+                className="grid min-h-screen items-center lg:items-start lg:pt-32 text-center lg:text-left"
+                style={{ perspective: "1000px" }}
+              >
+                <motion.div className="flex flex-col justify-center items-center lg:items-start space-y-12">
                   <motion.div
-                    className="inline-flex items-center gap-3 rounded-full border border-stone-200/60 bg-white/40 px-6 py-3 backdrop-blur-sm dark:border-stone-800/60 dark:bg-stone-900/40 mt-4 md:mt-6 lg:mt-0"
-                    whileHover={{ scale: 1.02 }}
-                    transition={{ duration: 0.3 }}
+                    initial={{ opacity: 0, y: 60 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 1.2,
+                      delay: 1,
+                      ease: [0.6, 0.01, 0.05, 0.95],
+                    }}
+                    className="space-y-8"
                   >
                     <motion.div
-                      animate={{
-                        scale: [1, 1.3, 1],
-                        opacity: [0.7, 1, 0.7],
-                      }}
-                      transition={{
-                        duration: 2.5,
-                        repeat: Number.POSITIVE_INFINITY,
-                        ease: "easeInOut",
-                      }}
-                      className="h-2 w-2 rounded-full bg-emerald-500"
-                    />
-                    <span className="text-sm font-light tracking-wide text-stone-700 dark:text-stone-300">
-                      Multiplayer Card Experience
-                    </span>
-                  </motion.div>
-
-                  <div className="space-y-10 text-center lg:text-left">
-                    <h1 className="inline-block text-left text-5xl font-light leading-none tracking-tight text-stone-900 dark:text-stone-100 sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl">
-                      <motion.span
-                        className="block"
-                        initial={{ opacity: 0, y: 40 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 1, delay: 1.2 }}
-                        style={{
-                          x: textX1,
-                          y: textY1,
-                          willChange: "transform",
+                      className="inline-flex items-center gap-3 rounded-full border border-stone-200/60 bg-white/40 px-6 py-3 backdrop-blur-sm dark:border-stone-800/60 dark:bg-stone-900/40 mt-4 md:mt-6 lg:mt-0"
+                      whileHover={{ scale: 1.02 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <motion.div
+                        animate={{
+                          scale: [1, 1.3, 1],
+                          opacity: [0.7, 1, 0.7],
                         }}
-                      >
-                        The
-                      </motion.span>
-                      <motion.span
-                        className="relative ml-8 inline-block font-normal italic"
-                        initial={{ opacity: 0, x: -60 }}
-                        animate={{ opacity: 1, x: 0 }}
                         transition={{
-                          duration: 1.2,
-                          delay: 1.5,
-                          ease: [0.6, 0.01, 0.05, 0.95],
+                          duration: 2.5,
+                          repeat: Number.POSITIVE_INFINITY,
+                          ease: "easeInOut",
                         }}
-                        style={{
-                          x: textX2,
-                          y: textY2,
-                          willChange: "transform",
-                        }}
-                      >
+                        className="h-2 w-2 rounded-full bg-emerald-500"
+                      />
+                      <span className="text-sm font-light tracking-wide text-stone-700 dark:text-stone-300">
+                        Multiplayer Card Experience
+                      </span>
+                    </motion.div>
+
+                    <div className="space-y-10 text-center lg:text-left">
+                      <h1 className="inline-block text-left text-5xl font-light leading-none tracking-tight text-stone-900 dark:text-stone-100 sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl">
                         <motion.span
-                          variants={textContainerVariants}
-                          initial="initial"
-                          whileHover="hover"
-                          onMouseEnter={() => {
-                            if (hoverTimeoutRef.current) {
-                              clearTimeout(hoverTimeoutRef.current);
-                            }
-                            hoverTimeoutRef.current = setTimeout(() => {
-                              setIsCheckHovered(true);
-                            }, 300);
+                          className="block"
+                          initial={{ opacity: 0, y: 40 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 1, delay: 1.2 }}
+                          style={{
+                            x: textX1,
+                            y: textY1,
+                            willChange: "transform",
                           }}
-                          onMouseLeave={() => {
-                            if (hoverTimeoutRef.current) {
-                              clearTimeout(hoverTimeoutRef.current);
-                            }
-                            setIsCheckHovered(false);
-                          }}
-                          className="flex"
-                          aria-label="Check"
-                          data-cursor-icon
                         >
-                          <AnimatePresence initial={false}>
-                            {checkText.map((char, index) => {
-                              if (char === "!") {
+                          The
+                        </motion.span>
+                        <motion.span
+                          className="relative ml-8 inline-block font-normal italic"
+                          initial={{ opacity: 0, x: -60 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{
+                            duration: 1.2,
+                            delay: 1.5,
+                            ease: [0.6, 0.01, 0.05, 0.95],
+                          }}
+                          style={{
+                            x: textX2,
+                            y: textY2,
+                            willChange: "transform",
+                          }}
+                        >
+                          <motion.span
+                            variants={textContainerVariants}
+                            initial="initial"
+                            whileHover="hover"
+                            onMouseEnter={() => {
+                              if (hoverTimeoutRef.current) {
+                                clearTimeout(hoverTimeoutRef.current);
+                              }
+                              hoverTimeoutRef.current = setTimeout(() => {
+                                setIsCheckHovered(true);
+                              }, 300);
+                            }}
+                            onMouseLeave={() => {
+                              if (hoverTimeoutRef.current) {
+                                clearTimeout(hoverTimeoutRef.current);
+                              }
+                              setIsCheckHovered(false);
+                            }}
+                            className="flex"
+                            aria-label="Check"
+                            data-cursor-icon
+                          >
+                            <AnimatePresence initial={false}>
+                              {checkText.map((char, index) => {
+                                if (char === "!") {
+                                  return (
+                                    <motion.span
+                                      key={index}
+                                      className="inline-block"
+                                      initial={{ opacity: 0, width: 0, x: -10 }}
+                                      animate={{
+                                        opacity: 1,
+                                        width: "auto",
+                                        x: 0,
+                                      }}
+                                      exit={{ opacity: 0, width: 0, x: 10 }}
+                                      transition={{
+                                        duration: 0.3,
+                                        ease: "easeInOut",
+                                      }}
+                                    >
+                                      {char}
+                                    </motion.span>
+                                  );
+                                }
                                 return (
                                   <motion.span
                                     key={index}
+                                    variants={letterVariants}
                                     className="inline-block"
-                                    initial={{ opacity: 0, width: 0, x: -10 }}
-                                    animate={{
-                                      opacity: 1,
-                                      width: "auto",
-                                      x: 0,
-                                    }}
-                                    exit={{ opacity: 0, width: 0, x: 10 }}
-                                    transition={{
-                                      duration: 0.3,
-                                      ease: "easeInOut",
-                                    }}
                                   >
                                     {char}
                                   </motion.span>
                                 );
-                              }
-                              return (
-                                <motion.span
-                                  key={index}
-                                  variants={letterVariants}
-                                  className="inline-block"
-                                >
-                                  {char}
-                                </motion.span>
-                              );
-                            })}
-                          </AnimatePresence>
+                              })}
+                            </AnimatePresence>
+                          </motion.span>
+                          <motion.div
+                            initial={{ scaleX: 0, originX: 0.5 }}
+                            animate={{ scaleX: 1 }}
+                            transition={{
+                              duration: 1.5,
+                              delay: 2.2,
+                              ease: [0.6, 0.01, 0.05, 0.95],
+                            }}
+                            className="absolute -bottom-3 left-[52%] h-1 w-[96%] -translate-x-1/2 bg-gradient-to-r from-stone-900 to-stone-600 dark:from-stone-100 dark:to-stone-400"
+                          />
                         </motion.span>
-                        <motion.div
-                          initial={{ scaleX: 0, originX: 0.5 }}
-                          animate={{ scaleX: 1 }}
-                          transition={{
-                            duration: 1.5,
-                            delay: 2.2,
-                            ease: [0.6, 0.01, 0.05, 0.95],
-                          }}
-                          className="absolute -bottom-3 left-[52%] h-1 w-[96%] -translate-x-1/2 bg-gradient-to-r from-stone-900 to-stone-600 dark:from-stone-100 dark:to-stone-400"
-                        />
-                      </motion.span>
-                    </h1>
+                      </h1>
 
-                    <motion.p
+                      <motion.p
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 1, delay: 0.5 }}
+                        className="max-w-lg text-xl font-light leading-relaxed text-stone-600 dark:text-stone-400"
+                      >
+                        Outwit your friends in a tense game of memory, strategy,
+                        and pure luck. Keep your cards close, your score low,
+                        and call "Check" at the perfect moment to snatch
+                        victory.
+                      </motion.p>
+                    </div>
+
+                    <motion.div
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 1, delay: 0.5 }}
-                      className="max-w-lg text-xl font-light leading-relaxed text-stone-600 dark:text-stone-400"
+                      transition={{ duration: 1, delay: 0.8 }}
+                      className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start"
                     >
-                      Outwit your friends in a tense game of memory, strategy,
-                      and pure luck. Keep your cards close, your score low, and
-                      call "Check" at the perfect moment to snatch victory.
-                    </motion.p>
-                  </div>
-
-                  <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 1, delay: 0.8 }}
-                    className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start"
-                  >
-                    {isTouchDevice ? (
-                      <>
-                        <Button
-                          size="lg"
-                          onClick={handleCreateGame}
-                          className="bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
-                        >
-                          Create a Lobby
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="lg"
-                          onClick={handleJoinGame}
-                          className="border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
-                        >
-                          <Users className="mr-2 h-4 w-4" />
-                          Join a Lobby
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <motion.div
-                          variants={buttonWithCardVariants}
-                          className="relative"
-                          initial="initial"
-                          whileHover="hover"
-                          onHoverStart={() => setLobbyCard(getRandomCard())}
-                        >
+                      {isTouchDevice ? (
+                        <>
                           <Button
                             size="lg"
                             onClick={handleCreateGame}
-                            data-cursor-link
-                            className="group relative z-10 overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+                            className="bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
                           >
-                            <span className="pointer-events-none relative z-10 flex items-center gap-2">
-                              Create a Lobby
-                              <motion.div
-                                animate={{
-                                  x: !shouldReduceMotion ? [0, 4, 0] : 0,
-                                }}
-                                transition={{
-                                  duration: 2,
-                                  repeat: Number.POSITIVE_INFINITY,
-                                  ease: "easeInOut",
-                                }}
-                              >
-                                <ArrowRight className="h-4 w-4" />
-                              </motion.div>
-                            </span>
-                            <motion.div
-                              className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
-                              initial={{ x: "-100%" }}
-                              whileHover={{ x: "0%" }}
-                              transition={{ duration: 0.4, ease: "easeOut" }}
-                            />
+                            Create a Lobby
                           </Button>
-                          <motion.div
-                            variants={dealtCardVariants}
-                            className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
-                          >
-                            {lobbyCard && (
-                              <PlayingCard
-                                card={lobbyCard}
-                                className="h-full w-full"
-                              />
-                            )}
-                          </motion.div>
-                        </motion.div>
-                        <motion.div
-                          variants={buttonWithCardVariants}
-                          className="relative"
-                          initial="initial"
-                          whileHover="hover"
-                          onHoverStart={() => setJoinCard(getRandomCard())}
-                        >
                           <Button
                             variant="outline"
                             size="lg"
                             onClick={handleJoinGame}
-                            data-cursor-link
-                            className="relative z-10 rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+                            className="border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
                           >
                             <Users className="mr-2 h-4 w-4" />
                             Join a Lobby
                           </Button>
+                        </>
+                      ) : (
+                        <>
                           <motion.div
-                            variants={dealtCardVariants}
-                            className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
+                            variants={buttonWithCardVariants}
+                            className="relative"
+                            initial="initial"
+                            whileHover="hover"
+                            onHoverStart={() => setLobbyCard(getRandomCard())}
                           >
-                            {joinCard && (
-                              <PlayingCard
-                                card={joinCard}
-                                className="h-full w-full"
+                            <Button
+                              size="lg"
+                              onClick={handleCreateGame}
+                              data-cursor-link
+                              className="group relative z-10 overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+                            >
+                              <span className="pointer-events-none relative z-10 flex items-center gap-2">
+                                Create a Lobby
+                                <motion.div
+                                  animate={{
+                                    x: !shouldReduceMotion ? [0, 4, 0] : 0,
+                                  }}
+                                  transition={{
+                                    duration: 2,
+                                    repeat: Number.POSITIVE_INFINITY,
+                                    ease: "easeInOut",
+                                  }}
+                                >
+                                  <ArrowRight className="h-4 w-4" />
+                                </motion.div>
+                              </span>
+                              <motion.div
+                                className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
+                                initial={{ x: "-100%" }}
+                                whileHover={{ x: "0%" }}
+                                transition={{ duration: 0.4, ease: "easeOut" }}
                               />
-                            )}
+                            </Button>
+                            <motion.div
+                              variants={dealtCardVariants}
+                              className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
+                            >
+                              {lobbyCard && (
+                                <PlayingCard
+                                  card={lobbyCard}
+                                  className="h-full w-full"
+                                />
+                              )}
+                            </motion.div>
                           </motion.div>
-                        </motion.div>
-                      </>
-                    )}
+                          <motion.div
+                            variants={buttonWithCardVariants}
+                            className="relative"
+                            initial="initial"
+                            whileHover="hover"
+                            onHoverStart={() => setJoinCard(getRandomCard())}
+                          >
+                            <Button
+                              variant="outline"
+                              size="lg"
+                              onClick={handleJoinGame}
+                              data-cursor-link
+                              className="relative z-10 rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+                            >
+                              <Users className="mr-2 h-4 w-4" />
+                              Join a Lobby
+                            </Button>
+                            <motion.div
+                              variants={dealtCardVariants}
+                              className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
+                            >
+                              {joinCard && (
+                                <PlayingCard
+                                  card={joinCard}
+                                  className="h-full w-full"
+                                />
+                              )}
+                            </motion.div>
+                          </motion.div>
+                        </>
+                      )}
+                    </motion.div>
                   </motion.div>
                 </motion.div>
-              </motion.div>
 
-              <div className="relative hidden h-full items-center justify-center lg:flex">
-                {!shouldReduceMotion && (
-                  <SmoothFloatingElements
-                    mouseX={mouseX}
-                    mouseY={mouseY}
-                    isVisible={isHeroInView}
-                    isCheckHovered={isCheckHovered}
-                    shouldReduceMotion={shouldReduceMotion ?? false}
-                  />
-                )}
+                <div className="relative hidden h-full items-center justify-center lg:flex">
+                  {!shouldReduceMotion && !isTouchDevice && (
+                    <SmoothFloatingElements
+                      mouseX={mouseX}
+                      mouseY={mouseY}
+                      isVisible={isHeroInView}
+                      isCheckHovered={isCheckHovered}
+                      shouldReduceMotion={shouldReduceMotion ?? false}
+                    />
+                  )}
+                </div>
               </div>
-            </div>
 
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: isAtTop ? 1 : 0 }}
-              transition={
-                isInitialLoad
-                  ? { delay: 3, duration: 1.5 }
-                  : { duration: 0.5, ease: "easeOut" }
-              }
-              className="absolute bottom-12 left-1/2 -translate-x-1/2"
-            >
               <motion.div
-                animate={!shouldReduceMotion ? { y: [0, 8, 0] } : {}}
-                transition={{
-                  repeat: Number.POSITIVE_INFINITY,
-                  duration: 3,
-                  ease: "easeInOut",
-                }}
-                className="flex cursor-pointer flex-col items-center gap-2 text-stone-500 transition-colors duration-300 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300"
-                onClick={() => {
-                  document
-                    .getElementById("game-principles-anchor")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: isAtTop ? 1 : 0 }}
+                transition={
+                  isInitialLoad
+                    ? { delay: 3, duration: 1.5 }
+                    : { duration: 0.5, ease: "easeOut" }
+                }
+                className="absolute bottom-12 left-1/2 -translate-x-1/2"
               >
-                <span className="text-sm font-light tracking-wide">
-                  Discover more
-                </span>
-                <ChevronDown className="h-4 w-4" />
+                <motion.div
+                  animate={!shouldReduceMotion ? { y: [0, 8, 0] } : {}}
+                  transition={{
+                    repeat: Number.POSITIVE_INFINITY,
+                    duration: 3,
+                    ease: "easeInOut",
+                  }}
+                  className="flex cursor-pointer flex-col items-center gap-2 text-stone-500 transition-colors duration-300 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300"
+                  onClick={() => {
+                    document
+                      .getElementById("game-principles-anchor")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  <span className="text-sm font-light tracking-wide">
+                    Discover more
+                  </span>
+                  <ChevronDown className="h-4 w-4" />
+                </motion.div>
               </motion.div>
             </motion.div>
-          </motion.div>
-        </section>
+          </section>
+        )}
+        {useMobileLayout && (
+          <MobileHeroLayout
+            handleCreateGame={handleCreateGame}
+            handleJoinGame={handleJoinGame}
+          />
+        )}
 
         <Scrollytelling />
 
