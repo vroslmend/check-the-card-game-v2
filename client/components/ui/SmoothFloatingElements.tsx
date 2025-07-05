@@ -165,6 +165,9 @@ export function SmoothFloatingElements({
   const [particles, setParticles] = useState<any[]>([]);
 
   useEffect(() => {
+    // Disabled decorative particles for cleaner background
+    setParticles([]);
+    /*
     if (shouldReduceMotion) {
       setParticles([]);
       return;
@@ -185,6 +188,7 @@ export function SmoothFloatingElements({
         delay: i * 0.4,
       })),
     );
+    */
   }, [shouldReduceMotion]);
 
   // Smooth mouse tracking
@@ -241,7 +245,11 @@ export function SmoothFloatingElements({
               key="blob"
               className="h-96 w-96"
               initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1, transition: { duration: 0.4, ease: "easeInOut" } }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                transition: { duration: 0.4, ease: "easeInOut" },
+              }}
               exit={{
                 opacity: 0,
                 scale: 0.8,
@@ -401,20 +409,7 @@ export function SmoothFloatingElements({
 
       {/* Optimized particles */}
       <motion.div style={{ x: particleX, y: particleY }}>
-        {particles.map(({ id, style, animation, duration, delay }) => (
-          <motion.div
-            key={id}
-            className="absolute h-1.5 w-1.5 rounded-full bg-stone-400/30 dark:bg-stone-600/30"
-            style={style}
-            animate={animation}
-            transition={{
-              duration,
-              repeat: Number.POSITIVE_INFINITY,
-              ease: "easeInOut",
-              delay,
-            }}
-          />
-        ))}
+        {/* decorative particle dots removed */}
       </motion.div>
 
       {/* Subtle glow effect */}

@@ -20,15 +20,56 @@ import {
   type ClientCheckGameState,
   type PlayerActionType,
 } from "shared-types";
-import { DeviceProvider } from "@/context/DeviceContext";
+import { DeviceProvider, useDevice } from "@/context/DeviceContext";
+
+// ============================================================================
+//  LAYOUT CONTROLLER – applies mobile-only virtualization
+// ============================================================================
+const LayoutController = ({ children }: { children: React.ReactNode }) => {
+  const { isTouchDevice } = useDevice();
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    if (isTouchDevice) {
+      html.classList.add("mobile-lock");
+      body.classList.add("mobile-lock");
+    } else {
+      html.classList.remove("mobile-lock");
+      body.classList.remove("mobile-lock");
+    }
+    return () => {
+      html.classList.remove("mobile-lock");
+      body.classList.remove("mobile-lock");
+    };
+  }, [isTouchDevice]);
+
+  // If mobile, wrap children in a scrollable container; else render as-is
+  return isTouchDevice ? (
+    <div className="h-full w-full overflow-y-auto overflow-x-hidden bg-stone-50 dark:bg-zinc-950">
+      {children}
+    </div>
+  ) : (
+    <>{children}</>
+  );
+};
 
 // ============================================================================
 //  EFFECTS BRIDGE COMPONENT – connects the actor to sockets and routing
 // ============================================================================
 function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
+  const pathname = usePathname();
   const router = useRouter();
+  // Guard against double-execution in React.StrictMode during development
+  const effectRan = useRef(false);
 
   useEffect(() => {
+    // In development React 18 StrictMode mounts, unmounts, then mounts again.
+    // Prevent registering duplicate listeners or multiple socket.connect calls.
+    if (effectRan.current && process.env.NODE_ENV === "development") {
+      return;
+    }
+
     type EmittedEvent = Parameters<Parameters<typeof actor.on>[1]>[0];
 
     const socketSub = actor.on("EMIT_TO_SOCKET", (emitted: EmittedEvent) => {
@@ -48,6 +89,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
 
     const navSub = actor.on("NAVIGATE", (event: EmittedEvent) => {
       if (event.type !== "NAVIGATE") return;
+      // Use window.location for navigation to ensure a full page reload for context reset
       router.push(event.path);
     });
 
@@ -87,8 +129,13 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     socket.on("connect_error", ce);
     socket.on("disconnect", onDisconnect);
 
-    if (!socket.connected) socket.connect();
-    else onConnect();
+    // Only initiate connection if not already connected/connecting
+    // @ts-ignore connecting is internal property but useful here
+    if (!socket.connected && !(socket as any).connecting) {
+      socket.connect();
+    } else if (socket.connected) {
+      onConnect();
+    }
 
     // manager-level reconnect failure event (no args)
     const rf = () =>
@@ -96,6 +143,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     socket.io?.on("reconnect_failed", rf);
 
     return () => {
+      effectRan.current = true; // mark that effect has run for StrictMode guard
       socketSub.unsubscribe();
       navSub.unsubscribe();
       socket.off(SocketEventName.GAME_STATE_UPDATE, gs);
@@ -110,7 +158,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
       socket.off("disconnect", onDisconnect);
       socket.io?.off("reconnect_failed", rf);
     };
-  }, [actor, router]);
+  }, [actor, pathname, router]);
 
   return null;
 }
@@ -120,7 +168,21 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
 // ============================================================================
 export function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+
   const actorRef = useRef<UIMachineActorRef | null>(null);
+
+  useEffect(() => {
+    const setAppHeight = () => {
+      const doc = document.documentElement;
+      doc.style.setProperty("--app-height", `${window.innerHeight}px`);
+    };
+
+    window.addEventListener("resize", setAppHeight);
+    setAppHeight();
+
+    return () => window.removeEventListener("resize", setAppHeight);
+  }, []);
 
   if (actorRef.current === null) {
     const getInitialInput = (): UIMachineInput => {
@@ -176,13 +238,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <DeviceProvider>
         <GameUIActorContext.Provider value={actor}>
           <UIMachineEffects actor={actor} />
-          <CursorProvider>
-            <SmoothScrollProvider>
-              {children}
+          <LayoutController>
+            <CursorProvider>
+              <SmoothScrollProvider>{children}</SmoothScrollProvider>
               <CustomCursor />
-            </SmoothScrollProvider>
-            <Toaster />
-          </CursorProvider>
+              <Toaster />
+            </CursorProvider>
+          </LayoutController>
         </GameUIActorContext.Provider>
       </DeviceProvider>
     </ThemeProvider>

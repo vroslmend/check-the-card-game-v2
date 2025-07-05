@@ -140,7 +140,7 @@ function HomePage() {
   const [isSignatureVisible, setIsSignatureVisible] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPrecisionHovered, setIsPrecisionHovered] = useState(false);
-  const { isMobile } = useDevice();
+  const { useMobileLayout, isTouchDevice } = useDevice();
   const [isPending, startTransition] = useTransition();
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -325,10 +325,10 @@ function HomePage() {
     }
     window.scrollTo(0, 0);
 
-    if (!isMobile && isMobileMenuOpen) {
+    if (!useMobileLayout && isMobileMenuOpen) {
       setIsMobileMenuOpen(false);
     }
-  }, [isMobileMenuOpen, isMobile]);
+  }, [isMobileMenuOpen, useMobileLayout]);
 
   useEffect(() => {
     if (isModalOpen) {
@@ -350,13 +350,13 @@ function HomePage() {
 
     const throttledMouseMove = throttle(handleMouseMove, 16);
 
-    if (!isMobile && !isModalOpen) {
+    if (!isTouchDevice && !isModalOpen) {
       window.addEventListener("mousemove", throttledMouseMove);
       return () => {
         window.removeEventListener("mousemove", throttledMouseMove);
       };
     }
-  }, [isMobile, handleMouseMove, isModalOpen, mouseX, mouseY]);
+  }, [isTouchDevice, handleMouseMove, isModalOpen, mouseX, mouseY]);
 
   const handleCreateGame = () => {
     startTransition(() => {
@@ -373,7 +373,8 @@ function HomePage() {
   return (
     <div
       ref={containerRef}
-      className="relative flex min-h-screen flex-col bg-stone-50 dark:bg-zinc-950 noselect"
+      className="relative flex flex-col bg-stone-50 dark:bg-zinc-950 noselect w-full"
+      style={{ minHeight: "var(--app-height)" }}
     >
       <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
       <JoinGameModal
@@ -391,9 +392,9 @@ function HomePage() {
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-        className="fixed top-0 z-50 w-full backdrop-blur-xl transition-all duration-700"
+        className="fixed top-0 z-50 w-full bg-transparent transition-all duration-700"
       >
-        <div className="container mx-auto flex h-24 items-center justify-between px-4">
+        <div className="container mx-auto flex items-center justify-between px-4 py-3 sm:py-4 lg:py-6">
           <a
             href="/"
             onClick={(e) => {
@@ -426,7 +427,7 @@ function HomePage() {
               initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6, duration: 1 }}
-              className="text-3xl font-light tracking-tight text-stone-900 dark:text-stone-100"
+              className="text-2xl sm:text-3xl font-light tracking-tight text-stone-900 dark:text-stone-100"
             >
               Check
             </motion.span>
@@ -529,11 +530,11 @@ function HomePage() {
       <main className="flex-1">
         <section
           ref={heroRef}
-          className="relative flex min-h-screen items-center justify-center"
+          className="relative flex min-h-screen items-center justify-center pt-24 md:pt-28 lg:pt-0"
         >
           <motion.div
             style={{ y: heroY }}
-            className="container relative z-10 mx-auto px-4"
+            className="container relative z-10 mx-auto px-6 md:px-8 lg:px-12"
           >
             <div
               className="grid min-h-screen items-center lg:grid-cols-2 text-center lg:text-left"
@@ -551,7 +552,7 @@ function HomePage() {
                   className="space-y-8"
                 >
                   <motion.div
-                    className="inline-flex items-center gap-3 rounded-full border border-stone-200/60 bg-white/40 px-6 py-3 backdrop-blur-sm dark:border-stone-800/60 dark:bg-stone-900/40"
+                    className="inline-flex items-center gap-3 rounded-full border border-stone-200/60 bg-white/40 px-6 py-3 backdrop-blur-sm dark:border-stone-800/60 dark:bg-stone-900/40 mt-4 md:mt-6 lg:mt-0"
                     whileHover={{ scale: 1.02 }}
                     transition={{ duration: 0.3 }}
                   >
@@ -573,7 +574,7 @@ function HomePage() {
                   </motion.div>
 
                   <div className="space-y-10 text-center lg:text-left">
-                    <h1 className="inline-block text-left text-6xl font-light leading-none tracking-tighter text-stone-900 dark:text-stone-100 sm:text-7xl md:text-8xl lg:text-8xl xl:text-9xl">
+                    <h1 className="inline-block text-left text-5xl font-light leading-none tracking-tight text-stone-900 dark:text-stone-100 sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl">
                       <motion.span
                         className="block"
                         initial={{ opacity: 0, y: 40 }}
@@ -690,7 +691,7 @@ function HomePage() {
                     transition={{ duration: 1, delay: 0.8 }}
                     className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start"
                   >
-                    {isMobile ? (
+                    {isTouchDevice ? (
                       <>
                         <Button
                           size="lg"
@@ -853,7 +854,7 @@ function HomePage() {
               </p>
 
               <div className="flex flex-col gap-6 sm:flex-row sm:justify-center">
-                {isMobile ? (
+                {isTouchDevice ? (
                   <>
                     <Button
                       size="lg"
@@ -915,8 +916,8 @@ function HomePage() {
         style={{ y: footerY }}
         className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/60 bg-white/80 backdrop-blur-sm dark:border-stone-800/60 dark:bg-zinc-950/80"
       >
-        <div className="container mx-auto grid grid-cols-1 items-center gap-y-4 px-4 py-4 text-center sm:grid-cols-3 sm:text-left">
-          <div className="hidden sm:flex items-center gap-3 justify-self-start">
+        <div className="container mx-auto grid grid-cols-1 items-center gap-y-4 px-4 py-4 text-center lg:grid-cols-3 lg:text-left">
+          <div className="hidden lg:flex items-center gap-3 justify-self-start">
             <Spade className="h-5 w-5 text-stone-700 dark:text-stone-300" />
             <span className="text-lg font-light text-stone-900 dark:text-stone-100">
               Check
@@ -985,7 +986,7 @@ function HomePage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-center gap-6 sm:justify-self-end">
+          <div className="flex items-center justify-center gap-6 lg:justify-self-end">
             <motion.a
               href="https://github.com/vroslmend"
               target="_blank"

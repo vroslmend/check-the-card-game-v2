@@ -268,6 +268,16 @@ html {
   .\@container {
     container-type: inline-size;
   }
+
+  /* Override Tailwind's default screen height utility to use dynamic viewport height. */
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+
+  /* Override Tailwind's h-screen utility to ensure dynamic viewport height. */
+  .h-screen {
+    height: 100dvh;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -287,4 +297,17 @@ html {
 
 .cursor-blend-difference {
   mix-blend-mode: difference;
+}
+
+@layer base {
+  :root {
+    --app-height: 100dvh;
+  }
+}
+
+/* Viewport Virtualization: main document is now a static frame */
+html.mobile-lock,
+body.mobile-lock {
+  height: 100%;
+  overflow: hidden;
 }
