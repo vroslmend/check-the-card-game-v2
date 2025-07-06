@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useTransition } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useTransition,
+  useContext,
+} from "react";
 import {
   motion,
   useScroll,
@@ -29,7 +36,6 @@ import {
 import { Menu, X } from "lucide-react";
 import { FaGithub, FaSpotify, FaDiscord } from "react-icons/fa";
 import { OptimizedShapes } from "@/components/ui/OptimizedShapes";
-import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements";
 import { PrincipleCard } from "@/components/ui/PrincipleCard";
 import { CardStack } from "@/components/ui/CardStack";
 import { AnimateOnView } from "@/components/ui/AnimateOnView";
@@ -42,7 +48,9 @@ import { JoinGameModal } from "@/components/modals/JoinGameModal";
 import { useDevice } from "@/context/DeviceContext";
 import { PlayingCard } from "@/components/cards/PlayingCard";
 import type { Card } from "shared-types";
+import { ScrollContainerContext } from "./providers";
 import { Suit, CardRank } from "shared-types";
+import { HeroAnimation } from "@/components/ui/HeroAnimation";
 
 const textContainerVariants = {
   hover: {
@@ -156,9 +164,23 @@ function MobileHeroLayout({
         <div className="space-y-8">
           <h1 className="text-5xl font-light leading-none tracking-tight text-stone-900 dark:text-stone-100 sm:text-6xl">
             <span className="block">The</span>
-            <span className="relative inline-block font-normal italic">
+            <motion.span
+              className="relative inline-block font-normal italic"
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 1 }}
+            >
               Check
-            </span>
+              <motion.div
+                initial={{ scaleX: 0, originX: 0.5 }}
+                animate={{ scaleX: 1 }}
+                transition={{
+                  duration: 1.2,
+                  delay: 0.8,
+                  ease: [0.6, 0.01, 0.05, 0.95],
+                }}
+                className="absolute -bottom-3 left-1/2 h-1 w-[90%] -translate-x-1/2 bg-gradient-to-r from-stone-900 to-stone-600 dark:from-stone-100 dark:to-stone-400"
+              />
+            </motion.span>
           </h1>
           <p className="mx-auto max-w-lg text-lg font-light leading-relaxed text-stone-600 dark:text-stone-400">
             Outwit your friends in a tense game of memory, strategy, and pure
@@ -167,11 +189,11 @@ function MobileHeroLayout({
           </p>
         </div>
 
-        <div className="flex w-full max-w-xs flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-4">
           <Button
             size="lg"
             onClick={handleCreateGame}
-            className="w-full bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+            className="bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
           >
             Create a Lobby
           </Button>
@@ -179,7 +201,7 @@ function MobileHeroLayout({
             variant="outline"
             size="lg"
             onClick={handleJoinGame}
-            className="w-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+            className="border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
           >
             <Users className="mr-2 h-4 w-4" />
             Join a Lobby
@@ -196,10 +218,10 @@ function HomePage() {
   const [isCheckHovered, setIsCheckHovered] = useState(false);
   const [isAtTop, setIsAtTop] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [isSignatureVisible, setIsSignatureVisible] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPrecisionHovered, setIsPrecisionHovered] = useState(false);
   const { useMobileLayout, isTouchDevice } = useDevice();
+  const scrollContainerRef = useContext(ScrollContainerContext);
   const [isPending, startTransition] = useTransition();
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -291,6 +313,7 @@ function HomePage() {
 
   const { scrollYProgress: footerScrollYProgress } = useScroll({
     target: endOfPageRef,
+    container: scrollContainerRef ?? undefined,
     offset: ["start end", "end end"],
   });
 
@@ -301,19 +324,9 @@ function HomePage() {
 
   const footerY = useTransform(
     smoothFooterScrollYProgress,
-    [0, 0.6],
+    useMobileLayout ? [0.9, 1] : [0, 0.6],
     ["100%", "0%"],
   );
-
-  const signatureTriggerProgress = useTransform(
-    smoothFooterScrollYProgress,
-    [0.5, 0.9],
-    [0, 1],
-  );
-
-  useMotionValueEvent(signatureTriggerProgress, "change", (latest: number) => {
-    setIsSignatureVisible(latest > 0);
-  });
 
   const checkText = (isCheckHovered ? "Check!" : "Check").split("");
 
@@ -339,7 +352,9 @@ function HomePage() {
     springConfig,
   );
 
-  const { scrollY, scrollYProgress } = useScroll();
+  const { scrollY, scrollYProgress } = useScroll({
+    container: scrollContainerRef ?? undefined,
+  });
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 100,
     damping: 30,
@@ -428,6 +443,10 @@ function HomePage() {
       setShowJoinGame(true);
     });
   };
+
+  const isFooterInView = useInView(endOfPageRef, {
+    margin: "0px 0px -50px 0px",
+  });
 
   return (
     <div
@@ -597,7 +616,7 @@ function HomePage() {
               className="container relative z-10 mx-auto px-6 md:px-8 lg:px-12"
             >
               <div
-                className="grid min-h-screen items-center lg:items-start lg:pt-32 text-center lg:text-left"
+                className="grid lg:grid-cols-2 min-h-screen items-center lg:items-start lg:pt-32"
                 style={{ perspective: "1000px" }}
               >
                 <motion.div className="flex flex-col justify-center items-center lg:items-start space-y-12">
@@ -857,10 +876,9 @@ function HomePage() {
 
                 <div className="relative hidden h-full items-center justify-center lg:flex">
                   {!shouldReduceMotion && !isTouchDevice && (
-                    <SmoothFloatingElements
+                    <HeroAnimation
                       mouseX={mouseX}
                       mouseY={mouseY}
-                      isVisible={isHeroInView}
                       isCheckHovered={isCheckHovered}
                       shouldReduceMotion={shouldReduceMotion ?? false}
                     />
@@ -982,7 +1000,7 @@ function HomePage() {
 
       <motion.footer
         style={{ y: footerY }}
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/60 bg-white/80 backdrop-blur-sm dark:border-stone-800/60 dark:bg-zinc-950/80"
+        className="mt-auto border-t border-stone-200/60 bg-white/80 backdrop-blur-sm dark:border-stone-800/60 dark:bg-zinc-950/80"
       >
         <div className="container mx-auto grid grid-cols-1 items-center gap-y-4 px-4 py-4 text-center lg:grid-cols-3 lg:text-left">
           <div className="hidden lg:flex items-center gap-3 justify-self-start">
@@ -1049,7 +1067,7 @@ function HomePage() {
                   key="signature"
                   className="absolute inset-0 flex items-center justify-center"
                 >
-                  <Signature isInView={isSignatureVisible} />
+                  <Signature isInView={isFooterInView} />
                 </motion.div>
               </div>
             </div>

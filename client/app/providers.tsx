@@ -13,7 +13,7 @@ import { uiMachine, type UIMachineInput } from "@/machines/uiMachine";
 import { usePathname, useRouter } from "next/navigation";
 import logger from "@/lib/logger";
 import { socket } from "@/lib/socket";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, createContext } from "react";
 import { createActor } from "xstate";
 import {
   SocketEventName,
@@ -23,10 +23,18 @@ import {
 import { DeviceProvider, useDevice } from "@/context/DeviceContext";
 
 // ============================================================================
+//  SCROLL CONTAINER CONTEXT – provides the scrolling element for touch devices
+// ============================================================================
+
+export const ScrollContainerContext =
+  createContext<React.RefObject<HTMLDivElement | null> | null>(null);
+
+// ============================================================================
 //  LAYOUT CONTROLLER – applies mobile-only virtualization
 // ============================================================================
 const LayoutController = ({ children }: { children: React.ReactNode }) => {
   const { isTouchDevice } = useDevice();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -46,11 +54,18 @@ const LayoutController = ({ children }: { children: React.ReactNode }) => {
 
   // If mobile, wrap children in a scrollable container; else render as-is
   return isTouchDevice ? (
-    <div className="h-full w-full overflow-y-auto overflow-x-hidden bg-stone-50 dark:bg-zinc-950">
-      {children}
-    </div>
+    <ScrollContainerContext.Provider value={scrollRef}>
+      <div
+        ref={scrollRef}
+        className="h-full w-full overflow-y-auto overflow-x-hidden bg-stone-50 dark:bg-zinc-950"
+      >
+        {children}
+      </div>
+    </ScrollContainerContext.Provider>
   ) : (
-    <>{children}</>
+    <ScrollContainerContext.Provider value={null}>
+      {children}
+    </ScrollContainerContext.Provider>
   );
 };
 
