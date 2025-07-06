@@ -49,6 +49,7 @@ import { useDevice } from "@/context/DeviceContext";
 import { PlayingCard } from "@/components/cards/PlayingCard";
 import type { Card } from "shared-types";
 import { ScrollContainerContext } from "./providers";
+import { cn } from "@/lib/utils";
 import { Suit, CardRank } from "shared-types";
 import { HeroAnimation } from "@/components/ui/HeroAnimation";
 
@@ -361,6 +362,29 @@ function HomePage() {
     restDelta: 0.001,
   });
 
+  // Header animation logic
+  const SCROLL_THRESHOLD = 80;
+  const [isDocked, setIsDocked] = useState(false);
+
+  // Reuse existing scrollY from useScroll above
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    setIsDocked(latest > SCROLL_THRESHOLD);
+  });
+
+  const headerHeight = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["96px", "64px"]);
+  const headerBgLight = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["hsl(0 0% 100% / 0)", "hsl(0 0% 100% / 0.6)"]);
+  const headerBgDark = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["hsl(0 0% 3% / 0)", "hsl(0 0% 8% / 0.4)"]);
+  const headerBackdropFilter = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["blur(0px)", "blur(16px)"]);
+  const headerBorderOpacity = useTransform(scrollY, [0, SCROLL_THRESHOLD], [0, 0.4]);
+
+  const headerTranslateY = useTransform(scrollY, [0, SCROLL_THRESHOLD], [0, 16]);
+  const headerWidth = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["100%", "92%"]);
+  const headerRadius = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["0px", "24px"]);
+
+  // Responsive inner padding and logo scaling
+  const innerPadding = useTransform(scrollY, [0, SCROLL_THRESHOLD], [24, 12]);
+  const logoScale = useTransform(scrollY, [0, SCROLL_THRESHOLD], [1, 0.9]);
+
   useMotionValueEvent(scrollY, "change", (latest) => {
     const atTop = latest < 50;
     if (atTop !== isAtTop) {
@@ -466,14 +490,44 @@ function HomePage() {
         shouldReduceMotion={shouldReduceMotion ?? false}
       />
 
+      {/* Dynamic placeholder to prevent layout shift only when header is docked */}
+      <motion.div style={{ height: isDocked ? headerHeight : 0 }} />
+
       <motion.header
-        initial={{ y: -100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-        className="fixed top-0 z-50 w-full bg-transparent transition-all duration-700"
+        style={{
+          height: headerHeight,
+          width: headerWidth,
+          y: headerTranslateY,
+          x: "-50%",
+          left: "50%",
+          backgroundColor: isAtTop ? "hsla(0,0%,100%,0)" : "var(--header-theme-bg)",
+          backdropFilter: isAtTop ? "blur(0px)" : headerBackdropFilter,
+          WebkitBackdropFilter: isAtTop ? "blur(0px)" : headerBackdropFilter,
+          borderRadius: headerRadius,
+        }}
+        className={cn(
+          "fixed top-0 z-50 flex flex-col",
+          isDocked && "shadow-lg ring-1 ring-black/5 dark:ring-white/10",
+        )}
       >
-        <div className="container mx-auto flex items-center justify-between px-4 py-3 sm:py-4 lg:py-6">
-          <a
+        {/* Animated bottom border */}
+        <motion.div
+          className="absolute bottom-0 left-0 right-0 h-px bg-border pointer-events-none"
+          style={{ opacity: headerBorderOpacity }}
+        />
+
+        {/* Dynamic theme background */}
+        <style>{`
+          :root { --header-theme-bg: ${headerBgLight.get()}; }
+          .dark { --header-theme-bg: ${headerBgDark.get()}; }
+        `}</style>
+
+        <motion.div
+          style={{ paddingTop: innerPadding, paddingBottom: innerPadding }}
+          className="container mx-auto flex items-center justify-between px-4"
+        >
+          <motion.a
+            style={{ scale: logoScale }}
             href="/"
             onClick={(e) => {
               e.preventDefault();
@@ -509,7 +563,7 @@ function HomePage() {
             >
               Check
             </motion.span>
-          </a>
+          </motion.a>
 
           <motion.nav
             initial={{ opacity: 0, x: 30 }}
@@ -556,7 +610,7 @@ function HomePage() {
               <Menu />
             </Button>
           </motion.div>
-        </div>
+        </motion.div>
       </motion.header>
 
       <AnimatePresence>
