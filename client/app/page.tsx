@@ -7,6 +7,7 @@ import {
   useCallback,
   useTransition,
   useContext,
+  useMemo,
 } from "react";
 import {
   motion,
@@ -52,6 +53,29 @@ import { ScrollContainerContext } from "./providers";
 import { cn } from "@/lib/utils";
 import { Suit, CardRank } from "shared-types";
 import { HeroAnimation } from "@/components/ui/HeroAnimation";
+
+function useWindowSize() {
+  // Initialise with 0 so that the very first render is identical on
+  // the server **and** on the client. The real size is read once the
+  // component mounts (after hydration) to avoid HTML mismatches.
+  const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    function handleResize() {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    }
+
+    window.addEventListener("resize", handleResize);
+    handleResize(); // Set initial size
+
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  return windowSize;
+}
 
 const textContainerVariants = {
   hover: {
@@ -227,6 +251,15 @@ function HomePage() {
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
+  const { width: windowWidth } = useWindowSize();
+
+  const headerWidthValue = useMemo(() => {
+    if (windowWidth <= 640) {
+      // Tailwind's sm breakpoint
+      return windowWidth * 0.9; // 90% of viewport width
+    }
+    return 480; // Fixed width for larger screens
+  }, [windowWidth]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
@@ -362,31 +395,159 @@ function HomePage() {
     restDelta: 0.001,
   });
 
-  // Header animation logic
-  const SCROLL_THRESHOLD = 80;
+  // Enhanced spring configuration for header animations
+  const headerSpringConfig = {
+    stiffness: 300,
+    damping: 40,
+    mass: 0.8,
+  };
+
+  // Header animation logic - start transitions after user scrolls to preserve original header
+  const SCROLL_THRESHOLD = 120;
+  const SCROLL_START = 80; // Start transition much later to preserve normal header
   const [isDocked, setIsDocked] = useState(false);
 
   // Reuse existing scrollY from useScroll above
   useMotionValueEvent(scrollY, "change", (latest) => {
-    setIsDocked(latest > SCROLL_THRESHOLD);
+    setIsDocked(latest > SCROLL_START);
   });
 
-  const headerHeight = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["96px", "64px"]);
-  const headerBgLight = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["hsl(0 0% 100% / 0)", "hsl(0 0% 100% / 0.6)"]);
-  const headerBgDark = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["hsl(0 0% 3% / 0)", "hsl(0 0% 8% / 0.4)"]);
-  const headerBackdropFilter = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["blur(0px)", "blur(16px)"]);
-  const headerBorderOpacity = useTransform(scrollY, [0, SCROLL_THRESHOLD], [0, 0.4]);
+  // Enhanced header animations with spring-based smoothing - keep original normal state, dramatic dock state
+  const rawHeaderHeight = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["96px", "56px"], // Original normal height, much smaller when docked
+  );
+  const headerHeight = useSpring(rawHeaderHeight, headerSpringConfig);
 
-  const headerTranslateY = useTransform(scrollY, [0, SCROLL_THRESHOLD], [0, 16]);
-  const headerWidth = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["100%", "92%"]);
-  const headerRadius = useTransform(scrollY, [0, SCROLL_THRESHOLD], ["0px", "24px"]);
+  // Improved background colors with better opacity and saturation
+  const rawHeaderBgLight = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["hsl(0 0% 100% / 0)", "hsl(0 0% 98% / 0.85)"],
+  );
+  const headerBgLight = useSpring(rawHeaderBgLight, headerSpringConfig);
 
-  // Responsive inner padding and logo scaling
-  const innerPadding = useTransform(scrollY, [0, SCROLL_THRESHOLD], [24, 12]);
-  const logoScale = useTransform(scrollY, [0, SCROLL_THRESHOLD], [1, 0.9]);
+  const rawHeaderBgDark = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["hsl(0 0% 3% / 0)", "hsl(0 0% 6% / 0.85)"],
+  );
+  const headerBgDark = useSpring(rawHeaderBgDark, headerSpringConfig);
+
+  // Enhanced backdrop blur with smoother progression
+  const rawHeaderBackdropFilter = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["blur(0px)", "blur(20px)"],
+  );
+  const headerBackdropFilter = useSpring(
+    rawHeaderBackdropFilter,
+    headerSpringConfig,
+  );
+
+  // Refined border with better opacity curve
+  const rawHeaderBorderOpacity = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    [0, 0.15],
+  );
+  const headerBorderOpacity = useSpring(
+    rawHeaderBorderOpacity,
+    headerSpringConfig,
+  );
+
+  // Smooth positioning and sizing to prevent layout shift
+  const rawHeaderTranslateY = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    [0, 24], // Move down more from the top
+  );
+  const headerTranslateY = useSpring(rawHeaderTranslateY, headerSpringConfig);
+
+  // Combine header height and translateY so the placeholder always
+  // reserves the exact vertical space the header occupies in the viewport.
+  const placeholderHeight = useMotionTemplate`calc(${headerHeight} + ${headerTranslateY}px)`;
+
+  const rawHeaderWidth = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["100%", `${headerWidthValue}px`], // Use responsive width
+  );
+  const headerWidth = useSpring(rawHeaderWidth, headerSpringConfig);
+
+  // Smooth left positioning to prevent layout shift
+  const rawHeaderLeft = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["0%", "50%"], // Smooth transition from left edge to center
+  );
+  const headerLeft = useSpring(rawHeaderLeft, headerSpringConfig);
+
+  // Smooth x transform to prevent layout shift
+  const rawHeaderX = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["0%", "-50%"], // Smooth transition to center alignment
+  );
+  const headerX = useSpring(rawHeaderX, headerSpringConfig);
+
+  const rawHeaderRadius = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["0px", "32px"],
+  );
+  const headerRadius = useSpring(rawHeaderRadius, headerSpringConfig);
+
+  // Enhanced shadow for better depth perception
+  const rawHeaderShadow = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    ["0 0 0 0 rgba(0, 0, 0, 0)", "0 8px 32px -4px rgba(0, 0, 0, 0.12)"],
+  );
+  const headerShadow = useSpring(rawHeaderShadow, headerSpringConfig);
+
+  // Restore original normal state, dramatic dock state
+  const rawInnerPadding = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    [24, 8], // Original normal padding, much tighter when docked
+  );
+  const innerPadding = useSpring(rawInnerPadding, headerSpringConfig);
+
+  const rawLogoScale = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    [1, 0.7], // More aggressive scaling
+  );
+  const logoScale = useSpring(rawLogoScale, headerSpringConfig);
+
+  // Navigation gap animation - restore original normal state
+  const rawNavGap = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    [48, 16], // Tighter gap when docked
+  );
+  const navGap = useSpring(rawNavGap, headerSpringConfig);
+
+  // Navigation item scaling for compact dock
+  const rawNavScale = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    [1, 0.8], // More aggressive scaling
+  );
+  const navScale = useSpring(rawNavScale, headerSpringConfig);
+
+  // Horizontal padding - restore original normal state
+  const rawHorizontalPadding = useTransform(
+    scrollY,
+    [SCROLL_START, SCROLL_THRESHOLD],
+    [16, 12], // Tighter padding when docked
+  );
+  const horizontalPadding = useSpring(rawHorizontalPadding, headerSpringConfig);
 
   useMotionValueEvent(scrollY, "change", (latest) => {
-    const atTop = latest < 50;
+    const atTop = latest < SCROLL_START; // Use same threshold as dock animation
     if (atTop !== isAtTop) {
       setIsAtTop(atTop);
     }
@@ -490,30 +651,45 @@ function HomePage() {
         shouldReduceMotion={shouldReduceMotion ?? false}
       />
 
-      {/* Dynamic placeholder to prevent layout shift only when header is docked */}
-      <motion.div style={{ height: isDocked ? headerHeight : 0 }} />
+      {/* Dynamic placeholder to prevent layout shift — always reserve exact header space */}
+      <motion.div style={{ height: placeholderHeight }} />
 
       <motion.header
         style={{
-          height: headerHeight,
-          width: headerWidth,
-          y: headerTranslateY,
-          x: "-50%",
-          left: "50%",
-          backgroundColor: isAtTop ? "hsla(0,0%,100%,0)" : "var(--header-theme-bg)",
+          height: isAtTop ? "96px" : headerHeight,
+          width: isAtTop ? "100%" : headerWidth,
+          y: isAtTop ? 0 : headerTranslateY,
+          x: isAtTop ? 0 : headerX,
+          left: isAtTop ? 0 : headerLeft,
+          backgroundColor: isAtTop
+            ? "hsla(0,0%,100%,0)"
+            : "var(--header-theme-bg)",
           backdropFilter: isAtTop ? "blur(0px)" : headerBackdropFilter,
           WebkitBackdropFilter: isAtTop ? "blur(0px)" : headerBackdropFilter,
-          borderRadius: headerRadius,
+          borderRadius: isAtTop ? "0px" : headerRadius,
+          boxShadow: isAtTop ? "none" : headerShadow,
         }}
         className={cn(
-          "fixed top-0 z-50 flex flex-col",
-          isDocked && "shadow-lg ring-1 ring-black/5 dark:ring-white/10",
+          "fixed top-0 z-50 flex flex-col transition-all duration-300 ease-out",
+          isDocked && "ring-1 ring-black/8 dark:ring-white/8",
         )}
       >
-        {/* Animated bottom border */}
+        {/* Enhanced border with gradient effect */}
         <motion.div
-          className="absolute bottom-0 left-0 right-0 h-px bg-border pointer-events-none"
-          style={{ opacity: headerBorderOpacity }}
+          className="absolute inset-0 rounded-[inherit] pointer-events-none"
+          style={{
+            opacity: headerBorderOpacity,
+            background: `linear-gradient(135deg,
+              rgba(255, 255, 255, 0.6) 0%,
+              rgba(255, 255, 255, 0.2) 50%,
+              rgba(255, 255, 255, 0.1) 100%)`,
+            padding: "1px",
+            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            maskComposite: "xor",
+            WebkitMask:
+              "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+          }}
         />
 
         {/* Dynamic theme background */}
@@ -523,17 +699,25 @@ function HomePage() {
         `}</style>
 
         <motion.div
-          style={{ paddingTop: innerPadding, paddingBottom: innerPadding }}
+          style={{
+            paddingTop: isAtTop ? 24 : innerPadding,
+            paddingBottom: isAtTop ? 24 : innerPadding,
+            paddingLeft: isAtTop ? 16 : horizontalPadding,
+            paddingRight: isAtTop ? 16 : horizontalPadding,
+          }}
           className="container mx-auto flex items-center justify-between px-4"
         >
           <motion.a
-            style={{ scale: logoScale }}
+            style={{ scale: isAtTop ? 1 : logoScale }}
             href="/"
             onClick={(e) => {
               e.preventDefault();
               window.location.reload();
             }}
             className="flex items-center gap-4 cursor-pointer"
+            whileHover={{ scale: (isAtTop ? 1 : logoScale.get()) * 1.05 }}
+            whileTap={{ scale: (isAtTop ? 1 : logoScale.get()) * 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
           >
             <motion.div
               initial={{ opacity: 0, x: -30 }}
@@ -565,51 +749,81 @@ function HomePage() {
             </motion.span>
           </motion.a>
 
-          <motion.nav
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6, duration: 1 }}
-            className="hidden lg:flex items-center gap-12"
-          >
-            {["Rules", "Features", "Leaderboard"].map((item, index) => (
-              <motion.div
-                key={item}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8 + index * 0.1, duration: 0.6 }}
-              >
-                <Link
-                  href={`#${item.toLowerCase()}`}
-                  className="relative text-sm font-light tracking-wide text-stone-600 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-                  data-cursor-icon
-                >
-                  {item}
-                  <motion.div
-                    className="absolute -bottom-1 left-0 h-px bg-stone-900 dark:bg-stone-100"
-                    initial={{ width: 0 }}
-                    whileHover={{ width: "100%" }}
-                    transition={{ duration: 0.3 }}
-                  />
-                </Link>
-              </motion.div>
-            ))}
-            <ThemeToggle />
-          </motion.nav>
-
-          <motion.div
-            className="lg:hidden"
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6, duration: 1 }}
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsMobileMenuOpen(true)}
+          <AnimatePresence>
+            <motion.nav
+              key="desktop-nav"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className={cn(
+                "items-center lg:flex transition-[opacity,transform]",
+                isAtTop && windowWidth > 1024 ? "gap-12 hidden lg:flex" : "gap-4 flex"
+              )}
             >
-              <Menu />
-            </Button>
-          </motion.div>
+              {isAtTop && windowWidth > 1024 ? (
+                <>
+                  {["Rules", "Features", "Leaderboard"].map((item, index) => (
+                    <motion.div
+                      key={item}
+                      whileHover={{ y: -2 }}
+                      whileTap={{ y: 0, scale: 0.98 }}
+                    >
+                      <Link
+                        href={`#${item.toLowerCase()}`}
+                        className="relative block px-3 py-2 text-sm font-light tracking-wide text-stone-600 transition-all duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 rounded-lg hover:bg-stone-100/50 dark:hover:bg-stone-800/50"
+                        data-cursor-icon
+                      >
+                        <motion.span
+                          className="relative z-10"
+                          whileHover={{ scale: 1.05 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                        >
+                          {item}
+                        </motion.span>
+                        <motion.div
+                          className="absolute -bottom-0.5 left-3 right-3 h-0.5 bg-gradient-to-r from-stone-900 to-stone-600 dark:from-stone-100 dark:to-stone-400 rounded-full"
+                          initial={{ scaleX: 0, opacity: 0 }}
+                          whileHover={{ scaleX: 1, opacity: 1 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 400,
+                            damping: 25,
+                            opacity: { duration: 0.2 },
+                          }}
+                        />
+                        <motion.div
+                          className="absolute inset-0 rounded-lg bg-gradient-to-r from-stone-50 to-stone-100 dark:from-stone-800 dark:to-stone-700"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          whileHover={{ opacity: 0.1, scale: 1 }}
+                          transition={{ duration: 0.2 }}
+                        />
+                      </Link>
+                    </motion.div>
+                  ))}
+                  <ThemeToggle />
+                </>
+              ) : (
+                <>
+                  <ThemeToggle />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="relative overflow-hidden rounded-xl hover:bg-stone-100/80 dark:hover:bg-stone-800/80 transition-colors duration-200 lg:hidden"
+                  >
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-stone-200 to-stone-300 dark:from-stone-700 dark:to-stone-600"
+                      initial={{ scale: 0, opacity: 0 }}
+                      whileHover={{ scale: 1, opacity: 0.1 }}
+                      transition={{ duration: 0.2 }}
+                    />
+                    <Menu className="relative z-10" />
+                  </Button>
+                </>
+              )}
+            </motion.nav>
+          </AnimatePresence>
         </motion.div>
       </motion.header>
 
