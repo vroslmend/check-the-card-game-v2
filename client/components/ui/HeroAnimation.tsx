@@ -161,18 +161,19 @@ export function HeroAnimation({
 
   return (
     <motion.div
-      className="relative flex items-center justify-center w-full h-full"
+      className="relative flex items-center justify-center w-full h-full lg:items-start lg:justify-center"
       style={{
         rotateX: centralRotateX,
         rotateY: centralRotateY,
         willChange: "transform",
+        scale: "clamp(0.7, 0.7 + 0.3 * ((100vw - 1024px) / (1920px - 1024px)), 1)",
       }}
     >
       <AnimatePresence mode="wait">
         {!isCheckHovered ? (
           <motion.div
             key="blob"
-            className="-translate-y-16"
+           
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{
               opacity: 1,
@@ -190,7 +191,7 @@ export function HeroAnimation({
         ) : (
           <motion.div
             key="card-container"
-            className="-translate-y-16"
+           
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: { duration: 0.1 } }}
             exit={{ opacity: 0, transition: { duration: 0.5 } }}
@@ -250,27 +251,33 @@ export function HeroAnimation({
               }}
             >
               <motion.div
-                className="absolute inset-0 h-80 w-56 rounded-lg border-2 border-stone-200 bg-gradient-to-br from-stone-100 to-stone-200/60 shadow-xl dark:border-stone-800 dark:from-stone-800 dark:to-stone-900/60"
+                className="absolute inset-0 rounded-lg border-2 border-stone-200 bg-gradient-to-br from-stone-100 to-stone-200/60 shadow-xl dark:border-stone-800 dark:from-stone-800 dark:to-stone-900/60"
                 style={{
+                  width: "clamp(168px, 20vw, 224px)",
+                  height: "clamp(240px, 28vw, 320px)",
                   backfaceVisibility: "hidden",
                   transform: "rotateY(180deg)",
                 }}
               >
                 <div className="absolute inset-4 rounded border border-stone-300/30 dark:border-stone-700/30">
                   <div className="flex h-full items-center justify-center">
-                    <div className="font-serif text-lg font-light italic text-stone-600/50 dark:text-stone-400/50">
+                    <div className="font-serif text-sm sm:text-base lg:text-lg font-light italic text-stone-600/50 dark:text-stone-400/50">
                       Check
                     </div>
                   </div>
                 </div>
               </motion.div>
               <motion.div
-                className="h-80 w-56 rounded-lg border-2 border-stone-200 bg-stone-50 shadow-xl dark:border-stone-800 dark:bg-stone-900"
-                style={{ backfaceVisibility: "hidden" }}
+                className="rounded-lg border-2 border-stone-200 bg-stone-50 shadow-xl dark:border-stone-800 dark:bg-stone-900"
+                style={{ 
+                  width: "clamp(168px, 20vw, 224px)",
+                  height: "clamp(240px, 28vw, 320px)",
+                  backfaceVisibility: "hidden" 
+                }}
               >
                 <div className="relative flex h-full flex-col justify-between p-4">
                   <motion.div
-                    className="font-serif text-xl font-light text-stone-900 dark:text-stone-100"
+                    className="font-serif text-lg sm:text-xl font-light text-stone-900 dark:text-stone-100"
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3, duration: 0.3 }}
@@ -279,7 +286,7 @@ export function HeroAnimation({
                     <div className="text-lg leading-none">♠</div>
                   </motion.div>
                   <motion.div
-                    className="absolute inset-0 flex items-center justify-center text-8xl font-light text-stone-900 dark:text-stone-100"
+                    className="absolute inset-0 flex items-center justify-center text-6xl sm:text-7xl lg:text-8xl font-light text-stone-900 dark:text-stone-100"
                     initial={{ opacity: 0, scale: 0.5, rotate: -180 }}
                     animate={{ opacity: 1, scale: 1, rotate: 0 }}
                     transition={{
@@ -293,7 +300,7 @@ export function HeroAnimation({
                     ♠
                   </motion.div>
                   <motion.div
-                    className="self-end rotate-180 font-serif text-xl font-light text-stone-900 dark:text-stone-100"
+                    className="self-end rotate-180 font-serif text-lg sm:text-xl font-light text-stone-900 dark:text-stone-100"
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3, duration: 0.3 }}

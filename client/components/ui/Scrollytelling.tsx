@@ -116,13 +116,13 @@ const FeatureCard = ({
     >
       <div>
         <feature.icon className="w-10 h-10 mb-4 text-stone-500" />
-        <h3 className="text-3xl font-light text-stone-900 dark:text-stone-100">
+        <h3 className="text-xl sm:text-2xl lg:text-3xl font-light text-stone-900 dark:text-stone-100">
           {feature.title}
         </h3>
       </div>
       <motion.p
         style={{ opacity: isMobile ? 1 : textOpacity }}
-        className="text-lg font-light text-stone-600 dark:text-stone-400"
+        className="text-sm sm:text-base lg:text-lg font-light text-stone-600 dark:text-stone-400"
       >
         {feature.description}
       </motion.p>
@@ -210,10 +210,10 @@ function DesktopScrollytelling() {
               style={{ opacity: principlesTitleOpacity, y: principlesTitleY }}
               className="text-center"
             >
-              <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+              <h2 className="mb-6 text-4xl sm:text-5xl lg:text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
                 The Art of the Game
               </h2>
-              <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
+              <p className="mx-auto max-w-2xl text-lg sm:text-xl font-light text-stone-600 dark:text-stone-400">
                 Simple rules give rise to complex strategies.
               </p>
             </motion.div>
@@ -243,10 +243,10 @@ function DesktopScrollytelling() {
         <div className="relative h-[300vh]" ref={featuresContainerRef}>
           <div className="sticky top-1/4 left-0 overflow-hidden">
             <AnimateOnView className="text-center mb-16">
-              <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+              <h2 className="mb-6 text-4xl sm:text-5xl lg:text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
                 Built for Strategy
               </h2>
-              <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
+              <p className="mx-auto max-w-2xl text-lg sm:text-xl font-light text-stone-600 dark:text-stone-400">
                 Every card holds the potential for a game-changing move.
               </p>
             </AnimateOnView>
@@ -293,10 +293,10 @@ function MobileScrollytelling() {
       <div className="container mx-auto px-4 space-y-24">
         {/* Principles Section */}
         <AnimateOnView className="text-center">
-          <h2 className="mb-6 text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+          <h2 className="mb-6 text-3xl sm:text-4xl md:text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
             The Art of the Game
           </h2>
-          <p className="mx-auto max-w-2xl text-lg font-light text-stone-600 dark:text-stone-400">
+          <p className="mx-auto max-w-2xl text-base sm:text-lg font-light text-stone-600 dark:text-stone-400">
             Simple rules give rise to complex strategies.
           </p>
         </AnimateOnView>
@@ -317,10 +317,10 @@ function MobileScrollytelling() {
         {/* Features Section */}
         <div className="space-y-16">
           <AnimateOnView className="text-center">
-            <h2 className="mb-6 text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+            <h2 className="mb-6 text-3xl sm:text-4xl md:text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
               Built for Strategy
             </h2>
-            <p className="mx-auto max-w-2xl text-lg font-light text-stone-600 dark:text-stone-400">
+            <p className="mx-auto max-w-2xl text-base sm:text-lg font-light text-stone-600 dark:text-stone-400">
               Every card holds the potential for a game-changing move.
             </p>
           </AnimateOnView>
@@ -333,11 +333,11 @@ function MobileScrollytelling() {
               >
                 <div>
                   <feature.icon className="w-10 h-10 mb-4 text-stone-500" />
-                  <h3 className="text-3xl font-light text-stone-900 dark:text-stone-100">
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-light text-stone-900 dark:text-stone-100">
                     {feature.title}
                   </h3>
                 </div>
-                <p className="text-lg font-light text-stone-600 dark:text-stone-400 mt-4">
+                <p className="text-sm sm:text-base md:text-lg font-light text-stone-600 dark:text-stone-400 mt-4">
                   {feature.description}
                 </p>
               </AnimateOnView>

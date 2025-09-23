@@ -82,7 +82,7 @@ body {
 
 html {
   scroll-behavior: smooth;
-  font-size: clamp(0.8rem, 1.5vw + 0.1rem, 1.125rem);
+  font-size: 100%; /* Stabilized root font size */
 }
 
 ::-webkit-scrollbar {
@@ -310,4 +310,55 @@ html.mobile-lock,
 body.mobile-lock {
   height: 100%;
   overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Hero Responsive Typography & Spacing                               */
+/* ------------------------------------------------------------------ */
+.hero-heading {
+  font-size: clamp(4rem, 12vw, 7rem);
+  line-height: 1;
+}
+
+.hero-p {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+.hero-spacing {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .hero-spacing {
+    gap: 2rem;
+  }
+}
+
+@media (max-height: 750px) {
+  .hero-heading {
+    font-size: clamp(3rem, 10vh, 5rem) !important;
+  }
+  .hero-p {
+    font-size: 1rem !important;
+    line-height: 1.5rem !important;
+  }
+  .hero-spacing {
+    gap: 1rem !important;
+  }
+}
+
+@media (max-height: 600px) {
+  .hero-heading {
+    font-size: clamp(2.5rem, 8vh, 4rem) !important;
+  }
+  .hero-p {
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+  }
+  .hero-spacing {
+    gap: 0.75rem !important;
+  }
 }
