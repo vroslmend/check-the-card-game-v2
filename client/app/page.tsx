@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   useState,
   useEffect,
   useRef,
@@ -164,15 +164,18 @@ function FeatureItem({
   );
 }
 
-function MobileHeroLayout({
-  handleCreateGame,
-  handleJoinGame,
-}: {
-  handleCreateGame: () => void;
-  handleJoinGame: () => void;
-}) {
+const MobileHeroLayout = React.forwardRef<
+  HTMLDivElement,
+  {
+    handleCreateGame: () => void;
+    handleJoinGame: () => void;
+  }
+>(({ handleCreateGame, handleJoinGame }, ref) => {
   return (
-    <section className="relative flex min-h-[100dvh] flex-col items-center justify-center px-6 text-center -mt-24">
+    <section
+      ref={ref}
+      className="relative flex min-h-[100dvh] flex-col items-center justify-center px-6 text-center -mt-24"
+    >
       <motion.div
         initial={{ opacity: 0, y: 60 }}
         animate={{ opacity: 1, y: 0 }}
@@ -235,7 +238,8 @@ function MobileHeroLayout({
       </motion.div>
     </section>
   );
-}
+});
+MobileHeroLayout.displayName = "MobileHeroLayout";
 
 function HomePage() {
   const [showNewGame, setShowNewGame] = useState(false);
@@ -346,7 +350,7 @@ function HomePage() {
 
   const { scrollYProgress: footerScrollYProgress } = useScroll({
     target: endOfPageRef,
-    container: scrollContainerRef ?? undefined,
+    ...(scrollContainerRef && { container: scrollContainerRef }),
     offset: ["start end", "end end"],
   });
 
@@ -386,7 +390,7 @@ function HomePage() {
   );
 
   const { scrollY, scrollYProgress } = useScroll({
-    container: scrollContainerRef ?? undefined,
+    ...(scrollContainerRef && { container: scrollContainerRef }),
   });
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 100,
@@ -627,22 +631,17 @@ function HomePage() {
     });
   };
 
+  const scrollytellingRef = useRef<HTMLDivElement>(null);
+  const isScrollytellingVisible = useInView(scrollytellingRef, {
+    ...(scrollContainerRef && { root: scrollContainerRef }),
+    margin: "-25% 0px -25% 0px",
+  });
+
   const isFooterInView = useInView(endOfPageRef, {
     margin: "0px 0px -50px 0px",
   });
 
-  // Discover more element - CSS-only positioning with clean fade animation
-  const DISCOVER_FADE_THRESHOLD = 80;
-
-  // Create a raw transform ONLY for opacity. This is critical.
-  const rawDiscoverOpacity = useTransform(
-    scrollY,
-    [0, DISCOVER_FADE_THRESHOLD],
-    [1, 0] // Creates a smooth, symmetrical fade-out and fade-in
-  );
-
-  // Apply spring smoothing to the opacity value.
-  const discoverOpacity = useSpring(rawDiscoverOpacity, headerSpringConfig);
+  const showDiscoverMore = isHeroInView && !isScrollytellingVisible;
 
   return (
     <div
@@ -1181,6 +1180,7 @@ function HomePage() {
         )}
         {useMobileLayout && (
           <MobileHeroLayout
+            ref={heroRef}
             handleCreateGame={handleCreateGame}
             handleJoinGame={handleJoinGame}
           />
@@ -1189,11 +1189,10 @@ function HomePage() {
         {/* Discover more element - positioned outside scroll container influence */}
         <motion.div
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 1.5, ease: "easeOut" }}
+          animate={{ opacity: showDiscoverMore ? 1 : 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
           style={{
-            opacity: discoverOpacity,
-            pointerEvents: isAtTop ? 'auto' : 'none'
+            pointerEvents: showDiscoverMore ? "auto" : "none",
           }}
           className="fixed bottom-4 sm:bottom-6 md:bottom-8 lg:bottom-12 left-1/2 -translate-x-1/2 z-40"
         >
@@ -1230,7 +1229,9 @@ function HomePage() {
           </motion.div>
         </motion.div>
 
-        <Scrollytelling />
+        <div ref={scrollytellingRef}>
+          <Scrollytelling />
+        </div>
 
         <section id="leaderboard" className="relative py-40">
           <div className="container px-4 mx-auto">

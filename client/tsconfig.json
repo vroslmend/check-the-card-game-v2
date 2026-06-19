@@ -19,8 +19,8 @@
         "name": "next"
       }
     ],
-    "baseUrl": ".",
     "paths": {
+      "*": ["/."],
       "@/*": ["./*"],
       "shared-types": ["../shared-types/dist"],
       "shared-types/*": ["../shared-types/dist/*"]
