@@ -18,6 +18,15 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Check! - The Card Game",
   description: "A card game of strategy, memory, and luck.",
+  openGraph: {
+    title: "Check!",
+    description: "Play online with friends, in real time.",
+    url: "https://check-the-game.vercel.app",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export default function RootLayout({
