@@ -7,6 +7,7 @@ import React, {
   useRef,
   useEffect,
   useCallback,
+  useMemo,
 } from "react";
 import {
   useUISelector,
@@ -14,7 +15,7 @@ import {
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
 import { GameStage, TurnPhase, PlayerActionType, CardRank } from "shared-types";
-import ActionBarComponent, { Action } from "./ActionBarComponent";
+import { Action } from "./ActionBarComponent";
 import {
   createDrawDeckAction,
   createDrawDiscardAction,
@@ -29,17 +30,21 @@ import {
   createStartGameAction,
 } from "./ActionFactories";
 import { isDrawnCard } from "@/lib/types";
-import logger from "@/lib/logger";
+
+const MATCHING_STAGE_DURATION_MS = 5000;
+// Must match the server's PEEK_DURATION_MS / ABILITY_PEEK_VIEW_DURATION_MS.
+const INITIAL_PEEK_DURATION_MS = 10000;
+const ABILITY_PEEK_DURATION_MS = 5000;
 
 type ActionControllerContextType = {
-  selectedCardIndex: number | null;
-  setSelectedCardIndex: React.Dispatch<React.SetStateAction<number | null>>;
   matchAttempt: { cardIndex: number } | null;
   setMatchAttempt: React.Dispatch<
     React.SetStateAction<{ cardIndex: number } | null>
   >;
   getActions: () => Action[];
   getPromptText: () => string | null;
+  /** Deadline of the active timed peek (initial or ability), for countdown UI. */
+  getTimedIndicator: () => { expireAt: number; durationMs: number } | null;
 };
 
 export const ActionControllerContext =
@@ -52,6 +57,20 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     currentAbilityContext,
     hasPassedMatch,
   } = state.context;
+
+  // Latest peek deadline (initial peek or ability peek) as primitives so the
+  // selector result stays shallow-comparable.
+  let peekExpireAt: number | null = null;
+  let peekDurationMs = 0;
+  for (const vc of state.context.visibleCards) {
+    if (vc.expireAt && (peekExpireAt === null || vc.expireAt > peekExpireAt)) {
+      peekExpireAt = vc.expireAt;
+      peekDurationMs =
+        vc.source === "initial-peek"
+          ? INITIAL_PEEK_DURATION_MS
+          : ABILITY_PEEK_DURATION_MS;
+    }
+  }
 
   if (!currentGameState || !localPlayerId) {
     return {
@@ -67,6 +86,10 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       allPlayersReady: false,
       hasPassedMatch: false,
       isAbilitySelecting: false,
+      peekExpireAt: null as number | null,
+      peekDurationMs: 0,
+      turnDeadline: null as number | null,
+      turnTimerMs: 0,
     };
   }
 
@@ -111,6 +134,10 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     ),
     hasPassedMatch,
     isAbilitySelecting,
+    peekExpireAt,
+    peekDurationMs,
+    turnDeadline: currentGameState.turnDeadline,
+    turnTimerMs: currentGameState.turnTimerMs,
   };
 };
 
@@ -122,30 +149,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
   const actorRef = useUIActorRef();
   const { send } = actorRef;
 
-  useEffect(() => {
-    if (process.env.NODE_ENV === "production") return;
-
-    const snapshot = actorRef.getSnapshot();
-    logger.debug({
-      component: "ActionController",
-      stateValue: snapshot.value,
-      statePaths:
-        (snapshot as unknown as { toStrings?: () => string[] }).toStrings?.() ??
-        [],
-      abilityContext: props.abilityContext,
-      isAbilityPlayer: props.isAbilityPlayer,
-      isAbilitySelecting: props.isAbilitySelecting,
-    });
-  }, [
-    actorRef,
-    props.abilityContext,
-    props.isAbilityPlayer,
-    props.isAbilitySelecting,
-  ]);
-
-  const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(
-    null,
-  );
   const [matchAttempt, setMatchAttempt] = useState<{
     cardIndex: number;
   } | null>(null);
@@ -153,44 +156,13 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
   const [isHoldingCallCheck, setIsHoldingCallCheck] = useState(false);
   const callCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [matchProgress, setMatchProgress] = useState(0);
-  const matchRafRef = useRef<number | null>(null);
-
   useEffect(() => {
-    setSelectedCardIndex(null);
     setMatchAttempt(null);
     setCallCheckProgress(0);
     setIsHoldingCallCheck(false);
     if (callCheckIntervalRef.current)
       clearInterval(callCheckIntervalRef.current);
-    setMatchProgress(0);
-    if (matchRafRef.current !== null) cancelAnimationFrame(matchRafRef.current);
   }, [props.gameStage, props.isMyTurn]);
-
-  useEffect(() => {
-    const DURATION = 5000;
-
-    const update = () => {
-      if (!props.matchingOpportunity || props.hasPassedMatch) {
-        setMatchProgress(0);
-        return;
-      }
-      const startTs = props.matchingOpportunity.startTimestamp ?? Date.now();
-      const elapsed = Date.now() - startTs;
-      const pct = Math.min((elapsed / DURATION) * 100, 100);
-      setMatchProgress(pct);
-      if (pct < 100) {
-        matchRafRef.current = requestAnimationFrame(update);
-      }
-    };
-
-    update();
-
-    return () => {
-      if (matchRafRef.current !== null)
-        cancelAnimationFrame(matchRafRef.current);
-    };
-  }, [props.matchingOpportunity, props.hasPassedMatch]);
 
   const clearCallCheckTimers = useCallback(() => {
     setIsHoldingCallCheck(false);
@@ -264,19 +236,22 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
           }),
         );
       }
-      const remainingMs = props.matchingOpportunity
-        ? Math.max(
-            0,
-            5000 - (Date.now() - props.matchingOpportunity.startTimestamp!),
-          )
-        : 0;
+      // The progress button animates the countdown itself; here we only need
+      // the starting point and remaining duration.
+      const elapsedMs =
+        Date.now() - (matchingOpportunity.startTimestamp ?? Date.now());
+      const remainingMs = Math.max(0, MATCHING_STAGE_DURATION_MS - elapsedMs);
+      const progressPercent = Math.min(
+        (elapsedMs / MATCHING_STAGE_DURATION_MS) * 100,
+        100,
+      );
       actions.push(
         createPassMatchAction(
           () => sendEvent({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }),
-          matchProgress,
+          progressPercent,
           remainingMs,
           false,
-          props.hasPassedMatch,
+          hasPassedMatch,
         ),
       );
       return actions;
@@ -408,7 +383,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     return actions;
   }, [
     props,
-    selectedCardIndex,
     matchAttempt,
     callCheckProgress,
     isHoldingCallCheck,
@@ -429,12 +403,14 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     } = props;
     if (!localPlayer) return null;
 
-    if (
-      matchingOpportunity &&
-      matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id) &&
-      !hasPassedMatch
-    ) {
-      return "Select a card from your hand to attempt a match, or pass.";
+    if (matchingOpportunity) {
+      if (
+        matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id) &&
+        !hasPassedMatch
+      ) {
+        return "Select a card from your hand to attempt a match, or pass.";
+      }
+      return "Waiting for the matching window to close…";
     }
     if (abilityContext && isAbilityPlayer && isAbilitySelecting) {
       const {
@@ -475,17 +451,48 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     return null;
   }, [props]);
 
+  const getTimedIndicator = useCallback(() => {
+    const {
+      peekExpireAt,
+      peekDurationMs,
+      turnDeadline,
+      turnTimerMs,
+      matchingOpportunity,
+      gameStage,
+    } = props;
+    const now = Date.now();
+    if (peekExpireAt && peekExpireAt > now) {
+      return { expireAt: peekExpireAt, durationMs: peekDurationMs };
+    }
+    // Turn-timer countdown, shown to everyone. The matching window renders
+    // its own countdown on the Pass button, so it is excluded here.
+    if (
+      turnDeadline &&
+      turnDeadline > now &&
+      turnTimerMs > 0 &&
+      !matchingOpportunity &&
+      (gameStage === GameStage.PLAYING ||
+        gameStage === GameStage.FINAL_TURNS ||
+        gameStage === GameStage.INITIAL_PEEK)
+    ) {
+      return { expireAt: turnDeadline, durationMs: turnTimerMs };
+    }
+    return null;
+  }, [props]);
+
+  const contextValue = useMemo(
+    () => ({
+      matchAttempt,
+      setMatchAttempt,
+      getActions,
+      getPromptText,
+      getTimedIndicator,
+    }),
+    [matchAttempt, getActions, getPromptText, getTimedIndicator],
+  );
+
   return (
-    <ActionControllerContext.Provider
-      value={{
-        selectedCardIndex,
-        setSelectedCardIndex,
-        matchAttempt,
-        setMatchAttempt,
-        getActions,
-        getPromptText,
-      }}
-    >
+    <ActionControllerContext.Provider value={contextValue}>
       {children}
     </ActionControllerContext.Provider>
   );

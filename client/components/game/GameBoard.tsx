@@ -1,6 +1,5 @@
 "use client";
 
-import { WifiOff } from "lucide-react";
 import {
   useUISelector,
   useUIActorRef,
@@ -14,6 +13,7 @@ import { ActionControllerView } from "./ActionControllerView";
 import { AnimatePresence } from "framer-motion";
 import { GameEndScreen } from "./GameEndScreen";
 import { GameHeader } from "./GameHeader";
+import SidePanel from "@/components/layout/SidePanel";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
   state.matches({ inGame: "disconnected" });
@@ -34,11 +34,15 @@ const selectGameBoardProps = (state: UIMachineSnapshot) => {
   };
 };
 
-const selectGameEndProps = (state: UIMachineSnapshot) => ({
-  gameStage: state.context.currentGameState?.gameStage,
-  players: Object.values(state.context.currentGameState?.players ?? {}),
-  winnerId: state.context.currentGameState?.winnerId ?? null,
-});
+const selectGameEndProps = (state: UIMachineSnapshot) => {
+  const gameState = state.context.currentGameState;
+  const fallbackWinner = gameState?.winnerId ? [gameState.winnerId] : [];
+  return {
+    gameStage: gameState?.gameStage,
+    players: Object.values(gameState?.players ?? {}),
+    winnerIds: gameState?.gameover?.winnerIds ?? fallbackWinner,
+  };
+};
 
 const ConnectionStatusBanner = () => {
   const isDisconnected = useUISelector(selectIsDisconnected);
@@ -81,7 +85,7 @@ export function GameBoard() {
   const { send } = useUIActorRef();
   const { gameState, localPlayerId, playerWithPendingCard, isMyTurn } =
     useUISelector(selectGameBoardProps);
-  const { gameStage, players, winnerId } = useUISelector(selectGameEndProps);
+  const { gameStage, players, winnerIds } = useUISelector(selectGameEndProps);
 
   if (!localPlayerId || !gameState) {
     return <LoadingIndicator />;
@@ -114,7 +118,7 @@ export function GameBoard() {
             gameStage === GameStage.SCORING) && (
             <GameEndScreen
               players={players}
-              winnerId={winnerId}
+              winnerIds={winnerIds}
               localPlayerId={localPlayerId}
               onPlayAgain={handlePlayAgain}
             />
@@ -122,6 +126,7 @@ export function GameBoard() {
         </AnimatePresence>
 
         <ConnectionStatusBanner />
+        <SidePanel />
         <GameStateError
           hasPlayers={opponentPlayers.length > 0}
           hasGameState={!!gameState}

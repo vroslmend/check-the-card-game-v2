@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
-import { useSyncExternalStore } from "react";
+import { createContext, useContext } from "react";
+import { useSelector } from "@xstate/react";
 import {
   type UIMachineActorRef,
   type UIMachineSnapshot,
@@ -26,23 +26,33 @@ export function useUIActorRef() {
 }
 
 /**
- * A hook to subscribe to the actor's state and select a part of it.
- * This is the custom equivalent of the `useSelector` that createActorContext provided.
+ * Compares selector results one level deep so selectors can return small
+ * derived objects without re-rendering on every unrelated snapshot change.
+ */
+export function shallowEqual<T>(a: T, b: T): boolean {
+  if (Object.is(a, b)) return true;
+  if (
+    typeof a !== "object" ||
+    typeof b !== "object" ||
+    a === null ||
+    b === null
+  ) {
+    return false;
+  }
+  const keysA = Object.keys(a) as (keyof T)[];
+  const keysB = Object.keys(b) as (keyof T)[];
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((key) => Object.is(a[key], b[key]));
+}
+
+/**
+ * Subscribes to the UI machine and re-renders only when the selected value
+ * changes (shallow comparison by default).
  */
 export function useUISelector<T>(
   selector: (snapshot: UIMachineSnapshot) => T,
-  compare?: (a: T, b: T) => boolean,
+  compare: (a: T, b: T) => boolean = shallowEqual,
 ): T {
   const actorRef = useUIActorRef();
-
-  const state = useSyncExternalStore(
-    (onStoreChange) => {
-      const subscription = actorRef.subscribe(onStoreChange);
-      return () => subscription.unsubscribe();
-    },
-    () => actorRef.getSnapshot(),
-    () => actorRef.getSnapshot(),
-  );
-
-  return useMemo(() => selector(state), [state, selector, compare]);
+  return useSelector(actorRef, selector, compare);
 }

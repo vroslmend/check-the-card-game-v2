@@ -4,7 +4,13 @@ import {
   useUIActorRef,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
-import { type Player, TurnPhase, PlayerActionType } from "shared-types";
+import {
+  type Player,
+  TurnPhase,
+  PlayerActionType,
+  PlayerStatus,
+  GameStage,
+} from "shared-types";
 import PlayerHand from "./PlayerHand";
 import { cn } from "@/lib/utils";
 import { useActionController } from "./ActionController";
@@ -15,6 +21,9 @@ import {
   Clock,
   PlayCircle,
   ArrowRightCircle,
+  Ban,
+  Eye,
+  Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -44,17 +53,31 @@ const selectStripContext = (state: UIMachineSnapshot) => {
 
   const isTargetableForAbility = !!currentAbilityContext;
 
-  return { canSwap, canMatch, isTargetableForAbility };
+  return {
+    canSwap,
+    canMatch,
+    isTargetableForAbility,
+    gameStage: currentGameState?.gameStage ?? null,
+    matchingPlayerIds:
+      currentGameState?.matchingOpportunity?.remainingPlayerIDs ?? null,
+    publicPeekerId: currentGameState?.publicPeek?.peekerId ?? null,
+  };
 };
 
 const PlayerInfoBadge = ({
   player,
   isCurrentTurn,
   isLocalPlayer,
+  gameStage,
+  isInMatchingWindow,
+  isPeekingCards,
 }: {
   player: Player;
   isCurrentTurn: boolean;
   isLocalPlayer: boolean;
+  gameStage: GameStage | null;
+  isInMatchingWindow: boolean;
+  isPeekingCards: boolean;
 }) => {
   const getStatus = () => {
     if (!player.isConnected)
@@ -62,6 +85,24 @@ const PlayerInfoBadge = ({
         Icon: WifiOff,
         text: "Disconnected",
         color: "text-rose-700 dark:text-rose-400",
+      };
+    if (player.status === PlayerStatus.DISQUALIFIED)
+      return {
+        Icon: Ban,
+        text: "Disqualified",
+        color: "text-rose-700 dark:text-rose-400",
+      };
+    if (isPeekingCards)
+      return {
+        Icon: Eye,
+        text: "Peeking",
+        color: "text-amber-600 dark:text-amber-400",
+      };
+    if (isInMatchingWindow)
+      return {
+        Icon: Zap,
+        text: "Matching…",
+        color: "text-amber-600 dark:text-amber-400",
       };
     if (isCurrentTurn)
       return {
@@ -75,6 +116,18 @@ const PlayerInfoBadge = ({
         text: "Check Called",
         color: "text-sky-600 dark:text-sky-400",
       };
+    if (gameStage === GameStage.INITIAL_PEEK)
+      return player.isReady
+        ? {
+            Icon: CheckCircle,
+            text: "Ready",
+            color: "text-teal-600 dark:text-teal-400",
+          }
+        : {
+            Icon: Eye,
+            text: "Peeking",
+            color: "text-stone-600 dark:text-stone-400",
+          };
     return {
       Icon: Clock,
       text: "Waiting",
@@ -130,16 +183,17 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
   isLocalPlayer,
   isCurrentTurn,
 }) => {
-  const { canSwap, canMatch, isTargetableForAbility } =
-    useUISelector(selectStripContext);
+  const {
+    canSwap,
+    canMatch,
+    isTargetableForAbility,
+    gameStage,
+    matchingPlayerIds,
+    publicPeekerId,
+  } = useUISelector(selectStripContext);
 
   const { send } = useUIActorRef();
-  const {
-    selectedCardIndex,
-    setSelectedCardIndex,
-    setMatchAttempt,
-    matchAttempt,
-  } = useActionController();
+  const { setMatchAttempt, matchAttempt } = useActionController();
 
   const handleCardClick = (cardIndex: number) => {
     if (isLocalPlayer && canMatch) {
@@ -181,6 +235,9 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         player={player}
         isCurrentTurn={isCurrentTurn}
         isLocalPlayer={isLocalPlayer}
+        gameStage={gameStage}
+        isInMatchingWindow={!!matchingPlayerIds?.includes(player.id)}
+        isPeekingCards={publicPeekerId === player.id}
       />
       <PlayerHand
         player={player}
@@ -189,11 +246,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         canInteract={canInteract}
         isLocked={player.isLocked}
         selectedCardIndex={
-          isLocalPlayer
-            ? canMatch
-              ? matchAttempt?.cardIndex
-              : selectedCardIndex
-            : undefined
+          isLocalPlayer && canMatch ? matchAttempt?.cardIndex : undefined
         }
         className="w-full max-w-md"
       />

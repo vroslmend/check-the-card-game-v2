@@ -80,18 +80,16 @@ export function RejoinModal() {
   };
 
   return (
-    <Dialog
-      open={isVisible}
-      onOpenChange={(open) => {
-        if (!open) {
-          router.push("/");
-        }
-      }}
-    >
+    // The prompt is a required decision: dismissing it (outside click, ESC or
+    // an X button) used to leave the page with no way to bring the form back.
+    // It is now non-dismissible, with an explicit "back to home" link instead.
+    <Dialog open={isVisible}>
       <AnimatePresence>
         {isVisible && (
           <DialogContent
+            showCloseButton={false}
             onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
             className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-zinc-950 border-stone-200 dark:border-zinc-800 rounded-xl border"
           >
             <motion.div
@@ -137,7 +135,7 @@ export function RejoinModal() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center">
+                <div className="flex flex-col items-center justify-center gap-3">
                   <Button
                     type="submit"
                     disabled={isLoading || !playerName.trim()}
@@ -155,6 +153,14 @@ export function RejoinModal() {
                       </span>
                     )}
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/")}
+                    disabled={isLoading}
+                    className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 underline-offset-4 hover:underline transition-colors disabled:opacity-50"
+                  >
+                    No thanks, take me home
+                  </button>
                 </div>
               </form>
             </motion.div>

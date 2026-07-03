@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { PanelLeftClose, PanelLeftOpen, Info, ChevronLeft, User } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, ChevronLeft, User } from 'lucide-react';
 import { useUIActorRef, useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
 import Link from 'next/link';
 import Magnetic from '@/components/ui/Magnetic';
@@ -58,18 +58,6 @@ export const GameHeader = () => {
         <div className="flex items-center h-10">
           <ThemeToggle />
         </div>
-
-        <Magnetic>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-10 w-10 min-w-[40px] rounded-full bg-stone-100/70 hover:bg-stone-100/90 dark:bg-zinc-800/70 dark:hover:bg-zinc-800/90 flex items-center justify-center"
-            data-cursor-link
-          >
-            <Info className="h-5 w-5 text-stone-600 dark:text-stone-400" />
-            <span className="sr-only">Game Information</span>
-          </Button>
-        </Magnetic>
 
         <Magnetic>
           <Button 

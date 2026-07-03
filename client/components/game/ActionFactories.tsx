@@ -1,11 +1,9 @@
 import React from "react";
 import { Action } from "./ActionBarComponent";
 import {
-  Circle,
   Eye,
   CheckCircle,
   X,
-  Shuffle,
   SkipForward,
   Ban,
   Play,
@@ -55,7 +53,10 @@ export const createCallCheckAction = (
   disabled?: boolean,
   showProgress?: boolean,
 ): Action => ({
-  label: "CHECK!",
+  // Hold-to-confirm: the fill animates while the pointer is held so an
+  // accidental click can't end your round. The label says so, otherwise a
+  // quick click reads as a broken loading animation.
+  label: "Hold to Check!",
   onPointerDown,
   onPointerUp,
   onPointerLeave,
@@ -122,17 +123,6 @@ export const createSkipAbilityAction = (
   className: "text-stone-300",
 });
 
-export const createCancelAbilityAction = (
-  onClick: () => void,
-  disabled?: boolean,
-): Action => ({
-  label: "Cancel Ability",
-  onClick,
-  disabled,
-  icon: <Ban className="h-5 w-5" />,
-  className: "text-rose-300",
-});
-
 export const createReadyForPeekAction = (
   onClick: () => void,
   disabled?: boolean,
@@ -164,11 +154,4 @@ export const createStartGameAction = (
   disabled,
   icon: <Play className="h-5 w-5" />,
   className: "text-teal-300",
-});
-
-export const createAbilityPeekingAction = (timeLeft: number): Action => ({
-  label: `Peeking... ${Math.ceil(timeLeft)}s`,
-  onClick: () => {},
-  disabled: true,
-  className: "bg-purple-500/50 text-purple-200",
 });

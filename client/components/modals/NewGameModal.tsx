@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { PlusCircle, Sparkles, ArrowRight } from "lucide-react";
+import { PlusCircle, Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,19 +34,18 @@ export function NewGameModal({
     }
     return "";
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
   const { isMobile } = useDevice();
 
   const { send } = useUIActorRef();
-  const state = useUISelector((s) => s);
+  // Loading state lives in the machine, so a failed request re-enables the
+  // button instead of leaving the modal stuck on "Creating...".
+  const isLoading = useUISelector((s) => s.hasTag("loading"));
 
-  const handleCreateGame = async () => {
+  const handleCreateGame = () => {
     if (!playerName.trim()) {
       toast.error("Please enter your name.");
       return;
     }
-    setIsLoading(true);
     localStorage.setItem("localPlayerName", playerName);
     send({ type: "CREATE_GAME_REQUESTED", playerName });
   };
@@ -60,7 +58,12 @@ export function NewGameModal({
 
   return (
     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-      <DialogContent className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800">
+      <DialogContent
+        onInteractOutside={(e) => {
+          if (isLoading) e.preventDefault();
+        }}
+        className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800"
+      >
         <div className="relative">
           <div className="relative p-6">
             <DialogHeader className="mb-8">
@@ -133,18 +136,24 @@ export function NewGameModal({
                     className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 relative overflow-hidden group"
                     data-cursor-link
                   >
+                    {/* Constant label + arrow↔spinner swap keeps the button
+                        the same width while loading (no size jump). */}
                     <span className="relative z-10 flex items-center gap-2">
-                      {isLoading ? "Creating..." : "Create Game"}
-                      <motion.div
-                        animate={{ x: [0, 4, 0] }}
-                        transition={{
-                          duration: 2,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                        }}
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                      </motion.div>
+                      Create Game
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <motion.div
+                          animate={{ x: [0, 4, 0] }}
+                          transition={{
+                            duration: 2,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                          }}
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                        </motion.div>
+                      )}
                     </span>
                     <motion.div
                       className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
@@ -161,8 +170,12 @@ export function NewGameModal({
                   className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 relative overflow-hidden group"
                   data-cursor-link
                 >
-                  {isLoading ? "Creating..." : "Create Game"}
-                  <ArrowRight className="h-4 w-4" />
+                  Create Game
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ArrowRight className="h-4 w-4" />
+                  )}
                 </Button>
               )}
             </DialogFooter>

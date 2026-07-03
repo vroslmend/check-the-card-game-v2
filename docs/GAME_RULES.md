@@ -53,6 +53,13 @@ _**Note on Special Cards:** If a King, Queen, or Jack is drawn from the deck and
 #### **B. End of Turn**
 After a player discards a card (completing their Draw Action), the game enters **The Matching Stage**. Once the Matching Stage and any resulting Special Abilities are fully resolved, the turn passes to the next player.
 
+#### **C. Turn Timer**
+Each decision window is time-limited (default: 45 seconds) so a single player cannot stall the game:
+*   **Draw window:** if the player has not acted when time expires, they automatically draw from the Draw Pile.
+*   **Discard window:** an unresolved deck draw is automatically discarded; a discard-pile draw is automatically swapped with the first card in the player's grid.
+*   **Ability window:** an unresolved Special Ability fizzles (see Section 11.C).
+*   **Initial Peek:** if a player never declares Ready, the peek phase begins anyway once the timer expires.
+
 ## **7. The Matching Stage**
 
 This is a timed, real-time event that occurs immediately after *any* card is discarded.
@@ -82,6 +89,7 @@ This is a timed, real-time event that occurs immediately after *any* card is dis
     1.  If a player attempts to match with a card of the wrong rank, the attempt fails.
     2.  **Penalty:** The player must immediately **draw one (1) card** from the Draw Pile and add it to their hand. The invalid card returns to their hand.
     3.  The matching opportunity then **continues** for all other eligible players until the stage ends. The penalized player may attempt to match again if they have another valid card.
+    4.  **Penalty Limit (Disqualification):** If a penalty card brings a player's hand to **eight (8) cards**, that player is **disqualified** from the round. They are immediately **locked** (see Section 9.D): they take no further turns, cannot match, and their pending abilities fizzle. Their hand is still revealed and scored at the end of the round, but a disqualified player **cannot win**. If disqualifications leave fewer than two active players and no "Check" is in progress, the round ends immediately and proceeds to Scoring.
 
 ## **8. Special Card Abilities**
 
@@ -90,6 +98,8 @@ Abilities are triggered when a Special Card (King, Queen, or Jack) is discarded 
 *   **King (K):** Peek at any **two** cards on the table (your own or an opponent's). Then, swap any **one** card on the table with any **other** card.
 *   **Queen (Q):** Peek at any **one** card on the table. Then, swap any **one** card with any **other** card.
 *   **Jack (J):** Swap any **one** card with any **other** card. (No peek).
+
+_**Note on Peek Visibility:** As at a real table, **all players can see which card positions are being peeked at** — only the peeking player sees the card's face. Similarly, a card taken from the Discard Pile remains face-up for everyone while it is held, since it was already public knowledge._
 
 #### **A. Skipping Abilities**
 A player may choose to skip parts of their ability. For a King or Queen, they can skip the "peek" stage and proceed to the "swap" stage. They can also skip the "swap" stage, which ends the ability's effect.

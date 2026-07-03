@@ -9,6 +9,7 @@ import {
   ActiveAbility,
   RichGameLogMessage,
   ChatMessage,
+  PublicPeekInfo,
 } from "shared-types";
 
 export interface ServerActiveAbility extends Omit<ActiveAbility, "stage"> {
@@ -47,6 +48,7 @@ export interface GameContext {
     cardToMatch: Card;
     originalPlayerID: PlayerId;
     remainingPlayerIDs: PlayerId[];
+    startTimestamp: number;
   } | null;
   abilityStack: ServerActiveAbility[];
   checkDetails: {
@@ -65,19 +67,15 @@ export interface GameContext {
   discardPileIsSealed: boolean;
   errorState: {
     message: string;
-    retryCount: number;
-    errorType:
-      | "DECK_EMPTY"
-      | "NETWORK_ERROR"
-      | "PLAYER_ERROR"
-      | "GENERAL_ERROR"
-      | null;
+    errorType: "DECK_EMPTY" | "NETWORK_ERROR";
     affectedPlayerId?: PlayerId;
-    recoveryState?: unknown;
   } | null;
   maxPlayers: number;
   cardsPerPlayer: number;
   winnerId: PlayerId | null;
+  publicPeek: PublicPeekInfo | null;
+  turnDeadline: number | null;
+  turnTimerMs: number;
 }
 
 export type GameInput = {

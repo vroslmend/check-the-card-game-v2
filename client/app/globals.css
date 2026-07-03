@@ -82,7 +82,9 @@ body {
 
 html {
   scroll-behavior: smooth;
-  font-size: clamp(0.8rem, 1.5vw + 0.1rem, 1.125rem);
+  /* Fixed root font size: a viewport-scaled rem base makes every rem-derived
+     layout shift while the browser chrome shows/hides on mobile. */
+  font-size: 100%;
 }
 
 ::-webkit-scrollbar {
@@ -268,6 +270,30 @@ html {
   .\@container {
     container-type: inline-size;
   }
+
+  /* Mobile browsers overshoot 100vh by the collapsible URL bar, cutting off
+     the bottom of the board (action bar, prompt text). Dynamic viewport units
+     track the visible area instead. */
+  .h-screen {
+    height: 100dvh;
+  }
+
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+}
+
+/* Card face typography scales with the card via container-query units, with a
+   fixed fallback for browsers that can't resolve cq units (e.g. older
+   Firefox/Zen builds, where the corner ranks otherwise render at size 0). */
+.card-corner-text {
+  font-size: 1rem;
+  font-size: clamp(0.875rem, 40cqw, 1.25rem);
+}
+
+.card-suit-text {
+  font-size: 1.5rem;
+  font-size: clamp(0.875rem, 20cqw, 3rem);
 }
 
 @media (prefers-reduced-motion: reduce) {

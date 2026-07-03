@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { type Player, type Card } from "shared-types";
+import { type Player, type Card, PlayerStatus } from "shared-types";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Crown, PartyPopper } from "lucide-react";
@@ -11,7 +11,7 @@ import { useUISelector } from "@/context/GameUIContext";
 
 interface GameEndScreenProps {
   players: Player[];
-  winnerId: string | null;
+  winnerIds: string[];
   localPlayerId: string;
   onPlayAgain: () => void;
 }
@@ -70,13 +70,18 @@ const selectIsGameMaster = (state: any) =>
 
 export const GameEndScreen = ({
   players,
-  winnerId,
+  winnerIds,
   localPlayerId,
   onPlayAgain,
 }: GameEndScreenProps) => {
-  const winner = players.find((p) => p.id === winnerId);
+  const winners = players.filter((p) => winnerIds.includes(p.id));
   const sortedPlayers = [...players].sort((a, b) => a.score - b.score);
   const isGameMaster = useUISelector(selectIsGameMaster);
+
+  const title =
+    winners.length === 0
+      ? "Round Over!"
+      : `${winners.map((w) => w.name).join(" & ")} Win${winners.length === 1 ? "s" : ""}!`;
 
   return (
     <motion.div
@@ -91,9 +96,20 @@ export const GameEndScreen = ({
           variants={itemVariants}
           className="flex flex-col items-center gap-2 text-center"
         >
-          <PartyPopper className="w-16 h-16 text-amber-500" />
+          <motion.div
+            initial={{ scale: 0, rotate: -30 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{
+              type: "spring",
+              stiffness: 260,
+              damping: 12,
+              delay: 0.25,
+            }}
+          >
+            <PartyPopper className="w-16 h-16 text-amber-500" />
+          </motion.div>
           <h1 className="text-5xl font-light tracking-tighter text-zinc-800 dark:text-zinc-100">
-            {winner ? `${winner.name} Wins!` : "Round Over!"}
+            {title}
           </h1>
           <p className="text-lg text-zinc-500 dark:text-zinc-400">
             Final Scores
@@ -110,14 +126,14 @@ export const GameEndScreen = ({
               variants={itemVariants}
               className={cn(
                 "p-4 rounded-2xl transition-all duration-300 flex flex-col md:flex-row md:items-center gap-4",
-                player.id === winnerId
+                winnerIds.includes(player.id)
                   ? "bg-amber-100/60 dark:bg-amber-900/30 border-2 border-amber-400/80"
                   : "bg-white/60 dark:bg-zinc-900/60 border border-stone-200 dark:border-zinc-800",
               )}
             >
               <div className="flex-shrink-0 flex justify-between items-center md:flex-col md:w-32 md:items-start">
                 <div className="flex items-center gap-2 font-bold text-xl text-zinc-800 dark:text-zinc-200">
-                  {player.id === winnerId && (
+                  {winnerIds.includes(player.id) && (
                     <Crown className="w-6 h-6 text-amber-500" />
                   )}
                   <span className="truncate max-w-[120px]">
@@ -128,6 +144,11 @@ export const GameEndScreen = ({
                       </span>
                     )}
                   </span>
+                  {player.status === PlayerStatus.DISQUALIFIED && (
+                    <span className="text-xs font-sans font-medium uppercase tracking-wide text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/40 rounded-full px-2 py-0.5">
+                      Disqualified
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="font-mono text-2xl font-semibold text-zinc-800 dark:text-zinc-100">
@@ -146,19 +167,18 @@ export const GameEndScreen = ({
                   initial="hidden"
                   animate="visible"
                 >
-                  {player.hand
-                    .filter(
-                      (c): c is Card => typeof c === "object" && "rank" in c,
-                    )
-                    .map((card, cardIndex) => (
-                      <motion.div key={cardIndex} variants={cardItemVariants}>
+                  {player.hand.map((card) => {
+                    const isRevealed = "rank" in card;
+                    return (
+                      <motion.div key={card.id} variants={cardItemVariants}>
                         <PlayingCard
-                          card={card}
-                          faceDown={false}
+                          card={isRevealed ? (card as Card) : undefined}
+                          faceDown={!isRevealed}
                           className="w-16 aspect-[5/7]"
                         />
                       </motion.div>
-                    ))}
+                    );
+                  })}
                 </motion.div>
               </div>
             </motion.div>
