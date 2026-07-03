@@ -9,6 +9,7 @@ import {
   ActiveAbility,
   RichGameLogMessage,
   ChatMessage,
+  PublicPeekInfo,
 } from "shared-types";
 
 export interface ServerActiveAbility extends Omit<ActiveAbility, "stage"> {
@@ -72,6 +73,9 @@ export interface GameContext {
   maxPlayers: number;
   cardsPerPlayer: number;
   winnerId: PlayerId | null;
+  publicPeek: PublicPeekInfo | null;
+  turnDeadline: number | null;
+  turnTimerMs: number;
 }
 
 export type GameInput = {

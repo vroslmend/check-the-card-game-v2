@@ -61,6 +61,9 @@ const ABILITY_PEEK_VIEW_DURATION_MS = 5000;
 // Rules 7: a player whose hand reaches this size via failed-match penalties is
 // disqualified from the round (locked, revealed at scoring, cannot win).
 const MAX_HAND_SIZE = parseInt(process.env.MAX_HAND_SIZE || "8", 10);
+// Per-decision-window time limit (draw, discard, ability). On expiry the turn
+// auto-resolves so one idle player can't stall the whole game.
+const TURN_TIMER_MS = parseInt(process.env.TURN_TIMER_MS || "45000", 10);
 
 const getPlayerNameForLog = (
   playerId: PlayerId,
@@ -218,10 +221,23 @@ const baseTurnStateNode = {
     [TurnPhase.DRAW]: {
       entry: [
         "log_ENTER_TURN_DRAW",
-        assign({ currentTurnSegment: TurnPhase.DRAW }),
+        assign(() => ({
+          currentTurnSegment: TurnPhase.DRAW,
+          turnDeadline: Date.now() + TURN_TIMER_MS,
+        })),
         "unsealDiscardPile",
         "broadcastGameState",
       ],
+      // Turn timer: an idle player auto-draws from the deck so the game
+      // can't stall on one connected-but-absent player.
+      after: {
+        turnTimer: {
+          actions: raise(({ context }: { context: GameContext }) => ({
+            type: PlayerActionType.DRAW_FROM_DECK as const,
+            playerId: context.currentPlayerId!,
+          })) as any,
+        },
+      },
       on: {
         [PlayerActionType.DRAW_FROM_DECK]: {
           target: TurnPhase.DISCARD,
@@ -240,13 +256,16 @@ const baseTurnStateNode = {
           // earlier, while it was not yet their turn). Pause for recovery.
           target: "#game.error",
           guard: "isCurrentPlayerDisconnected",
-          actions: {
-            type: "enterErrorState",
-            params: ({ context }: { context: GameContext }) => ({
-              errorType: "NETWORK_ERROR" as const,
-              playerId: context.currentPlayerId!,
-            }),
-          },
+          actions: [
+            {
+              type: "enterErrorState",
+              params: ({ context }: { context: GameContext }) => ({
+                errorType: "NETWORK_ERROR" as const,
+                playerId: context.currentPlayerId!,
+              }),
+            },
+            "broadcastGameState",
+          ],
         },
         {
           target: "#game.error",
@@ -262,9 +281,39 @@ const baseTurnStateNode = {
     [TurnPhase.DISCARD]: {
       entry: [
         "log_ENTER_TURN_DISCARD",
-        assign({ currentTurnSegment: TurnPhase.DISCARD }),
+        assign(() => ({
+          currentTurnSegment: TurnPhase.DISCARD,
+          turnDeadline: Date.now() + TURN_TIMER_MS,
+        })),
         "broadcastGameState",
       ],
+      // Turn timer: deck draws are auto-discarded; discard-pile draws must be
+      // swapped (rules 6.A), so the first hand slot is used.
+      after: {
+        turnTimer: {
+          actions: enqueueActions(
+            ({ context, enqueue }: { context: GameContext; enqueue: any }) => {
+              const playerId = context.currentPlayerId;
+              const pending = playerId
+                ? context.players[playerId]?.pendingDrawnCard
+                : null;
+              if (!playerId || !pending) return;
+              if (pending.source === "deck") {
+                enqueue.raise({
+                  type: PlayerActionType.DISCARD_DRAWN_CARD,
+                  playerId,
+                });
+              } else {
+                enqueue.raise({
+                  type: PlayerActionType.SWAP_AND_DISCARD,
+                  playerId,
+                  payload: { handCardIndex: 0 },
+                });
+              }
+            },
+          ) as any,
+        },
+      },
       on: {
         [PlayerActionType.SWAP_AND_DISCARD]: {
           guard: and(["isPlayerTurn", "hasDrawnCard", "isValidHandIndex"]),
@@ -287,8 +336,21 @@ const baseTurnStateNode = {
     ability: {
       entry: [
         "log_ENTER_TURN_ABILITY",
-        assign({ currentTurnSegment: TurnPhase.ABILITY }),
+        assign(() => ({
+          currentTurnSegment: TurnPhase.ABILITY,
+          turnDeadline: Date.now() + TURN_TIMER_MS,
+        })),
+        "broadcastGameState",
       ],
+      // Turn timer: an unresolved ability fizzles. Re-entering arms a fresh
+      // timer for the next ability on the stack (if any).
+      after: {
+        turnTimer: {
+          target: "ability",
+          reenter: true,
+          actions: ["fizzleTopAbility", "broadcastGameState"],
+        },
+      },
       always: [
         {
           guard: or(["isAbilityOwnerLocked", "isAbilityOwnerDisconnected"]),
@@ -317,7 +379,9 @@ const baseTurnStateNode = {
     matching: {
       entry: [
         "log_ENTER_TURN_MATCHING",
-        assign({ currentTurnSegment: TurnPhase.MATCHING }),
+        // The matching window has its own countdown (matchingOpportunity's
+        // startTimestamp); clear the turn deadline so clients don't show two.
+        assign({ currentTurnSegment: TurnPhase.MATCHING, turnDeadline: null }),
         "setupMatchingOpportunity",
         "broadcastGameState",
       ],
@@ -814,10 +878,30 @@ export const gameMachine = setup({
         });
       }
 
+      // Real-life table parity: everyone gets to see WHICH cards are being
+      // peeked at (positions only, never the faces). Cleared when the peek
+      // display window ends (skip/swap/stage flip/fizzle).
+      let newPublicPeek = null as GameContext["publicPeek"];
+      if (
+        payload.action === "peek" &&
+        currentAbility.stage === "peeking" &&
+        Array.isArray(payload.targets)
+      ) {
+        newPublicPeek = {
+          peekerId: playerId,
+          targets: payload.targets.map((t) => ({
+            playerId: t.playerId,
+            cardIndex: t.cardIndex,
+          })),
+          startedAt: Date.now(),
+        };
+      }
+
       return {
         players: updatedPlayers,
         abilityStack: newAbilityStack,
         log: newLog,
+        publicPeek: newPublicPeek,
       };
     }),
     updatePlayerLobbyReady: assign(({ context, event }) => {
@@ -862,6 +946,8 @@ export const gameMachine = setup({
           }),
         ] as RichGameLogMessage[],
         gameStage: GameStage.DEALING,
+        publicPeek: null,
+        turnDeadline: null,
       };
     }),
     updatePlayerPeekReady: assign(({ context, event }) => {
@@ -1166,6 +1252,8 @@ export const gameMachine = setup({
         winnerId: winnerIds[0] ?? null,
         gameover: { winnerIds, loserId, playerScores },
         gameStage: GameStage.SCORING,
+        publicPeek: null,
+        turnDeadline: null,
       };
     }),
     resetForNewRound: assign(({ context }) => {
@@ -1263,6 +1351,8 @@ export const gameMachine = setup({
           errorType: params.errorType,
           affectedPlayerId: params.playerId,
         },
+        // The game is paused; don't leave a stale countdown ticking on clients.
+        turnDeadline: null,
       }),
     ),
     clearErrorState: assign({ errorState: null }),
@@ -1437,6 +1527,7 @@ export const gameMachine = setup({
     }),
     fizzleTopAbility: assign({
       abilityStack: ({ context }) => context.abilityStack.slice(0, -1),
+      publicPeek: null,
       log: ({ context }) => {
         const fizzledAbility = context.abilityStack.at(-1);
         if (!fizzledAbility) return context.log;
@@ -1452,6 +1543,24 @@ export const gameMachine = setup({
       },
     }),
     emitPeekResults,
+    // Privately sends each player their own bottom-two cards for the initial
+    // peek. Used both when everyone readies up and on the ready-stall timeout.
+    sendInitialPeekInfo: enqueueActions(({ context, enqueue }) => {
+      context.turnOrder.forEach((playerId: PlayerId) => {
+        const playerHand = context.players[playerId]!.hand;
+        const peekableCards = playerHand.slice(-2);
+        enqueue(
+          emit({
+            type: "SEND_EVENT_TO_PLAYER",
+            payload: {
+              playerId,
+              eventName: SocketEventName.INITIAL_PEEK_INFO,
+              eventData: { hand: peekableCards },
+            },
+          }) as any,
+        );
+      });
+    }) as any,
     schedulePeekToSwap: enqueueActions(({ context, event, enqueue }) => {
       if (event.type !== PlayerActionType.USE_ABILITY) return;
       const ability = context.abilityStack.at(-1);
@@ -1472,20 +1581,23 @@ export const gameMachine = setup({
         });
       }
     }) as any,
-    transitionToSwapStage: assign({
-      abilityStack: ({ context, event }) => {
-        assertEvent(event, "TIMER.PEEK_TO_SWAP");
-        return produce(context.abilityStack, (draft) => {
-          const currentAbility = draft.at(-1);
-          if (
-            currentAbility &&
-            currentAbility.stage === "peeking" &&
-            currentAbility.sourceCard.id === event.sourceCardId
-          ) {
-            currentAbility.stage = "swapping";
-          }
-        });
-      },
+    transitionToSwapStage: assign(({ context, event }) => {
+      assertEvent(event, "TIMER.PEEK_TO_SWAP");
+      const currentAbility = context.abilityStack.at(-1);
+      if (
+        !currentAbility ||
+        currentAbility.stage !== "peeking" ||
+        currentAbility.sourceCard.id !== event.sourceCardId
+      ) {
+        return {};
+      }
+      return {
+        abilityStack: produce(context.abilityStack, (draft) => {
+          draft.at(-1)!.stage = "swapping";
+        }),
+        // The peek display window ends with the peeking stage.
+        publicPeek: null,
+      };
     }),
     log_ENTER_WAITING: () =>
       logger.info(
@@ -1542,6 +1654,9 @@ export const gameMachine = setup({
         "Turn phase: ABILITY",
       ),
   },
+  delays: {
+    turnTimer: TURN_TIMER_MS,
+  },
   actors: {
     peekTimer: fromPromise(
       () =>
@@ -1581,6 +1696,9 @@ export const gameMachine = setup({
     chat: [],
     discardPileIsSealed: false,
     errorState: null,
+    publicPeek: null,
+    turnDeadline: null,
+    turnTimerMs: TURN_TIMER_MS,
   }),
   initial: GameStage.WAITING_FOR_PLAYERS,
   on: {
@@ -1681,7 +1799,10 @@ export const gameMachine = setup({
     [GameStage.INITIAL_PEEK]: {
       entry: [
         "log_ENTER_INITIAL_PEEK",
-        assign({ gameStage: GameStage.INITIAL_PEEK }),
+        assign(() => ({
+          gameStage: GameStage.INITIAL_PEEK,
+          turnDeadline: Date.now() + TURN_TIMER_MS,
+        })),
         "broadcastGameState",
       ],
       initial: "waitingForReady",
@@ -1711,26 +1832,22 @@ export const gameMachine = setup({
           always: {
             target: "peeking",
             guard: "allPlayersReadyForPeek",
-            actions: enqueueActions(({ context, enqueue }) => {
-              context.turnOrder.forEach((playerId) => {
-                const playerHand = context.players[playerId]!.hand;
-                const peekableCards = playerHand.slice(-2);
-                enqueue(
-                  emit({
-                    type: "SEND_EVENT_TO_PLAYER",
-                    payload: {
-                      playerId,
-                      eventName: SocketEventName.INITIAL_PEEK_INFO,
-                      eventData: { hand: peekableCards },
-                    },
-                  }) as any,
-                );
-              });
-              enqueue("broadcastGameState" as const);
-            }),
+            actions: "sendInitialPeekInfo",
+          },
+          // A connected player who never presses Ready can't hold the game
+          // hostage: the peek phase is forced forward after the turn timer.
+          after: {
+            turnTimer: {
+              target: "peeking",
+              actions: "sendInitialPeekInfo",
+            },
           },
         },
         peeking: {
+          entry: [
+            assign({ turnDeadline: null }),
+            "broadcastGameState",
+          ] as const,
           invoke: {
             src: "peekTimer",
             onDone: {
@@ -1759,6 +1876,9 @@ export const gameMachine = setup({
                   playerId: (event as { playerId: PlayerId }).playerId,
                 }),
               },
+              // Tell the other clients the game is paused (disconnect flag,
+              // log entry, cleared turn deadline).
+              "broadcastGameState",
             ],
           },
           {
@@ -1783,6 +1903,9 @@ export const gameMachine = setup({
                   playerId: (event as { playerId: PlayerId }).playerId,
                 }),
               },
+              // Tell the other clients the game is paused (disconnect flag,
+              // log entry, cleared turn deadline).
+              "broadcastGameState",
             ],
           },
           {
@@ -1849,6 +1972,9 @@ export const gameMachine = setup({
                   playerId: (event as { playerId: PlayerId }).playerId,
                 }),
               },
+              // Tell the other clients the game is paused (disconnect flag,
+              // log entry, cleared turn deadline).
+              "broadcastGameState",
             ],
           },
           {
@@ -1873,6 +1999,9 @@ export const gameMachine = setup({
                   playerId: (event as { playerId: PlayerId }).playerId,
                 }),
               },
+              // Tell the other clients the game is paused (disconnect flag,
+              // log entry, cleared turn deadline).
+              "broadcastGameState",
             ],
           },
           {

@@ -166,6 +166,7 @@ Create `.env` files in the `server` and `client` directories for local developme
     *   `MAX_HAND_SIZE`: Hand size at which a player is disqualified from the round (default: `8`).
     *   `PEEK_DURATION_MS`: Duration of the initial card peek phase in milliseconds (default: `10000`).
     *   `MATCHING_STAGE_DURATION_MS`: Duration of the matching stage in milliseconds (default: `5000`).
+    *   `TURN_TIMER_MS`: Time limit per decision window (draw/discard/ability) before the turn auto-resolves (default: `45000`).
     *   `RECONNECT_TIMEOUT_MS`: Timeout for player reconnection attempts in milliseconds (default: `30000`).
     *   `LOBBY_DISCONNECT_TIMEOUT_MS`: How long a disconnected lobby player keeps their seat in milliseconds (default: `5000`).
 
@@ -202,6 +203,8 @@ MAX_HAND_SIZE=8
 PEEK_DURATION_MS=10000
 # Duration of the matching stage after a card is discarded.
 MATCHING_STAGE_DURATION_MS=5000
+# Time limit per decision window (draw/discard/ability) before auto-resolve.
+TURN_TIMER_MS=45000
 
 # --- Error Recovery Configuration ---
 # Timeout for player reconnection attempts (milliseconds)

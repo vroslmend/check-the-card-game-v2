@@ -95,6 +95,17 @@ export interface Player {
 }
 
 /**
+ * Which card positions are currently being peeked at, visible to ALL players
+ * (real-life table parity: you can see which card someone lifts, not its
+ * face). Card values are never included.
+ */
+export interface PublicPeekInfo {
+  peekerId: PlayerId;
+  targets: { playerId: PlayerId; cardIndex: number }[];
+  startedAt: number;
+}
+
+/**
  * The redacted, client-safe version of the game's state.
  * This is the primary data structure the client will use to render the game.
  */
@@ -130,6 +141,11 @@ export interface ClientCheckGameState {
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
+  publicPeek: PublicPeekInfo | null;
+  /** When the current timed decision window (draw/discard/ability) expires. */
+  turnDeadline: number | null;
+  /** Length of a full turn-timer window, for rendering countdowns. */
+  turnTimerMs: number;
 }
 
 // ================================================================================================

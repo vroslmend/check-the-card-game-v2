@@ -60,6 +60,7 @@ const selectStripContext = (state: UIMachineSnapshot) => {
     gameStage: currentGameState?.gameStage ?? null,
     matchingPlayerIds:
       currentGameState?.matchingOpportunity?.remainingPlayerIDs ?? null,
+    publicPeekerId: currentGameState?.publicPeek?.peekerId ?? null,
   };
 };
 
@@ -69,12 +70,14 @@ const PlayerInfoBadge = ({
   isLocalPlayer,
   gameStage,
   isInMatchingWindow,
+  isPeekingCards,
 }: {
   player: Player;
   isCurrentTurn: boolean;
   isLocalPlayer: boolean;
   gameStage: GameStage | null;
   isInMatchingWindow: boolean;
+  isPeekingCards: boolean;
 }) => {
   const getStatus = () => {
     if (!player.isConnected)
@@ -88,6 +91,12 @@ const PlayerInfoBadge = ({
         Icon: Ban,
         text: "Disqualified",
         color: "text-rose-700 dark:text-rose-400",
+      };
+    if (isPeekingCards)
+      return {
+        Icon: Eye,
+        text: "Peeking",
+        color: "text-amber-600 dark:text-amber-400",
       };
     if (isInMatchingWindow)
       return {
@@ -180,6 +189,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     isTargetableForAbility,
     gameStage,
     matchingPlayerIds,
+    publicPeekerId,
   } = useUISelector(selectStripContext);
 
   const { send } = useUIActorRef();
@@ -227,6 +237,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         isLocalPlayer={isLocalPlayer}
         gameStage={gameStage}
         isInMatchingWindow={!!matchingPlayerIds?.includes(player.id)}
+        isPeekingCards={publicPeekerId === player.id}
       />
       <PlayerHand
         player={player}

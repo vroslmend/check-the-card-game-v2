@@ -88,6 +88,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       isAbilitySelecting: false,
       peekExpireAt: null as number | null,
       peekDurationMs: 0,
+      turnDeadline: null as number | null,
+      turnTimerMs: 0,
     };
   }
 
@@ -134,6 +136,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     isAbilitySelecting,
     peekExpireAt,
     peekDurationMs,
+    turnDeadline: currentGameState.turnDeadline,
+    turnTimerMs: currentGameState.turnTimerMs,
   };
 };
 
@@ -448,9 +452,32 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
   }, [props]);
 
   const getTimedIndicator = useCallback(() => {
-    const { peekExpireAt, peekDurationMs } = props;
-    if (!peekExpireAt || peekExpireAt <= Date.now()) return null;
-    return { expireAt: peekExpireAt, durationMs: peekDurationMs };
+    const {
+      peekExpireAt,
+      peekDurationMs,
+      turnDeadline,
+      turnTimerMs,
+      matchingOpportunity,
+      gameStage,
+    } = props;
+    const now = Date.now();
+    if (peekExpireAt && peekExpireAt > now) {
+      return { expireAt: peekExpireAt, durationMs: peekDurationMs };
+    }
+    // Turn-timer countdown, shown to everyone. The matching window renders
+    // its own countdown on the Pass button, so it is excluded here.
+    if (
+      turnDeadline &&
+      turnDeadline > now &&
+      turnTimerMs > 0 &&
+      !matchingOpportunity &&
+      (gameStage === GameStage.PLAYING ||
+        gameStage === GameStage.FINAL_TURNS ||
+        gameStage === GameStage.INITIAL_PEEK)
+    ) {
+      return { expireAt: turnDeadline, durationMs: turnTimerMs };
+    }
+    return null;
   }, [props]);
 
   const contextValue = useMemo(

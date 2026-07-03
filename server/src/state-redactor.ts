@@ -50,8 +50,14 @@ export const generatePlayerView = (
 
     let clientPendingDrawnCard: { card: PublicCard; source: "deck" | "discard" } | null = null;
     if (serverPlayer.pendingDrawnCard) {
-      if (isViewingPlayer) {
-        clientPendingDrawnCard = { 
+      // A card taken from the discard pile was already public knowledge, so
+      // everyone keeps seeing its face (real-life parity). Deck draws stay
+      // hidden from everyone but the drawer.
+      if (
+        isViewingPlayer ||
+        serverPlayer.pendingDrawnCard.source === "discard"
+      ) {
+        clientPendingDrawnCard = {
           card: serverPlayer.pendingDrawnCard.card,
           source: serverPlayer.pendingDrawnCard.source,
         };
@@ -114,6 +120,10 @@ export const generatePlayerView = (
     log: clientLog,
     chat: fullGameContext.chat ?? [],
     discardPileIsSealed: fullGameContext.discardPileIsSealed,
+    // Positions only — card faces are never part of publicPeek.
+    publicPeek: fullGameContext.publicPeek,
+    turnDeadline: fullGameContext.turnDeadline,
+    turnTimerMs: fullGameContext.turnTimerMs,
   };
 
   logger.debug(

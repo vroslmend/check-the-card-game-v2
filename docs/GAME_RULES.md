@@ -53,6 +53,13 @@ _**Note on Special Cards:** If a King, Queen, or Jack is drawn from the deck and
 #### **B. End of Turn**
 After a player discards a card (completing their Draw Action), the game enters **The Matching Stage**. Once the Matching Stage and any resulting Special Abilities are fully resolved, the turn passes to the next player.
 
+#### **C. Turn Timer**
+Each decision window is time-limited (default: 45 seconds) so a single player cannot stall the game:
+*   **Draw window:** if the player has not acted when time expires, they automatically draw from the Draw Pile.
+*   **Discard window:** an unresolved deck draw is automatically discarded; a discard-pile draw is automatically swapped with the first card in the player's grid.
+*   **Ability window:** an unresolved Special Ability fizzles (see Section 11.C).
+*   **Initial Peek:** if a player never declares Ready, the peek phase begins anyway once the timer expires.
+
 ## **7. The Matching Stage**
 
 This is a timed, real-time event that occurs immediately after *any* card is discarded.
@@ -91,6 +98,8 @@ Abilities are triggered when a Special Card (King, Queen, or Jack) is discarded 
 *   **King (K):** Peek at any **two** cards on the table (your own or an opponent's). Then, swap any **one** card on the table with any **other** card.
 *   **Queen (Q):** Peek at any **one** card on the table. Then, swap any **one** card with any **other** card.
 *   **Jack (J):** Swap any **one** card with any **other** card. (No peek).
+
+_**Note on Peek Visibility:** As at a real table, **all players can see which card positions are being peeked at** — only the peeking player sees the card's face. Similarly, a card taken from the Discard Pile remains face-up for everyone while it is held, since it was already public knowledge._
 
 #### **A. Skipping Abilities**
 A player may choose to skip parts of their ability. For a King or Queen, they can skip the "peek" stage and proceed to the "swap" stage. They can also skip the "swap" stage, which ends the ability's effect.
