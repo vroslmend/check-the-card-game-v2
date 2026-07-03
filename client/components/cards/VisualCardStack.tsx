@@ -6,12 +6,14 @@ import { PlayingCard } from "./PlayingCard";
 import { CardBack } from "./CardBack";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-
+import { useDevice } from "@/context/DeviceContext";
 
 interface VisualCardStackProps {
   title: string;
   count: number;
   topCard?: PublicCard | null;
+  /** Card revealed underneath when the top card animates away. */
+  secondCard?: PublicCard | null;
   faceDown?: boolean;
   canInteract?: boolean;
   onClick?: () => void;
@@ -23,6 +25,7 @@ export const VisualCardStack = ({
   title,
   count,
   topCard,
+  secondCard = null,
   faceDown = false,
   canInteract = false,
   onClick,
@@ -30,6 +33,7 @@ export const VisualCardStack = ({
   className,
 }: VisualCardStackProps) => {
   const hasCards = count > 0;
+  const { isTouchDevice } = useDevice();
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -50,7 +54,9 @@ export const VisualCardStack = ({
         )
       </h4>
       <motion.div
-        whileHover={canInteract ? { scale: 1.05, y: -5 } : {}}
+        whileHover={
+          canInteract && !isTouchDevice ? { scale: 1.05, y: -5 } : undefined
+        }
         transition={{ type: "spring", stiffness: 400, damping: 20 }}
         onClick={onClick}
         className={cn(
@@ -59,6 +65,17 @@ export const VisualCardStack = ({
           className,
         )}
       >
+        {/* A static card under the animated top card keeps the pile visually
+            stable while the top card flies away or a new one lands. */}
+        {count > 1 && (
+          <div className="absolute inset-0 z-[5]" aria-hidden>
+            {!faceDown && secondCard && "rank" in secondCard ? (
+              <PlayingCard card={secondCard} className="h-full w-full" />
+            ) : (
+              <PlayingCard faceDown className="h-full w-full" />
+            )}
+          </div>
+        )}
         <AnimatePresence>
           {hasCards && topCard ? (
             <motion.div

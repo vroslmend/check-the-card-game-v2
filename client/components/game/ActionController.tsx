@@ -32,6 +32,9 @@ import {
 import { isDrawnCard } from "@/lib/types";
 
 const MATCHING_STAGE_DURATION_MS = 5000;
+// Must match the server's PEEK_DURATION_MS / ABILITY_PEEK_VIEW_DURATION_MS.
+const INITIAL_PEEK_DURATION_MS = 10000;
+const ABILITY_PEEK_DURATION_MS = 5000;
 
 type ActionControllerContextType = {
   matchAttempt: { cardIndex: number } | null;
@@ -40,6 +43,8 @@ type ActionControllerContextType = {
   >;
   getActions: () => Action[];
   getPromptText: () => string | null;
+  /** Deadline of the active timed peek (initial or ability), for countdown UI. */
+  getTimedIndicator: () => { expireAt: number; durationMs: number } | null;
 };
 
 export const ActionControllerContext =
@@ -52,6 +57,20 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     currentAbilityContext,
     hasPassedMatch,
   } = state.context;
+
+  // Latest peek deadline (initial peek or ability peek) as primitives so the
+  // selector result stays shallow-comparable.
+  let peekExpireAt: number | null = null;
+  let peekDurationMs = 0;
+  for (const vc of state.context.visibleCards) {
+    if (vc.expireAt && (peekExpireAt === null || vc.expireAt > peekExpireAt)) {
+      peekExpireAt = vc.expireAt;
+      peekDurationMs =
+        vc.source === "initial-peek"
+          ? INITIAL_PEEK_DURATION_MS
+          : ABILITY_PEEK_DURATION_MS;
+    }
+  }
 
   if (!currentGameState || !localPlayerId) {
     return {
@@ -67,6 +86,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       allPlayersReady: false,
       hasPassedMatch: false,
       isAbilitySelecting: false,
+      peekExpireAt: null as number | null,
+      peekDurationMs: 0,
     };
   }
 
@@ -111,6 +132,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     ),
     hasPassedMatch,
     isAbilitySelecting,
+    peekExpireAt,
+    peekDurationMs,
   };
 };
 
@@ -376,12 +399,14 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     } = props;
     if (!localPlayer) return null;
 
-    if (
-      matchingOpportunity &&
-      matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id) &&
-      !hasPassedMatch
-    ) {
-      return "Select a card from your hand to attempt a match, or pass.";
+    if (matchingOpportunity) {
+      if (
+        matchingOpportunity.remainingPlayerIDs.includes(localPlayer.id) &&
+        !hasPassedMatch
+      ) {
+        return "Select a card from your hand to attempt a match, or pass.";
+      }
+      return "Waiting for the matching window to close…";
     }
     if (abilityContext && isAbilityPlayer && isAbilitySelecting) {
       const {
@@ -422,9 +447,21 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     return null;
   }, [props]);
 
+  const getTimedIndicator = useCallback(() => {
+    const { peekExpireAt, peekDurationMs } = props;
+    if (!peekExpireAt || peekExpireAt <= Date.now()) return null;
+    return { expireAt: peekExpireAt, durationMs: peekDurationMs };
+  }, [props]);
+
   const contextValue = useMemo(
-    () => ({ matchAttempt, setMatchAttempt, getActions, getPromptText }),
-    [matchAttempt, getActions, getPromptText],
+    () => ({
+      matchAttempt,
+      setMatchAttempt,
+      getActions,
+      getPromptText,
+      getTimedIndicator,
+    }),
+    [matchAttempt, getActions, getPromptText, getTimedIndicator],
   );
 
   return (

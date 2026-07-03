@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { type Player, type Card } from "shared-types";
+import { type Player, type Card, PlayerStatus } from "shared-types";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Crown, PartyPopper } from "lucide-react";
@@ -96,7 +96,18 @@ export const GameEndScreen = ({
           variants={itemVariants}
           className="flex flex-col items-center gap-2 text-center"
         >
-          <PartyPopper className="w-16 h-16 text-amber-500" />
+          <motion.div
+            initial={{ scale: 0, rotate: -30 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{
+              type: "spring",
+              stiffness: 260,
+              damping: 12,
+              delay: 0.25,
+            }}
+          >
+            <PartyPopper className="w-16 h-16 text-amber-500" />
+          </motion.div>
           <h1 className="text-5xl font-light tracking-tighter text-zinc-800 dark:text-zinc-100">
             {title}
           </h1>
@@ -133,6 +144,11 @@ export const GameEndScreen = ({
                       </span>
                     )}
                   </span>
+                  {player.status === PlayerStatus.DISQUALIFIED && (
+                    <span className="text-xs font-sans font-medium uppercase tracking-wide text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/40 rounded-full px-2 py-0.5">
+                      Disqualified
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="font-mono text-2xl font-semibold text-zinc-800 dark:text-zinc-100">
@@ -151,19 +167,18 @@ export const GameEndScreen = ({
                   initial="hidden"
                   animate="visible"
                 >
-                  {player.hand
-                    .filter(
-                      (c): c is Card => typeof c === "object" && "rank" in c,
-                    )
-                    .map((card, cardIndex) => (
-                      <motion.div key={cardIndex} variants={cardItemVariants}>
+                  {player.hand.map((card) => {
+                    const isRevealed = "rank" in card;
+                    return (
+                      <motion.div key={card.id} variants={cardItemVariants}>
                         <PlayingCard
-                          card={card}
-                          faceDown={false}
+                          card={isRevealed ? (card as Card) : undefined}
+                          faceDown={!isRevealed}
                           className="w-16 aspect-[5/7]"
                         />
                       </motion.div>
-                    ))}
+                    );
+                  })}
                 </motion.div>
               </div>
             </motion.div>

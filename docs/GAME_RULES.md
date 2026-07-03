@@ -82,6 +82,7 @@ This is a timed, real-time event that occurs immediately after *any* card is dis
     1.  If a player attempts to match with a card of the wrong rank, the attempt fails.
     2.  **Penalty:** The player must immediately **draw one (1) card** from the Draw Pile and add it to their hand. The invalid card returns to their hand.
     3.  The matching opportunity then **continues** for all other eligible players until the stage ends. The penalized player may attempt to match again if they have another valid card.
+    4.  **Penalty Limit (Disqualification):** If a penalty card brings a player's hand to **eight (8) cards**, that player is **disqualified** from the round. They are immediately **locked** (see Section 9.D): they take no further turns, cannot match, and their pending abilities fizzle. Their hand is still revealed and scored at the end of the round, but a disqualified player **cannot win**. If disqualifications leave fewer than two active players and no "Check" is in progress, the round ends immediately and proceeds to Scoring.
 
 ## **8. Special Card Abilities**
 

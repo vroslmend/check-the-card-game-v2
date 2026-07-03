@@ -727,6 +727,20 @@ export const uiMachine = setup({
       id: "inGame",
       initial: "routing",
       on: {
+        // Creating or joining a new game while an old session is still live in
+        // this tab (e.g. the user navigated back to the landing page without
+        // leaving) auto-abandons the old game: tell the server we left, clear
+        // the stored session, then run the normal create/join flow.
+        // promptToJoin/joiningGame define their own JOIN_GAME_REQUESTED which
+        // takes precedence, so the no-session join prompt is unaffected.
+        CREATE_GAME_REQUESTED: {
+          target: "#outOfGame.creatingGame",
+          actions: ["emitLeaveGame", "resetGameContext", "clearSession"],
+        },
+        JOIN_GAME_REQUESTED: {
+          target: "#outOfGame.joiningGame",
+          actions: ["emitLeaveGame", "resetGameContext", "clearSession"],
+        },
         LEAVE_GAME: { target: ".leaving" },
         TOGGLE_SIDE_PANEL: { actions: "toggleSidePanel" },
         CLIENT_GAME_STATE_UPDATED: {

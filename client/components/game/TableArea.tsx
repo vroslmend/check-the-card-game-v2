@@ -75,28 +75,41 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
     }
   };
 
-  const deckForRender = deckSize > 0 && deckTop ? [deckTop] : [];
-  const combinedDeckForDealing = [...deckForRender, ...dealingDeck];
-
   return (
     <div className="grid h-full w-full grid-cols-[1fr_auto_1fr] items-center gap-4">
-      <motion.div
-        layout
-        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-        className="flex justify-end w-full justify-self-end"
-      >
-        <VisualCardStack
-          title="Deck"
-          count={deckSize}
-          topCard={deckTop}
-          faceDown
-          canInteract={canDrawFromDeck}
-          onClick={handleDeckClick}
-          className="landscape:w-[8vh] portrait:w-[15vw]"
-        />
-      </motion.div>
+      <div className="flex justify-end w-full justify-self-end">
+        <div className="relative">
+          <VisualCardStack
+            title="Deck"
+            count={deckSize}
+            topCard={deckTop}
+            faceDown
+            canInteract={canDrawFromDeck}
+            onClick={handleDeckClick}
+            className="landscape:w-[8vh] portrait:w-[15vw]"
+          />
+          {/* During DEALING every dealt card sits here with its layoutId, so
+              when the hands render on the next stage each card flies from the
+              deck to its grid slot instead of popping into place. */}
+          {dealingDeck.length > 0 && (
+            <div className="absolute bottom-0 left-1/2 landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7] -translate-x-1/2 pointer-events-none">
+              {dealingDeck.map((card) => (
+                <motion.div
+                  key={card.id}
+                  layoutId={card.id}
+                  className="absolute inset-0"
+                >
+                  <PlayingCard faceDown className="w-full h-full" />
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
-      <div className="flex items-center justify-center">
+      {/* The drawn-card slot keeps its full size even while empty so the deck
+          and discard piles don't shift sideways on every draw/discard. */}
+      <div className="relative landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7]">
         <AnimatePresence>
           {drawnCard && (
             <motion.div
@@ -105,7 +118,7 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.5, y: 50 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="relative z-10 landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7]"
+              className="absolute inset-0 z-10"
             >
               <PlayingCard
                 card={"rank" in drawnCard ? (drawnCard as Card) : undefined}
@@ -116,21 +129,19 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
           )}
         </AnimatePresence>
       </div>
-      <motion.div
-        layout
-        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-        className="flex justify-start w-full justify-self-start"
-      >
+
+      <div className="flex justify-start w-full justify-self-start">
         <VisualCardStack
           title="Discard"
           count={discardPile.length}
           topCard={topDiscardCard}
+          secondCard={discardPile.at(-2) ?? null}
           isSealed={discardPileIsSealed}
           canInteract={canDrawFromDiscard}
           onClick={handleDiscardClick}
           className="landscape:w-[8vh] portrait:w-[15vw]"
         />
-      </motion.div>
+      </div>
     </div>
   );
 };

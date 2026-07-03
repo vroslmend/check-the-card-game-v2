@@ -53,7 +53,10 @@ export const createCallCheckAction = (
   disabled?: boolean,
   showProgress?: boolean,
 ): Action => ({
-  label: "CHECK!",
+  // Hold-to-confirm: the fill animates while the pointer is held so an
+  // accidental click can't end your round. The label says so, otherwise a
+  // quick click reads as a broken loading animation.
+  label: "Hold to Check!",
   onPointerDown,
   onPointerUp,
   onPointerLeave,

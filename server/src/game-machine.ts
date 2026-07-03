@@ -58,6 +58,9 @@ const LOBBY_DISCONNECT_TIMEOUT_MS = parseInt(
   10,
 );
 const ABILITY_PEEK_VIEW_DURATION_MS = 5000;
+// Rules 7: a player whose hand reaches this size via failed-match penalties is
+// disqualified from the round (locked, revealed at scoring, cannot win).
+const MAX_HAND_SIZE = parseInt(process.env.MAX_HAND_SIZE || "8", 10);
 
 const getPlayerNameForLog = (
   playerId: PlayerId,
@@ -1142,11 +1145,18 @@ export const gameMachine = setup({
         playerScores[p.id] = p.score;
       });
 
-      const minScore = Math.min(...Object.values(playerScores));
+      // Disqualified players are revealed and scored but cannot win.
+      const eligibleScores = Object.values(updatedPlayers)
+        .filter((p) => p.status !== PlayerStatus.DISQUALIFIED)
+        .map((p) => p.score);
+      const minScore = Math.min(...eligibleScores);
       const maxScore = Math.max(...Object.values(playerScores));
-      const winnerIds = Object.keys(playerScores).filter(
-        (id) => playerScores[id] === minScore,
-      );
+      const winnerIds = Object.values(updatedPlayers)
+        .filter(
+          (p) =>
+            p.status !== PlayerStatus.DISQUALIFIED && p.score === minScore,
+        )
+        .map((p) => p.id);
       const loserId =
         Object.keys(playerScores).find((id) => playerScores[id] === maxScore) ??
         null;
@@ -1301,24 +1311,54 @@ export const gameMachine = setup({
       }
 
       const penaltyCard = tempDeck.pop()!;
+      const disqualified =
+        context.players[playerId]!.hand.length + 1 >= MAX_HAND_SIZE;
       const updatedPlayers = produce(context.players, (draft) => {
-        draft[playerId]!.hand.push(penaltyCard);
+        const player = draft[playerId]!;
+        player.hand.push(penaltyCard);
+        if (disqualified) {
+          player.isLocked = true;
+          player.status = PlayerStatus.DISQUALIFIED;
+        }
       });
 
-      logMessageText += `${getPlayerNameForLog(playerId, context.players)} attempted an invalid match and received a penalty card.`;
+      const playerName = getPlayerNameForLog(playerId, context.players);
+      logMessageText += `${playerName} attempted an invalid match and received a penalty card.`;
+
+      const newLog = [
+        ...context.log,
+        createLogEntry(context.gameId, {
+          message: logMessageText,
+          type: "public",
+          tags: ["player-action", "game-event"],
+        }),
+      ];
+      if (disqualified) {
+        newLog.push(
+          createLogEntry(context.gameId, {
+            message: `${playerName} reached ${MAX_HAND_SIZE} cards and is disqualified from the round.`,
+            type: "public",
+            tags: ["game-event"],
+          }),
+        );
+      }
 
       return {
         deck: tempDeck,
         discardPile: tempDiscard,
         players: updatedPlayers,
-        log: [
-          ...context.log,
-          createLogEntry(context.gameId, {
-            message: logMessageText,
-            type: "public",
-            tags: ["player-action", "game-event"],
-          }),
-        ],
+        // A disqualified player is out of the current matching window too.
+        matchingOpportunity:
+          disqualified && context.matchingOpportunity
+            ? {
+                ...context.matchingOpportunity,
+                remainingPlayerIDs:
+                  context.matchingOpportunity.remainingPlayerIDs.filter(
+                    (id) => id !== playerId,
+                  ),
+              }
+            : context.matchingOpportunity,
+        log: newLog,
       };
     }),
     handleFailedRecovery: assign(({ context }) => {
@@ -1761,6 +1801,17 @@ export const gameMachine = setup({
       },
       states: {
         turn: createTurnStateNode([
+          {
+            // Disqualifications can leave fewer than two active players with
+            // no Check in progress; the round ends immediately (the survivor
+            // is the only player still eligible to win).
+            guard: ({ context }: { context: GameContext }) =>
+              !context.checkDetails &&
+              context.turnOrder.filter(
+                (id) => !context.players[id]!.isLocked,
+              ).length < 2,
+            target: `#game.${GameStage.SCORING}`,
+          },
           {
             // A match that emptied a hand auto-calls Check; route into the
             // final-turns phase instead of looping the normal turn cycle.

@@ -23,9 +23,14 @@ export interface Action {
 }
 
 const ActionBarComponent: React.FC = () => {
-  const { getActions, getPromptText } = useActionController();
+  const { getActions, getPromptText, getTimedIndicator } =
+    useActionController();
   const actions = getActions();
   const promptText = getPromptText();
+  const timedIndicator = getTimedIndicator();
+  const remainingMs = timedIndicator
+    ? Math.max(0, timedIndicator.expireAt - Date.now())
+    : 0;
 
   return (
     <motion.div
@@ -60,9 +65,32 @@ const ActionBarComponent: React.FC = () => {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
           >
-            <p className="text-sm font-medium text-stone-900 dark:text-stone-100 px-3 py-1 bg-black/10 dark:bg-white/10 rounded-full">
+            <p className="text-sm font-medium text-stone-900 dark:text-stone-100 px-4 py-1 bg-black/10 dark:bg-white/10 rounded-2xl max-w-[min(92vw,40rem)] text-balance">
               {promptText}
             </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Countdown for the active timed peek. Pure CSS-driven animation keyed
+          by deadline: no per-frame re-renders. */}
+      <AnimatePresence>
+        {timedIndicator && remainingMs > 0 && (
+          <motion.div
+            key={timedIndicator.expireAt}
+            className="mt-2 h-1 w-48 max-w-[60vw] overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="h-full rounded-full bg-teal-500/80"
+              initial={{
+                width: `${(remainingMs / timedIndicator.durationMs) * 100}%`,
+              }}
+              animate={{ width: "0%" }}
+              transition={{ duration: remainingMs / 1000, ease: "linear" }}
+            />
           </motion.div>
         )}
       </AnimatePresence>

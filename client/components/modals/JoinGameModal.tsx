@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle, Users, Shield, ArrowRight } from "lucide-react";
+import {
+  CheckCircle,
+  Users,
+  Shield,
+  ArrowRight,
+  Loader2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -225,22 +231,24 @@ export function JoinGameModal({
                       className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 relative overflow-hidden group"
                       data-cursor-link
                     >
+                      {/* Constant label + arrow↔spinner swap keeps the button
+                          the same width while loading (no size jump). */}
                       <span className="relative z-10 flex items-center gap-2">
-                        {isLoading
-                          ? "Loading..."
-                          : step === 1
-                            ? "Continue"
-                            : "Join Game"}
-                        <motion.div
-                          animate={{ x: [0, 4, 0] }}
-                          transition={{
-                            duration: 2,
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                          }}
-                        >
-                          <ArrowRight className="h-4 w-4" />
-                        </motion.div>
+                        {step === 1 ? "Continue" : "Join Game"}
+                        {isLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <motion.div
+                            animate={{ x: [0, 4, 0] }}
+                            transition={{
+                              duration: 2,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                            }}
+                          >
+                            <ArrowRight className="h-4 w-4" />
+                          </motion.div>
+                        )}
                       </span>
                       <motion.div
                         className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
@@ -258,12 +266,12 @@ export function JoinGameModal({
                     className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900"
                     data-cursor-link
                   >
-                    {isLoading
-                      ? "Loading..."
-                      : step === 1
-                        ? "Continue"
-                        : "Join Game"}
-                    <ArrowRight className="h-4 w-4" />
+                    {step === 1 ? "Continue" : "Join Game"}
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4" />
+                    )}
                   </Button>
                 )}
               </div>

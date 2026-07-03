@@ -14,7 +14,7 @@ Be the player with the lowest total card value in your hand when a round ends. A
 
 *   **Hand Management:** Players manage their cards (initially four) in a conceptual grid, with an initial peek at two of them.
 *   **Turn Actions:** Draw from the deck or discard pile, then discard a card by either swapping with a hand card or discarding the drawn card directly.
-*   **Matching:** Discarding a card creates an opportunity for any player to match its rank with a card from their hand.
+*   **Matching:** Discarding a card creates an opportunity for any player to match its rank with a card from their hand. Failed attempts draw a penalty card — reach 8 cards and you're disqualified from the round.
 *   **Special Abilities (K, Q, J):** Kings, Queens, and Jacks have unique abilities (peeking at cards, swapping cards) that trigger when discarded or matched as a pair.
 *   **"Calling Check":** Players can "Call Check" to signal the final round, or this can occur automatically if a player empties their hand via a match.
 
@@ -156,18 +156,18 @@ Create `.env` files in the `server` and `client` directories for local developme
 
 *   **Client (`client/.env.local`):**
     *   `NEXT_PUBLIC_WEBSOCKET_URL`: Full URL of the backend Socket.IO server. (Defaults to `http://localhost:8000` for local development).
-    *   `NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS`: Maximum number of client-side reconnection attempts (default: `3`).
-    *   `NEXT_PUBLIC_RECONNECT_INTERVAL_MS`: Interval between client-side reconnection attempts in milliseconds (default: `5000`).
+    *   `NEXT_PUBLIC_LOG_LEVEL`: Client logger verbosity (default: `info`).
 
 *   **Server (`server/.env`):**
     *   `PORT`: Port for the backend server (default: `8000`).
     *   `CORS_ORIGIN`: The client URL for CORS validation (default: `http://localhost:3000`).
     *   `MAX_PLAYERS`: The maximum number of players in a game (default: `4`).
     *   `CARDS_PER_PLAYER`: The number of cards dealt to each player (default: `4`).
+    *   `MAX_HAND_SIZE`: Hand size at which a player is disqualified from the round (default: `8`).
     *   `PEEK_DURATION_MS`: Duration of the initial card peek phase in milliseconds (default: `10000`).
     *   `MATCHING_STAGE_DURATION_MS`: Duration of the matching stage in milliseconds (default: `5000`).
     *   `RECONNECT_TIMEOUT_MS`: Timeout for player reconnection attempts in milliseconds (default: `30000`).
-    *   `MAX_RETRIES`: Maximum number of retries for server-side error recovery (default: `3`).
+    *   `LOBBY_DISCONNECT_TIMEOUT_MS`: How long a disconnected lobby player keeps their seat in milliseconds (default: `5000`).
 
 ### Example Environment Files
 
@@ -177,11 +177,8 @@ Create `.env` files in the `server` and `client` directories for local developme
 # For local development, this points to your local server.
 NEXT_PUBLIC_WEBSOCKET_URL=http://localhost:8000
 
-# --- Error Recovery Configuration ---
-# Maximum number of client-side reconnection attempts
-NEXT_PUBLIC_MAX_RECONNECT_ATTEMPTS=3
-# Interval between client-side reconnection attempts (milliseconds)
-NEXT_PUBLIC_RECONNECT_INTERVAL_MS=5000
+# Client logger verbosity (trace | debug | info | warn | error)
+NEXT_PUBLIC_LOG_LEVEL=info
 ```
 
 **Server `.env` Example:**
@@ -197,6 +194,8 @@ PORT=8000
 MAX_PLAYERS=4
 # The number of cards dealt to each player at the start of a round.
 CARDS_PER_PLAYER=4
+# Hand size at which a player is disqualified from the round.
+MAX_HAND_SIZE=8
 
 # --- Game Pacing (in Milliseconds) ---
 # Duration of the initial card peek phase.
@@ -207,31 +206,16 @@ MATCHING_STAGE_DURATION_MS=5000
 # --- Error Recovery Configuration ---
 # Timeout for player reconnection attempts (milliseconds)
 RECONNECT_TIMEOUT_MS=30000
-# Maximum number of retries for server-side recovery
-MAX_RETRIES=3
+# How long a disconnected lobby player keeps their seat (milliseconds)
+LOBBY_DISCONNECT_TIMEOUT_MS=5000
 ```
 
 ## 📝 Current Development Status
 
-*   **Backend Refactor (Completed):** The backend uses XState (`game-machine.ts`) for all authoritative game logic.
-*   **Frontend Architecture (Completed):** The frontend has been architected using Next.js, TypeScript, and a single root XState machine (`uiMachine.ts`) for all client-side state orchestration.
-*   **Core UI Components (In Progress):** Development is focused on refining UI components, animations, and ensuring all game phases are fully represented in the UI.
-*   **Error Recovery (Completed):** Both client and server implement robust error handling and recovery mechanisms using XState's error states and transitions.
-*   **Game Logic Testing (Completed):** Comprehensive test suite for the game-machine.ts implementation, verifying behavior against game rules for all core mechanics, special abilities, and error recovery paths. Tests follow XState best practices and behavior-driven development principles.
-
-## 🧪 Testing Approach
-
-This project follows a behavior-driven testing approach:
-
-*   **Test-First Philosophy:** Tests are written against the specification in GAME_RULES.md, not the implementation.
-*   **XState Actor Testing:** Tests use XState's actor model to verify state transitions and context updates.
-*   **Key Test Areas:** Core game flow, special abilities (K/Q/J), error recovery, edge cases.
-*   **Independent Verification:** When discrepancies are found between tests and implementation, the implementation is adjusted to match the expected behavior defined in the tests.
-
-Run the test suite with:
-```bash
-npm run test
-```
+*   **Backend (Stable):** The backend uses XState (`game-machine.ts`) for all authoritative game logic, including disconnect/reconnect recovery, forfeit handling, and rules-compliance guards. The rules it implements are specified in `docs/GAME_RULES.md`.
+*   **Frontend Architecture (Stable):** The frontend uses Next.js, TypeScript, and a single root XState machine (`uiMachine.ts`) for all client-side state orchestration.
+*   **Core Game UI (Polishing):** All game phases are represented in the UI; ongoing work is visual polish and animation refinement.
+*   **Automated Tests (Not yet written):** There is currently no test suite; verification is manual against `docs/GAME_RULES.md`.
 
 ---
 Happy Gaming and Coding!

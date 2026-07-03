@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Action } from "./ActionBarComponent";
 import { cn } from "@/lib/utils";
+import { useDevice } from "@/context/DeviceContext";
 import {
   Tooltip,
   TooltipContent,
@@ -15,6 +16,9 @@ interface ActionButtonProps {
 }
 
 const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
+  // whileHover on touch devices sticks after a tap (pointerenter without a
+  // matching leave), leaving the button scaled up. Hover is mouse-only.
+  const { isTouchDevice } = useDevice();
   const {
     label,
     onClick,
@@ -99,7 +103,9 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
       <Tooltip>
         <TooltipTrigger asChild>
           <motion.button
-            whileHover={{ scale: disabled ? 1 : 1.1 }}
+            whileHover={
+              disabled || isTouchDevice ? undefined : { scale: 1.1 }
+            }
             whileTap={{ scale: disabled ? 1 : 0.9 }}
             className={cn(
               "relative h-10 shrink-0 rounded-full flex items-center justify-center overflow-hidden",

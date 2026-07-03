@@ -4,7 +4,13 @@ import {
   useUIActorRef,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
-import { type Player, TurnPhase, PlayerActionType } from "shared-types";
+import {
+  type Player,
+  TurnPhase,
+  PlayerActionType,
+  PlayerStatus,
+  GameStage,
+} from "shared-types";
 import PlayerHand from "./PlayerHand";
 import { cn } from "@/lib/utils";
 import { useActionController } from "./ActionController";
@@ -15,6 +21,9 @@ import {
   Clock,
   PlayCircle,
   ArrowRightCircle,
+  Ban,
+  Eye,
+  Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -44,17 +53,28 @@ const selectStripContext = (state: UIMachineSnapshot) => {
 
   const isTargetableForAbility = !!currentAbilityContext;
 
-  return { canSwap, canMatch, isTargetableForAbility };
+  return {
+    canSwap,
+    canMatch,
+    isTargetableForAbility,
+    gameStage: currentGameState?.gameStage ?? null,
+    matchingPlayerIds:
+      currentGameState?.matchingOpportunity?.remainingPlayerIDs ?? null,
+  };
 };
 
 const PlayerInfoBadge = ({
   player,
   isCurrentTurn,
   isLocalPlayer,
+  gameStage,
+  isInMatchingWindow,
 }: {
   player: Player;
   isCurrentTurn: boolean;
   isLocalPlayer: boolean;
+  gameStage: GameStage | null;
+  isInMatchingWindow: boolean;
 }) => {
   const getStatus = () => {
     if (!player.isConnected)
@@ -62,6 +82,18 @@ const PlayerInfoBadge = ({
         Icon: WifiOff,
         text: "Disconnected",
         color: "text-rose-700 dark:text-rose-400",
+      };
+    if (player.status === PlayerStatus.DISQUALIFIED)
+      return {
+        Icon: Ban,
+        text: "Disqualified",
+        color: "text-rose-700 dark:text-rose-400",
+      };
+    if (isInMatchingWindow)
+      return {
+        Icon: Zap,
+        text: "Matching…",
+        color: "text-amber-600 dark:text-amber-400",
       };
     if (isCurrentTurn)
       return {
@@ -75,6 +107,18 @@ const PlayerInfoBadge = ({
         text: "Check Called",
         color: "text-sky-600 dark:text-sky-400",
       };
+    if (gameStage === GameStage.INITIAL_PEEK)
+      return player.isReady
+        ? {
+            Icon: CheckCircle,
+            text: "Ready",
+            color: "text-teal-600 dark:text-teal-400",
+          }
+        : {
+            Icon: Eye,
+            text: "Peeking",
+            color: "text-stone-600 dark:text-stone-400",
+          };
     return {
       Icon: Clock,
       text: "Waiting",
@@ -130,8 +174,13 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
   isLocalPlayer,
   isCurrentTurn,
 }) => {
-  const { canSwap, canMatch, isTargetableForAbility } =
-    useUISelector(selectStripContext);
+  const {
+    canSwap,
+    canMatch,
+    isTargetableForAbility,
+    gameStage,
+    matchingPlayerIds,
+  } = useUISelector(selectStripContext);
 
   const { send } = useUIActorRef();
   const { setMatchAttempt, matchAttempt } = useActionController();
@@ -176,6 +225,8 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         player={player}
         isCurrentTurn={isCurrentTurn}
         isLocalPlayer={isLocalPlayer}
+        gameStage={gameStage}
+        isInMatchingWindow={!!matchingPlayerIds?.includes(player.id)}
       />
       <PlayerHand
         player={player}
