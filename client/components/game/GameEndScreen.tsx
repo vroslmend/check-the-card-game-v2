@@ -11,7 +11,7 @@ import { useUISelector } from "@/context/GameUIContext";
 
 interface GameEndScreenProps {
   players: Player[];
-  winnerId: string | null;
+  winnerIds: string[];
   localPlayerId: string;
   onPlayAgain: () => void;
 }
@@ -70,13 +70,18 @@ const selectIsGameMaster = (state: any) =>
 
 export const GameEndScreen = ({
   players,
-  winnerId,
+  winnerIds,
   localPlayerId,
   onPlayAgain,
 }: GameEndScreenProps) => {
-  const winner = players.find((p) => p.id === winnerId);
+  const winners = players.filter((p) => winnerIds.includes(p.id));
   const sortedPlayers = [...players].sort((a, b) => a.score - b.score);
   const isGameMaster = useUISelector(selectIsGameMaster);
+
+  const title =
+    winners.length === 0
+      ? "Round Over!"
+      : `${winners.map((w) => w.name).join(" & ")} Win${winners.length === 1 ? "s" : ""}!`;
 
   return (
     <motion.div
@@ -93,7 +98,7 @@ export const GameEndScreen = ({
         >
           <PartyPopper className="w-16 h-16 text-amber-500" />
           <h1 className="text-5xl font-light tracking-tighter text-zinc-800 dark:text-zinc-100">
-            {winner ? `${winner.name} Wins!` : "Round Over!"}
+            {title}
           </h1>
           <p className="text-lg text-zinc-500 dark:text-zinc-400">
             Final Scores
@@ -110,14 +115,14 @@ export const GameEndScreen = ({
               variants={itemVariants}
               className={cn(
                 "p-4 rounded-2xl transition-all duration-300 flex flex-col md:flex-row md:items-center gap-4",
-                player.id === winnerId
+                winnerIds.includes(player.id)
                   ? "bg-amber-100/60 dark:bg-amber-900/30 border-2 border-amber-400/80"
                   : "bg-white/60 dark:bg-zinc-900/60 border border-stone-200 dark:border-zinc-800",
               )}
             >
               <div className="flex-shrink-0 flex justify-between items-center md:flex-col md:w-32 md:items-start">
                 <div className="flex items-center gap-2 font-bold text-xl text-zinc-800 dark:text-zinc-200">
-                  {player.id === winnerId && (
+                  {winnerIds.includes(player.id) && (
                     <Crown className="w-6 h-6 text-amber-500" />
                   )}
                   <span className="truncate max-w-[120px]">

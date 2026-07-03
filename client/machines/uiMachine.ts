@@ -6,8 +6,6 @@ import {
   type ActorRefFrom,
   type SnapshotFrom,
   type StateFrom,
-  fromCallback,
-  fromPromise,
   raise,
   enqueueActions,
 } from "xstate";
@@ -29,7 +27,6 @@ import {
   type PeekTarget,
   type SwapTarget,
   type AbilityType,
-  CardRank,
   TurnPhase,
 } from "shared-types";
 import { toast } from "sonner";
@@ -37,6 +34,7 @@ import logger from "@/lib/logger";
 import { createGameActor, joinGameActor, rejoinActor } from "@/lib/actors";
 
 const PEEK_ABILITY_DURATION_MS = 5000;
+const INITIAL_PEEK_DURATION_MS = 10000;
 
 type ServerToClientEvents =
   | { type: "CLIENT_GAME_STATE_UPDATED"; gameState: ClientCheckGameState }
@@ -52,27 +50,16 @@ type ServerToClientEvents =
   | { type: "ERROR_RECEIVED"; error: string }
   | { type: "INITIAL_LOGS_RECEIVED"; logs: RichGameLogMessage[] };
 
-type SocketEmitEvent =
-  | {
-      eventName: SocketEventName.SEND_CHAT_MESSAGE;
-      payload: {
-        message: string;
-        senderId: string;
-        senderName: string;
-        gameId: string;
-      };
-    }
-  | {
-      eventName: SocketEventName.PLAYER_ACTION;
-      payload: { type: PlayerActionType | string; payload?: any };
-    };
+type SocketEmitEvent = {
+  eventName: SocketEventName.PLAYER_ACTION;
+  payload: { type: PlayerActionType | string; payload?: any };
+};
 
 type EmittedEventToSocket = { type: "EMIT_TO_SOCKET" } & SocketEmitEvent;
 
 export type UIMachineInput = {
   gameId?: string;
   localPlayerId?: string;
-  initialGameState?: ClientCheckGameState;
 };
 
 export type PeekedCardInfo = {
@@ -87,16 +74,12 @@ export interface UIMachineContext {
   gameId?: string;
   currentGameState?: ClientCheckGameState;
   localPlayerId?: string;
-  playerName?: string;
   currentAbilityContext?: ClientAbilityContext;
-  selectedCardIndices: number[];
   visibleCards: PeekedCardInfo[];
   isSidePanelOpen: boolean;
-  error: { message: string; details?: string } | null;
   reconnectionAttempts: number;
   hasPassedMatch: boolean;
   modal: { type: "rejoin" | "error"; title: string; message: string } | null;
-  viewingPeekStartTime?: number;
 }
 
 export type UIMachineEvents =
@@ -116,12 +99,9 @@ export type UIMachineEvents =
     }
   | { type: "CONFIRM_ABILITY_ACTION" }
   | { type: "SKIP_ABILITY_STAGE" }
-  | { type: "CANCEL_ABILITY" }
   | { type: "TOGGLE_SIDE_PANEL" }
   | { type: "CLEANUP_EXPIRED_CARDS" }
   | { type: "DISMISS_MODAL" }
-  | { type: "RECOVERY_FAILED" }
-  | { type: "CONNECTION_ERROR"; message: string }
   | { type: "CONNECT"; recovered?: boolean }
   | { type: "RETRY_REJOIN" }
   | { type: "DISCONNECT" }
@@ -152,12 +132,6 @@ export const uiMachine = setup({
     input: {} as UIMachineInput,
   },
   actors: {
-    cardVisibilityCleanup: fromCallback(({ sendBack }) => {
-      const interval = setInterval(() => {
-        sendBack({ type: "CLEANUP_EXPIRED_CARDS" });
-      }, 1000);
-      return () => clearInterval(interval);
-    }),
     createGame: createGameActor,
     joinGame: joinGameActor,
     rejoinAndPoll: rejoinActor,
@@ -176,6 +150,25 @@ export const uiMachine = setup({
         )
           return event.response.gameState;
         return undefined;
+      },
+      // "Pass" is final per matching opportunity, so only reset the flag when
+      // the incoming state carries a different (or no) matching opportunity.
+      hasPassedMatch: ({ context, event }) => {
+        const nextState =
+          event.type === "CLIENT_GAME_STATE_UPDATED"
+            ? event.gameState
+            : event.type === "_SESSION_ESTABLISHED" &&
+                "gameState" in event.response
+              ? event.response.gameState
+              : undefined;
+        const prev = context.currentGameState?.matchingOpportunity;
+        const next = nextState?.matchingOpportunity;
+        if (!next) return false;
+        const sameOpportunity =
+          !!prev &&
+          prev.startTimestamp === next.startTimestamp &&
+          prev.cardToMatch.id === next.cardToMatch.id;
+        return sameOpportunity ? context.hasPassedMatch : false;
       },
       localPlayerId: ({ context, event }) => {
         if (context.localPlayerId) return context.localPlayerId;
@@ -247,7 +240,6 @@ export const uiMachine = setup({
       currentGameState: undefined,
       currentAbilityContext: undefined,
       visibleCards: [],
-      error: null,
       reconnectionAttempts: 0,
     }),
     persistSession: ({ event }) => {
@@ -274,20 +266,15 @@ export const uiMachine = setup({
         sessionStorage.removeItem("playerSession");
       }
     },
-    emitChatMessage: emit(({ context, event }) => {
+    emitChatMessage: emit(({ event }) => {
       assertEvent(event, "SUBMIT_CHAT_MESSAGE");
-      const me = context.currentGameState?.players[context.localPlayerId!];
+      // Sender identity is derived server-side from the socket session.
       return {
         type: "EMIT_TO_SOCKET",
         eventName: SocketEventName.PLAYER_ACTION,
         payload: {
           type: PlayerActionType.SEND_CHAT_MESSAGE,
-          payload: {
-            message: event.message,
-            senderId: me!.id,
-            senderName: me!.name,
-            gameId: context.gameId!,
-          },
+          payload: { message: event.message },
         },
       } as const;
     }),
@@ -322,6 +309,11 @@ export const uiMachine = setup({
         payload: { type: PlayerActionType.USE_ABILITY, playerId, payload },
       } as const;
     }),
+    emitLeaveGame: emit(() => ({
+      type: "EMIT_TO_SOCKET" as const,
+      eventName: SocketEventName.PLAYER_ACTION as const,
+      payload: { type: PlayerActionType.LEAVE_GAME },
+    })),
     emitSkipAbilityStage: emit(({ context }) => {
       const playerId = context.localPlayerId;
       if (!playerId) throw new Error("Local player ID missing");
@@ -346,17 +338,17 @@ export const uiMachine = setup({
     toggleSidePanel: assign({
       isSidePanelOpen: ({ context }) => !context.isSidePanelOpen,
     }),
-    addPeekedCardToContext: assign({
-      visibleCards: ({ context, event }) => {
-        assertEvent(event, "ABILITY_PEEK_RESULT");
-        const newCard: PeekedCardInfo = {
-          playerId: event.playerId,
-          cardIndex: event.cardIndex,
-          card: event.card,
-          source: "ability",
-          expireAt: Date.now() + PEEK_ABILITY_DURATION_MS,
-        };
-        return [
+    addPeekedCardToContext: enqueueActions(({ context, event, enqueue }) => {
+      assertEvent(event, "ABILITY_PEEK_RESULT");
+      const newCard: PeekedCardInfo = {
+        playerId: event.playerId,
+        cardIndex: event.cardIndex,
+        card: event.card,
+        source: "ability",
+        expireAt: Date.now() + PEEK_ABILITY_DURATION_MS,
+      };
+      enqueue.assign({
+        visibleCards: [
           ...context.visibleCards.filter(
             (c) =>
               !(
@@ -364,18 +356,25 @@ export const uiMachine = setup({
               ),
           ),
           newCard,
-        ];
-      },
+        ],
+      });
+      enqueue.raise(
+        { type: "CLEANUP_EXPIRED_CARDS" },
+        { delay: PEEK_ABILITY_DURATION_MS + 250 },
+      );
     }),
-    setInitialPeekCards: assign({
-      visibleCards: ({ context, event }) => {
-        assertEvent(event, "INITIAL_PEEK_INFO");
-        const localPlayerId = context.localPlayerId;
-        const handSize =
-          context.currentGameState?.players[localPlayerId!]?.hand.length ?? 0;
-        if (!localPlayerId || event.hand.length === 0) return [];
-        const peekDuration = 10000;
-        return event.hand.map((card, idx) => {
+    setInitialPeekCards: enqueueActions(({ context, event, enqueue }) => {
+      assertEvent(event, "INITIAL_PEEK_INFO");
+      const localPlayerId = context.localPlayerId;
+      if (!localPlayerId || event.hand.length === 0) {
+        enqueue.assign({ visibleCards: [] });
+        return;
+      }
+      const handSize =
+        context.currentGameState?.players[localPlayerId]?.hand.length ?? 0;
+      const peekDuration = INITIAL_PEEK_DURATION_MS;
+      enqueue.assign({
+        visibleCards: event.hand.map((card, idx) => {
           const calculatedIndex = handSize
             ? handSize - event.hand.length + idx
             : idx;
@@ -386,12 +385,12 @@ export const uiMachine = setup({
             source: "initial-peek" as const,
             expireAt: Date.now() + peekDuration,
           };
-        });
-      },
-    }),
-    clearTemporaryCardStates: assign({
-      visibleCards: [],
-      selectedCardIndices: [],
+        }),
+      });
+      enqueue.raise(
+        { type: "CLEANUP_EXPIRED_CARDS" },
+        { delay: peekDuration + 250 },
+      );
     }),
     syncAbilityContext: assign({
       currentAbilityContext: ({ context }) => {
@@ -405,7 +404,11 @@ export const uiMachine = setup({
         const currentClientAbility = context.currentAbilityContext;
         if (
           !currentClientAbility ||
-          currentClientAbility.type !== topServerAbility.type ||
+          // Compare by source card so back-to-back abilities of the same type
+          // (e.g. a matched King pair owned by the same player) don't reuse
+          // the previous ability's selections.
+          currentClientAbility.sourceCard.id !==
+            topServerAbility.sourceCard.id ||
           currentClientAbility.stage !== topServerAbility.stage
         ) {
           const { type, stage, playerId, sourceCard } = topServerAbility;
@@ -441,7 +444,6 @@ export const uiMachine = setup({
         return currentClientAbility;
       },
     }),
-    clearAbilityContext: assign({ currentAbilityContext: undefined }),
     setAbilityPeekTarget: enqueueActions(({ context, event, enqueue }) => {
       assertEvent(event, "PLAYER_SLOT_CLICKED_FOR_ABILITY");
       const ability = context.currentAbilityContext;
@@ -509,15 +511,19 @@ export const uiMachine = setup({
         },
       });
     }),
-    incrementReconnectionAttempts: assign({
-      reconnectionAttempts: ({ context }) => context.reconnectionAttempts + 1,
-    }),
     resetReconnectionAttempts: assign({ reconnectionAttempts: 0 }),
     cleanupExpiredVisibleCards: assign({
-      visibleCards: ({ context }) =>
-        context.visibleCards.filter(
-          (vc) => !vc.expireAt || vc.expireAt > Date.now(),
-        ),
+      visibleCards: ({ context }) => {
+        const now = Date.now();
+        const remaining = context.visibleCards.filter(
+          (vc) => !vc.expireAt || vc.expireAt > now,
+        );
+        // Preserve reference identity when nothing expired to avoid
+        // triggering re-renders for a no-op.
+        return remaining.length === context.visibleCards.length
+          ? context.visibleCards
+          : remaining;
+      },
     }),
     dismissModal: assign({ modal: null }),
     redirectToHome: () => {
@@ -543,11 +549,6 @@ export const uiMachine = setup({
       logger.info(
         { machine: "uiMachine", transition: "to outOfGame" },
         "Routing to out-of-game",
-      ),
-    logToInGame: () =>
-      logger.info(
-        { machine: "uiMachine", transition: "to inGame" },
-        "Routing to in-game (hydrated)",
       ),
     logToPromptToJoin: () =>
       logger.info(
@@ -616,15 +617,13 @@ export const uiMachine = setup({
   context: ({ input }) => ({
     localPlayerId: input.localPlayerId,
     gameId: input.gameId,
-    currentGameState: input.initialGameState,
+    currentGameState: undefined,
     currentAbilityContext: undefined,
     visibleCards: [],
     isSidePanelOpen: false,
-    error: null,
     reconnectionAttempts: 0,
     hasPassedMatch: false,
     modal: null,
-    selectedCardIndices: [],
   }),
   initial: "initializing",
   on: {
@@ -648,13 +647,6 @@ export const uiMachine = setup({
       entry: "logInitializing",
       always: [
         {
-          target: "inGame",
-          guard: ({ context }) => !!context.currentGameState,
-          description:
-            "Has initial game state provided via input. Hydrate immediately.",
-          actions: ["logToInGame"],
-        },
-        {
           target: "inGame.promptToJoin",
           guard: ({ context }) => !!context.gameId && !context.localPlayerId,
           description: "Has a game ID from URL, but no player ID from session.",
@@ -662,8 +654,8 @@ export const uiMachine = setup({
         },
         {
           target: "inGame.disconnected",
-          guard: ({ context }) =>
-            !!context.localPlayerId && !context.currentGameState,
+          guard: ({ context }) => !!context.localPlayerId,
+          description: "Has a stored session; attempt an automatic rejoin.",
           actions: "logToReconnecting",
         },
         { target: "outOfGame", actions: "logToOutOfGame" },
@@ -734,17 +726,12 @@ export const uiMachine = setup({
     inGame: {
       id: "inGame",
       initial: "routing",
-      invoke: { src: "cardVisibilityCleanup" },
       on: {
         LEAVE_GAME: { target: ".leaving" },
         TOGGLE_SIDE_PANEL: { actions: "toggleSidePanel" },
         CLIENT_GAME_STATE_UPDATED: {
           target: ".routing",
-          actions: [
-            assign({ hasPassedMatch: false }),
-            "setCurrentGameState",
-            "syncAbilityContext",
-          ],
+          actions: ["setCurrentGameState", "syncAbilityContext"],
         },
         INITIAL_LOGS_RECEIVED: { actions: "setInitialLogs" },
         NEW_GAME_LOG: { actions: "addGameLog" },
@@ -773,7 +760,6 @@ export const uiMachine = setup({
         PLAY_AGAIN: { actions: "emitPlayerAction" },
         DISMISS_MODAL: { actions: "dismissModal" },
         SKIP_ABILITY_STAGE: { actions: "emitSkipAbilityStage" },
-        CANCEL_ABILITY: { actions: "clearAbilityContext" },
         CLEANUP_EXPIRED_CARDS: { actions: "cleanupExpiredVisibleCards" },
         DISCONNECT: { target: ".disconnected" },
       },
@@ -825,7 +811,15 @@ export const uiMachine = setup({
             },
           ],
         },
-        lobby: { entry: "log_ENTER_LOBBY", tags: ["lobby", "playing"] },
+        lobby: {
+          entry: "log_ENTER_LOBBY",
+          tags: ["lobby", "playing"],
+          on: {
+            // Manual "refresh" from the lobby re-runs the rejoin handshake to
+            // re-sync state with the server.
+            RETRY_REJOIN: { target: "reconnecting" },
+          },
+        },
         initialPeek: {
           entry: ["log_ENTER_INITIAL_PEEK"],
           tags: ["peeking", "playing"],
@@ -859,6 +853,14 @@ export const uiMachine = setup({
         ability: {
           tags: ["ability", "playing"],
           initial: "selecting",
+          // Whatever substate we are in, leave the ability flow as soon as the
+          // synced server state no longer has an ability for this player.
+          always: [
+            {
+              target: "#inGame.routing",
+              guard: ({ context }) => !context.currentAbilityContext,
+            },
+          ],
           on: {
             CLIENT_GAME_STATE_UPDATED: {
               actions: [
@@ -888,46 +890,23 @@ export const uiMachine = setup({
             SKIP_ABILITY_STAGE: {
               actions: "emitSkipAbilityStage",
             },
-            CANCEL_ABILITY: {
-              target: "playing",
-              actions: "clearAbilityContext",
-            },
           },
           states: {
             selecting: {
               tags: ["ability-selecting"],
-              always: [
-                {
-                  target: "#inGame.routing",
-                  guard: ({ context }) => !context.currentAbilityContext,
-                },
-              ],
             },
             resolving: {
               initial: "waiting",
               states: {
                 waiting: {},
+                // The server owns the peek→swap transition (its own 5s timer
+                // or an explicit skip). The client only waits here until the
+                // synced ability context leaves the peeking stage.
                 viewingPeek: {
-                  entry: assign({ viewingPeekStartTime: () => Date.now() }),
-                  after: {
-                    [PEEK_ABILITY_DURATION_MS]: {
-                      guard: ({ context }) =>
-                        context.currentAbilityContext?.type === "king" &&
-                        context.currentAbilityContext?.stage === "peeking",
-                      actions: "emitSkipAbilityStage",
-                    },
-                  },
                   always: {
                     guard: ({ context }) =>
                       context.currentAbilityContext?.stage !== "peeking",
                     target: "#inGame.ability.selecting",
-                  },
-                  on: {
-                    CLIENT_GAME_STATE_UPDATED: {
-                      guard: ({ context }) =>
-                        context.currentAbilityContext?.stage !== "peeking",
-                      target: "#inGame.ability.selecting",
-                    },
                   },
                 },
               },
@@ -940,7 +919,12 @@ export const uiMachine = setup({
           tags: ["gameover", "playing"],
         },
         leaving: {
-          entry: ["resetGameContext", "clearSession", "redirectToHome"],
+          entry: [
+            "emitLeaveGame",
+            "resetGameContext",
+            "clearSession",
+            "redirectToHome",
+          ],
         },
         disconnected: {
           tags: ["recovering"],
@@ -959,18 +943,6 @@ export const uiMachine = setup({
             ],
             RETRY_REJOIN: { target: "reconnecting" },
           },
-          onError: [
-            {
-              target: "recoveryFailed",
-              guard: ({ event }: { event: any }) =>
-                (event.error as Error)?.message
-                  ?.toLowerCase?.()
-                  .includes("not found"),
-            },
-            {
-              target: "disconnected",
-            },
-          ],
         },
         reconnecting: {
           tags: ["recovering", "loading"],
@@ -999,9 +971,18 @@ export const uiMachine = setup({
                 }),
               ],
             },
-            onError: {
-              target: "disconnected",
-            },
+            onError: [
+              {
+                // The game (or this player's seat) no longer exists on the
+                // server — retrying forever would loop, so clear the session.
+                target: "recoveryFailed",
+                guard: ({ event }) =>
+                  ((event.error as Error)?.message ?? "")
+                    .toLowerCase()
+                    .includes("not found"),
+              },
+              { target: "disconnected" },
+            ],
           },
         },
         recoveryFailed: { entry: ["clearSession", "redirectToHome"] },

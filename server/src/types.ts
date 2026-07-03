@@ -47,6 +47,7 @@ export interface GameContext {
     cardToMatch: Card;
     originalPlayerID: PlayerId;
     remainingPlayerIDs: PlayerId[];
+    startTimestamp: number;
   } | null;
   abilityStack: ServerActiveAbility[];
   checkDetails: {
@@ -65,15 +66,8 @@ export interface GameContext {
   discardPileIsSealed: boolean;
   errorState: {
     message: string;
-    retryCount: number;
-    errorType:
-      | "DECK_EMPTY"
-      | "NETWORK_ERROR"
-      | "PLAYER_ERROR"
-      | "GENERAL_ERROR"
-      | null;
+    errorType: "DECK_EMPTY" | "NETWORK_ERROR";
     affectedPlayerId?: PlayerId;
-    recoveryState?: unknown;
   } | null;
   maxPlayers: number;
   cardsPerPlayer: number;

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { PlusCircle, Sparkles, ArrowRight } from "lucide-react";
@@ -35,19 +34,18 @@ export function NewGameModal({
     }
     return "";
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
   const { isMobile } = useDevice();
 
   const { send } = useUIActorRef();
-  const state = useUISelector((s) => s);
+  // Loading state lives in the machine, so a failed request re-enables the
+  // button instead of leaving the modal stuck on "Creating...".
+  const isLoading = useUISelector((s) => s.hasTag("loading"));
 
-  const handleCreateGame = async () => {
+  const handleCreateGame = () => {
     if (!playerName.trim()) {
       toast.error("Please enter your name.");
       return;
     }
-    setIsLoading(true);
     localStorage.setItem("localPlayerName", playerName);
     send({ type: "CREATE_GAME_REQUESTED", playerName });
   };
@@ -60,7 +58,12 @@ export function NewGameModal({
 
   return (
     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-      <DialogContent className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800">
+      <DialogContent
+        onInteractOutside={(e) => {
+          if (isLoading) e.preventDefault();
+        }}
+        className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800"
+      >
         <div className="relative">
           <div className="relative p-6">
             <DialogHeader className="mb-8">

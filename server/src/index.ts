@@ -6,7 +6,7 @@ import { nanoid } from "nanoid";
 
 dotenv.config();
 
-import { gameMachine, GameContext } from "./game-machine.js";
+import { gameMachine } from "./game-machine.js";
 import { generatePlayerView } from "./state-redactor.js";
 import logger from "./lib/logger.js";
 import {
@@ -21,7 +21,6 @@ import {
   ChatMessage,
   ClientToServerEvents,
   ServerToClientEvents,
-  ServerToClientEventName,
   AttemptRejoinResponse,
 } from "shared-types";
 
@@ -34,10 +33,56 @@ const socketSessionMap = new Map<
   string,
   { gameId: GameId; playerId: PlayerId }
 >();
-const pendingCallbacks = new Map<
-  string,
-  (response: CreateGameResponse | JoinGameResponse) => void
->();
+
+const MAX_CHAT_MESSAGE_LENGTH = 500;
+const ABANDONED_GAME_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+
+// Only client-originated player actions may be forwarded into a game machine.
+// Everything else (PLAYER_RECONNECTED, PLAYER_JOIN_REQUEST, timer events, ...)
+// is internal and must not be spoofable through the PLAYER_ACTION socket event.
+const ALLOWED_PLAYER_ACTIONS = new Set<string>(Object.values(PlayerActionType));
+
+const stopAndRemoveGame = (gameId: GameId, reason: string) => {
+  const gameActor = activeGameMachines.get(gameId);
+  if (!gameActor) return;
+  logger.info({ gameId, reason }, "Stopping and removing game machine");
+  gameActor.stop();
+  activeGameMachines.delete(gameId);
+};
+
+const cleanupGameIfEmpty = (gameId: GameId) => {
+  const gameActor = activeGameMachines.get(gameId);
+  if (!gameActor) return;
+  if (Object.keys(gameActor.getSnapshot().context.players).length === 0) {
+    stopAndRemoveGame(gameId, "no players remain");
+  }
+};
+
+// Periodic sweep so fully-abandoned mid-game machines don't leak forever.
+// A game is only removed after two consecutive sweeps with nobody connected,
+// so a brief everyone-is-refreshing window can't kill a live game.
+const abandonedGameStrikes = new Set<GameId>();
+setInterval(() => {
+  for (const [gameId, gameActor] of activeGameMachines.entries()) {
+    const players = Object.values(gameActor.getSnapshot().context.players);
+    const abandoned =
+      players.length === 0 || players.every((p) => !p.isConnected);
+    if (!abandoned) {
+      abandonedGameStrikes.delete(gameId);
+    } else if (abandonedGameStrikes.has(gameId)) {
+      abandonedGameStrikes.delete(gameId);
+      stopAndRemoveGame(gameId, "abandoned by all players");
+    } else {
+      abandonedGameStrikes.add(gameId);
+    }
+  }
+}, ABANDONED_GAME_SWEEP_INTERVAL_MS).unref();
+
+const sanitizeChatMessage = (raw: unknown): string | null => {
+  if (typeof raw !== "string") return null;
+  const message = raw.trim().slice(0, MAX_CHAT_MESSAGE_LENGTH);
+  return message.length > 0 ? message : null;
+};
 
 const CORS_ORIGIN = (
   process.env.CORS_ORIGIN ??
@@ -192,36 +237,29 @@ io.on("connection", (socket: Socket) => {
         socket.join(gameId);
         registerSocketSession(gameId, playerId);
 
-        const joinSubscription = gameActor.on(
-          "PLAYER_JOIN_SUCCESSFUL",
-          (event) => {
-            if (event.playerId === playerId) {
-              logger.info(
-                { gameId, playerId },
-                "PLAYER_JOIN_SUCCESSFUL event received for creator. Responding to client.",
-              );
-              const creatorView = generatePlayerView(
-                gameActor.getSnapshot(),
-                playerId,
-              );
-              if (callback) {
-                callback({
-                  success: true,
-                  gameId,
-                  playerId,
-                  gameState: creatorView,
-                });
-              }
-              joinSubscription.unsubscribe();
-            }
-          },
-        );
-
         gameActor.send({
           type: "PLAYER_JOIN_REQUEST",
           playerSetupData: finalPlayerSetupData,
           playerId,
         });
+
+        // XState processes events synchronously; if the join was accepted the
+        // player exists in the snapshot now.
+        if (!gameActor.getSnapshot().context.players[playerId]) {
+          stopAndRemoveGame(gameId, "creator could not join own game");
+          if (callback)
+            callback({ success: false, message: "Failed to create game." });
+          return;
+        }
+
+        if (callback) {
+          callback({
+            success: true,
+            gameId,
+            playerId,
+            gameState: generatePlayerView(gameActor.getSnapshot(), playerId),
+          });
+        }
       } catch (e: any) {
         logger.error({ err: e }, `[Server-CreateGame] Error`);
         if (callback)
@@ -298,39 +336,31 @@ io.on("connection", (socket: Socket) => {
           socketId: socket.id,
         };
 
-        socket.join(gameId);
-        registerSocketSession(gameId, playerId);
-
-        const joinSubscription = gameActor.on(
-          "PLAYER_JOIN_SUCCESSFUL",
-          (event) => {
-            if (event.playerId === playerId) {
-              logger.info(
-                { gameId, playerId },
-                "PLAYER_JOIN_SUCCESSFUL event received from machine. Responding to client.",
-              );
-              const playerSpecificView = generatePlayerView(
-                gameActor.getSnapshot(),
-                playerId,
-              );
-              if (callback) {
-                callback({
-                  success: true,
-                  gameId,
-                  playerId,
-                  gameState: playerSpecificView,
-                });
-              }
-              joinSubscription.unsubscribe();
-            }
-          },
-        );
-
         gameActor.send({
           type: "PLAYER_JOIN_REQUEST",
           playerSetupData: finalPlayerSetupData,
           playerId,
         });
+
+        // The machine may still refuse the join (e.g. two players raced for
+        // the last free seat). Never leave the client hanging without a reply.
+        if (!gameActor.getSnapshot().context.players[playerId]) {
+          if (callback)
+            callback({ success: false, message: "Could not join the game." });
+          return;
+        }
+
+        socket.join(gameId);
+        registerSocketSession(gameId, playerId);
+
+        if (callback) {
+          callback({
+            success: true,
+            gameId,
+            playerId,
+            gameState: generatePlayerView(gameActor.getSnapshot(), playerId),
+          });
+        }
       } catch (e: any) {
         logger.error({ err: e }, `[Server-JoinGame] Error`);
         if (callback)
@@ -359,6 +389,16 @@ io.on("connection", (socket: Socket) => {
           );
           if (callback)
             callback({ success: false, message: "Game not found." });
+          return;
+        }
+
+        if (!gameActor.getSnapshot().context.players[playerId]) {
+          logger.warn(
+            { gameId, playerId },
+            "Attempted rejoin for a player not in this game",
+          );
+          if (callback)
+            callback({ success: false, message: "Player not found." });
           return;
         }
 
@@ -410,9 +450,31 @@ io.on("connection", (socket: Socket) => {
     },
   );
 
+  // Builds a trusted chat event: sender identity always comes from the
+  // socket's session, never from the client payload, so names/ids cannot be
+  // spoofed.
+  const sendChatAsSessionPlayer = (
+    gameActor: GameMachineActorRef,
+    session: { gameId: GameId; playerId: PlayerId },
+    rawMessage: unknown,
+  ) => {
+    const message = sanitizeChatMessage(rawMessage);
+    if (!message) return;
+    const sender = gameActor.getSnapshot().context.players[session.playerId];
+    if (!sender) return;
+    gameActor.send({
+      type: PlayerActionType.SEND_CHAT_MESSAGE,
+      payload: {
+        message,
+        senderId: sender.id,
+        senderName: sender.name,
+      },
+    });
+  };
+
   socket.on(
     SocketEventName.PLAYER_ACTION,
-    (action: { type: PlayerActionType; playerId: PlayerId; payload?: any }) => {
+    (action: { type: PlayerActionType; payload?: any }) => {
       const session = getSocketSession();
       if (!session) {
         logger.warn(
@@ -422,12 +484,36 @@ io.on("connection", (socket: Socket) => {
         return;
       }
       const gameActor = activeGameMachines.get(session.gameId);
-      if (gameActor) {
-        logger.debug(
-          { action, gameId: session.gameId, playerId: session.playerId },
-          "Player action received",
+      if (!gameActor) return;
+
+      if (!action || !ALLOWED_PLAYER_ACTIONS.has(action.type)) {
+        logger.warn(
+          { action, socketId: socket.id },
+          "Rejected player action with unknown or internal event type.",
         );
-        gameActor.send({ ...action, playerId: session.playerId } as any);
+        return;
+      }
+
+      logger.debug(
+        { action, gameId: session.gameId, playerId: session.playerId },
+        "Player action received",
+      );
+
+      if (action.type === PlayerActionType.SEND_CHAT_MESSAGE) {
+        sendChatAsSessionPlayer(gameActor, session, action.payload?.message);
+        return;
+      }
+
+      gameActor.send({
+        type: action.type,
+        payload: action.payload,
+        playerId: session.playerId,
+      } as any);
+
+      if (action.type === PlayerActionType.LEAVE_GAME) {
+        socketSessionMap.delete(socket.id);
+        socket.leave(session.gameId);
+        cleanupGameIfEmpty(session.gameId);
       }
     },
   );
@@ -445,14 +531,7 @@ io.on("connection", (socket: Socket) => {
       }
       const gameActor = activeGameMachines.get(session.gameId);
       if (gameActor) {
-        logger.debug(
-          { payload, gameId: session.gameId, playerId: session.playerId },
-          "Chat message received",
-        );
-        gameActor.send({
-          type: PlayerActionType.SEND_CHAT_MESSAGE,
-          payload,
-        });
+        sendChatAsSessionPlayer(gameActor, session, payload?.message);
       }
     },
   );

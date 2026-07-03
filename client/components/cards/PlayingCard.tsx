@@ -34,23 +34,15 @@ const PlayingCardRenderer = ({ card }: { card: Card }) => {
         colorClass,
       )}
     >
-      <div className={cn("text-left text-[clamp(0.875rem,40cqw,1.25rem)]")}>
+      <div className="text-left card-corner-text">
         <div className="font-bold leading-none">{rankLabel}</div>
       </div>
 
-      <div
-        className={cn(
-          "absolute inset-0 flex items-center justify-center text-[clamp(0.875rem,20cqw,3rem)]",
-        )}
-      >
+      <div className="absolute inset-0 flex items-center justify-center card-suit-text">
         {symbol}
       </div>
 
-      <div
-        className={cn(
-          "self-end rotate-180 text-left text-[clamp(0.875rem,40cqw,1.25rem)]",
-        )}
-      >
+      <div className="self-end rotate-180 text-left card-corner-text">
         <div className="font-bold leading-none">{rankLabel}</div>
       </div>
     </div>

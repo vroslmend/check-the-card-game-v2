@@ -1,37 +1,36 @@
 import { useState, useEffect } from "react";
 
-export function useMediaQuery(query: string) {
+export function useMediaQuery(query: string): boolean {
+  // Initialise to false for identical server & first client render.
   const [matches, setMatches] = useState(false);
 
   useEffect(() => {
-    // Ensure window is defined (for SSR)
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
 
     const media = window.matchMedia(query);
-    if (media.matches !== matches) {
-      setMatches(media.matches);
-    }
-    const listener = () => {
-      setMatches(media.matches);
-    };
+    const listener = () => setMatches(media.matches);
 
-    // Use addEventListener for modern browsers, with a fallback to addListener
     if (media.addEventListener) {
       media.addEventListener("change", listener);
     } else {
-      media.addListener(listener); // Deprecated but necessary for some browsers
+      // Legacy Safari fallback
+      media.addListener(listener);
     }
+
+    // Sync immediately after mount (covers StrictMode remount case).
+    setMatches(media.matches);
 
     return () => {
       if (media.removeEventListener) {
         media.removeEventListener("change", listener);
       } else {
-        media.removeListener(listener); // Deprecated
+        media.removeListener(listener);
       }
     };
-  }, [matches, query]);
+    // Effect only re-runs if the query string itself changes. Including
+    // `matches` here (the old bug) tore down and re-created the listener on
+    // every media-query flip.
+  }, [query]);
 
   return matches;
 }

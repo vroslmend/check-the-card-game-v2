@@ -23,11 +23,9 @@ const selectContext = (state: UIMachineSnapshot) => {
   const ability = state.context.currentAbilityContext;
   return {
     visibleCards: state.context.visibleCards,
-    abilitySelectionInfo: {
-      stage: ability?.stage ?? null,
-      selectedPeekTargets: ability?.selectedPeekTargets ?? [],
-      selectedSwapTargets: ability?.selectedSwapTargets ?? [],
-    },
+    abilityStage: ability?.stage ?? null,
+    selectedPeekTargets: ability?.selectedPeekTargets,
+    selectedSwapTargets: ability?.selectedSwapTargets,
   };
 };
 
@@ -40,7 +38,8 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   isLocked = false,
   selectedCardIndex = null,
 }) => {
-  const { visibleCards, abilitySelectionInfo } = useUISelector(selectContext);
+  const { visibleCards, abilityStage, selectedPeekTargets, selectedSwapTargets } =
+    useUISelector(selectContext);
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine)");
 
   const handToDisplay = isLocalPlayer
@@ -50,12 +49,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   const combinedClass = cn(isLocked && "grayscale opacity-60");
 
   return (
-    <HandGrid
-      numItems={handToDisplay.length}
-      className={combinedClass}
-      isLocalPlayer={isLocalPlayer}
-      cardToSelect={selectedCardIndex}
-    >
+    <HandGrid numItems={handToDisplay.length} className={combinedClass}>
       {handToDisplay.map((card, index) => {
         const isCardVisible = visibleCards.some(
           (vc) => vc.playerId === player.id && vc.cardIndex === index,
@@ -76,13 +70,13 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
 
         const isMatchSelected = selectedCardIndex === index;
         const isAbilityPeekSelected =
-          abilitySelectionInfo.stage === "peeking" &&
-          abilitySelectionInfo.selectedPeekTargets.some(
+          abilityStage === "peeking" &&
+          !!selectedPeekTargets?.some(
             (t) => t.playerId === player.id && t.cardIndex === index,
           );
         const isAbilitySwapSelected =
-          abilitySelectionInfo.stage === "swapping" &&
-          abilitySelectionInfo.selectedSwapTargets.some(
+          abilityStage === "swapping" &&
+          !!selectedSwapTargets?.some(
             (t) => t.playerId === player.id && t.cardIndex === index,
           );
         const abilityRingClass = isAbilityPeekSelected

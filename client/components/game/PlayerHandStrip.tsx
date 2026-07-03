@@ -134,12 +134,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     useUISelector(selectStripContext);
 
   const { send } = useUIActorRef();
-  const {
-    selectedCardIndex,
-    setSelectedCardIndex,
-    setMatchAttempt,
-    matchAttempt,
-  } = useActionController();
+  const { setMatchAttempt, matchAttempt } = useActionController();
 
   const handleCardClick = (cardIndex: number) => {
     if (isLocalPlayer && canMatch) {
@@ -189,11 +184,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         canInteract={canInteract}
         isLocked={player.isLocked}
         selectedCardIndex={
-          isLocalPlayer
-            ? canMatch
-              ? matchAttempt?.cardIndex
-              : selectedCardIndex
-            : undefined
+          isLocalPlayer && canMatch ? matchAttempt?.cardIndex : undefined
         }
         className="w-full max-w-md"
       />

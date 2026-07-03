@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle, Users, Shield, ArrowRight } from "lucide-react";
@@ -37,22 +36,21 @@ export function JoinGameModal({
     }
     return "";
   });
-  const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
-  const router = useRouter();
   const { isMobile } = useDevice();
 
-  const state = useUISelector((s) => s);
+  // Loading state lives in the machine, so a failed join re-enables the
+  // button instead of leaving the modal stuck on "Loading...".
+  const isLoading = useUISelector((s) => s.hasTag("loading"));
   const { send } = useUIActorRef();
 
-  const handleJoinGame = async () => {
+  const handleJoinGame = () => {
     if (!gameId.trim() || !playerName.trim()) {
       toast.error("Please enter a game ID and your name.");
       return;
     }
-    setIsLoading(true);
     localStorage.setItem("localPlayerName", playerName);
-    send({ type: "JOIN_GAME_REQUESTED", gameId, playerName });
+    send({ type: "JOIN_GAME_REQUESTED", gameId: gameId.trim(), playerName });
   };
 
   const handleNextStep = () => {
@@ -84,7 +82,12 @@ export function JoinGameModal({
 
   return (
     <Dialog open={isModalOpen} onOpenChange={resetAndClose}>
-      <DialogContent className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800">
+      <DialogContent
+        onInteractOutside={(e) => {
+          if (isLoading) e.preventDefault();
+        }}
+        className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800"
+      >
         <div className="relative">
           <div className="absolute top-0 right-0 w-64 h-64 bg-stone-100 dark:bg-zinc-900 rounded-full blur-3xl opacity-60" />
           <div className="absolute bottom-0 left-0 w-72 h-72 bg-stone-100 dark:bg-zinc-900 rounded-full blur-3xl opacity-60" />

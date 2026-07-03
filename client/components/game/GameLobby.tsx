@@ -86,10 +86,11 @@ const PlayerRow = ({
   index: number;
 }) => {
   const { send } = useUIActorRef();
-  const snapshot = useUISelector((state) => state);
-  const isGameMaster =
-    snapshot.context.currentGameState?.gameMasterId ===
-    snapshot.context.localPlayerId;
+  const isGameMaster = useUISelector(
+    (state) =>
+      state.context.currentGameState?.gameMasterId ===
+      state.context.localPlayerId,
+  );
 
   const [isHolding, setIsHolding] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -282,11 +283,13 @@ const selectLobbyProps = (state: UIMachineSnapshot) => {
     };
   }
 
-  const players = currentGameState.turnOrder
-    ? currentGameState.turnOrder.map(
-        (id: string) => currentGameState.players[id],
-      )
-    : Object.values(currentGameState.players);
+  const players = (
+    currentGameState.turnOrder?.length
+      ? currentGameState.turnOrder.map(
+          (id: string) => currentGameState.players[id],
+        )
+      : Object.values(currentGameState.players)
+  ).filter((p): p is Player => !!p);
   const localPlayer = localPlayerId
     ? currentGameState.players[localPlayerId]
     : null;
@@ -336,19 +339,12 @@ export const GameLobby = () => {
 
   useEffect(() => {
     if (isLoading) {
-      const timer = setTimeout(() => {
-        setReconnectionTimeout(true);
-        send({
-          type: "CONNECTION_ERROR",
-          message: "Reconnection taking too long",
-        });
-      }, 8000);
-
+      const timer = setTimeout(() => setReconnectionTimeout(true), 8000);
       return () => clearTimeout(timer);
     } else {
       setReconnectionTimeout(false);
     }
-  }, [isLoading, send]);
+  }, [isLoading]);
 
   useEffect(() => {
     return () => {
@@ -406,7 +402,8 @@ export const GameLobby = () => {
 
     setIsRefreshing(true);
 
-    send({ type: "CONNECT" });
+    // Re-runs the rejoin handshake, which re-syncs the lobby state.
+    send({ type: "RETRY_REJOIN" });
 
     refreshTimeoutRef.current = setTimeout(() => {
       setIsRefreshing(false);
@@ -516,9 +513,12 @@ export const GameLobby = () => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-        className="min-h-screen flex items-center justify-center font-serif p-4 sm:p-6 md:p-10"
+        className="min-h-screen flex items-center justify-center font-serif p-4"
       >
-        <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto relative overflow-hidden bg-white/80 dark:bg-zinc-950/80 rounded-3xl sm:rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl">
+        <div
+          className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto relative bg-white/80 dark:bg-zinc-950/80 rounded-3xl sm:rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl
+                     max-h-[90dvh] flex flex-col overflow-hidden"
+        >
           <motion.div
             className="absolute -top-10 -right-10 w-64 h-64 bg-gradient-to-br from-stone-100 dark:from-zinc-900 rounded-full blur-3xl"
             animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
@@ -530,7 +530,10 @@ export const GameLobby = () => {
             transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
           />
 
-          <div className="relative p-8 md:p-10">
+          <div
+            className="relative p-8 md:p-10 flex flex-col min-h-0
+                       [@media(max-height:750px)]:p-6 [@media(max-height:600px)]:p-4"
+          >
             <motion.div
               className="absolute top-5 right-5"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -620,12 +623,16 @@ export const GameLobby = () => {
               </Magnetic>
             </motion.div>
 
-            <div className="flex flex-col items-center text-center mb-10">
+            <div
+              className="flex flex-col items-center text-center mb-10
+                         [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4"
+            >
               <motion.h2
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.2 }}
-                className="text-4xl sm:text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100"
+                className="text-4xl sm:text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100
+                           [@media(max-height:750px)]:text-3xl [@media(max-height:600px)]:text-2xl"
               >
                 Game Lobby
               </motion.h2>
@@ -641,7 +648,7 @@ export const GameLobby = () => {
 
             {gameId && (
               <motion.div
-                className="mb-10"
+                className="mb-10 [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.4 }}
@@ -665,7 +672,8 @@ export const GameLobby = () => {
             )}
 
             <motion.div
-              className="space-y-3 mb-8 max-h-[50vh] md:max-h-[60vh] overflow-y-auto pr-1"
+              className="flex-1 min-h-0 space-y-3 mb-8 max-h-[50vh] md:max-h-[60vh] overflow-y-auto pr-1
+                         [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4 [@media(max-height:600px)]:space-y-2"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ staggerChildren: 0.1, delayChildren: 0.5 }}
@@ -688,7 +696,10 @@ export const GameLobby = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.6 }}
             >
-              <div className="h-10 mb-6 flex items-center justify-center">
+              <div
+                className="h-10 mb-6 flex items-center justify-center
+                           [@media(max-height:750px)]:mb-4 [@media(max-height:600px)]:h-8 [@media(max-height:600px)]:mb-3"
+              >
                 {getLobbyStatus()}
               </div>
 

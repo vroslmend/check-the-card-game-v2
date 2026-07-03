@@ -18,10 +18,10 @@ import logger from "./lib/logger.js";
  * @returns A redacted game state object suitable for sending to the client.
  */
 export const generatePlayerView = (
-  snapshot: { context: GameContext; value: unknown },
+  snapshot: { context: GameContext },
   viewingPlayerId: string,
 ): ClientCheckGameState => {
-  const { context: fullGameContext, value: snapshotValue } = snapshot;
+  const { context: fullGameContext } = snapshot;
   logger.debug(
     { gameId: fullGameContext.gameId, viewingPlayerId },
     "Generating player view",
@@ -78,19 +78,6 @@ export const generatePlayerView = (
     };
   }
 
-  let gameStageValue: GameStage;
-  if (typeof snapshot.value === "string") {
-    gameStageValue = snapshot.value as GameStage;
-  } else if (typeof snapshot.value === "object" && snapshot.value !== null) {
-    gameStageValue = Object.keys(snapshot.value)[0] as GameStage;
-  } else {
-    logger.warn(
-      { value: snapshot.value, gameId: fullGameContext.gameId },
-      "Unexpected snapshot value type, defaulting game stage.",
-    );
-    gameStageValue = GameStage.WAITING_FOR_PLAYERS;
-  }
-
   const clientLog = fullGameContext.log.filter(
     (entry: RichGameLogMessage) =>
       entry.type === "public" ||
@@ -112,7 +99,10 @@ export const generatePlayerView = (
         : null,
     discardPile: fullGameContext.discardPile,
     turnOrder: fullGameContext.turnOrder,
-    gameStage: gameStageValue,
+    // context.gameStage is the single source of truth. Deriving the stage from
+    // the machine's state value breaks whenever the machine is in a non-stage
+    // node such as the error/recovery state.
+    gameStage: fullGameContext.gameStage,
     currentPlayerId: fullGameContext.currentPlayerId,
     turnPhase: fullGameContext.currentTurnSegment,
     abilityStack: fullGameContext.abilityStack,

@@ -1,52 +1,47 @@
 "use client";
 
 import React from "react";
-import { useUISelector } from "@/context/GameUIContext";
+import {
+  useUISelector,
+  type UIMachineSnapshot,
+} from "@/context/GameUIContext";
 import { GameBoard } from "@/components/game/GameBoard";
 import { GameLobby } from "@/components/game/GameLobby";
 import LoadingOrError from "@/components/layout/LoadingOrError";
 import { RejoinModal } from "@/components/modals/RejoinModal";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import CardAnimationRoot from "@/components/cards/CardAnimationRoot";
 import { GameStage } from "shared-types";
 
-const selectStableView = (s: any) => {
+type GameView = "prompting" | "lobby" | "game" | "connecting";
+
+const selectView = (s: UIMachineSnapshot): GameView => {
   if (
     s.context.modal?.type === "rejoin" ||
     s.matches({ inGame: "promptToJoin" })
   ) {
-    return "loading";
+    return "prompting";
   }
-  if (s.context.currentGameState?.gameStage === GameStage.WAITING_FOR_PLAYERS) {
-    return "lobby";
-  }
-  if (s.context.currentGameState?.gameStage) {
-    return "game";
-  }
-  return "loading";
+  const gameStage = s.context.currentGameState?.gameStage;
+  if (gameStage === GameStage.WAITING_FOR_PLAYERS) return "lobby";
+  if (gameStage) return "game";
+  return "connecting";
 };
 
 export default function GameUI() {
-  const { state, gameStage, modalType, view } = useUISelector((s) => ({
-    state: s,
-    gameStage: s.context.currentGameState?.gameStage,
-    modalType: s.context.modal?.type,
-    view: selectStableView(s),
-  }));
+  const view = useUISelector(selectView);
 
   const renderContent = () => {
-    if (modalType === "rejoin" || state.matches({ inGame: "promptToJoin" })) {
-      return <LoadingOrError message="Awaiting your input..." />;
-    }
-
-    if (gameStage) {
-      if (gameStage === GameStage.WAITING_FOR_PLAYERS) {
+    switch (view) {
+      case "prompting":
+        return <LoadingOrError message="Awaiting your input..." />;
+      case "lobby":
         return <GameLobby />;
-      }
-      return <GameBoard />;
+      case "game":
+        return <GameBoard />;
+      default:
+        return <LoadingOrError message="Connecting..." />;
     }
-
-    return <LoadingOrError message="Connecting..." />;
   };
 
   return (

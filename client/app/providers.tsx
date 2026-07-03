@@ -63,10 +63,10 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     const er = (e: { message: string }) =>
       actor.send({ type: "ERROR_RECEIVED", error: e.message });
     const ce = (err: any) =>
-      actor.send({
-        type: "CONNECTION_ERROR",
-        message: err.message ?? "connection error",
-      });
+      logger.warn(
+        { error: err?.message ?? "connection error" },
+        "Socket connection error",
+      );
     const il = (l: any[]) =>
       actor.send({ type: "INITIAL_LOGS_RECEIVED", logs: l });
     const onConnect = () =>
@@ -92,7 +92,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
 
     // manager-level reconnect failure event (no args)
     const rf = () =>
-      actor.send({ type: "CONNECTION_ERROR", message: "reconnection failed" });
+      logger.error("Socket reconnection failed after exhausting retries");
     socket.io?.on("reconnect_failed", rf);
 
     return () => {
