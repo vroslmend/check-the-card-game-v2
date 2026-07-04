@@ -60,7 +60,7 @@ export const VisualCardStack = ({
         transition={{ type: "spring", stiffness: 400, damping: 20 }}
         onClick={onClick}
         className={cn(
-          "relative landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7]",
+          "relative w-[min(8vh,15vw)] aspect-[5/7]",
           canInteract ? "cursor-pointer" : "cursor-default",
           className,
         )}

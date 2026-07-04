@@ -105,13 +105,13 @@ export const TableArea = ({
             faceDown
             canInteract={canDrawFromDeck}
             onClick={handleDeckClick}
-            className="landscape:w-[8vh] portrait:w-[15vw]"
+            className="w-[min(8vh,15vw)]"
           />
           {/* During DEALING every dealt card sits here with its layoutId, so
               when the hands render on the next stage each card flies from the
               deck to its grid slot instead of popping into place. */}
           {dealingDeck.length > 0 && (
-            <div className="absolute bottom-0 left-1/2 landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7] -translate-x-1/2 pointer-events-none">
+            <div className="absolute bottom-0 left-1/2 w-[min(8vh,15vw)] aspect-[5/7] -translate-x-1/2 pointer-events-none">
               {dealingDeck.map((card) => (
                 <motion.div
                   key={card.id}
@@ -128,7 +128,7 @@ export const TableArea = ({
 
       {/* The drawn-card slot keeps its full size even while empty so the deck
           and discard piles don't shift sideways on every draw/discard. */}
-      <div className="relative landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7]">
+      <div className="relative w-[min(8vh,15vw)] aspect-[5/7]">
         <AnimatePresence>
           {drawnCard && (
             <motion.div
@@ -170,7 +170,7 @@ export const TableArea = ({
           isSealed={discardPileIsSealed}
           canInteract={canDrawFromDiscard || canDiscardDrawnCard}
           onClick={handleDiscardClick}
-          className="landscape:w-[8vh] portrait:w-[15vw]"
+          className="w-[min(8vh,15vw)]"
         />
       </div>
     </div>

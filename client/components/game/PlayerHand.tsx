@@ -129,7 +129,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
         return (
           <div
             key={card.id}
-            className="relative landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7]"
+            className="relative w-[min(8vh,15vw)] aspect-[5/7]"
           >
             <motion.div
               key={card.id}
