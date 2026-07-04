@@ -14,37 +14,24 @@ const PlayingCardRenderer = ({ card }: { card: Card }) => {
     C: "♣",
     S: "♠",
   };
-  const suitColors: Record<string, string> = {
-    H: "text-rose-600 dark:text-rose-400",
-    D: "text-rose-600 dark:text-rose-400",
-    C: "text-stone-800 dark:text-stone-300",
-    S: "text-stone-800 dark:text-stone-300",
-  };
-
-  const colorClass =
-    suitColors[card.suit] || "text-stone-800 dark:text-stone-300";
+  const isRed = card.suit === "H" || card.suit === "D";
   const symbol = suitSymbols[card.suit] || "?";
   const rankLabel = card.rank === CardRank.Ten ? "10" : card.rank;
 
+  // Reference layout: the card IS typography — a big rank centered over its
+  // suit glyph, no mirrored corners. Red suits carry the accent, black = ink.
   return (
     <div
       className={cn(
-        "relative h-full w-full rounded-lg border bg-white dark:bg-zinc-900 flex flex-col justify-between font-game p-1 @container/card",
-        "border-stone-200 dark:border-zinc-700",
-        colorClass,
+        "relative h-full w-full rounded-card border bg-surface border-hairline",
+        "flex flex-col items-center justify-center font-game @container/card",
+        isRed ? "text-accent" : "text-ink",
       )}
     >
-      <div className="text-left card-corner-text">
-        <div className="font-bold leading-none">{rankLabel}</div>
-      </div>
-
-      <div className="absolute inset-0 flex items-center justify-center card-suit-text">
-        {symbol}
-      </div>
-
-      <div className="self-end rotate-180 text-left card-corner-text">
-        <div className="font-bold leading-none">{rankLabel}</div>
-      </div>
+      <span className="card-rank-text font-extrabold leading-none">
+        {rankLabel}
+      </span>
+      <span className="card-suit-glyph leading-none">{symbol}</span>
     </div>
   );
 };
@@ -54,6 +41,8 @@ interface PlayingCardProps {
   onClick?: () => void;
   faceDown?: boolean;
   className?: string;
+  /** Count rendered on the card back (deck stock pile). */
+  backCount?: number;
 }
 
 export function PlayingCard({
@@ -61,6 +50,7 @@ export function PlayingCard({
   onClick,
   faceDown,
   className,
+  backCount,
 }: PlayingCardProps) {
   const showFront = !faceDown;
 
@@ -102,7 +92,7 @@ export function PlayingCard({
           variants={{ front: { opacity: 0 }, back: { opacity: 1 } }}
           transition={{ duration: 0, delay: 0.25 }}
         >
-          <CardBack />
+          <CardBack count={backCount} />
         </motion.div>
       </motion.div>
     </div>

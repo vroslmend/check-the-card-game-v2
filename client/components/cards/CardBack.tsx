@@ -1,24 +1,22 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { Check } from "lucide-react";
 
-export function CardBack() {
+interface CardBackProps {
+  /** When set (deck stock pile), the count renders instead of the mark. */
+  count?: number;
+}
+
+export function CardBack({ count }: CardBackProps) {
   return (
-    <div
-      className={cn(
-        "relative w-full h-full rounded-md overflow-hidden shadow-md border",
-        "bg-zinc-900 border-zinc-700",
+    <div className="relative w-full h-full rounded-card bg-accent flex items-center justify-center overflow-hidden @container/back">
+      {typeof count === "number" ? (
+        <span className="card-back-count font-game font-bold leading-none text-accent-ink">
+          {count}
+        </span>
+      ) : (
+        <Check className="w-[22%] h-[22%] text-accent-ink" strokeWidth={3} />
       )}
-    >
-      <div className="absolute inset-0 z-10 pointer-events-none opacity-[0.03] bg-[url('/noise.svg')] bg-repeat" />
-
-      <div
-        className="absolute inset-0 z-0 opacity-80 dark:hidden"
-        style={{
-          background:
-            "radial-gradient(circle at 50% 0%, rgba(255,255,255,0.06), transparent 40%)",
-        }}
-      />
     </div>
   );
 }

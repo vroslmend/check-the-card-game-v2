@@ -336,15 +336,20 @@ html {
 
 /* Card face typography scales with the card via container-query units, with a
    fixed fallback for browsers that can't resolve cq units (e.g. older
-   Firefox/Zen builds, where the corner ranks otherwise render at size 0). */
-.card-corner-text {
-  font-size: 1rem;
-  font-size: clamp(0.875rem, 40cqw, 1.25rem);
+   Firefox/Zen builds, where the text otherwise renders at size 0). */
+.card-rank-text {
+  font-size: 1.5rem;
+  font-size: clamp(1.1rem, 34cqw, 2.2rem);
 }
 
-.card-suit-text {
-  font-size: 1.5rem;
-  font-size: clamp(0.875rem, 20cqw, 3rem);
+.card-suit-glyph {
+  font-size: 1.2rem;
+  font-size: clamp(0.9rem, 26cqw, 1.7rem);
+}
+
+.card-back-count {
+  font-size: 1.3rem;
+  font-size: clamp(0.9rem, 30cqw, 1.9rem);
 }
 
 @media (prefers-reduced-motion: reduce) {
