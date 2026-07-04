@@ -459,18 +459,28 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       turnTimerMs,
       matchingOpportunity,
       gameStage,
+      turnPhase,
+      isMyTurn,
+      isAbilityPlayer,
     } = props;
     const now = Date.now();
     if (peekExpireAt && peekExpireAt > now) {
       return { expireAt: peekExpireAt, durationMs: peekDurationMs };
     }
-    // Turn-timer countdown, shown to everyone. The matching window renders
-    // its own countdown on the Pass button, so it is excluded here.
+    // Turn-timer countdown, shown only to whoever must act on it: the current
+    // player during draw/discard, the ability owner during abilities, and
+    // everyone during the initial peek (that deadline is shared). Spectators
+    // get the status chips instead. The matching window renders its own
+    // countdown on the Pass button, so it is excluded here.
+    const isMyDeadline =
+      gameStage === GameStage.INITIAL_PEEK ||
+      (turnPhase === TurnPhase.ABILITY ? isAbilityPlayer : isMyTurn);
     if (
       turnDeadline &&
       turnDeadline > now &&
       turnTimerMs > 0 &&
       !matchingOpportunity &&
+      isMyDeadline &&
       (gameStage === GameStage.PLAYING ||
         gameStage === GameStage.FINAL_TURNS ||
         gameStage === GameStage.INITIAL_PEEK)
