@@ -22,9 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Magnetic from "@/components/ui/Magnetic";
+import { cn } from "@/lib/utils";
 import { useUISelector, useUIActorRef } from "@/context/GameUIContext";
-import { useDevice } from "@/context/DeviceContext";
 
 interface JoinGameModalProps {
   isModalOpen: boolean;
@@ -43,7 +42,6 @@ export function JoinGameModal({
     return "";
   });
   const [step, setStep] = useState(1);
-  const { isMobile } = useDevice();
 
   // Loading state lives in the machine, so a failed join re-enables the
   // button instead of leaving the modal stuck on "Loading...".
@@ -92,12 +90,9 @@ export function JoinGameModal({
         onInteractOutside={(e) => {
           if (isLoading) e.preventDefault();
         }}
-        className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800"
+        className="sm:max-w-[425px] p-0 overflow-hidden bg-surface border border-hairline"
       >
         <div className="relative">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-stone-100 dark:bg-zinc-900 rounded-full blur-3xl opacity-60" />
-          <div className="absolute bottom-0 left-0 w-72 h-72 bg-stone-100 dark:bg-zinc-900 rounded-full blur-3xl opacity-60" />
-
           <div className="relative p-6">
             <DialogHeader className="mb-6">
               <motion.div
@@ -106,14 +101,14 @@ export function JoinGameModal({
                 transition={{ duration: 0.3 }}
                 className="mb-2 flex items-center gap-2"
               >
-                <div className="rounded-full bg-stone-100 dark:bg-zinc-900 p-1.5">
-                  <Users className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                <div className="rounded-full bg-surface-2 p-1.5">
+                  <Users className="h-4 w-4 text-ink-muted" />
                 </div>
-                <DialogTitle className="text-2xl font-light">
+                <DialogTitle className="text-2xl font-bold text-ink">
                   Join a Game
                 </DialogTitle>
               </motion.div>
-              <DialogDescription className="text-stone-500 dark:text-stone-400">
+              <DialogDescription className="text-ink-muted">
                 Connect with friends and join an existing game session.
               </DialogDescription>
             </DialogHeader>
@@ -121,21 +116,37 @@ export function JoinGameModal({
             <div className="mb-6">
               <div className="flex justify-between mb-4">
                 <div
-                  className={`flex items-center gap-2 ${step >= 1 ? "text-stone-900 dark:text-stone-100" : "text-stone-400"}`}
+                  className={cn(
+                    "flex items-center gap-2",
+                    step >= 1 ? "text-ink" : "text-ink-muted",
+                  )}
                 >
                   <div
-                    className={`rounded-full h-6 w-6 flex items-center justify-center ${step >= 1 ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900" : "bg-stone-200 dark:bg-stone-800 text-stone-500 dark:text-stone-500"}`}
+                    className={cn(
+                      "rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold",
+                      step >= 1
+                        ? "bg-ink text-ground"
+                        : "bg-surface-2 text-ink-muted border border-hairline",
+                    )}
                   >
                     {step > 1 ? <CheckCircle className="h-4 w-4" /> : "1"}
                   </div>
                   <span className="text-sm">Your Identity</span>
                 </div>
-                <div className="flex-1 border-t border-dashed border-stone-200 dark:border-zinc-800 self-center mx-2"></div>
+                <div className="flex-1 border-t border-dashed border-hairline self-center mx-2"></div>
                 <div
-                  className={`flex items-center gap-2 ${step >= 2 ? "text-stone-900 dark:text-stone-100" : "text-stone-400"}`}
+                  className={cn(
+                    "flex items-center gap-2",
+                    step >= 2 ? "text-ink" : "text-ink-muted",
+                  )}
                 >
                   <div
-                    className={`rounded-full h-6 w-6 flex items-center justify-center ${step >= 2 ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900" : "bg-stone-200 dark:bg-stone-800 text-stone-500 dark:text-stone-500"}`}
+                    className={cn(
+                      "rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold",
+                      step >= 2
+                        ? "bg-ink text-ground"
+                        : "bg-surface-2 text-ink-muted border border-hairline",
+                    )}
                   >
                     2
                   </div>
@@ -156,7 +167,7 @@ export function JoinGameModal({
                     <div className="space-y-2">
                       <Label
                         htmlFor="player-name"
-                        className="text-sm font-normal text-stone-600 dark:text-stone-400"
+                        className="text-sm font-normal text-ink-muted"
                       >
                         What should we call you?
                       </Label>
@@ -165,7 +176,7 @@ export function JoinGameModal({
                         value={playerName}
                         onChange={(e) => setPlayerName(e.target.value)}
                         placeholder="Enter your name"
-                        className="rounded-xl border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 h-12 px-4"
+                        className="rounded-xl border-hairline bg-surface h-12 px-4"
                         onKeyDown={onKeyDown}
                         autoComplete="off"
                       />
@@ -185,7 +196,7 @@ export function JoinGameModal({
                     <div className="space-y-2">
                       <Label
                         htmlFor="game-id"
-                        className="text-sm font-normal text-stone-600 dark:text-stone-400"
+                        className="text-sm font-normal text-ink-muted"
                       >
                         Enter the game ID provided by your friend
                       </Label>
@@ -194,11 +205,11 @@ export function JoinGameModal({
                         value={gameId}
                         onChange={(e) => setGameId(e.target.value)}
                         placeholder="Game ID"
-                        className="rounded-xl border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 h-12 px-4 font-mono"
+                        className="rounded-xl border-hairline bg-surface h-12 px-4 font-mono"
                         onKeyDown={onKeyDown}
                         autoComplete="off"
                       />
-                      <p className="text-xs text-stone-500 dark:text-stone-500 mt-2">
+                      <p className="text-xs text-ink-muted mt-2">
                         <Shield className="h-3 w-3 inline mr-1" />
                         Make sure you have the correct code from the game
                         creator
@@ -215,65 +226,40 @@ export function JoinGameModal({
                   type="button"
                   variant="outline"
                   onClick={() => setStep(1)}
-                  className="rounded-xl border-stone-200 dark:border-zinc-800"
+                  className="rounded-full border-hairline"
                   data-cursor-link
                 >
                   Back
                 </Button>
               )}
               <div className={step === 1 ? "ml-auto" : ""}>
-                {!isMobile ? (
-                  <Magnetic>
-                    <Button
-                      type="button"
-                      onClick={handleNextStep}
-                      disabled={isLoading}
-                      className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 relative overflow-hidden group"
-                      data-cursor-link
-                    >
-                      {/* Constant label + arrow↔spinner swap keeps the button
-                          the same width while loading (no size jump). */}
-                      <span className="relative z-10 flex items-center gap-2">
-                        {step === 1 ? "Continue" : "Join Game"}
-                        {isLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <motion.div
-                            animate={{ x: [0, 4, 0] }}
-                            transition={{
-                              duration: 2,
-                              repeat: Infinity,
-                              ease: "easeInOut",
-                            }}
-                          >
-                            <ArrowRight className="h-4 w-4" />
-                          </motion.div>
-                        )}
-                      </span>
-                      <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
-                        initial={{ x: "-100%" }}
-                        whileHover={{ x: "0%" }}
-                        transition={{ duration: 0.4, ease: "easeOut" }}
-                      />
-                    </Button>
-                  </Magnetic>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={handleNextStep}
-                    disabled={isLoading}
-                    className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900"
-                    data-cursor-link
-                  >
+                <Button
+                  type="button"
+                  onClick={handleNextStep}
+                  disabled={isLoading}
+                  className="rounded-full px-8 py-6 h-auto bg-accent text-accent-ink hover:bg-accent/90"
+                  data-cursor-link
+                >
+                  {/* Constant label + arrow↔spinner swap keeps the button the
+                      same width while loading (no size jump). */}
+                  <span className="flex items-center gap-2">
                     {step === 1 ? "Continue" : "Join Game"}
                     {isLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <ArrowRight className="h-4 w-4" />
+                      <motion.div
+                        animate={{ x: [0, 4, 0] }}
+                        transition={{
+                          duration: 2,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </motion.div>
                     )}
-                  </Button>
-                )}
+                  </span>
+                </Button>
               </div>
             </DialogFooter>
           </div>

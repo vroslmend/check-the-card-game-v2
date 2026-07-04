@@ -15,9 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Magnetic from "@/components/ui/Magnetic";
 import { useUIActorRef, useUISelector } from "@/context/GameUIContext";
-import { useDevice } from "@/context/DeviceContext";
 
 interface NewGameModalProps {
   isModalOpen: boolean;
@@ -34,7 +32,6 @@ export function NewGameModal({
     }
     return "";
   });
-  const { isMobile } = useDevice();
 
   const { send } = useUIActorRef();
   // Loading state lives in the machine, so a failed request re-enables the
@@ -62,7 +59,7 @@ export function NewGameModal({
         onInteractOutside={(e) => {
           if (isLoading) e.preventDefault();
         }}
-        className="sm:max-w-[425px] p-0 overflow-hidden bg-white dark:bg-zinc-950 border border-stone-200 dark:border-zinc-800"
+        className="sm:max-w-[425px] p-0 overflow-hidden bg-surface border border-hairline"
       >
         <div className="relative">
           <div className="relative p-6">
@@ -73,14 +70,14 @@ export function NewGameModal({
                 transition={{ duration: 0.3 }}
                 className="mb-2 flex items-center gap-2"
               >
-                <div className="rounded-full bg-stone-100 dark:bg-zinc-900 p-1.5">
-                  <PlusCircle className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                <div className="rounded-full bg-surface-2 p-1.5">
+                  <PlusCircle className="h-4 w-4 text-ink-muted" />
                 </div>
-                <DialogTitle className="text-2xl font-light">
+                <DialogTitle className="text-2xl font-bold text-ink">
                   Create a New Game
                 </DialogTitle>
               </motion.div>
-              <DialogDescription className="text-stone-500 dark:text-stone-400">
+              <DialogDescription className="text-ink-muted">
                 Start a new game session and invite friends to join.
               </DialogDescription>
             </DialogHeader>
@@ -94,7 +91,7 @@ export function NewGameModal({
               <div className="space-y-2">
                 <Label
                   htmlFor="name"
-                  className="text-sm font-normal text-stone-600 dark:text-stone-400"
+                  className="text-sm font-normal text-ink-muted"
                 >
                   What should we call you?
                 </Label>
@@ -103,22 +100,22 @@ export function NewGameModal({
                   placeholder="Enter your name"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
-                  className="rounded-xl border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 h-12 px-4"
+                  className="rounded-xl border-hairline bg-surface h-12 px-4"
                   onKeyDown={onKeyDown}
                   autoComplete="off"
                 />
               </div>
 
-              <div className="bg-stone-50 dark:bg-zinc-900 rounded-xl p-4 border border-stone-200/80 dark:border-zinc-800/80">
+              <div className="bg-surface-2 rounded-xl p-4 border border-hairline">
                 <div className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 rounded-full p-2 mt-0.5">
-                    <Sparkles className="h-4 w-4 text-amber-500" />
+                  <div className="bg-surface rounded-full p-2 mt-0.5">
+                    <Sparkles className="h-4 w-4 text-ink-muted" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-medium text-stone-800 dark:text-stone-200 mb-1">
+                    <h4 className="text-sm font-semibold text-ink mb-1">
                       Game Master
                     </h4>
-                    <p className="text-xs text-stone-500 dark:text-stone-400">
+                    <p className="text-xs text-ink-muted">
                       As the creator, you'll be the Game Master with special
                       privileges to manage the game session.
                     </p>
@@ -128,56 +125,32 @@ export function NewGameModal({
             </motion.div>
 
             <DialogFooter className="flex justify-end">
-              {!isMobile ? (
-                <Magnetic>
-                  <Button
-                    onClick={handleCreateGame}
-                    disabled={isLoading}
-                    className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 relative overflow-hidden group"
-                    data-cursor-link
-                  >
-                    {/* Constant label + arrow↔spinner swap keeps the button
-                        the same width while loading (no size jump). */}
-                    <span className="relative z-10 flex items-center gap-2">
-                      Create Game
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <motion.div
-                          animate={{ x: [0, 4, 0] }}
-                          transition={{
-                            duration: 2,
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                          }}
-                        >
-                          <ArrowRight className="h-4 w-4" />
-                        </motion.div>
-                      )}
-                    </span>
-                    <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
-                      initial={{ x: "-100%" }}
-                      whileHover={{ x: "0%" }}
-                      transition={{ duration: 0.4, ease: "easeOut" }}
-                    />
-                  </Button>
-                </Magnetic>
-              ) : (
-                <Button
-                  onClick={handleCreateGame}
-                  disabled={isLoading}
-                  className="rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 relative overflow-hidden group"
-                  data-cursor-link
-                >
+              <Button
+                onClick={handleCreateGame}
+                disabled={isLoading}
+                className="rounded-full px-8 py-6 h-auto bg-accent text-accent-ink hover:bg-accent/90"
+                data-cursor-link
+              >
+                {/* Constant label + arrow↔spinner swap keeps the button the
+                    same width while loading (no size jump). */}
+                <span className="flex items-center gap-2">
                   Create Game
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <ArrowRight className="h-4 w-4" />
+                    <motion.div
+                      animate={{ x: [0, 4, 0] }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </motion.div>
                   )}
-                </Button>
-              )}
+                </span>
+              </Button>
             </DialogFooter>
           </div>
         </div>

@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { type Player, PlayerActionType } from "shared-types";
 import { cn } from "@/lib/utils";
-import Magnetic from "@/components/ui/Magnetic";
 import { CopyToClipboardButton } from "../ui/CopyToClipboardButton";
 
 const spinnerStyle = `
@@ -32,6 +31,8 @@ const spinnerStyle = `
   }
 `;
 
+// Status is text + icon only — no hue coding. `muted` dims passive states
+// (waiting/disconnected) to ink-muted; active states (ready) read ink.
 const StatusIndicator = ({
   icon: Icon,
   text,
@@ -44,7 +45,7 @@ const StatusIndicator = ({
   <motion.div
     initial={{ opacity: 0, y: -10 }}
     animate={{ opacity: 1, y: 0 }}
-    className={cn("flex items-center gap-2 text-sm font-light", colorClass)}
+    className={cn("flex items-center gap-2 text-sm font-medium", colorClass)}
   >
     <Icon className="h-4 w-4" />
     <p>{text}</p>
@@ -64,16 +65,6 @@ const playerCardVariants = {
     },
   }),
   exit: { opacity: 0, x: -20, transition: { duration: 0.3 } },
-};
-
-const glowVariants = {
-  hidden: { opacity: 0, scale: 0 },
-  visible: { opacity: 0, scale: 0, transition: { duration: 0.2 } },
-  hover: {
-    opacity: 0.6,
-    scale: 3,
-    transition: { duration: 0.3, ease: "easeOut" },
-  },
 };
 
 const PlayerRow = ({
@@ -125,33 +116,19 @@ const PlayerRow = ({
     }
   }, [isHolding, player.id, send]);
 
-  const getStatus = () => {
-    if (!player.isConnected) {
-      return (
-        <StatusIndicator
-          icon={WifiOff}
-          text="Disconnected"
-          colorClass="text-red-500"
-        />
-      );
-    }
-    if (player.isReady) {
-      return (
-        <StatusIndicator
-          icon={CheckCircle}
-          text="Ready"
-          colorClass="text-emerald-500"
-        />
-      );
-    }
-    return (
-      <StatusIndicator
-        icon={Clock}
-        text="Waiting"
-        colorClass="text-stone-500 dark:text-stone-400"
-      />
-    );
+  // Text + icon only, no hue: ready reads ink, passive states read ink-muted.
+  const getStatus = (): {
+    Icon: React.ElementType;
+    text: string;
+    muted: boolean;
+  } => {
+    if (!player.isConnected)
+      return { Icon: WifiOff, text: "Disconnected", muted: true };
+    if (player.isReady) return { Icon: CheckCircle, text: "Ready", muted: false };
+    return { Icon: Clock, text: "Waiting", muted: true };
   };
+
+  const { Icon: StatusIcon, text: statusText, muted } = getStatus();
 
   return (
     <motion.div
@@ -161,105 +138,73 @@ const PlayerRow = ({
       initial="hidden"
       animate="visible"
       exit="exit"
-      whileHover="hover"
       key={player.id}
       className={cn(
-        "group relative overflow-hidden rounded-2xl border border-stone-200 bg-white/60 p-[1px] shadow-sm backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/60",
-        !player.isConnected && "opacity-60 grayscale",
+        "flex w-full items-center justify-between gap-3 rounded-2xl border border-hairline bg-surface px-5 py-4",
+        !player.isConnected && "opacity-70",
       )}
     >
-      <motion.div
-        variants={glowVariants}
-        className="absolute inset-0 blur-2xl"
-        style={{
-          background:
-            "radial-gradient(circle at center, white, transparent 50%)",
-          borderRadius: "100%",
-        }}
-      />
-      <div className="relative z-10 flex w-full items-center justify-between rounded-2xl bg-white p-4 px-5 dark:bg-zinc-900">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
-              player.isReady
-                ? "bg-emerald-100 dark:bg-emerald-900/50"
-                : !player.isConnected
-                  ? "bg-red-100/50 dark:bg-red-900/30"
-                  : "bg-stone-100 dark:bg-zinc-800",
-            )}
-          >
-            <motion.div
-              animate={
-                player.isReady && player.isConnected
-                  ? { scale: [1, 1.2, 1] }
-                  : {}
-              }
-              transition={{
-                duration: 2,
-                repeat: player.isReady && player.isConnected ? Infinity : 0,
-                repeatDelay: 2,
-              }}
-            >
-              {!player.isConnected ? (
-                <WifiOff className="h-4 w-4 text-red-500/70" />
-              ) : player.isReady ? (
-                <CheckCircle className="h-4 w-4 text-emerald-500" />
-              ) : (
-                <Clock className="h-4 w-4 text-stone-500 dark:text-stone-400" />
-              )}
-            </motion.div>
-          </div>
-          <span
-            className={cn(
-              "font-game text-lg text-stone-800 dark:text-stone-200",
-              !player.isConnected && "text-stone-500 dark:text-stone-500",
-            )}
-          >
-            {player.name}{" "}
-            {isLocalPlayer && (
-              <span className="text-xs font-light text-stone-500">(You)</span>
-            )}
-            {!player.isConnected && (
-              <span className="text-xs font-light italic ml-2 text-stone-400">
-                (disconnected)
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {getStatus()}
-
-          {canRemove && (
-            <motion.div
-              initial={{ opacity: 0.6 }}
-              whileHover={{ opacity: 1 }}
-              className="relative"
-            >
-              <motion.div
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/20 cursor-pointer"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.98 }}
-                onTapStart={() => setIsHolding(true)}
-                onTap={() => setIsHolding(false)}
-                onHoverEnd={() => setIsHolding(false)}
-                onTapCancel={() => setIsHolding(false)}
-              >
-                <UserMinus className="h-4 w-4 text-red-500" />
-                <span className="text-xs font-medium text-red-500">
-                  {isHolding ? `${Math.round(holdProgress)}%` : "Remove"}
-                </span>
-
-                {isHolding && (
-                  <motion.div
-                    className="absolute left-0 top-0 bottom-0 bg-red-500/20 h-full rounded-full"
-                    style={{ width: `${holdProgress}%`, originX: 0 }}
-                  />
-                )}
-              </motion.div>
-            </motion.div>
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className={cn(
+            "truncate font-game text-lg font-bold text-ink",
+            !player.isConnected && "text-ink-muted",
           )}
+        >
+          {player.name}{" "}
+          {isLocalPlayer && (
+            <span className="text-xs font-normal text-ink-muted">(You)</span>
+          )}
+          {!player.isConnected && (
+            <span className="ml-2 text-xs font-normal italic text-ink-muted">
+              (disconnected)
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-3">
+        <div
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-2.5 py-1 text-xs font-semibold",
+            muted ? "text-ink-muted" : "text-ink",
+          )}
+        >
+          <StatusIcon className="h-3.5 w-3.5" />
+          <span>{statusText}</span>
         </div>
+
+        {canRemove && (
+          <motion.div
+            initial={{ opacity: 0.7 }}
+            whileHover={{ opacity: 1 }}
+            className="relative"
+          >
+            {/* Hairline pill that fills accent while held (destructive hold,
+                mirrors the "Hold to Check" pattern) — no separate danger red. */}
+            <motion.div
+              className={cn(
+                "relative flex cursor-pointer items-center gap-1 overflow-hidden rounded-full border px-3 py-1.5 transition-colors",
+                isHolding ? "border-accent" : "border-hairline",
+              )}
+              whileTap={{ scale: 0.98 }}
+              onTapStart={() => setIsHolding(true)}
+              onTap={() => setIsHolding(false)}
+              onHoverEnd={() => setIsHolding(false)}
+              onTapCancel={() => setIsHolding(false)}
+            >
+              {isHolding && (
+                <motion.div
+                  className="absolute left-0 top-0 bottom-0 h-full bg-accent/25"
+                  style={{ width: `${holdProgress}%`, originX: 0 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center gap-1 text-xs font-semibold text-ink-muted">
+                <UserMinus className="h-4 w-4" />
+                {isHolding ? `${Math.round(holdProgress)}%` : "Remove"}
+              </span>
+            </motion.div>
+          </motion.div>
+        )}
       </div>
     </motion.div>
   );
@@ -331,8 +276,6 @@ export const GameLobby = () => {
     hasDisconnectedPlayers,
     gameId,
   } = useUISelector(selectLobbyProps);
-  const [buttonHovered, setButtonHovered] = useState(false);
-  const [leaveButtonHovered, setLeaveButtonHovered] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [reconnectionTimeout, setReconnectionTimeout] = useState(false);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -365,8 +308,8 @@ export const GameLobby = () => {
           transition={{ duration: 0.5 }}
         >
           <div className="flex flex-col items-center gap-4">
-            <div className="h-10 w-10 rounded-full border-2 border-stone-200 dark:border-zinc-800 border-t-stone-900 dark:border-t-stone-100 loading-spinner" />
-            <p className="text-stone-600 dark:text-stone-400">
+            <div className="h-10 w-10 rounded-full border-2 border-hairline border-t-ink loading-spinner" />
+            <p className="text-ink-muted">
               {reconnectionTimeout
                 ? "Reconnection is taking longer than expected..."
                 : "Opening lobby..."}
@@ -375,7 +318,7 @@ export const GameLobby = () => {
               <motion.button
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="mt-2 px-4 py-2 rounded-full bg-stone-800 text-white text-sm"
+                className="mt-2 px-4 py-2 rounded-full bg-accent text-accent-ink text-sm font-semibold"
                 onClick={() => window.location.reload()}
               >
                 Refresh Page
@@ -416,7 +359,7 @@ export const GameLobby = () => {
         <StatusIndicator
           icon={Users}
           text="Waiting for more players..."
-          colorClass="text-stone-500 dark:text-stone-400"
+          colorClass="text-ink-muted"
         />
       );
     }
@@ -425,7 +368,7 @@ export const GameLobby = () => {
         <StatusIndicator
           icon={Clock}
           text="Waiting for players to ready up..."
-          colorClass="text-stone-500 dark:text-stone-400"
+          colorClass="text-ink-muted"
         />
       );
     }
@@ -434,7 +377,7 @@ export const GameLobby = () => {
         <StatusIndicator
           icon={WifiOff}
           text="Some players are disconnected but you can still start."
-          colorClass="text-amber-500"
+          colorClass="text-ink-muted"
         />
       );
     }
@@ -443,7 +386,7 @@ export const GameLobby = () => {
         <StatusIndicator
           icon={PartyPopper}
           text="All players ready! You can start the game."
-          colorClass="text-emerald-500"
+          colorClass="text-ink"
         />
       );
     }
@@ -451,13 +394,18 @@ export const GameLobby = () => {
       <StatusIndicator
         icon={CheckCircle}
         text="Ready! Waiting for the host to start."
-        colorClass="text-stone-500 dark:text-stone-400"
+        colorClass="text-ink-muted"
       />
     );
   };
 
   const canStartGame = isGameMaster && allPlayersReady && hasEnoughPlayers;
   const isPlayerReady = localPlayer?.isReady;
+
+  // One accent-filled pill at a time: the primary action fills accent when it
+  // is actionable, and drops to a quiet surface pill when there is nothing to do.
+  const ACCENT_PILL = "bg-accent text-accent-ink hover:bg-accent/90";
+  const QUIET_PILL = "bg-surface-2 text-ink-muted border border-hairline";
 
   const getButtonConfig = () => {
     if (isGameMaster) {
@@ -467,8 +415,7 @@ export const GameLobby = () => {
           action: handlePlayerReady,
           disabled: false,
           icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
-          colors:
-            "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 text-white",
+          colors: ACCENT_PILL,
         };
       }
 
@@ -478,8 +425,7 @@ export const GameLobby = () => {
           action: handleStartGame,
           disabled: false,
           icon: <PartyPopper className="h-4 w-4 pointer-events-none" />,
-          colors:
-            "bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white",
+          colors: ACCENT_PILL,
         };
       }
 
@@ -488,8 +434,7 @@ export const GameLobby = () => {
         action: () => {},
         disabled: true,
         icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
-        colors:
-          "bg-stone-300 dark:bg-zinc-700 text-stone-500 dark:text-stone-400 cursor-default",
+        colors: QUIET_PILL,
       };
     } else {
       return {
@@ -497,9 +442,7 @@ export const GameLobby = () => {
         action: handlePlayerReady,
         disabled: isPlayerReady,
         icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
-        colors: isPlayerReady
-          ? "bg-stone-300 dark:bg-zinc-700 text-stone-500 dark:text-stone-400 cursor-default"
-          : "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 text-white",
+        colors: isPlayerReady ? QUIET_PILL : ACCENT_PILL,
       };
     }
   };
@@ -507,267 +450,191 @@ export const GameLobby = () => {
   const buttonConfig = getButtonConfig();
 
   return (
-    <>
-      <style>{spinnerStyle}</style>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-        className="min-h-screen flex items-center justify-center font-game p-4"
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+      className="min-h-screen flex items-center justify-center font-game p-4 bg-ground"
+    >
+      <div
+        className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto relative bg-surface rounded-3xl sm:rounded-[2.5rem] border border-hairline
+                   max-h-[90dvh] flex flex-col overflow-hidden"
       >
         <div
-          className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto relative bg-white/80 dark:bg-zinc-950/80 rounded-3xl sm:rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl
-                     max-h-[90dvh] flex flex-col overflow-hidden"
+          className="relative p-8 md:p-10 flex flex-col min-h-0
+                     [@media(max-height:750px)]:p-6 [@media(max-height:600px)]:p-4"
         >
           <motion.div
-            className="absolute -top-10 -right-10 w-64 h-64 bg-gradient-to-br from-stone-100 dark:from-zinc-900 rounded-full blur-3xl"
-            animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
-            transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
-          />
+            className="absolute top-5 right-5 z-10"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5, duration: 0.3 }}
+          >
+            <motion.button
+              onClick={handleLeaveGame}
+              className="flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-4 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
+              data-cursor-link
+              whileTap={{ scale: 0.95 }}
+            >
+              <LogOut className="h-4 w-4 md:hidden" />
+              <span className="hidden md:inline">Exit Lobby</span>
+            </motion.button>
+          </motion.div>
+
           <motion.div
-            className="absolute -bottom-10 -left-10 w-72 h-72 bg-gradient-to-t from-stone-100 dark:from-zinc-900 rounded-full blur-3xl"
-            animate={{ x: [0, -30, 0], y: [0, 20, 0] }}
-            transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
-          />
+            className="absolute top-5 left-5 z-10"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5, duration: 0.3 }}
+          >
+            <motion.button
+              onClick={handleRefreshGameState}
+              disabled={isRefreshing}
+              className="rounded-full border border-hairline bg-surface p-2 text-ink-muted transition-colors hover:border-ink-muted hover:text-ink disabled:opacity-60"
+              data-cursor-link
+              whileTap={{ scale: 0.95 }}
+            >
+              <motion.div
+                animate={isRefreshing ? { rotate: 360 } : {}}
+                transition={{
+                  duration: 1,
+                  ease: "linear",
+                  repeat: isRefreshing ? Infinity : 0,
+                  repeatType: "loop",
+                }}
+                className="refresh-icon"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </motion.div>
+            </motion.button>
+          </motion.div>
 
           <div
-            className="relative p-8 md:p-10 flex flex-col min-h-0
-                       [@media(max-height:750px)]:p-6 [@media(max-height:600px)]:p-4"
+            className="flex flex-col items-center text-center mb-10
+                       [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4"
           >
-            <motion.div
-              className="absolute top-5 right-5"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.5, duration: 0.3 }}
+            <motion.h2
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+              className="text-4xl sm:text-5xl font-extrabold tracking-tight text-ink
+                         [@media(max-height:750px)]:text-3xl [@media(max-height:600px)]:text-2xl"
             >
-              <Magnetic>
-                <motion.button
-                  onClick={handleLeaveGame}
-                  className="rounded-full px-4 py-2 text-sm border border-stone-200 dark:border-zinc-800 text-stone-500 dark:text-stone-400 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-sm hover:bg-white dark:hover:bg-zinc-900 relative overflow-hidden"
-                  data-cursor-link
-                  onMouseEnter={() => setLeaveButtonHovered(true)}
-                  onMouseLeave={() => setLeaveButtonHovered(false)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-rose-100/20 dark:via-rose-900/20 to-transparent"
-                    initial={{ x: "-100%" }}
-                    animate={{
-                      x: leaveButtonHovered ? "100%" : "-100%",
-                    }}
-                    transition={{
-                      duration: 1,
-                      ease: "easeInOut",
-                    }}
-                  />
-                  <span className="relative z-10 flex items-center gap-1">
-                    <LogOut className="h-4 w-4 md:hidden" />
-                    <motion.span
-                      animate={leaveButtonHovered ? { x: -2 } : { x: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="hidden md:inline"
-                    >
-                      Exit
-                    </motion.span>
-                    <motion.span
-                      animate={leaveButtonHovered ? { x: 2 } : { x: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="hidden md:inline"
-                    >
-                      Lobby
-                    </motion.span>
-                  </span>
-                </motion.button>
-              </Magnetic>
-            </motion.div>
-
-            <motion.div
-              className="absolute top-5 left-5"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.5, duration: 0.3 }}
-            >
-              <Magnetic>
-                <motion.button
-                  onClick={handleRefreshGameState}
-                  disabled={isRefreshing}
-                  className="rounded-full p-2 border border-stone-200 dark:border-zinc-800 text-stone-500 dark:text-stone-400 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-sm hover:bg-white dark:hover:bg-zinc-900 relative overflow-hidden"
-                  data-cursor-link
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <motion.div
-                    animate={isRefreshing ? { rotate: 360 } : {}}
-                    transition={{
-                      duration: 1,
-                      ease: "linear",
-                      repeat: isRefreshing ? Infinity : 0,
-                      repeatType: "loop",
-                    }}
-                    onAnimationComplete={() => {
-                      if (!isRefreshing) {
-                        document
-                          .querySelector(".refresh-icon")
-                          ?.getAnimations()
-                          .forEach((animation) => {
-                            animation.cancel();
-                          });
-                      }
-                    }}
-                    className="refresh-icon"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </motion.div>
-                </motion.button>
-              </Magnetic>
-            </motion.div>
-
-            <div
-              className="flex flex-col items-center text-center mb-10
-                         [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4"
-            >
-              <motion.h2
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.2 }}
-                className="text-4xl sm:text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100
-                           [@media(max-height:750px)]:text-3xl [@media(max-height:600px)]:text-2xl"
-              >
-                Game Lobby
-              </motion.h2>
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.7, delay: 0.3 }}
-                className="text-stone-500 dark:text-stone-400 mt-2 text-base sm:text-lg"
-              >
-                Assemble your party
-              </motion.p>
-            </div>
-
-            {gameId && (
-              <motion.div
-                className="mb-10 [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.4 }}
-              >
-                <div className="text-center">
-                  <h2 className="text-lg font-medium text-stone-700 dark:text-stone-300">
-                    Invite Friends
-                  </h2>
-                  <p className="mt-1 text-sm text-stone-500">
-                    Share the Game ID or send the link below.
-                  </p>
-                  <div className="mt-4 flex justify-center">
-                    <CopyToClipboardButton
-                      textToCopy={inviteLink}
-                      buttonText={gameId}
-                      className="text-lg tracking-widest"
-                    />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            <motion.div
-              className="flex-1 min-h-0 space-y-3 mb-8 max-h-[50vh] md:max-h-[60vh] overflow-y-auto pr-1
-                         [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4 [@media(max-height:600px)]:space-y-2"
+              Game Lobby
+            </motion.h2>
+            <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ staggerChildren: 0.1, delayChildren: 0.5 }}
+              transition={{ duration: 0.7, delay: 0.3 }}
+              className="text-ink-muted mt-2 text-base sm:text-lg"
             >
-              <AnimatePresence>
-                {players.map((p, i) => (
-                  <PlayerRow
-                    key={p.id}
-                    player={p}
-                    isLocalPlayer={p.id === localPlayer?.id}
-                    index={i}
-                  />
-                ))}
-              </AnimatePresence>
-            </motion.div>
+              Assemble your party
+            </motion.p>
+          </div>
 
+          {gameId && (
             <motion.div
-              className="flex flex-col items-center"
+              className="mb-10 [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.6 }}
+              transition={{ duration: 0.7, delay: 0.4 }}
             >
-              <div
-                className="h-10 mb-6 flex items-center justify-center
-                           [@media(max-height:750px)]:mb-4 [@media(max-height:600px)]:h-8 [@media(max-height:600px)]:mb-3"
-              >
-                {getLobbyStatus()}
+              <div className="text-center">
+                <h2 className="text-lg font-semibold text-ink">
+                  Invite Friends
+                </h2>
+                <p className="mt-1 text-sm text-ink-muted">
+                  Share the Game ID or send the link below.
+                </p>
+                <div className="mt-4 flex justify-center">
+                  <CopyToClipboardButton
+                    textToCopy={inviteLink}
+                    buttonText={gameId}
+                    className="text-lg tracking-widest"
+                  />
+                </div>
               </div>
+            </motion.div>
+          )}
 
-              <Magnetic>
-                <motion.button
-                  key="lobby-main-action"
-                  onTap={() => buttonConfig.action()}
-                  disabled={buttonConfig.disabled}
-                  className={cn(
-                    "h-14 min-w-[12rem] sm:min-w-[16rem] rounded-full shadow-xl px-8 relative overflow-hidden flex items-center justify-center gap-2",
-                    buttonConfig.colors,
-                    buttonConfig.disabled && "opacity-70 cursor-not-allowed",
-                  )}
-                  data-cursor-link
-                  onMouseEnter={() => setButtonHovered(true)}
-                  onMouseLeave={() => setButtonHovered(false)}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
+          <motion.div
+            className="flex-1 min-h-0 space-y-3 mb-8 max-h-[50vh] md:max-h-[60vh] overflow-y-auto pr-1
+                       [@media(max-height:750px)]:mb-6 [@media(max-height:600px)]:mb-4 [@media(max-height:600px)]:space-y-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ staggerChildren: 0.1, delayChildren: 0.5 }}
+          >
+            <AnimatePresence>
+              {players.map((p, i) => (
+                <PlayerRow
+                  key={p.id}
+                  player={p}
+                  isLocalPlayer={p.id === localPlayer?.id}
+                  index={i}
+                />
+              ))}
+            </AnimatePresence>
+          </motion.div>
+
+          <motion.div
+            className="flex flex-col items-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.6 }}
+          >
+            <div
+              className="h-10 mb-6 flex items-center justify-center
+                         [@media(max-height:750px)]:mb-4 [@media(max-height:600px)]:h-8 [@media(max-height:600px)]:mb-3"
+            >
+              {getLobbyStatus()}
+            </div>
+
+            <motion.button
+              key="lobby-main-action"
+              onTap={() => buttonConfig.action()}
+              disabled={buttonConfig.disabled}
+              className={cn(
+                "flex h-14 min-w-[12rem] items-center justify-center gap-2 rounded-full px-8 text-base font-bold sm:min-w-[16rem]",
+                buttonConfig.colors,
+                buttonConfig.disabled && "cursor-not-allowed",
+              )}
+              data-cursor-link
+              whileTap={buttonConfig.disabled ? undefined : { scale: 0.97 }}
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{
+                type: "spring",
+                stiffness: 300,
+                damping: 20,
+                duration: 0.4,
+              }}
+            >
+              <span className="flex items-center gap-2">
+                <motion.span
+                  key={buttonConfig.text}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {buttonConfig.text}
+                </motion.span>
+                <motion.div
+                  key={buttonConfig.disabled ? "disabled-icon" : "enabled-icon"}
+                  animate={{ x: [0, 4, 0] }}
                   transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 20,
-                    duration: 0.4,
+                    duration: 1.2,
+                    repeat: Infinity,
+                    repeatDelay: 1,
+                    ease: "easeInOut",
                   }}
                 >
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-                    initial={false}
-                    animate={{ x: buttonHovered ? "100%" : "-100%" }}
-                    transition={{ duration: 1.5, ease: "easeInOut" }}
-                  />
-
-                  <span className="relative z-10 flex items-center gap-2 font-medium">
-                    <motion.span
-                      key={buttonConfig.text}
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      {buttonConfig.text}
-                    </motion.span>
-                    <motion.div
-                      key={
-                        buttonConfig.disabled ? "disabled-icon" : "enabled-icon"
-                      }
-                      animate={
-                        buttonHovered
-                          ? { rotate: [0, 15, -15, 0] }
-                          : { x: [0, 5, 0] }
-                      }
-                      transition={{
-                        duration: 1.2,
-                        repeat: Infinity,
-                        repeatDelay: 1,
-                        ease: "easeInOut",
-                      }}
-                    >
-                      {buttonConfig.icon}
-                    </motion.div>
-                  </span>
-                </motion.button>
-              </Magnetic>
-            </motion.div>
-          </div>
+                  {buttonConfig.icon}
+                </motion.div>
+              </span>
+            </motion.button>
+          </motion.div>
         </div>
-      </motion.div>
-    </>
+      </div>
+    </motion.div>
   );
 };

@@ -85,13 +85,13 @@ export const GameEndScreen = ({
 
   return (
     <motion.div
-      className="absolute inset-0 bg-zinc-900/70 backdrop-blur-lg flex items-center justify-center z-50 p-4 font-game"
+      className="absolute inset-0 bg-ground flex items-center justify-center z-50 p-4 font-game overflow-y-auto"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
       exit="exit"
     >
-      <motion.div className="w-full max-w-3xl bg-white/90 dark:bg-zinc-950/90 backdrop-blur-2xl rounded-3xl shadow-2xl p-8 flex flex-col items-center gap-6 border border-stone-200 dark:border-zinc-800">
+      <motion.div className="w-full max-w-3xl p-8 flex flex-col items-center gap-6">
         <motion.div
           variants={itemVariants}
           className="flex flex-col items-center gap-2 text-center"
@@ -106,14 +106,12 @@ export const GameEndScreen = ({
               delay: 0.25,
             }}
           >
-            <PartyPopper className="w-16 h-16 text-amber-500" />
+            <PartyPopper className="w-16 h-16 text-accent" />
           </motion.div>
-          <h1 className="text-5xl font-light tracking-tighter text-zinc-800 dark:text-zinc-100">
+          <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight text-ink">
             {title}
           </h1>
-          <p className="text-lg text-zinc-500 dark:text-zinc-400">
-            Final Scores
-          </p>
+          <p className="text-lg text-ink-muted">Final Scores</p>
         </motion.div>
 
         <motion.div
@@ -127,40 +125,46 @@ export const GameEndScreen = ({
               className={cn(
                 "p-4 rounded-2xl transition-all duration-300 flex flex-col md:flex-row md:items-center gap-4",
                 winnerIds.includes(player.id)
-                  ? "bg-amber-100/60 dark:bg-amber-900/30 border-2 border-amber-400/80"
-                  : "bg-white/60 dark:bg-zinc-900/60 border border-stone-200 dark:border-zinc-800",
+                  ? "bg-surface border-2 border-accent"
+                  : "bg-surface border border-hairline",
               )}
             >
               <div className="flex-shrink-0 flex justify-between items-center md:flex-col md:w-32 md:items-start">
-                <div className="flex items-center gap-2 font-bold text-xl text-zinc-800 dark:text-zinc-200">
+                <div className="flex items-center gap-2 font-bold text-xl text-ink">
                   {winnerIds.includes(player.id) && (
-                    <Crown className="w-6 h-6 text-amber-500" />
+                    <Crown className="w-6 h-6 text-accent" />
                   )}
-                  <span className="truncate max-w-[120px]">
+                  <span
+                    className={cn(
+                      "truncate max-w-[120px]",
+                      player.status === PlayerStatus.DISQUALIFIED &&
+                        "text-ink-muted line-through",
+                    )}
+                  >
                     {player.name}{" "}
                     {player.id === localPlayerId && (
-                      <span className="text-sm font-light text-stone-500">
+                      <span className="text-sm font-normal text-ink-muted">
                         (You)
                       </span>
                     )}
                   </span>
                   {player.status === PlayerStatus.DISQUALIFIED && (
-                    <span className="text-xs font-sans font-medium uppercase tracking-wide text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/40 rounded-full px-2 py-0.5">
+                    <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-ink-muted border border-hairline bg-surface rounded-full px-2 py-0.5">
                       Disqualified
                     </span>
                   )}
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className="font-mono text-2xl font-semibold text-zinc-800 dark:text-zinc-100">
+                  <span className="text-2xl font-extrabold text-accent">
                     {player.score}
                   </span>
-                  <span className="text-xs font-light text-stone-500">
+                  <span className="text-xs font-normal text-ink-muted">
                     Points
                   </span>
                 </div>
               </div>
 
-              <div className="flex-grow border-t border-stone-200 dark:border-zinc-800 md:border-t-0 md:border-l md:pl-4">
+              <div className="flex-grow border-t border-hairline md:border-t-0 md:border-l md:pl-4">
                 <motion.div
                   className="flex items-center justify-center overflow-x-auto gap-2 pt-4 md:pt-0 pb-2"
                   variants={cardContainerVariants}
@@ -190,7 +194,7 @@ export const GameEndScreen = ({
             <Button
               onClick={onPlayAgain}
               size="lg"
-              className="rounded-full px-8 py-6 text-lg"
+              className="rounded-full px-8 py-6 text-lg bg-accent text-accent-ink hover:bg-accent/90"
             >
               Play Again
             </Button>
