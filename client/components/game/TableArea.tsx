@@ -19,6 +19,8 @@ import { PlayingCard } from "../cards/PlayingCard";
 
 export interface TableAreaProps {
   drawnCard?: PublicCard;
+  /** Name of the drawn card's holder when it isn't the local player. */
+  drawnByName?: string;
   dealingDeck?: PublicCard[];
 }
 
@@ -61,7 +63,11 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
   };
 };
 
-export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
+export const TableArea = ({
+  drawnCard,
+  drawnByName,
+  dealingDeck = [],
+}: TableAreaProps) => {
   const { send } = useUIActorRef();
   const {
     deckSize,
@@ -138,6 +144,18 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
                 faceDown={"facedown" in drawnCard}
                 className="w-full h-full"
               />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {drawnCard && drawnByName && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="absolute -bottom-7 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-stone-900/80 px-2.5 py-0.5 text-[11px] font-medium text-stone-100 backdrop-blur-sm dark:bg-zinc-100/90 dark:text-zinc-900"
+            >
+              {drawnByName} is deciding…
             </motion.div>
           )}
         </AnimatePresence>
