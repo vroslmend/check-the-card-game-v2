@@ -106,6 +106,17 @@ export interface PublicPeekInfo {
 }
 
 /**
+ * Which two card positions were just swapped by an ability, visible to ALL
+ * players (real-life table parity: you can see which cards traded places,
+ * never their faces). Momentary: clients hide it ~2.5s after occurredAt.
+ */
+export interface PublicSwapInfo {
+  swapperId: PlayerId;
+  targets: { playerId: PlayerId; cardIndex: number }[];
+  occurredAt: number;
+}
+
+/**
  * The redacted, client-safe version of the game's state.
  * This is the primary data structure the client will use to render the game.
  */
@@ -142,6 +153,7 @@ export interface ClientCheckGameState {
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
   publicPeek: PublicPeekInfo | null;
+  publicSwap: PublicSwapInfo | null;
   /** When the current timed decision window (draw/discard/ability) expires. */
   turnDeadline: number | null;
   /** Length of a full turn-timer window, for rendering countdowns. */

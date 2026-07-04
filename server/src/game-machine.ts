@@ -281,9 +281,12 @@ const baseTurnStateNode = {
     [TurnPhase.DISCARD]: {
       entry: [
         "log_ENTER_TURN_DISCARD",
+        // Deliberately no turnDeadline reassign: draw + discard share the
+        // single deadline set at DRAW entry, so an idle player can't burn a
+        // full timer window per segment. When it has already expired, the
+        // turnTimer delay clamp (min 1s) rushes the auto-resolve through.
         assign(() => ({
           currentTurnSegment: TurnPhase.DISCARD,
-          turnDeadline: Date.now() + TURN_TIMER_MS,
         })),
         "broadcastGameState",
       ],
@@ -897,11 +900,35 @@ export const gameMachine = setup({
         };
       }
 
+      // Real-life table parity for swaps: everyone sees WHICH two positions
+      // traded cards, never the faces. Momentary — clients hide it ~2.5s
+      // after occurredAt, so only round/score resets need to clear it. The
+      // swap payload carries singular source/target objects (not a targets
+      // array like peek), so assemble the two positions from them here.
+      let newPublicSwap = null as GameContext["publicSwap"];
+      if (payload.action === "swap" && currentAbility.stage === "swapping") {
+        newPublicSwap = {
+          swapperId: playerId,
+          targets: [
+            {
+              playerId: payload.source.playerId,
+              cardIndex: payload.source.cardIndex,
+            },
+            {
+              playerId: payload.target.playerId,
+              cardIndex: payload.target.cardIndex,
+            },
+          ],
+          occurredAt: Date.now(),
+        };
+      }
+
       return {
         players: updatedPlayers,
         abilityStack: newAbilityStack,
         log: newLog,
         publicPeek: newPublicPeek,
+        publicSwap: newPublicSwap,
       };
     }),
     updatePlayerLobbyReady: assign(({ context, event }) => {
@@ -947,6 +974,7 @@ export const gameMachine = setup({
         ] as RichGameLogMessage[],
         gameStage: GameStage.DEALING,
         publicPeek: null,
+        publicSwap: null,
         turnDeadline: null,
       };
     }),
@@ -1253,6 +1281,7 @@ export const gameMachine = setup({
         gameover: { winnerIds, loserId, playerScores },
         gameStage: GameStage.SCORING,
         publicPeek: null,
+        publicSwap: null,
         turnDeadline: null,
       };
     }),
@@ -1655,7 +1684,19 @@ export const gameMachine = setup({
       ),
   },
   delays: {
-    turnTimer: TURN_TIMER_MS,
+    // Time left until the current turn deadline. States that own a fresh
+    // window (DRAW at turn start, each ability, INITIAL_PEEK) assign
+    // turnDeadline in their entry actions, which run before this delay is
+    // scheduled; DISCARD inherits the DRAW deadline. Clamped so an
+    // already-expired deadline still auto-resolves (after 1s) rather than
+    // firing at 0/negative, and can never exceed a full window.
+    turnTimer: ({ context }) => {
+      if (!context.turnDeadline) return TURN_TIMER_MS;
+      return Math.min(
+        Math.max(context.turnDeadline - Date.now(), 1000),
+        TURN_TIMER_MS,
+      );
+    },
   },
   actors: {
     peekTimer: fromPromise(
@@ -1697,6 +1738,7 @@ export const gameMachine = setup({
     discardPileIsSealed: false,
     errorState: null,
     publicPeek: null,
+    publicSwap: null,
     turnDeadline: null,
     turnTimerMs: TURN_TIMER_MS,
   }),

@@ -122,6 +122,8 @@ export const generatePlayerView = (
     discardPileIsSealed: fullGameContext.discardPileIsSealed,
     // Positions only — card faces are never part of publicPeek.
     publicPeek: fullGameContext.publicPeek,
+    // Positions only — card faces are never part of publicSwap.
+    publicSwap: fullGameContext.publicSwap,
     turnDeadline: fullGameContext.turnDeadline,
     turnTimerMs: fullGameContext.turnTimerMs,
   };

@@ -69,35 +69,41 @@ export function PlayingCard({
     if (card) lastCardRef.current = card;
   }, [card]);
 
-  const variants = {
-    flipped: { rotateY: 180 },
-    unflipped: { rotateY: 0 },
-  };
-
+  // The front face is untransformed at rest (parent rotateY(0) renders as
+  // `transform: none`). Firefox fails to paint text inside the previous
+  // structure (front face pre-rotated 180° under a 180°-rotated preserve-3d
+  // parent with backface-visibility: hidden), which left card faces blank.
+  // The mid-flip opacity swap makes the visible face explicit, so nothing
+  // depends on backface culling being computed correctly at exactly 180°.
   return (
     <div className={cn("perspective-[1000px]", className)} onClick={onClick}>
       <motion.div
         className="relative w-full h-full"
         style={{ transformStyle: "preserve-3d" }}
-        variants={variants}
-        animate={showFront ? "flipped" : "unflipped"}
+        initial={false}
+        variants={{ front: { rotateY: 0 }, back: { rotateY: 180 } }}
+        animate={showFront ? "front" : "back"}
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
-        <div
+        <motion.div
           className="absolute w-full h-full"
-          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+          style={{ backfaceVisibility: "hidden" }}
+          variants={{ front: { opacity: 1 }, back: { opacity: 0 } }}
+          transition={{ duration: 0, delay: 0.25 }}
         >
           {lastCardRef.current && (
             <PlayingCardRenderer card={lastCardRef.current} />
           )}
-        </div>
+        </motion.div>
 
-        <div
+        <motion.div
           className="absolute w-full h-full"
-          style={{ backfaceVisibility: "hidden" }}
+          style={{ rotateY: 180, backfaceVisibility: "hidden" }}
+          variants={{ front: { opacity: 0 }, back: { opacity: 1 } }}
+          transition={{ duration: 0, delay: 0.25 }}
         >
           <CardBack />
-        </div>
+        </motion.div>
       </motion.div>
     </div>
   );

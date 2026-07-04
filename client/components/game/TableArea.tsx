@@ -16,9 +16,12 @@ import {
 import { VisualCardStack } from "../cards/VisualCardStack";
 import { AnimatePresence, motion } from "framer-motion";
 import { PlayingCard } from "../cards/PlayingCard";
+import { cardTravelTransition } from "@/lib/card-motion";
 
 export interface TableAreaProps {
   drawnCard?: PublicCard;
+  /** Name of the drawn card's holder when it isn't the local player. */
+  drawnByName?: string;
   dealingDeck?: PublicCard[];
 }
 
@@ -27,6 +30,15 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
   const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
   const isDrawPhase =
     isMyTurn && currentGameState?.turnPhase === TurnPhase.DRAW;
+  const localPlayer = localPlayerId
+    ? currentGameState?.players[localPlayerId]
+    : undefined;
+  // Tapping the pile while holding a deck draw discards it directly (same
+  // action as the action-bar button; discard-pile draws must be swapped).
+  const canDiscardDrawnCard =
+    isMyTurn &&
+    currentGameState?.turnPhase === TurnPhase.DISCARD &&
+    localPlayer?.pendingDrawnCard?.source === "deck";
   const topDiscardCard = currentGameState?.discardPile.at(-1) ?? null;
 
   const isSpecialCard =
@@ -48,10 +60,15 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
       !currentGameState?.discardPileIsSealed &&
       !!currentGameState?.discardPile.length &&
       !isSpecialCard,
+    canDiscardDrawnCard: !!canDiscardDrawnCard,
   };
 };
 
-export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
+export const TableArea = ({
+  drawnCard,
+  drawnByName,
+  dealingDeck = [],
+}: TableAreaProps) => {
   const { send } = useUIActorRef();
   const {
     deckSize,
@@ -61,6 +78,7 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
     discardPileIsSealed,
     canDrawFromDeck,
     canDrawFromDiscard,
+    canDiscardDrawnCard,
   } = useUISelector(selectTableAreaProps);
 
   const handleDeckClick = () => {
@@ -70,7 +88,9 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
   };
 
   const handleDiscardClick = () => {
-    if (canDrawFromDiscard) {
+    if (canDiscardDrawnCard) {
+      send({ type: PlayerActionType.DISCARD_DRAWN_CARD });
+    } else if (canDrawFromDiscard) {
       send({ type: PlayerActionType.DRAW_FROM_DISCARD });
     }
   };
@@ -86,17 +106,18 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
             faceDown
             canInteract={canDrawFromDeck}
             onClick={handleDeckClick}
-            className="landscape:w-[8vh] portrait:w-[15vw]"
+            className="w-[min(8vh,15vw)]"
           />
           {/* During DEALING every dealt card sits here with its layoutId, so
               when the hands render on the next stage each card flies from the
               deck to its grid slot instead of popping into place. */}
           {dealingDeck.length > 0 && (
-            <div className="absolute bottom-0 left-1/2 landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7] -translate-x-1/2 pointer-events-none">
+            <div className="absolute bottom-0 left-1/2 w-[min(8vh,15vw)] aspect-[5/7] -translate-x-1/2 pointer-events-none">
               {dealingDeck.map((card) => (
                 <motion.div
                   key={card.id}
                   layoutId={card.id}
+                  transition={cardTravelTransition}
                   className="absolute inset-0"
                 >
                   <PlayingCard faceDown className="w-full h-full" />
@@ -109,7 +130,7 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
 
       {/* The drawn-card slot keeps its full size even while empty so the deck
           and discard piles don't shift sideways on every draw/discard. */}
-      <div className="relative landscape:w-[8vh] portrait:w-[15vw] aspect-[5/7]">
+      <div className="relative w-[min(8vh,15vw)] aspect-[5/7]">
         <AnimatePresence>
           {drawnCard && (
             <motion.div
@@ -117,7 +138,12 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
               initial={{ opacity: 0, scale: 0.5, y: -50 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.5, y: 50 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              transition={{
+                type: "spring",
+                stiffness: 400,
+                damping: 30,
+                ...cardTravelTransition,
+              }}
               className="absolute inset-0 z-10"
             >
               <PlayingCard
@@ -125,6 +151,18 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
                 faceDown={"facedown" in drawnCard}
                 className="w-full h-full"
               />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {drawnCard && drawnByName && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="absolute -bottom-7 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-stone-900/80 px-2.5 py-0.5 text-[11px] font-medium text-stone-100 backdrop-blur-sm dark:bg-zinc-100/90 dark:text-zinc-900"
+            >
+              {drawnByName} is deciding…
             </motion.div>
           )}
         </AnimatePresence>
@@ -137,9 +175,9 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
           topCard={topDiscardCard}
           secondCard={discardPile.at(-2) ?? null}
           isSealed={discardPileIsSealed}
-          canInteract={canDrawFromDiscard}
+          canInteract={canDrawFromDiscard || canDiscardDrawnCard}
           onClick={handleDiscardClick}
-          className="landscape:w-[8vh] portrait:w-[15vw]"
+          className="w-[min(8vh,15vw)]"
         />
       </div>
     </div>

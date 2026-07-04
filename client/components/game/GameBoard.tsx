@@ -159,7 +159,16 @@ export function GameBoard() {
 
             {/* Table Area - takes up remaining space */}
             <div className="flex items-center justify-center @container">
-              <TableArea drawnCard={drawnCardData} dealingDeck={dealingDeck} />
+              <TableArea
+                drawnCard={drawnCardData}
+                drawnByName={
+                  playerWithPendingCard &&
+                  playerWithPendingCard.id !== localPlayerId
+                    ? playerWithPendingCard.name
+                    : undefined
+                }
+                dealingDeck={dealingDeck}
+              />
             </div>
 
             {/* Local player area */}
