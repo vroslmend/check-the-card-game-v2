@@ -706,7 +706,7 @@ export const GameLobby = () => {
               <Magnetic>
                 <motion.button
                   key="lobby-main-action"
-                  onClick={buttonConfig.action}
+                  onTap={() => buttonConfig.action()}
                   disabled={buttonConfig.disabled}
                   className={cn(
                     "h-14 min-w-[12rem] sm:min-w-[16rem] rounded-full shadow-xl px-8 relative overflow-hidden flex items-center justify-center gap-2",
