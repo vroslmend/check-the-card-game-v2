@@ -16,10 +16,10 @@ export const createDrawDeckAction = (
   disabled?: boolean,
 ): Action => ({
   label: "Draw from Deck",
+  variant: "primary",
   onClick,
   disabled,
   icon: <Layers className="h-5 w-5" />,
-  className: "text-sky-200",
 });
 
 export const createDrawDiscardAction = (
@@ -30,7 +30,6 @@ export const createDrawDiscardAction = (
   onClick,
   disabled,
   icon: <ArrowUpFromLine className="h-5 w-5" />,
-  className: "text-sky-200",
 });
 
 export const createDiscardDrawnCardAction = (
@@ -41,7 +40,6 @@ export const createDiscardDrawnCardAction = (
   onClick,
   disabled,
   icon: <X className="h-5 w-5" />,
-  className: "text-rose-300",
 });
 
 export const createCallCheckAction = (
@@ -53,7 +51,7 @@ export const createCallCheckAction = (
   disabled?: boolean,
   showProgress?: boolean,
 ): Action => ({
-  // Hold-to-confirm: the fill animates while the pointer is held so an
+  // Hold-to-confirm: the accent fill animates while the pointer is held so an
   // accidental click can't end your round. The label says so, otherwise a
   // quick click reads as a broken loading animation.
   label: "Hold to Check!",
@@ -61,12 +59,11 @@ export const createCallCheckAction = (
   onPointerUp,
   onPointerLeave,
   disabled,
-  className:
-    "bg-amber-400 text-black hover:bg-amber-300 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500 font-semibold tracking-wider",
+  className: "font-semibold tracking-wide",
   isProgressButton: showProgress,
   progressPercent,
   remainingMs,
-  progressFillClassName: "bg-black/70 dark:bg-white/70",
+  progressFillClassName: "bg-accent/40",
 });
 
 export const createPassMatchAction = (
@@ -80,7 +77,6 @@ export const createPassMatchAction = (
   onClick,
   disabled: disabled || isPassed,
   icon: <Ban className="h-5 w-5" />,
-  className: "text-stone-300",
   isCircularProgress: true,
   isProgressButton: true,
   progressPercent,
@@ -93,10 +89,10 @@ export const createAttemptMatchAction = (
   _hasSelection: boolean = false,
 ): Action => ({
   label: "Confirm Match",
+  variant: "primary",
   onClick,
   disabled,
   icon: <CheckCircle className="h-5 w-5" />,
-  className: "text-teal-300",
 });
 
 export const createConfirmAbilityAction = (
@@ -105,10 +101,10 @@ export const createConfirmAbilityAction = (
   disabled?: boolean,
 ): Action => ({
   label,
+  variant: "primary",
   onClick,
   disabled,
   icon: <CheckCircle className="h-5 w-5" />,
-  className: "text-fuchsia-300",
 });
 
 export const createSkipAbilityAction = (
@@ -120,7 +116,6 @@ export const createSkipAbilityAction = (
   onClick,
   disabled,
   icon: <SkipForward className="h-5 w-5" />,
-  className: "text-stone-300",
 });
 
 export const createReadyForPeekAction = (
@@ -128,10 +123,10 @@ export const createReadyForPeekAction = (
   disabled?: boolean,
 ): Action => ({
   label: "Ready for Peek",
+  variant: "primary",
   onClick,
   disabled,
   icon: <Eye className="h-5 w-5" />,
-  className: "text-teal-300",
 });
 
 export const createPlayerReadyAction = (
@@ -139,10 +134,10 @@ export const createPlayerReadyAction = (
   disabled?: boolean,
 ): Action => ({
   label: "Ready",
+  variant: "primary",
   onClick,
   disabled,
   icon: <CheckCircle className="h-5 w-5" />,
-  className: "text-teal-300",
 });
 
 export const createStartGameAction = (
@@ -150,8 +145,8 @@ export const createStartGameAction = (
   disabled?: boolean,
 ): Action => ({
   label: "Start Game",
+  variant: "primary",
   onClick,
   disabled,
   icon: <Play className="h-5 w-5" />,
-  className: "text-teal-300",
 });

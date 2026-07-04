@@ -49,7 +49,7 @@ const ConnectionStatusBanner = () => {
   const isReconnecting = useUISelector(selectIsReconnecting);
   if (!isDisconnected && !isReconnecting) return null;
   return (
-    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg z-50">
+    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-accent text-accent-ink px-4 py-2 rounded-pill z-50">
       {isReconnecting ? "Reconnecting..." : "Connection Lost"}
     </div>
   );
@@ -64,20 +64,20 @@ const GameStateError = ({
 }) => {
   if (hasPlayers || !hasGameState) return null;
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
-      <div className="bg-white p-4 rounded-lg shadow-lg">
+    <div className="absolute inset-0 flex items-center justify-center bg-ink/50 z-50">
+      <div className="bg-surface text-ink p-4 rounded-card border border-hairline shadow-lg">
         <h3 className="font-bold">Game State Error</h3>
-        <p>Could not load player data. Please refresh the page.</p>
+        <p className="text-ink-muted">
+          Could not load player data. Please refresh the page.
+        </p>
       </div>
     </div>
   );
 };
 
 const LoadingIndicator = () => (
-  <div className="flex items-center justify-center h-screen w-full bg-stone-50 dark:bg-zinc-950">
-    <p className="font-game text-stone-600 dark:text-stone-400">
-      Loading Game...
-    </p>
+  <div className="flex items-center justify-center h-screen w-full bg-ground">
+    <p className="font-game text-ink-muted">Loading Game...</p>
   </div>
 );
 
@@ -110,7 +110,7 @@ export function GameBoard() {
   };
 
   return (
-    <div className="h-screen w-full bg-stone-50 dark:bg-zinc-950 flex flex-col overflow-hidden @container font-game">
+    <div className="h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
       <GameHeader />
       <div className="relative flex-1 grid grid-rows-[auto_1fr_auto_auto]">
         <AnimatePresence>
@@ -151,7 +151,7 @@ export function GameBoard() {
                   ))}
                 </div>
               ) : (
-                <p className="font-game text-stone-500 dark:text-stone-400">
+                <p className="font-game text-ink-muted">
                   Waiting for opponents...
                 </p>
               )}

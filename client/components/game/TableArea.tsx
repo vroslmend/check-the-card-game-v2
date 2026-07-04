@@ -160,7 +160,7 @@ export const TableArea = ({
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="absolute -bottom-7 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-stone-900/80 px-2.5 py-0.5 text-[11px] font-medium text-stone-100 backdrop-blur-sm dark:bg-zinc-100/90 dark:text-zinc-900"
+              className="absolute -bottom-7 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-hairline bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-ink-muted"
             >
               {drawnByName} is deciding…
             </motion.div>

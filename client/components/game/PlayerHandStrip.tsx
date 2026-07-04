@@ -79,85 +79,47 @@ const PlayerInfoBadge = ({
   isInMatchingWindow: boolean;
   isPeekingCards: boolean;
 }) => {
-  const getStatus = () => {
+  // Status is text + icon only — no hue coding. `muted` dims passive states
+  // (waiting/disconnected/disqualified) to ink-muted; active states read ink.
+  const getStatus = (): { Icon: typeof User; text: string; muted: boolean } => {
     if (!player.isConnected)
-      return {
-        Icon: WifiOff,
-        text: "Disconnected",
-        color: "text-rose-700 dark:text-rose-400",
-      };
+      return { Icon: WifiOff, text: "Disconnected", muted: true };
     if (player.status === PlayerStatus.DISQUALIFIED)
-      return {
-        Icon: Ban,
-        text: "Disqualified",
-        color: "text-rose-700 dark:text-rose-400",
-      };
-    if (isPeekingCards)
-      return {
-        Icon: Eye,
-        text: "Peeking",
-        color: "text-amber-600 dark:text-amber-400",
-      };
+      return { Icon: Ban, text: "Disqualified", muted: true };
+    if (isPeekingCards) return { Icon: Eye, text: "Peeking", muted: false };
     if (isInMatchingWindow)
-      return {
-        Icon: Zap,
-        text: "Matching…",
-        color: "text-amber-600 dark:text-amber-400",
-      };
+      return { Icon: Zap, text: "Matching…", muted: false };
     if (isCurrentTurn)
       return {
         Icon: isLocalPlayer ? PlayCircle : ArrowRightCircle,
         text: isLocalPlayer ? "Your Turn" : "Playing",
-        color: "text-teal-500 dark:text-teal-400/80",
+        muted: false,
       };
     if (player.hasCalledCheck)
-      return {
-        Icon: CheckCircle,
-        text: "Check Called",
-        color: "text-sky-600 dark:text-sky-400",
-      };
+      return { Icon: CheckCircle, text: "Check Called", muted: false };
     if (gameStage === GameStage.INITIAL_PEEK)
       return player.isReady
-        ? {
-            Icon: CheckCircle,
-            text: "Ready",
-            color: "text-teal-600 dark:text-teal-400",
-          }
-        : {
-            Icon: Eye,
-            text: "Peeking",
-            color: "text-stone-600 dark:text-stone-400",
-          };
-    return {
-      Icon: Clock,
-      text: "Waiting",
-      color: "text-stone-600 dark:text-stone-400",
-    };
+        ? { Icon: CheckCircle, text: "Ready", muted: false }
+        : { Icon: Eye, text: "Peeking", muted: true };
+    return { Icon: Clock, text: "Waiting", muted: true };
   };
 
-  const { Icon, text, color } = getStatus();
+  const { Icon, text, muted } = getStatus();
+  const isDisqualified = player.status === PlayerStatus.DISQUALIFIED;
 
   return (
     <div className="flex flex-col items-center gap-2 font-game">
-      <h3
-        className={cn(
-          "flex items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] transition-colors",
-          isCurrentTurn
-            ? "text-teal-500 dark:text-teal-400/80"
-            : "text-stone-900 dark:text-stone-100",
+      <h3 className="flex items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] font-bold text-ink">
+        {/* The one "whose turn" color on screen: an accent dot before the name. */}
+        {isCurrentTurn && (
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
         )}
-      >
-        <User
-          size={16}
-          className={cn(
-            "transition-colors",
-            isCurrentTurn
-              ? "text-teal-500 dark:text-teal-400/80"
-              : "text-stone-600 dark:text-stone-400",
-          )}
-        />
+        <User size={16} className="text-ink-muted" />
         <motion.span
-          className="inline-block"
+          className={cn(
+            "inline-block",
+            isDisqualified && "text-ink-muted line-through",
+          )}
           animate={isCurrentTurn ? { scale: 1.05 } : { scale: 1 }}
           transition={{ type: "spring", stiffness: 500, damping: 35 }}
         >
@@ -167,8 +129,8 @@ const PlayerInfoBadge = ({
 
       <div
         className={cn(
-          "flex items-center gap-1.5 text-[clamp(0.7rem,2vw,0.75rem)] font-medium",
-          color,
+          "flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-2 py-0.5 text-[clamp(0.7rem,2vw,0.75rem)] font-semibold",
+          muted ? "text-ink-muted" : "text-ink",
         )}
       >
         <Icon className="h-3 w-3" />
