@@ -1,11 +1,12 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ActionButton from "./ActionButton";
-import Magnetic from "@/components/ui/Magnetic";
 import { useActionController } from "./ActionController";
 
 export interface Action {
   label: string;
+  /** primary = the one accent-filled pill; secondary = hairline/bare. */
+  variant?: "primary" | "secondary";
   onClick?: () => void;
   onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
   onPointerUp?: React.PointerEventHandler<HTMLButtonElement>;
@@ -45,12 +46,10 @@ const ActionBarComponent: React.FC = () => {
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 400, damping: 35 }}
-        className="flex flex-row items-center justify-center flex-wrap gap-2 p-2 bg-black/20 backdrop-blur-xl rounded-full shadow-lg ring-1 ring-inset ring-white/10"
+        className="flex flex-row flex-wrap items-center justify-center gap-2 rounded-full border border-hairline bg-surface p-2 shadow-lg"
       >
         {actions.map((action, i) => (
-          <Magnetic key={action.label || i} strength={20}>
-            <ActionButton action={action} />
-          </Magnetic>
+          <ActionButton key={action.label || i} action={action} />
         ))}
       </motion.div>
 
@@ -65,7 +64,7 @@ const ActionBarComponent: React.FC = () => {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
           >
-            <p className="text-sm font-medium text-stone-900 dark:text-stone-100 px-4 py-1 bg-black/10 dark:bg-white/10 rounded-2xl max-w-[min(92vw,40rem)] text-balance">
+            <p className="max-w-[min(92vw,40rem)] px-4 py-1 text-sm font-semibold text-ink-muted text-balance">
               {promptText}
             </p>
           </motion.div>
@@ -78,13 +77,13 @@ const ActionBarComponent: React.FC = () => {
         {timedIndicator && remainingMs > 0 && (
           <motion.div
             key={timedIndicator.expireAt}
-            className="mt-2 h-1 w-48 max-w-[60vw] overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
+            className="mt-2 h-0.5 w-48 max-w-[60vw] overflow-hidden rounded-full bg-hairline"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="h-full rounded-full bg-teal-500/80"
+              className="h-full rounded-full bg-accent"
               initial={{
                 width: `${(remainingMs / timedIndicator.durationMs) * 100}%`,
               }}

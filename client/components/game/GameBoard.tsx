@@ -10,10 +10,11 @@ import PlayerHandStrip from "./PlayerHandStrip";
 import { GameStage, PlayerActionType, type PublicCard } from "shared-types";
 import { ActionController } from "./ActionController";
 import { ActionControllerView } from "./ActionControllerView";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { GameEndScreen } from "./GameEndScreen";
 import { GameHeader } from "./GameHeader";
 import SidePanel from "@/components/layout/SidePanel";
+import { useCheckMoment, CheckStamp } from "./CheckMoment";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
   state.matches({ inGame: "disconnected" });
@@ -49,7 +50,7 @@ const ConnectionStatusBanner = () => {
   const isReconnecting = useUISelector(selectIsReconnecting);
   if (!isDisconnected && !isReconnecting) return null;
   return (
-    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg z-50">
+    <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-accent text-accent-ink px-4 py-2 rounded-pill z-50">
       {isReconnecting ? "Reconnecting..." : "Connection Lost"}
     </div>
   );
@@ -64,20 +65,20 @@ const GameStateError = ({
 }) => {
   if (hasPlayers || !hasGameState) return null;
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
-      <div className="bg-white p-4 rounded-lg shadow-lg">
+    <div className="absolute inset-0 flex items-center justify-center bg-ink/50 z-50">
+      <div className="bg-surface text-ink p-4 rounded-card border border-hairline shadow-lg">
         <h3 className="font-bold">Game State Error</h3>
-        <p>Could not load player data. Please refresh the page.</p>
+        <p className="text-ink-muted">
+          Could not load player data. Please refresh the page.
+        </p>
       </div>
     </div>
   );
 };
 
 const LoadingIndicator = () => (
-  <div className="flex items-center justify-center h-screen w-full bg-stone-50 dark:bg-zinc-950">
-    <p className="font-serif text-stone-600 dark:text-stone-400">
-      Loading Game...
-    </p>
+  <div className="flex items-center justify-center h-screen w-full bg-ground">
+    <p className="font-game text-ink-muted">Loading Game...</p>
   </div>
 );
 
@@ -86,6 +87,8 @@ export function GameBoard() {
   const { gameState, localPlayerId, playerWithPendingCard, isMyTurn } =
     useUISelector(selectGameBoardProps);
   const { gameStage, players, winnerIds } = useUISelector(selectGameEndProps);
+  const checkMoment = useCheckMoment();
+  const reducedMotion = useReducedMotion();
 
   if (!localPlayerId || !gameState) {
     return <LoadingIndicator />;
@@ -110,9 +113,14 @@ export function GameBoard() {
   };
 
   return (
-    <div className="h-screen w-full bg-stone-50 dark:bg-zinc-950 flex flex-col overflow-hidden @container">
+    <div className="relative h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
       <GameHeader />
-      <div className="relative flex-1 grid grid-rows-[auto_1fr_auto_auto]">
+      <motion.div
+        className="relative flex-1 grid grid-rows-[auto_1fr_auto_auto]"
+        animate={{ scale: checkMoment && !reducedMotion ? 0.92 : 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        style={{ transformOrigin: "center" }}
+      >
         <AnimatePresence>
           {(gameStage === GameStage.GAMEOVER ||
             gameStage === GameStage.SCORING) && (
@@ -151,7 +159,7 @@ export function GameBoard() {
                   ))}
                 </div>
               ) : (
-                <p className="font-serif text-stone-500 dark:text-stone-400">
+                <p className="font-game text-ink-muted">
                   Waiting for opponents...
                 </p>
               )}
@@ -192,7 +200,9 @@ export function GameBoard() {
             </div>
           </div>
         </ActionController>
-      </div>
+      </motion.div>
+
+      <CheckStamp moment={checkMoment} />
     </div>
   );
 }

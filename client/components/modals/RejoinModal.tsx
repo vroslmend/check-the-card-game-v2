@@ -90,7 +90,7 @@ export function RejoinModal() {
             showCloseButton={false}
             onInteractOutside={(e) => e.preventDefault()}
             onEscapeKeyDown={(e) => e.preventDefault()}
-            className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-zinc-950 border-stone-200 dark:border-zinc-800 rounded-xl border"
+            className="sm:max-w-md p-0 overflow-hidden bg-surface border-hairline rounded-xl border"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: -30 }}
@@ -101,14 +101,14 @@ export function RejoinModal() {
               <form onSubmit={handleSubmit} className="relative p-6 md:p-8">
                 <DialogHeader className="mb-6 text-center">
                   <div className="inline-flex items-center justify-center gap-2 mx-auto">
-                    <div className="rounded-full bg-stone-100 dark:bg-zinc-900 p-2">
-                      <Users className="h-5 w-5 text-stone-600 dark:text-stone-400" />
+                    <div className="rounded-full bg-surface-2 p-2">
+                      <Users className="h-5 w-5 text-ink-muted" />
                     </div>
-                    <DialogTitle className="text-3xl font-light">
+                    <DialogTitle className="text-3xl font-bold text-ink">
                       {modalInfo?.title || "Join Game"}
                     </DialogTitle>
                   </div>
-                  <DialogDescription className="text-stone-500 dark:text-stone-400 mt-2">
+                  <DialogDescription className="text-ink-muted mt-2">
                     {modalInfo?.message ||
                       `You've been invited to game ${gameId}`}
                   </DialogDescription>
@@ -118,7 +118,7 @@ export function RejoinModal() {
                   <div className="space-y-2">
                     <Label
                       htmlFor="player-name-rejoin"
-                      className="text-sm font-normal text-stone-600 dark:text-stone-400"
+                      className="text-sm font-normal text-ink-muted"
                     >
                       What should we call you?
                     </Label>
@@ -127,7 +127,7 @@ export function RejoinModal() {
                       value={playerName}
                       onChange={(e) => setPlayerName(e.target.value)}
                       placeholder="Enter your name"
-                      className="rounded-xl border-stone-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 h-12 px-4 text-lg text-center"
+                      className="rounded-xl border-hairline bg-surface h-12 px-4 text-lg text-center"
                       onKeyDown={onKeyDown}
                       autoComplete="off"
                       autoFocus
@@ -139,7 +139,7 @@ export function RejoinModal() {
                   <Button
                     type="submit"
                     disabled={isLoading || !playerName.trim()}
-                    className="w-full rounded-xl px-8 py-6 h-auto bg-stone-900 hover:bg-stone-800 text-white dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900"
+                    className="w-full rounded-full px-8 py-6 h-auto bg-accent text-accent-ink hover:bg-accent/90"
                   >
                     {isLoading ? (
                       <>
@@ -157,7 +157,7 @@ export function RejoinModal() {
                     type="button"
                     onClick={() => router.push("/")}
                     disabled={isLoading}
-                    className="text-sm text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 underline-offset-4 hover:underline transition-colors disabled:opacity-50"
+                    className="text-sm text-ink-muted hover:text-ink underline-offset-4 hover:underline transition-colors disabled:opacity-50"
                   >
                     No thanks, take me home
                   </button>

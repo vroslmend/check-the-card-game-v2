@@ -31,7 +31,7 @@ export const CopyToClipboardButton = ({ textToCopy, className, buttonText }: Cop
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 5, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 bg-zinc-900 text-white text-xs rounded-md shadow-lg pointer-events-none z-10"
+            className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 bg-ink text-ground text-xs rounded-md shadow-lg pointer-events-none z-10"
           >
             Copied!
           </motion.div>
@@ -40,8 +40,8 @@ export const CopyToClipboardButton = ({ textToCopy, className, buttonText }: Cop
       <button
         onClick={handleCopy}
         className={cn(
-          'flex items-center gap-2 bg-stone-100/70 hover:bg-stone-100/90 dark:bg-zinc-800/70 dark:hover:bg-zinc-800/90 px-3 py-1.5 rounded-full transition-colors',
-          'font-mono text-xs text-stone-700 dark:text-stone-300',
+          'flex items-center gap-2 border border-hairline bg-surface-2 hover:bg-surface px-3 py-1.5 rounded-full transition-colors',
+          'font-mono text-xs text-ink',
           className
         )}
         disabled={copied}
@@ -57,7 +57,7 @@ export const CopyToClipboardButton = ({ textToCopy, className, buttonText }: Cop
               exit={{ scale: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <Check className="h-3.5 w-3.5 text-emerald-500" />
+              <Check className="h-3.5 w-3.5 text-accent" />
             </motion.div>
           ) : (
             <motion.div
@@ -74,4 +74,4 @@ export const CopyToClipboardButton = ({ textToCopy, className, buttonText }: Cop
       </button>
     </div>
   );
-}; 
+};

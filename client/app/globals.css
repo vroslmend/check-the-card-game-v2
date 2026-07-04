@@ -2,29 +2,49 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  --background: 0 0% 100%;
-  --foreground: 20 14% 8%;
-  --card: 0 0% 100%;
-  --card-foreground: 20 14% 8%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 20 14% 8%;
-  --primary: 20 14% 8%;
-  --primary-foreground: 60 9% 98%;
-  --secondary: 60 4.8% 95.9%;
-  --secondary-foreground: 24 9.8% 10%;
-  --muted: 60 4.8% 95.9%;
-  --muted-foreground: 25 5.3% 44.7%;
-  --accent: 60 4.8% 95.9%;
-  --accent-foreground: 24 9.8% 10%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 60 9% 98%;
-  --border: 20 5.9% 90%;
-  --input: 20 5.9% 90%;
-  --ring: 20 14% 8%;
+/* ============================================================================
+   Design tokens — "The Clean One, multiplayer" (Round 4 visual identity)
+   Four roles per theme: ground / surface / ink / accent (+ surface-2,
+   ink-muted, hairline, accent-ink). Stored as HSL channel triples so the new
+   --color-* utilities AND the existing shadcn vars — consumed app-wide and by
+   the landing page via `hsl(var(--x))` — resolve from one source of truth.
+   ============================================================================ */
+:root {
+  /* Semantic palette — light "Chalk" */
+  --ground: 40 9% 87%;
+  --surface: 0 0% 100%;
+  --surface-2: 40 14% 92%;
+  --ink: 34 10% 14%;
+  --ink-muted: 37 5% 52%;
+  --hairline: 38 9% 76%;
+  --accent: 0 49% 50%;
+  --accent-ink: 23 100% 97%;
+
+  /* shadcn vars re-pointed onto the palette. One accent only: the red is both
+     the design accent and shadcn's interactive / hover / destructive color
+     (so shadcn menu/select hover states tint accent until Phase C/D restyles
+     those primitives). */
+  --background: var(--ground);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-ink);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-muted);
+  --accent-foreground: var(--accent-ink);
+  --destructive: var(--accent);
+  --destructive-foreground: var(--accent-ink);
+  --border: var(--hairline);
+  --input: var(--hairline);
+  --ring: var(--accent);
   --radius: 0.5rem;
 
-  /* Custom cursor variables */
+  /* Custom cursor variables (landing) */
   --cursor-bg: hsl(20 14% 8% / 0.1);
   --cursor-border: hsl(20 14% 8% / 1);
   --cursor-bg-link: hsl(20 14% 8% / 0.2);
@@ -36,37 +56,68 @@
 }
 
 .dark {
-  @theme {
-    --background: 0 0% 3%;
-    --foreground: 60 9% 98%;
-    --card: 0 0% 8%;
-    --card-foreground: 60 9% 98%;
-    --popover: 0 0% 8%;
-    --popover-foreground: 60 9% 98%;
-    --primary: 60 9% 98%;
-    --primary-foreground: 0 0% 3%;
-    --secondary: 12 6.5% 15.1%;
-    --secondary-foreground: 60 9% 98%;
-    --muted: 12 6.5% 15.1%;
-    --muted-foreground: 24 5.4% 63.9%;
-    --accent: 12 6.5% 15.1%;
-    --accent-foreground: 60 9% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 60 9% 98%;
-    --border: 12 6.5% 15.1%;
-    --input: 12 6.5% 15.1%;
-    --ring: 60 9% 98%;
+  /* Semantic palette — dark "Slate". Only the eight raw tokens flip; the
+     shadcn vars above reference them via var(), so they follow automatically. */
+  --ground: 0 0% 7%;
+  --surface: 0 0% 14%;
+  --surface-2: 0 0% 11%;
+  --ink: 38 22% 93%;
+  --ink-muted: 36 4% 53%;
+  --hairline: 0 0% 23%;
+  --accent: 2 57% 57%;
+  --accent-ink: 6 22% 9%;
 
-    /* Custom cursor variables */
-    --cursor-bg: hsl(60 9% 98% / 0.1);
-    --cursor-border: hsl(60 9% 98% / 1);
-    --cursor-bg-link: hsl(60 9% 98% / 0.2);
-    --cursor-bg-pressed: hsl(60 9% 98% / 0.3);
-    --cursor-bg-text: hsl(60 9% 98% / 1);
+  /* Custom cursor variables (landing) */
+  --cursor-bg: hsl(60 9% 98% / 0.1);
+  --cursor-border: hsl(60 9% 98% / 1);
+  --cursor-bg-link: hsl(60 9% 98% / 0.2);
+  --cursor-bg-pressed: hsl(60 9% 98% / 0.3);
+  --cursor-bg-text: hsl(60 9% 98% / 1);
 
-    --feature-item-bg-rgb: 39, 39, 42;
-    --feature-item-text-color-hsl: 60 9% 98%;
-  }
+  --feature-item-bg-rgb: 39, 39, 42;
+  --feature-item-text-color-hsl: 60 9% 98%;
+}
+
+/* Map raw vars into Tailwind's namespaces so utilities generate. `inline` keeps
+   the reference to the raw var, so the .dark overrides above cascade into every
+   utility. This block also finally makes the shadcn semantic utilities
+   (bg-primary, bg-card, border-border, text-muted-foreground, …) emit CSS —
+   previously they were declared outside the --color-* namespace and produced
+   nothing at all. */
+@theme inline {
+  --color-ground: hsl(var(--ground));
+  --color-surface: hsl(var(--surface));
+  --color-surface-2: hsl(var(--surface-2));
+  --color-ink: hsl(var(--ink));
+  --color-ink-muted: hsl(var(--ink-muted));
+  --color-hairline: hsl(var(--hairline));
+  --color-accent: hsl(var(--accent));
+  --color-accent-ink: hsl(var(--accent-ink));
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  /* One game family (Nunito Sans); Playfair/Inter stay for the landing page. */
+  --font-game: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 0.625rem;
+  --radius-pill: 9999px;
 }
 
 .no-native-cursor * {
@@ -114,19 +165,6 @@ html {
 }
 
 @layer utilities {
-  .glass {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    will-change: transform;
-  }
-
-  .dark .glass {
-    background: rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.03);
-  }
-
   .will-change-transform {
     will-change: transform;
   }
@@ -140,11 +178,6 @@ html {
     will-change: transform;
   }
 
-  .animate-glow {
-    animation: glow 3s ease-in-out infinite alternate;
-    will-change: opacity, box-shadow;
-  }
-
   @keyframes float {
     0%,
     100% {
@@ -153,29 +186,6 @@ html {
     50% {
       transform: translateY(-15px);
     }
-  }
-
-  @keyframes glow {
-    from {
-      box-shadow: 0 0 20px rgba(120, 113, 108, 0.3);
-    }
-    to {
-      box-shadow: 0 0 30px rgba(120, 113, 108, 0.5);
-    }
-  }
-
-  .text-gradient {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--foreground)),
-      hsl(var(--muted-foreground))
-    );
-    background-size: 200% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shift 4s ease-in-out infinite;
-    will-change: background-position;
   }
 
   .text-stone-gradient {
@@ -208,16 +218,6 @@ html {
     }
   }
 
-  .card-hover {
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    will-change: transform, box-shadow;
-  }
-
-  .card-hover:hover {
-    transform: translateY(-6px) scale(1.01);
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.08);
-  }
-
   /* Primary gradient button */
   .btn-primary {
     @apply rounded-full px-3 py-1.5 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white transition-colors pointer-events-auto select-none;
@@ -225,10 +225,6 @@ html {
 
   .btn-icon {
     @apply rounded-full p-2 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white;
-  }
-
-  .dark .card-hover:hover {
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
   }
 
   .gpu-accelerated {
@@ -244,19 +240,6 @@ html {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-  }
-
-  @keyframes hue-rotate {
-    from {
-      filter: hue-rotate(0deg);
-    }
-    to {
-      filter: hue-rotate(360deg);
-    }
-  }
-
-  .animate-hue-rotate {
-    animation: hue-rotate 20s linear infinite;
   }
 
   .animation-delay-n5 {
@@ -285,15 +268,20 @@ html {
 
 /* Card face typography scales with the card via container-query units, with a
    fixed fallback for browsers that can't resolve cq units (e.g. older
-   Firefox/Zen builds, where the corner ranks otherwise render at size 0). */
-.card-corner-text {
-  font-size: 1rem;
-  font-size: clamp(0.875rem, 40cqw, 1.25rem);
+   Firefox/Zen builds, where the text otherwise renders at size 0). */
+.card-rank-text {
+  font-size: 1.5rem;
+  font-size: clamp(1.1rem, 34cqw, 2.2rem);
 }
 
-.card-suit-text {
-  font-size: 1.5rem;
-  font-size: clamp(0.875rem, 20cqw, 3rem);
+.card-suit-glyph {
+  font-size: 1.2rem;
+  font-size: clamp(0.9rem, 26cqw, 1.7rem);
+}
+
+.card-back-count {
+  font-size: 1.3rem;
+  font-size: clamp(0.9rem, 30cqw, 1.9rem);
 }
 
 @media (prefers-reduced-motion: reduce) {

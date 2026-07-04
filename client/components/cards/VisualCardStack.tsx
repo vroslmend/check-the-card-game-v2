@@ -3,11 +3,11 @@
 import React from "react";
 import { type Card, PublicCard } from "shared-types";
 import { PlayingCard } from "./PlayingCard";
-import { CardBack } from "./CardBack";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDevice } from "@/context/DeviceContext";
 import { cardTravelTransition } from "@/lib/card-motion";
+import { Lock } from "lucide-react";
 
 interface VisualCardStackProps {
   title: string;
@@ -37,32 +37,21 @@ export const VisualCardStack = ({
   const { isTouchDevice } = useDevice();
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <h4 className="font-serif font-medium text-stone-600 dark:text-stone-400 flex text-[clamp(0.875rem,2.5vw,1rem)]">
-        {title} (
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={count}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.2 }}
-            className="inline-block"
-          >
-            {count}
-          </motion.span>
-        </AnimatePresence>
-        )
-      </h4>
+    <div className="flex flex-col items-center">
       <motion.div
+        aria-label={`${title}${count ? ` (${count})` : ""}`}
         whileHover={
           canInteract && !isTouchDevice ? { scale: 1.05, y: -5 } : undefined
         }
         transition={{ type: "spring", stiffness: 400, damping: 20 }}
         onClick={onClick}
         className={cn(
-          "relative w-[min(8vh,15vw)] aspect-[5/7]",
-          canInteract ? "cursor-pointer" : "cursor-default",
+          "relative w-[min(8vh,15vw)] aspect-[5/7] rounded-card",
+          // Interactivity reads as a hairline accent ring + the hover lift —
+          // no glow blur.
+          canInteract
+            ? "cursor-pointer ring-[1.5px] ring-accent"
+            : "cursor-default",
           className,
         )}
       >
@@ -89,7 +78,12 @@ export const VisualCardStack = ({
               transition={{ duration: 0.2, ...cardTravelTransition }}
             >
               {faceDown ? (
-                <PlayingCard faceDown className="h-full w-full" />
+                // The stock pile shows its count on the top card's back.
+                <PlayingCard
+                  faceDown
+                  backCount={count}
+                  className="h-full w-full"
+                />
               ) : "facedown" in topCard ? (
                 <PlayingCard faceDown className="h-full w-full" />
               ) : (
@@ -98,7 +92,7 @@ export const VisualCardStack = ({
             </motion.div>
           ) : (
             <motion.div
-              className="relative z-10 h-full w-full rounded-lg border-2 border-dashed border-stone-300 dark:border-zinc-700 bg-black/10 dark:bg-white/5"
+              className="relative z-10 h-full w-full rounded-card border border-hairline bg-ink/[0.04]"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -106,13 +100,9 @@ export const VisualCardStack = ({
           )}
         </AnimatePresence>
         {isSealed && (
-          <div className="absolute inset-0 rounded-lg z-20 bg-black/40 grayscale" />
-        )}
-        {canInteract && (
-          <motion.div
-            className="absolute -inset-2 rounded-lg bg-blue-500/50 blur-lg z-0"
-            layoutId={`interactive-glow-${title}`}
-          />
+          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-card bg-ink/35">
+            <Lock className="h-[26%] w-[26%] text-accent-ink" strokeWidth={2.5} />
+          </div>
         )}
       </motion.div>
     </div>

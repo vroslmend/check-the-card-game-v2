@@ -9,7 +9,16 @@ import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { Eye, ArrowLeftRight } from "lucide-react";
+import { Eye, ArrowLeftRight, type LucideIcon } from "lucide-react";
+
+/** Corner badge on a ringed card slot: surface chip, ink glyph. The icon
+ *  distinguishes the action (eye = peek, arrows = swap); the ring color says
+ *  whose it is (accent = yours, ink = informational). */
+const SlotBadge = ({ icon: Icon }: { icon: LucideIcon }) => (
+  <span className="absolute -top-2 -right-2 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm">
+    <Icon className="h-3 w-3" />
+  </span>
+);
 
 interface PlayerHandProps {
   player: Player;
@@ -125,11 +134,6 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
           !!selectedSwapTargets?.some(
             (t) => t.playerId === player.id && t.cardIndex === index,
           );
-        const abilityRingClass = isAbilityPeekSelected
-          ? "ring-yellow-300/70"
-          : isAbilitySwapSelected
-            ? "ring-pink-400/70"
-            : "";
         const isSelected =
           isMatchSelected || isAbilityPeekSelected || isAbilitySwapSelected;
 
@@ -179,46 +183,45 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               }
             >
               <AnimatePresence>
+                {/* Your own selection — accent ring; the badge icon (eye vs
+                    arrows) says which action, never the hue. */}
                 {isSelected && (
                   <motion.div
                     key="sel-ring"
-                    className={cn(
-                      "absolute inset-0.5 rounded-md pointer-events-none",
-                      "ring-[4px]",
-                      isMatchSelected ? "ring-sky-400/80" : abilityRingClass,
-                    )}
+                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[3px] ring-accent"
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ duration: 0.15, ease: "easeOut" }}
-                  />
+                  >
+                    {isAbilityPeekSelected && <SlotBadge icon={Eye} />}
+                    {isAbilitySwapSelected && <SlotBadge icon={ArrowLeftRight} />}
+                  </motion.div>
                 )}
+                {/* Someone else's peek — informational ink ring + eye badge. */}
                 {showPeekIndicator && (
                   <motion.div
                     key="peek-indicator"
-                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[3px] ring-amber-400/80"
+                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[2px] ring-ink"
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
-                    <span className="absolute -top-2 -right-2 rounded-full bg-amber-400 text-zinc-900 p-1 shadow-md">
-                      <Eye className="h-3 w-3" />
-                    </span>
+                    <SlotBadge icon={Eye} />
                   </motion.div>
                 )}
+                {/* Someone else's swap — informational ink ring + arrows badge. */}
                 {showSwapIndicator && (
                   <motion.div
                     key="swap-indicator"
-                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[3px] ring-violet-400/80"
+                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[2px] ring-ink"
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
-                    <span className="absolute -top-2 -right-2 rounded-full bg-violet-400 text-zinc-900 p-1 shadow-md">
-                      <ArrowLeftRight className="h-3 w-3" />
-                    </span>
+                    <SlotBadge icon={ArrowLeftRight} />
                   </motion.div>
                 )}
               </AnimatePresence>
