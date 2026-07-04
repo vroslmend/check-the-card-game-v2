@@ -64,7 +64,7 @@ export const SidePanel = () => {
           className="absolute inset-y-0 right-0 z-40 flex w-full max-w-sm flex-col border-l border-stone-200 bg-white/95 backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/95"
         >
           <div className="flex h-14 shrink-0 items-center justify-between border-b border-stone-200 px-4 dark:border-zinc-800">
-            <h2 className="font-serif text-lg text-stone-900 dark:text-stone-100">
+            <h2 className="font-game text-lg text-stone-900 dark:text-stone-100">
               Activity
             </h2>
             <button

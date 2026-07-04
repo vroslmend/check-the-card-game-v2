@@ -85,7 +85,7 @@ export const GameEndScreen = ({
 
   return (
     <motion.div
-      className="absolute inset-0 bg-zinc-900/70 backdrop-blur-lg flex items-center justify-center z-50 p-4 font-serif"
+      className="absolute inset-0 bg-zinc-900/70 backdrop-blur-lg flex items-center justify-center z-50 p-4 font-game"
       variants={containerVariants}
       initial="hidden"
       animate="visible"

@@ -212,7 +212,7 @@ const PlayerRow = ({
           </div>
           <span
             className={cn(
-              "font-serif text-lg text-stone-800 dark:text-stone-200",
+              "font-game text-lg text-stone-800 dark:text-stone-200",
               !player.isConnected && "text-stone-500 dark:text-stone-500",
             )}
           >
@@ -359,7 +359,7 @@ export const GameLobby = () => {
       <div className="w-full max-w-2xl mx-auto">
         <style>{spinnerStyle}</style>
         <motion.div
-          className="w-full font-serif"
+          className="w-full font-game"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
@@ -513,7 +513,7 @@ export const GameLobby = () => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-        className="min-h-screen flex items-center justify-center font-serif p-4"
+        className="min-h-screen flex items-center justify-center font-game p-4"
       >
         <div
           className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl mx-auto relative bg-white/80 dark:bg-zinc-950/80 rounded-3xl sm:rounded-[2.5rem] border border-stone-200 dark:border-zinc-800 backdrop-blur-xl shadow-2xl

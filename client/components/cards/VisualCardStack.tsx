@@ -38,7 +38,7 @@ export const VisualCardStack = ({
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <h4 className="font-serif font-medium text-stone-600 dark:text-stone-400 flex text-[clamp(0.875rem,2.5vw,1rem)]">
+      <h4 className="font-game font-medium text-stone-600 dark:text-stone-400 flex text-[clamp(0.875rem,2.5vw,1rem)]">
         {title} (
         <AnimatePresence mode="wait" initial={false}>
           <motion.span

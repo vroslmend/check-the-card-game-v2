@@ -75,7 +75,7 @@ const GameStateError = ({
 
 const LoadingIndicator = () => (
   <div className="flex items-center justify-center h-screen w-full bg-stone-50 dark:bg-zinc-950">
-    <p className="font-serif text-stone-600 dark:text-stone-400">
+    <p className="font-game text-stone-600 dark:text-stone-400">
       Loading Game...
     </p>
   </div>
@@ -110,7 +110,7 @@ export function GameBoard() {
   };
 
   return (
-    <div className="h-screen w-full bg-stone-50 dark:bg-zinc-950 flex flex-col overflow-hidden @container">
+    <div className="h-screen w-full bg-stone-50 dark:bg-zinc-950 flex flex-col overflow-hidden @container font-game">
       <GameHeader />
       <div className="relative flex-1 grid grid-rows-[auto_1fr_auto_auto]">
         <AnimatePresence>
@@ -151,7 +151,7 @@ export function GameBoard() {
                   ))}
                 </div>
               ) : (
-                <p className="font-serif text-stone-500 dark:text-stone-400">
+                <p className="font-game text-stone-500 dark:text-stone-400">
                   Waiting for opponents...
                 </p>
               )}

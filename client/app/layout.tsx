@@ -1,6 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Playfair_Display, Inter } from "next/font/google";
+import { Playfair_Display, Inter, Nunito_Sans } from "next/font/google";
 import { Providers } from "./providers";
 import { cn } from "@/lib/utils";
 import "lenis/dist/lenis.css";
@@ -13,6 +13,13 @@ const playfair = Playfair_Display({
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+});
+
+// The game's one type family (exposed as --font-game). Playfair/Inter remain
+// for the landing page; game views use Nunito Sans.
+const nunito = Nunito_Sans({
+  subsets: ["latin"],
+  variable: "--font-nunito",
 });
 
 export const metadata: Metadata = {
@@ -38,7 +45,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${playfair.variable} ${inter.variable}`}
+      className={`${playfair.variable} ${inter.variable} ${nunito.variable}`}
     >
       <body className="font-serif antialiased">
         <Providers>{children}</Providers>

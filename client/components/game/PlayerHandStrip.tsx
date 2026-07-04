@@ -138,7 +138,7 @@ const PlayerInfoBadge = ({
   const { Icon, text, color } = getStatus();
 
   return (
-    <div className="flex flex-col items-center gap-2 font-serif">
+    <div className="flex flex-col items-center gap-2 font-game">
       <h3
         className={cn(
           "flex items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] transition-colors",
