@@ -165,19 +165,6 @@ html {
 }
 
 @layer utilities {
-  .glass {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    will-change: transform;
-  }
-
-  .dark .glass {
-    background: rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.03);
-  }
-
   .will-change-transform {
     will-change: transform;
   }
@@ -191,11 +178,6 @@ html {
     will-change: transform;
   }
 
-  .animate-glow {
-    animation: glow 3s ease-in-out infinite alternate;
-    will-change: opacity, box-shadow;
-  }
-
   @keyframes float {
     0%,
     100% {
@@ -204,29 +186,6 @@ html {
     50% {
       transform: translateY(-15px);
     }
-  }
-
-  @keyframes glow {
-    from {
-      box-shadow: 0 0 20px rgba(120, 113, 108, 0.3);
-    }
-    to {
-      box-shadow: 0 0 30px rgba(120, 113, 108, 0.5);
-    }
-  }
-
-  .text-gradient {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--foreground)),
-      hsl(var(--muted-foreground))
-    );
-    background-size: 200% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shift 4s ease-in-out infinite;
-    will-change: background-position;
   }
 
   .text-stone-gradient {
@@ -259,16 +218,6 @@ html {
     }
   }
 
-  .card-hover {
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    will-change: transform, box-shadow;
-  }
-
-  .card-hover:hover {
-    transform: translateY(-6px) scale(1.01);
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.08);
-  }
-
   /* Primary gradient button */
   .btn-primary {
     @apply rounded-full px-3 py-1.5 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white transition-colors pointer-events-auto select-none;
@@ -276,10 +225,6 @@ html {
 
   .btn-icon {
     @apply rounded-full p-2 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white;
-  }
-
-  .dark .card-hover:hover {
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
   }
 
   .gpu-accelerated {
@@ -295,19 +240,6 @@ html {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-  }
-
-  @keyframes hue-rotate {
-    from {
-      filter: hue-rotate(0deg);
-    }
-    to {
-      filter: hue-rotate(360deg);
-    }
-  }
-
-  .animate-hue-rotate {
-    animation: hue-rotate 20s linear infinite;
   }
 
   .animation-delay-n5 {

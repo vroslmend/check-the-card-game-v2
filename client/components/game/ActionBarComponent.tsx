@@ -1,7 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ActionButton from "./ActionButton";
-import Magnetic from "@/components/ui/Magnetic";
 import { useActionController } from "./ActionController";
 
 export interface Action {
@@ -50,9 +49,7 @@ const ActionBarComponent: React.FC = () => {
         className="flex flex-row flex-wrap items-center justify-center gap-2 rounded-full border border-hairline bg-surface p-2 shadow-lg"
       >
         {actions.map((action, i) => (
-          <Magnetic key={action.label || i} strength={20}>
-            <ActionButton action={action} />
-          </Magnetic>
+          <ActionButton key={action.label || i} action={action} />
         ))}
       </motion.div>
 

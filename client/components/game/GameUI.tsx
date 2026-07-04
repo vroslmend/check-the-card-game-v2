@@ -46,7 +46,7 @@ export default function GameUI() {
 
   return (
     <CardAnimationRoot>
-      <main className="relative h-screen w-full overflow-hidden bg-stone-100 dark:bg-zinc-900">
+      <main className="relative h-screen w-full overflow-hidden bg-ground">
         <AnimatePresence mode="wait">
           <motion.div
             key={view}
