@@ -16,6 +16,7 @@ import {
 import { VisualCardStack } from "../cards/VisualCardStack";
 import { AnimatePresence, motion } from "framer-motion";
 import { PlayingCard } from "../cards/PlayingCard";
+import { cardTravelTransition } from "@/lib/card-motion";
 
 export interface TableAreaProps {
   drawnCard?: PublicCard;
@@ -116,6 +117,7 @@ export const TableArea = ({
                 <motion.div
                   key={card.id}
                   layoutId={card.id}
+                  transition={cardTravelTransition}
                   className="absolute inset-0"
                 >
                   <PlayingCard faceDown className="w-full h-full" />
@@ -136,7 +138,12 @@ export const TableArea = ({
               initial={{ opacity: 0, scale: 0.5, y: -50 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.5, y: 50 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              transition={{
+                type: "spring",
+                stiffness: 400,
+                damping: 30,
+                ...cardTravelTransition,
+              }}
               className="absolute inset-0 z-10"
             >
               <PlayingCard

@@ -7,6 +7,7 @@ import { CardBack } from "./CardBack";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDevice } from "@/context/DeviceContext";
+import { cardTravelTransition } from "@/lib/card-motion";
 
 interface VisualCardStackProps {
   title: string;
@@ -85,7 +86,7 @@ export const VisualCardStack = ({
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.2, ...cardTravelTransition }}
             >
               {faceDown ? (
                 <PlayingCard faceDown className="h-full w-full" />

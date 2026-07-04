@@ -6,6 +6,7 @@ import { HandGrid } from "./HandGrid";
 import { type Player, type Card, GameStage } from "shared-types";
 import { cn } from "@/lib/utils";
 import { PlayingCard } from "../cards/PlayingCard";
+import { CardFlight } from "../cards/CardFlight";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Eye } from "lucide-react";
@@ -131,12 +132,11 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             key={card.id}
             className="relative w-[min(8vh,15vw)] aspect-[5/7]"
           >
-            <motion.div
+            <CardFlight
               key={card.id}
               layoutId={card.id}
-              transition={{ type: "spring", stiffness: 350, damping: 25 }}
               className={cn(
-                "absolute inset-0",
+                "absolute inset-0 rounded-lg",
                 "data-[interactive=true]:cursor-pointer",
                 "data-[interactive=true]:hover:filter-[brightness(1.15)]",
               )}
@@ -183,7 +183,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                 faceDown={!isFaceUp}
                 className="h-full w-full"
               />
-            </motion.div>
+            </CardFlight>
           </div>
         );
       })}
