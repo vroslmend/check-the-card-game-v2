@@ -27,6 +27,15 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
   const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
   const isDrawPhase =
     isMyTurn && currentGameState?.turnPhase === TurnPhase.DRAW;
+  const localPlayer = localPlayerId
+    ? currentGameState?.players[localPlayerId]
+    : undefined;
+  // Tapping the pile while holding a deck draw discards it directly (same
+  // action as the action-bar button; discard-pile draws must be swapped).
+  const canDiscardDrawnCard =
+    isMyTurn &&
+    currentGameState?.turnPhase === TurnPhase.DISCARD &&
+    localPlayer?.pendingDrawnCard?.source === "deck";
   const topDiscardCard = currentGameState?.discardPile.at(-1) ?? null;
 
   const isSpecialCard =
@@ -48,6 +57,7 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
       !currentGameState?.discardPileIsSealed &&
       !!currentGameState?.discardPile.length &&
       !isSpecialCard,
+    canDiscardDrawnCard: !!canDiscardDrawnCard,
   };
 };
 
@@ -61,6 +71,7 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
     discardPileIsSealed,
     canDrawFromDeck,
     canDrawFromDiscard,
+    canDiscardDrawnCard,
   } = useUISelector(selectTableAreaProps);
 
   const handleDeckClick = () => {
@@ -70,7 +81,9 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
   };
 
   const handleDiscardClick = () => {
-    if (canDrawFromDiscard) {
+    if (canDiscardDrawnCard) {
+      send({ type: PlayerActionType.DISCARD_DRAWN_CARD });
+    } else if (canDrawFromDiscard) {
       send({ type: PlayerActionType.DRAW_FROM_DISCARD });
     }
   };
@@ -137,7 +150,7 @@ export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
           topCard={topDiscardCard}
           secondCard={discardPile.at(-2) ?? null}
           isSealed={discardPileIsSealed}
-          canInteract={canDrawFromDiscard}
+          canInteract={canDrawFromDiscard || canDiscardDrawnCard}
           onClick={handleDiscardClick}
           className="landscape:w-[8vh] portrait:w-[15vw]"
         />
