@@ -9,7 +9,7 @@ import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { Eye } from "lucide-react";
+import { Eye, ArrowLeftRight } from "lucide-react";
 
 interface PlayerHandProps {
   player: Player;
@@ -29,6 +29,7 @@ const selectContext = (state: UIMachineSnapshot) => {
     selectedPeekTargets: ability?.selectedPeekTargets,
     selectedSwapTargets: ability?.selectedSwapTargets,
     publicPeek: state.context.currentGameState?.publicPeek ?? null,
+    publicSwap: state.context.currentGameState?.publicSwap ?? null,
     localPlayerId: state.context.localPlayerId,
     gameStage: state.context.currentGameState?.gameStage ?? null,
   };
@@ -49,10 +50,30 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     selectedPeekTargets,
     selectedSwapTargets,
     publicPeek,
+    publicSwap,
     localPlayerId,
     gameStage,
   } = useUISelector(selectContext);
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine)");
+
+  // publicSwap is a momentary flash: show the rings for 2.5s after the swap,
+  // then drop them without waiting for a server clear.
+  const [expiredSwapAt, setExpiredSwapAt] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (!publicSwap) return;
+    const remaining = publicSwap.occurredAt + 2500 - Date.now();
+    if (remaining <= 0) {
+      setExpiredSwapAt(publicSwap.occurredAt);
+      return;
+    }
+    const t = setTimeout(
+      () => setExpiredSwapAt(publicSwap.occurredAt),
+      remaining,
+    );
+    return () => clearTimeout(t);
+  }, [publicSwap]);
+  const swapIndicatorLive =
+    !!publicSwap && expiredSwapAt !== publicSwap.occurredAt;
 
   const handToDisplay = isLocalPlayer
     ? player.hand.map((card) => ({ facedown: true as const, id: card.id }))
@@ -127,6 +148,15 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             !isLocalPlayer &&
             index >= handToDisplay.length - 2);
 
+        // Someone else's just-confirmed ability swap touched this slot —
+        // everyone sees WHICH two cards traded places, never their faces.
+        const showSwapIndicator =
+          swapIndicatorLive &&
+          publicSwap!.swapperId !== localPlayerId &&
+          publicSwap!.targets.some(
+            (t) => t.playerId === player.id && t.cardIndex === index,
+          );
+
         return (
           <div
             key={card.id}
@@ -174,6 +204,20 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                   >
                     <span className="absolute -top-2 -right-2 rounded-full bg-amber-400 text-zinc-900 p-1 shadow-md">
                       <Eye className="h-3 w-3" />
+                    </span>
+                  </motion.div>
+                )}
+                {showSwapIndicator && (
+                  <motion.div
+                    key="swap-indicator"
+                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[3px] ring-violet-400/80"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
+                    <span className="absolute -top-2 -right-2 rounded-full bg-violet-400 text-zinc-900 p-1 shadow-md">
+                      <ArrowLeftRight className="h-3 w-3" />
                     </span>
                   </motion.div>
                 )}

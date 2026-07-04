@@ -900,11 +900,35 @@ export const gameMachine = setup({
         };
       }
 
+      // Real-life table parity for swaps: everyone sees WHICH two positions
+      // traded cards, never the faces. Momentary — clients hide it ~2.5s
+      // after occurredAt, so only round/score resets need to clear it. The
+      // swap payload carries singular source/target objects (not a targets
+      // array like peek), so assemble the two positions from them here.
+      let newPublicSwap = null as GameContext["publicSwap"];
+      if (payload.action === "swap" && currentAbility.stage === "swapping") {
+        newPublicSwap = {
+          swapperId: playerId,
+          targets: [
+            {
+              playerId: payload.source.playerId,
+              cardIndex: payload.source.cardIndex,
+            },
+            {
+              playerId: payload.target.playerId,
+              cardIndex: payload.target.cardIndex,
+            },
+          ],
+          occurredAt: Date.now(),
+        };
+      }
+
       return {
         players: updatedPlayers,
         abilityStack: newAbilityStack,
         log: newLog,
         publicPeek: newPublicPeek,
+        publicSwap: newPublicSwap,
       };
     }),
     updatePlayerLobbyReady: assign(({ context, event }) => {
@@ -950,6 +974,7 @@ export const gameMachine = setup({
         ] as RichGameLogMessage[],
         gameStage: GameStage.DEALING,
         publicPeek: null,
+        publicSwap: null,
         turnDeadline: null,
       };
     }),
@@ -1256,6 +1281,7 @@ export const gameMachine = setup({
         gameover: { winnerIds, loserId, playerScores },
         gameStage: GameStage.SCORING,
         publicPeek: null,
+        publicSwap: null,
         turnDeadline: null,
       };
     }),
@@ -1712,6 +1738,7 @@ export const gameMachine = setup({
     discardPileIsSealed: false,
     errorState: null,
     publicPeek: null,
+    publicSwap: null,
     turnDeadline: null,
     turnTimerMs: TURN_TIMER_MS,
   }),
