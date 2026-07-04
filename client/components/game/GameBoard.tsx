@@ -10,10 +10,11 @@ import PlayerHandStrip from "./PlayerHandStrip";
 import { GameStage, PlayerActionType, type PublicCard } from "shared-types";
 import { ActionController } from "./ActionController";
 import { ActionControllerView } from "./ActionControllerView";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { GameEndScreen } from "./GameEndScreen";
 import { GameHeader } from "./GameHeader";
 import SidePanel from "@/components/layout/SidePanel";
+import { useCheckMoment, CheckStamp } from "./CheckMoment";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
   state.matches({ inGame: "disconnected" });
@@ -86,6 +87,8 @@ export function GameBoard() {
   const { gameState, localPlayerId, playerWithPendingCard, isMyTurn } =
     useUISelector(selectGameBoardProps);
   const { gameStage, players, winnerIds } = useUISelector(selectGameEndProps);
+  const checkMoment = useCheckMoment();
+  const reducedMotion = useReducedMotion();
 
   if (!localPlayerId || !gameState) {
     return <LoadingIndicator />;
@@ -110,9 +113,14 @@ export function GameBoard() {
   };
 
   return (
-    <div className="h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
+    <div className="relative h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
       <GameHeader />
-      <div className="relative flex-1 grid grid-rows-[auto_1fr_auto_auto]">
+      <motion.div
+        className="relative flex-1 grid grid-rows-[auto_1fr_auto_auto]"
+        animate={{ scale: checkMoment && !reducedMotion ? 0.92 : 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        style={{ transformOrigin: "center" }}
+      >
         <AnimatePresence>
           {(gameStage === GameStage.GAMEOVER ||
             gameStage === GameStage.SCORING) && (
@@ -192,7 +200,9 @@ export function GameBoard() {
             </div>
           </div>
         </ActionController>
-      </div>
+      </motion.div>
+
+      <CheckStamp moment={checkMoment} />
     </div>
   );
 }
