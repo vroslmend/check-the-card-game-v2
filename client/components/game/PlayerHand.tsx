@@ -57,6 +57,13 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     ? player.hand.map((card) => ({ facedown: true as const, id: card.id }))
     : player.hand;
 
+  // Opponents sit across the table: rotate their grid 180° (row-major
+  // reversal) so their bottom peek row reads at the top of your screen,
+  // like a real table. `index` stays the ORIGINAL hand index — peek rings,
+  // visibleCards and click targets all key off the server-side index.
+  const handEntries = handToDisplay.map((card, index) => ({ card, index }));
+  const displayEntries = isLocalPlayer ? handEntries : [...handEntries].reverse();
+
   // Everyone is looking at their bottom two cards right now; show opponents
   // which slots those are (real-life parity: you see the cards being lifted).
   const initialPeekActive =
@@ -67,7 +74,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
 
   return (
     <HandGrid numItems={handToDisplay.length} className={combinedClass}>
-      {handToDisplay.map((card, index) => {
+      {displayEntries.map(({ card, index }) => {
         const isCardVisible = visibleCards.some(
           (vc) => vc.playerId === player.id && vc.cardIndex === index,
         );
