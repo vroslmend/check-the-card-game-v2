@@ -1394,6 +1394,15 @@ export const gameMachine = setup({
         deck: shuffleDeck(newDiscard),
         discardPile: topCard ? [topCard] : [],
         errorState: null,
+        log: [
+          ...context.log,
+          createLogEntry(context.gameId, {
+            message:
+              "The draw pile ran out — the discard pile was shuffled into a new deck.",
+            type: "public",
+            tags: ["game-event"],
+          }),
+        ],
       };
     }),
     broadcastGameState: emit({ type: "BROADCAST_GAME_STATE" }),
