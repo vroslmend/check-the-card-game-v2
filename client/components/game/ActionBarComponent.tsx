@@ -23,15 +23,35 @@ export interface Action {
   progressLabelClassName?: string;
 }
 
+// Long countdown windows only surface their bar for the final stretch; a
+// full-length bar from second zero reads as pressure, not help. Windows
+// shorter than this (the timed peeks) show start to end.
+const COUNTDOWN_REVEAL_MS = 15_000;
+
 const ActionBarComponent: React.FC = () => {
   const { getActions, getPromptText, getTimedIndicator } =
     useActionController();
   const actions = getActions();
   const promptText = getPromptText();
   const timedIndicator = getTimedIndicator();
+  // Re-render once when a hidden bar's reveal moment arrives — broadcasts
+  // alone won't wake this component at the right time.
+  const [, forceTick] = React.useReducer((n: number) => n + 1, 0);
+  const revealAt = timedIndicator
+    ? timedIndicator.expireAt -
+      Math.min(COUNTDOWN_REVEAL_MS, timedIndicator.durationMs)
+    : null;
+  React.useEffect(() => {
+    if (revealAt === null) return;
+    const wait = revealAt - Date.now();
+    if (wait <= 0) return;
+    const t = setTimeout(forceTick, wait + 20);
+    return () => clearTimeout(t);
+  }, [revealAt]);
   const remainingMs = timedIndicator
     ? Math.max(0, timedIndicator.expireAt - Date.now())
     : 0;
+  const countdownRevealed = revealAt !== null && Date.now() >= revealAt;
 
   return (
     <motion.div
@@ -78,7 +98,7 @@ const ActionBarComponent: React.FC = () => {
           the same no-reflow reason. */}
       <div className="mt-1 flex h-1 w-full items-center justify-center">
         <AnimatePresence>
-          {timedIndicator && remainingMs > 0 && (
+          {timedIndicator && remainingMs > 0 && countdownRevealed && (
             <motion.div
               key={timedIndicator.expireAt}
               className="h-0.5 w-48 max-w-[60vw] overflow-hidden rounded-full bg-hairline"
