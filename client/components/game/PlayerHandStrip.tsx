@@ -53,10 +53,18 @@ const selectStripContext = (state: UIMachineSnapshot) => {
 
   const isTargetableForAbility = !!currentAbilityContext;
 
+  // The bottom-two faces only reveal once the peek window opens (all players
+  // ready, or the ready-stall timeout forced it). Locally detectable: our own
+  // initial-peek cards are in visibleCards exactly for that window.
+  const initialPeekWindowActive =
+    currentGameState?.gameStage === GameStage.INITIAL_PEEK &&
+    state.context.visibleCards.some((vc) => vc.source === "initial-peek");
+
   return {
     canSwap,
     canMatch,
     isTargetableForAbility,
+    initialPeekWindowActive,
     gameStage: currentGameState?.gameStage ?? null,
     matchingPlayerIds:
       currentGameState?.matchingOpportunity?.remainingPlayerIDs ?? null,
@@ -71,6 +79,7 @@ const PlayerInfoBadge = ({
   gameStage,
   isInMatchingWindow,
   isPeekingCards,
+  isInitialPeekWindow,
 }: {
   player: Player;
   isCurrentTurn: boolean;
@@ -78,6 +87,7 @@ const PlayerInfoBadge = ({
   gameStage: GameStage | null;
   isInMatchingWindow: boolean;
   isPeekingCards: boolean;
+  isInitialPeekWindow: boolean;
 }) => {
   // Status is text + icon only — no hue coding. `muted` dims passive states
   // (waiting/disconnected/disqualified) to ink-muted; active states read ink.
@@ -97,10 +107,16 @@ const PlayerInfoBadge = ({
       };
     if (player.hasCalledCheck)
       return { Icon: CheckCircle, text: "Check Called", muted: false };
-    if (gameStage === GameStage.INITIAL_PEEK)
+    if (gameStage === GameStage.INITIAL_PEEK) {
+      // Before the window opens nobody can see anything — the label is about
+      // readiness. Once it opens, everyone is actually peeking. (The old
+      // mapping was inverted on both ends.)
+      if (isInitialPeekWindow)
+        return { Icon: Eye, text: "Peeking", muted: false };
       return player.isReady
         ? { Icon: CheckCircle, text: "Ready", muted: false }
-        : { Icon: Eye, text: "Peeking", muted: true };
+        : { Icon: Clock, text: "Not ready", muted: true };
+    }
     return { Icon: Clock, text: "Waiting", muted: true };
   };
 
@@ -149,6 +165,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     canSwap,
     canMatch,
     isTargetableForAbility,
+    initialPeekWindowActive,
     gameStage,
     matchingPlayerIds,
     publicPeekerId,
@@ -200,6 +217,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         gameStage={gameStage}
         isInMatchingWindow={!!matchingPlayerIds?.includes(player.id)}
         isPeekingCards={publicPeekerId === player.id}
+        isInitialPeekWindow={initialPeekWindowActive}
       />
       <PlayerHand
         player={player}

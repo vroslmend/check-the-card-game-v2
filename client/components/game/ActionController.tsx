@@ -443,14 +443,16 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       }
     }
   
-    if (props.gameStage === GameStage.INITIAL_PEEK && !localPlayer.isReady) {
-      return "Memorize your bottom two cards, then press Ready.";
-    }
-    if (
-      props.gameStage === GameStage.INITIAL_PEEK &&
-      localPlayer.isReady &&
-      !props.allPlayersReady
-    ) {
+    if (props.gameStage === GameStage.INITIAL_PEEK) {
+      // The bottom-two faces only appear once the peek window opens;
+      // peekExpireAt is set exactly while those initial-peek cards are
+      // visible. Before that there is nothing to memorize yet.
+      if (props.peekExpireAt) {
+        return "Memorize your bottom two cards!";
+      }
+      if (!localPlayer.isReady) {
+        return "Press Ready — cards are revealed once everyone is ready.";
+      }
       return "Waiting for other players to get ready…";
     }
     return null;
