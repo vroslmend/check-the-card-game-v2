@@ -39,11 +39,20 @@ export const VisualCardStack = ({
   return (
     <div className="flex flex-col items-center">
       <motion.div
+        layout
         aria-label={`${title}${count ? ` (${count})` : ""}`}
         whileHover={
           canInteract && !isTouchDevice ? { scale: 1.05, y: -5 } : undefined
         }
-        transition={{ type: "spring", stiffness: 400, damping: 20 }}
+        // Hover keeps its spring; layout shifts ride the shared card-travel
+        // tween so the base, lock overlay, ring and top card move as one
+        // instead of the top card trailing the rest.
+        transition={{
+          type: "spring",
+          stiffness: 400,
+          damping: 20,
+          ...cardTravelTransition,
+        }}
         onClick={onClick}
         className={cn(
           "relative w-[min(8vh,15vw)] aspect-[5/7] rounded-card",
