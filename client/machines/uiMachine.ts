@@ -128,6 +128,24 @@ export type UIMachineEvents =
   | { type: PlayerActionType.DECLARE_READY_FOR_PEEK }
   | { type: PlayerActionType.PLAY_AGAIN };
 
+/** Adopt a new server-clock offset sample only when it differs from the
+ *  current one by more than transport jitter. Each sample is true skew +
+ *  network transit, so it wobbles by tens of ms per broadcast; consumers
+ *  derive animation keys and deadlines from the offset, and a wobbling
+ *  offset re-keys/restarts those animations on every broadcast. Real skew
+ *  worth correcting is seconds to minutes. */
+const SERVER_CLOCK_JITTER_TOLERANCE_MS = 1500;
+const adoptServerClockOffset = (
+  current: number,
+  serverNow: number | undefined,
+): number => {
+  if (typeof serverNow !== "number") return current;
+  const sample = serverNow - Date.now();
+  return Math.abs(sample - current) > SERVER_CLOCK_JITTER_TOLERANCE_MS
+    ? sample
+    : current;
+};
+
 export const uiMachine = setup({
   types: {
     context: {} as UIMachineContext,
@@ -182,9 +200,10 @@ export const uiMachine = setup({
                 "gameState" in event.response
               ? event.response.gameState
               : undefined;
-        return typeof nextState?.serverNow === "number"
-          ? nextState.serverNow - Date.now()
-          : context.serverClockOffset;
+        return adoptServerClockOffset(
+          context.serverClockOffset,
+          nextState?.serverNow,
+        );
       },
       localPlayerId: ({ context, event }) => {
         if (context.localPlayerId) return context.localPlayerId;
@@ -1000,9 +1019,10 @@ export const uiMachine = setup({
                 assign({
                   currentGameState: ({ event }) => event.output.gameState,
                   serverClockOffset: ({ event, context }) =>
-                    typeof event.output.gameState?.serverNow === "number"
-                      ? event.output.gameState.serverNow - Date.now()
-                      : context.serverClockOffset,
+                    adoptServerClockOffset(
+                      context.serverClockOffset,
+                      event.output.gameState?.serverNow,
+                    ),
                   reconnectionAttempts: 0,
                   hasPassedMatch: false,
                 }),
