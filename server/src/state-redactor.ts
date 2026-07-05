@@ -80,6 +80,7 @@ export const generatePlayerView = (
       isLocked: serverPlayer.isLocked,
       score: serverPlayer.score,
       isConnected: serverPlayer.isConnected,
+      forfeited: serverPlayer.forfeited,
       pendingDrawnCard: clientPendingDrawnCard,
     };
   }

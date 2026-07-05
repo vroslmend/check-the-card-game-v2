@@ -1526,14 +1526,31 @@ export const gameMachine = setup({
 
       if (newTurnOrder.length <= 1) {
         const winnerId = newTurnOrder[0] ?? null;
+        // calculateScores never runs on this path — score the hands here so
+        // the end screen doesn't show zeros, and hand the game-master seat to
+        // a survivor so the Play Again button still exists for someone.
+        const playerScores: Record<PlayerId, number> = {};
+        for (const p of Object.values(newPlayers)) {
+          const score = p.hand.reduce(
+            (acc, card) => acc + cardScoreValues[card.rank],
+            0,
+          );
+          newPlayers[p.id] = { ...p, score };
+          playerScores[p.id] = score;
+        }
         return {
           players: newPlayers,
           turnOrder: newTurnOrder,
+          gameMasterId:
+            context.gameMasterId === affectedPlayerId && winnerId
+              ? winnerId
+              : context.gameMasterId,
           gameStage: GameStage.GAMEOVER,
+          winnerId,
           gameover: {
             winnerIds: winnerId ? [winnerId] : [],
             loserId: affectedPlayerId,
-            playerScores: {},
+            playerScores,
           },
           log: newLog,
           errorState: null,
@@ -1544,6 +1561,12 @@ export const gameMachine = setup({
         players: newPlayers,
         turnOrder: newTurnOrder,
         currentPlayerId: newCurrentPlayerId,
+        // A forfeited game master must not keep the seat: START/PLAY_AGAIN/
+        // REMOVE are gameMaster-gated and would be permanently unavailable.
+        gameMasterId:
+          context.gameMasterId === affectedPlayerId
+            ? (newTurnOrder[0] ?? context.gameMasterId)
+            : context.gameMasterId,
         checkDetails: context.checkDetails
           ? {
               ...context.checkDetails,
