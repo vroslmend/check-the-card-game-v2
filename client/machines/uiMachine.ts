@@ -110,6 +110,7 @@ export type UIMachineEvents =
   | { type: "DISCONNECT" }
   | { type: PlayerActionType.START_GAME }
   | { type: PlayerActionType.DECLARE_LOBBY_READY }
+  | { type: PlayerActionType.DECLARE_LOBBY_UNREADY }
   | {
       type: PlayerActionType.REMOVE_PLAYER;
       payload: { playerIdToRemove: string };
@@ -776,6 +777,7 @@ export const uiMachine = setup({
         },
         START_GAME: { actions: "emitPlayerAction" },
         DECLARE_LOBBY_READY: { actions: "emitPlayerAction" },
+        DECLARE_LOBBY_UNREADY: { actions: "emitPlayerAction" },
         REMOVE_PLAYER: { actions: "emitPlayerAction" },
         DRAW_FROM_DECK: { actions: "emitPlayerAction" },
         DRAW_FROM_DISCARD: { actions: "emitPlayerAction" },

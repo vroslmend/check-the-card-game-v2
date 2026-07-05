@@ -337,6 +337,8 @@ export const GameLobby = () => {
 
   const handlePlayerReady = () =>
     send({ type: PlayerActionType.DECLARE_LOBBY_READY });
+  const handlePlayerUnready = () =>
+    send({ type: PlayerActionType.DECLARE_LOBBY_UNREADY });
   const handleStartGame = () => send({ type: PlayerActionType.START_GAME });
   const handleLeaveGame = () => send({ type: "LEAVE_GAME" });
 
@@ -429,20 +431,30 @@ export const GameLobby = () => {
         };
       }
 
+      // Ready but can't start yet: the quiet pill doubles as the way back.
       return {
-        text: "Ready!",
-        action: () => {},
-        disabled: true,
-        icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
+        text: "Unready",
+        action: handlePlayerUnready,
+        disabled: false,
+        icon: <Clock className="h-4 w-4 pointer-events-none" />,
         colors: QUIET_PILL,
       };
     } else {
+      if (isPlayerReady) {
+        return {
+          text: "Unready",
+          action: handlePlayerUnready,
+          disabled: false,
+          icon: <Clock className="h-4 w-4 pointer-events-none" />,
+          colors: QUIET_PILL,
+        };
+      }
       return {
-        text: isPlayerReady ? "Ready!" : "Ready Up",
+        text: "Ready Up",
         action: handlePlayerReady,
-        disabled: isPlayerReady,
+        disabled: false,
         icon: <CheckCircle className="h-4 w-4 pointer-events-none" />,
-        colors: isPlayerReady ? QUIET_PILL : ACCENT_PILL,
+        colors: ACCENT_PILL,
       };
     }
   };
@@ -632,6 +644,14 @@ export const GameLobby = () => {
                 </motion.div>
               </span>
             </motion.button>
+            {isGameMaster && isPlayerReady && canStartGame && (
+              <button
+                onClick={handlePlayerUnready}
+                className="mt-3 text-xs font-semibold text-ink-muted underline underline-offset-4 hover:text-ink"
+              >
+                Unready
+              </button>
+            )}
           </motion.div>
         </div>
       </div>

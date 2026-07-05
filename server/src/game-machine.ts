@@ -107,6 +107,7 @@ const abilityRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
 type PlayerActionEvents =
   | { type: PlayerActionType.START_GAME; playerId: PlayerId }
   | { type: PlayerActionType.DECLARE_LOBBY_READY; playerId: PlayerId }
+  | { type: PlayerActionType.DECLARE_LOBBY_UNREADY; playerId: PlayerId }
   | { type: PlayerActionType.DRAW_FROM_DECK; playerId: PlayerId }
   | { type: PlayerActionType.DRAW_FROM_DISCARD; playerId: PlayerId }
   | {
@@ -942,6 +943,20 @@ export const gameMachine = setup({
               [event.playerId]: {
                 ...context.players[event.playerId]!,
                 isReady: true,
+              },
+            },
+          }
+        : {};
+    }),
+    updatePlayerLobbyUnready: assign(({ context, event }) => {
+      assertEvent(event, PlayerActionType.DECLARE_LOBBY_UNREADY);
+      return context.players[event.playerId]
+        ? {
+            players: {
+              ...context.players,
+              [event.playerId]: {
+                ...context.players[event.playerId]!,
+                isReady: false,
               },
             },
           }
@@ -1817,6 +1832,11 @@ export const gameMachine = setup({
         },
         [PlayerActionType.DECLARE_LOBBY_READY]: {
           actions: ["updatePlayerLobbyReady", "broadcastGameState"] as const,
+        },
+        // Ready is reversible while the game hasn't started (this handler is
+        // scoped to WAITING_FOR_PLAYERS, so it can't fire mid-game).
+        [PlayerActionType.DECLARE_LOBBY_UNREADY]: {
+          actions: ["updatePlayerLobbyUnready", "broadcastGameState"] as const,
         },
         [PlayerActionType.START_GAME]: {
           target: GameStage.DEALING,
