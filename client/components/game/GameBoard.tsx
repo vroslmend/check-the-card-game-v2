@@ -16,6 +16,7 @@ import { GameEndScreen } from "./GameEndScreen";
 import { GameHeader } from "./GameHeader";
 import SidePanel from "@/components/layout/SidePanel";
 import { useCheckMoment, CheckStamp } from "./CheckMoment";
+import { GameEventToasts } from "./GameEventToasts";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
   state.matches({ inGame: "disconnected" });
@@ -176,6 +177,7 @@ export function GameBoard() {
         </AnimatePresence>
 
         <ConnectionStatusBanner />
+        <GameEventToasts />
         {localPlayerForfeited &&
           gameStage !== GameStage.GAMEOVER &&
           gameStage !== GameStage.SCORING && (
