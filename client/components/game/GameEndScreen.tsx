@@ -20,6 +20,7 @@ interface GameEndScreenProps {
   winnerIds: string[];
   localPlayerId: string;
   onPlayAgain: () => void;
+  onLeave: () => void;
 }
 
 const containerVariants = {
@@ -108,6 +109,7 @@ export const GameEndScreen = ({
   winnerIds,
   localPlayerId,
   onPlayAgain,
+  onLeave,
 }: GameEndScreenProps) => {
   const winners = players.filter((p) => winnerIds.includes(p.id));
   const sortedPlayers = [...players].sort((a, b) => a.score - b.score);
@@ -229,8 +231,11 @@ export const GameEndScreen = ({
           ))}
         </motion.div>
 
-        {isGameMaster && (
-          <motion.div variants={itemVariants}>
+        <motion.div
+          variants={itemVariants}
+          className="flex flex-col items-center gap-3"
+        >
+          {isGameMaster && (
             <Button
               onClick={onPlayAgain}
               size="lg"
@@ -238,8 +243,16 @@ export const GameEndScreen = ({
             >
               Play Again
             </Button>
-          </motion.div>
-        )}
+          )}
+          {/* Non-masters previously had no way off this screen at all (a
+              forfeit can even leave the winner without a Play Again). */}
+          <button
+            onClick={onLeave}
+            className="rounded-full border border-hairline bg-surface px-5 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
+          >
+            Back to Home
+          </button>
+        </motion.div>
       </motion.div>
     </motion.div>
   );
