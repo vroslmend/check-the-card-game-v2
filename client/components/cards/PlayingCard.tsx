@@ -59,25 +59,25 @@ export function PlayingCard({
     if (card) lastCardRef.current = card;
   }, [card]);
 
-  // The front face is untransformed at rest (parent rotateY(0) renders as
-  // `transform: none`). Firefox fails to paint text inside the previous
-  // structure (front face pre-rotated 180° under a 180°-rotated preserve-3d
-  // parent with backface-visibility: hidden), which left card faces blank.
-  // The mid-flip opacity swap makes the visible face explicit, so nothing
-  // depends on backface culling being computed correctly at exactly 180°.
+  // 2D flip: the container sweeps scaleX 1 → -1 (through 0 at the midpoint,
+  // which reads exactly like a Y-rotation edge-on) while the faces
+  // opacity-swap at that midpoint — the visible face never depends on 3D
+  // backface culling. No perspective / preserve-3d / backface-visibility
+  // anywhere: permanent per-card 3D contexts are what Gecko composites into
+  // seam-prone tiled surfaces (the Firefox/Zen hairlines), and the original
+  // blank-face bug class dies with them too. The back face carries a static
+  // scaleX(-1) so it reads unmirrored when the container is at -1.
   return (
-    <div className={cn("perspective-[1000px]", className)} onClick={onClick}>
+    <div className={className} onClick={onClick}>
       <motion.div
         className="relative w-full h-full"
-        style={{ transformStyle: "preserve-3d" }}
         initial={false}
-        variants={{ front: { rotateY: 0 }, back: { rotateY: 180 } }}
+        variants={{ front: { scaleX: 1 }, back: { scaleX: -1 } }}
         animate={showFront ? "front" : "back"}
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
         <motion.div
           className="absolute w-full h-full"
-          style={{ backfaceVisibility: "hidden" }}
           variants={{ front: { opacity: 1 }, back: { opacity: 0 } }}
           transition={{ duration: 0, delay: 0.25 }}
         >
@@ -88,7 +88,7 @@ export function PlayingCard({
 
         <motion.div
           className="absolute w-full h-full"
-          style={{ rotateY: 180, backfaceVisibility: "hidden" }}
+          style={{ scaleX: -1 }}
           variants={{ front: { opacity: 0 }, back: { opacity: 1 } }}
           transition={{ duration: 0, delay: 0.25 }}
         >
