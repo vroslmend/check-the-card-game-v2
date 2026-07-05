@@ -451,7 +451,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         return "Memorize your bottom two cards!";
       }
       if (!localPlayer.isReady) {
-        return "Press Ready — cards are revealed once everyone is ready.";
+        return "Press Ready. Cards are revealed when everyone is ready.";
       }
       return "Waiting for other players to get ready…";
     }

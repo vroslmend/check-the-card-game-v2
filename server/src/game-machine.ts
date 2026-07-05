@@ -1413,7 +1413,7 @@ export const gameMachine = setup({
           ...context.log,
           createLogEntry(context.gameId, {
             message:
-              "The draw pile ran out — the discard pile was shuffled into a new deck.",
+              "The draw pile ran out. The discard pile was shuffled into a new deck.",
             type: "public",
             tags: ["game-event"],
           }),
