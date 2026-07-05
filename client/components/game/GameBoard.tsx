@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   useUISelector,
   useUIActorRef,
@@ -32,6 +33,8 @@ const selectGameBoardProps = (state: UIMachineSnapshot) => {
     localPlayerId: localPlayerId,
     playerWithPendingCard: playerWithPendingCard,
     isMyTurn: gameState?.currentPlayerId === localPlayerId,
+    localPlayerForfeited:
+      !!localPlayerId && !!gameState?.players[localPlayerId]?.forfeited,
   };
 };
 
@@ -82,10 +85,48 @@ const LoadingIndicator = () => (
   </div>
 );
 
+// Shown to a player whose seat was forfeited after a failed reconnect: the
+// board underneath is real but locked for them, which otherwise reads as a
+// silent hardstuck. Dismissible so they can spectate instead.
+const ForfeitNotice = ({ onLeave }: { onLeave: () => void }) => {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  return (
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-ground/80 p-4">
+      <div className="flex max-w-sm flex-col items-center gap-4 rounded-2xl border border-hairline bg-surface p-8 text-center">
+        <h3 className="text-2xl font-extrabold text-ink">
+          You forfeited this round
+        </h3>
+        <p className="text-sm text-ink-muted">
+          You were disconnected for too long, so your seat was forfeited. You
+          can keep watching, or head home.
+        </p>
+        <button
+          onClick={onLeave}
+          className="rounded-full bg-accent px-6 py-2.5 text-sm font-bold text-accent-ink hover:bg-accent/90"
+        >
+          Back to Home
+        </button>
+        <button
+          onClick={() => setDismissed(true)}
+          className="text-xs font-semibold text-ink-muted underline underline-offset-4 hover:text-ink"
+        >
+          Keep watching
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export function GameBoard() {
   const { send } = useUIActorRef();
-  const { gameState, localPlayerId, playerWithPendingCard, isMyTurn } =
-    useUISelector(selectGameBoardProps);
+  const {
+    gameState,
+    localPlayerId,
+    playerWithPendingCard,
+    isMyTurn,
+    localPlayerForfeited,
+  } = useUISelector(selectGameBoardProps);
   const { gameStage, players, winnerIds } = useUISelector(selectGameEndProps);
   const checkMoment = useCheckMoment();
   const reducedMotion = useReducedMotion();
@@ -129,11 +170,17 @@ export function GameBoard() {
               winnerIds={winnerIds}
               localPlayerId={localPlayerId}
               onPlayAgain={handlePlayAgain}
+              onLeave={() => send({ type: "LEAVE_GAME" })}
             />
           )}
         </AnimatePresence>
 
         <ConnectionStatusBanner />
+        {localPlayerForfeited &&
+          gameStage !== GameStage.GAMEOVER &&
+          gameStage !== GameStage.SCORING && (
+            <ForfeitNotice onLeave={() => send({ type: "LEAVE_GAME" })} />
+          )}
         <SidePanel />
         <GameStateError
           hasPlayers={opponentPlayers.length > 0}

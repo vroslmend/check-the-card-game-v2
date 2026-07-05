@@ -79,6 +79,9 @@ export interface UIMachineContext {
   isSidePanelOpen: boolean;
   reconnectionAttempts: number;
   hasPassedMatch: boolean;
+  /** serverNow − client Date.now(), from the latest broadcast. Server
+   *  timestamps convert to client-clock via `ts - serverClockOffset`. */
+  serverClockOffset: number;
   modal: { type: "rejoin" | "error"; title: string; message: string } | null;
 }
 
@@ -107,6 +110,7 @@ export type UIMachineEvents =
   | { type: "DISCONNECT" }
   | { type: PlayerActionType.START_GAME }
   | { type: PlayerActionType.DECLARE_LOBBY_READY }
+  | { type: PlayerActionType.DECLARE_LOBBY_UNREADY }
   | {
       type: PlayerActionType.REMOVE_PLAYER;
       payload: { playerIdToRemove: string };
@@ -169,6 +173,18 @@ export const uiMachine = setup({
           prev.startTimestamp === next.startTimestamp &&
           prev.cardToMatch.id === next.cardToMatch.id;
         return sameOpportunity ? context.hasPassedMatch : false;
+      },
+      serverClockOffset: ({ context, event }) => {
+        const nextState =
+          event.type === "CLIENT_GAME_STATE_UPDATED"
+            ? event.gameState
+            : event.type === "_SESSION_ESTABLISHED" &&
+                "gameState" in event.response
+              ? event.response.gameState
+              : undefined;
+        return typeof nextState?.serverNow === "number"
+          ? nextState.serverNow - Date.now()
+          : context.serverClockOffset;
       },
       localPlayerId: ({ context, event }) => {
         if (context.localPlayerId) return context.localPlayerId;
@@ -623,6 +639,7 @@ export const uiMachine = setup({
     isSidePanelOpen: false,
     reconnectionAttempts: 0,
     hasPassedMatch: false,
+    serverClockOffset: 0,
     modal: null,
   }),
   initial: "initializing",
@@ -760,6 +777,7 @@ export const uiMachine = setup({
         },
         START_GAME: { actions: "emitPlayerAction" },
         DECLARE_LOBBY_READY: { actions: "emitPlayerAction" },
+        DECLARE_LOBBY_UNREADY: { actions: "emitPlayerAction" },
         REMOVE_PLAYER: { actions: "emitPlayerAction" },
         DRAW_FROM_DECK: { actions: "emitPlayerAction" },
         DRAW_FROM_DISCARD: { actions: "emitPlayerAction" },
@@ -826,7 +844,10 @@ export const uiMachine = setup({
           ],
         },
         lobby: {
-          entry: "log_ENTER_LOBBY",
+          // dismissModal: belt-and-braces — GameUI pins the view to the join
+          // modal whenever context.modal is set, so a stale modal must never
+          // survive into the lobby.
+          entry: ["log_ENTER_LOBBY", "dismissModal"],
           tags: ["lobby", "playing"],
           on: {
             // Manual "refresh" from the lobby re-runs the rejoin handshake to
@@ -946,13 +967,20 @@ export const uiMachine = setup({
           on: {
             CONNECT: [
               {
+                // No session to rejoin with (e.g. the join prompt) — just
+                // resume routing instead of invoking a doomed rejoin.
                 target: "routing",
-                guard: ({ event }) =>
-                  event.type === "CONNECT" &&
-                  "recovered" in event &&
-                  event.recovered === true,
+                guard: ({ context }) => !context.localPlayerId,
                 actions: "resetReconnectionAttempts",
               },
+              // Always re-run the rejoin handshake — even when socket.io
+              // connection-state recovery succeeded (recovered === true).
+              // The server deletes the socket session on disconnect and marks
+              // the player disconnected; a recovered socket that skips
+              // ATTEMPT_REJOIN has no server-side session, so every action it
+              // sends is silently dropped and broadcasts skip it — the exact
+              // "joined back but frozen board" hardstuck. Rejoining is
+              // idempotent and cheap.
               { target: "reconnecting" },
             ],
             RETRY_REJOIN: { target: "reconnecting" },
@@ -971,6 +999,10 @@ export const uiMachine = setup({
               actions: [
                 assign({
                   currentGameState: ({ event }) => event.output.gameState,
+                  serverClockOffset: ({ event, context }) =>
+                    typeof event.output.gameState?.serverNow === "number"
+                      ? event.output.gameState.serverNow - Date.now()
+                      : context.serverClockOffset,
                   reconnectionAttempts: 0,
                   hasPassedMatch: false,
                 }),
@@ -1025,6 +1057,19 @@ export const uiMachine = setup({
         },
         joiningGame: {
           tags: ["loading"],
+          // The server broadcasts the post-join state BEFORE the join ack
+          // reaches this client (the machine's broadcast is emitted
+          // synchronously inside the join send). The inGame-level handler
+          // for this event targets .routing, which would cancel this invoke
+          // and discard the ack — _SESSION_ESTABLISHED (persistSession +
+          // dismissModal) would never run and the join modal never leaves
+          // the screen. Store the state here without transitioning; the ack
+          // then completes the session and routes.
+          on: {
+            CLIENT_GAME_STATE_UPDATED: {
+              actions: ["setCurrentGameState", "syncAbilityContext"],
+            },
+          },
           invoke: {
             src: "joinGame",
             input: ({ event }) => {

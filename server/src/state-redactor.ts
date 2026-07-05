@@ -80,6 +80,7 @@ export const generatePlayerView = (
       isLocked: serverPlayer.isLocked,
       score: serverPlayer.score,
       isConnected: serverPlayer.isConnected,
+      forfeited: serverPlayer.forfeited,
       pendingDrawnCard: clientPendingDrawnCard,
     };
   }
@@ -126,6 +127,7 @@ export const generatePlayerView = (
     publicSwap: fullGameContext.publicSwap,
     turnDeadline: fullGameContext.turnDeadline,
     turnTimerMs: fullGameContext.turnTimerMs,
+    serverNow: Date.now(),
   };
 
   logger.debug(

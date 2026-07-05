@@ -49,8 +49,10 @@ const MATCHING_STAGE_DURATION_MS = parseInt(
 );
 const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || "4", 10);
 const CARDS_PER_PLAYER = parseInt(process.env.CARDS_PER_PLAYER || "4", 10);
+// 120s: phone screen-locks routinely exceed 30s, and the socket layer's
+// connection-state recovery window is 2 minutes — forfeit only after that.
 const RECONNECT_TIMEOUT_MS = parseInt(
-  process.env.RECONNECT_TIMEOUT_MS || "30000",
+  process.env.RECONNECT_TIMEOUT_MS || "120000",
   10,
 );
 const LOBBY_DISCONNECT_TIMEOUT_MS = parseInt(
@@ -105,6 +107,7 @@ const abilityRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
 type PlayerActionEvents =
   | { type: PlayerActionType.START_GAME; playerId: PlayerId }
   | { type: PlayerActionType.DECLARE_LOBBY_READY; playerId: PlayerId }
+  | { type: PlayerActionType.DECLARE_LOBBY_UNREADY; playerId: PlayerId }
   | { type: PlayerActionType.DRAW_FROM_DECK; playerId: PlayerId }
   | { type: PlayerActionType.DRAW_FROM_DISCARD; playerId: PlayerId }
   | {
@@ -945,6 +948,20 @@ export const gameMachine = setup({
           }
         : {};
     }),
+    updatePlayerLobbyUnready: assign(({ context, event }) => {
+      assertEvent(event, PlayerActionType.DECLARE_LOBBY_UNREADY);
+      return context.players[event.playerId]
+        ? {
+            players: {
+              ...context.players,
+              [event.playerId]: {
+                ...context.players[event.playerId]!,
+                isReady: false,
+              },
+            },
+          }
+        : {};
+    }),
     dealCards: assign(({ context }) => {
       const deck = shuffleDeck(createDeck());
       const playersAfterDeal = produce(context.players, (draft) => {
@@ -1392,6 +1409,15 @@ export const gameMachine = setup({
         deck: shuffleDeck(newDiscard),
         discardPile: topCard ? [topCard] : [],
         errorState: null,
+        log: [
+          ...context.log,
+          createLogEntry(context.gameId, {
+            message:
+              "The draw pile ran out — the discard pile was shuffled into a new deck.",
+            type: "public",
+            tags: ["game-event"],
+          }),
+        ],
       };
     }),
     broadcastGameState: emit({ type: "BROADCAST_GAME_STATE" }),
@@ -1524,14 +1550,31 @@ export const gameMachine = setup({
 
       if (newTurnOrder.length <= 1) {
         const winnerId = newTurnOrder[0] ?? null;
+        // calculateScores never runs on this path — score the hands here so
+        // the end screen doesn't show zeros, and hand the game-master seat to
+        // a survivor so the Play Again button still exists for someone.
+        const playerScores: Record<PlayerId, number> = {};
+        for (const p of Object.values(newPlayers)) {
+          const score = p.hand.reduce(
+            (acc, card) => acc + cardScoreValues[card.rank],
+            0,
+          );
+          newPlayers[p.id] = { ...p, score };
+          playerScores[p.id] = score;
+        }
         return {
           players: newPlayers,
           turnOrder: newTurnOrder,
+          gameMasterId:
+            context.gameMasterId === affectedPlayerId && winnerId
+              ? winnerId
+              : context.gameMasterId,
           gameStage: GameStage.GAMEOVER,
+          winnerId,
           gameover: {
             winnerIds: winnerId ? [winnerId] : [],
             loserId: affectedPlayerId,
-            playerScores: {},
+            playerScores,
           },
           log: newLog,
           errorState: null,
@@ -1542,6 +1585,12 @@ export const gameMachine = setup({
         players: newPlayers,
         turnOrder: newTurnOrder,
         currentPlayerId: newCurrentPlayerId,
+        // A forfeited game master must not keep the seat: START/PLAY_AGAIN/
+        // REMOVE are gameMaster-gated and would be permanently unavailable.
+        gameMasterId:
+          context.gameMasterId === affectedPlayerId
+            ? (newTurnOrder[0] ?? context.gameMasterId)
+            : context.gameMasterId,
         checkDetails: context.checkDetails
           ? {
               ...context.checkDetails,
@@ -1783,6 +1832,11 @@ export const gameMachine = setup({
         },
         [PlayerActionType.DECLARE_LOBBY_READY]: {
           actions: ["updatePlayerLobbyReady", "broadcastGameState"] as const,
+        },
+        // Ready is reversible while the game hasn't started (this handler is
+        // scoped to WAITING_FOR_PLAYERS, so it can't fire mid-game).
+        [PlayerActionType.DECLARE_LOBBY_UNREADY]: {
+          actions: ["updatePlayerLobbyUnready", "broadcastGameState"] as const,
         },
         [PlayerActionType.START_GAME]: {
           target: GameStage.DEALING,

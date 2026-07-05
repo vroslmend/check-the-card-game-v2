@@ -91,6 +91,8 @@ export interface Player {
   isLocked: boolean;
   score: number;
   isConnected: boolean;
+  /** True when the player was dropped for failing to reconnect in time. */
+  forfeited?: boolean;
   pendingDrawnCard: { card: PublicCard; source: "deck" | "discard" } | null;
 }
 
@@ -158,6 +160,13 @@ export interface ClientCheckGameState {
   turnDeadline: number | null;
   /** Length of a full turn-timer window, for rendering countdowns. */
   turnTimerMs: number;
+  /**
+   * Server wall-clock at redaction time. All absolute timestamps in this
+   * state (turnDeadline, matchingOpportunity.startTimestamp,
+   * publicSwap.occurredAt, publicPeek.startedAt) are on the server's clock;
+   * clients derive an offset from this field instead of trusting Date.now().
+   */
+  serverNow: number;
 }
 
 // ================================================================================================
@@ -288,6 +297,7 @@ export enum PlayerActionType {
   // Lobby
   START_GAME = "START_GAME",
   DECLARE_LOBBY_READY = "DECLARE_LOBBY_READY",
+  DECLARE_LOBBY_UNREADY = "DECLARE_LOBBY_UNREADY",
   LEAVE_GAME = "LEAVE_GAME",
   REMOVE_PLAYER = "REMOVE_PLAYER",
 

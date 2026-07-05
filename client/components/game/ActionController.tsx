@@ -90,6 +90,7 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       peekDurationMs: 0,
       turnDeadline: null as number | null,
       turnTimerMs: 0,
+      serverClockOffset: 0,
     };
   }
 
@@ -138,6 +139,7 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     peekDurationMs,
     turnDeadline: currentGameState.turnDeadline,
     turnTimerMs: currentGameState.turnTimerMs,
+    serverClockOffset: state.context.serverClockOffset,
   };
 };
 
@@ -237,9 +239,12 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         );
       }
       // The progress button animates the countdown itself; here we only need
-      // the starting point and remaining duration.
+      // the starting point and remaining duration. startTimestamp is on the
+      // SERVER's clock — convert through the tracked offset so every client
+      // counts down from the same instant regardless of device clock skew.
+      const serverNowEst = Date.now() + props.serverClockOffset;
       const elapsedMs =
-        Date.now() - (matchingOpportunity.startTimestamp ?? Date.now());
+        serverNowEst - (matchingOpportunity.startTimestamp ?? serverNowEst);
       const remainingMs = Math.max(0, MATCHING_STAGE_DURATION_MS - elapsedMs);
       const progressPercent = Math.min(
         (elapsedMs / MATCHING_STAGE_DURATION_MS) * 100,
@@ -438,14 +443,16 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       }
     }
   
-    if (props.gameStage === GameStage.INITIAL_PEEK && !localPlayer.isReady) {
-      return "Memorize your bottom two cards, then press Ready.";
-    }
-    if (
-      props.gameStage === GameStage.INITIAL_PEEK &&
-      localPlayer.isReady &&
-      !props.allPlayersReady
-    ) {
+    if (props.gameStage === GameStage.INITIAL_PEEK) {
+      // The bottom-two faces only appear once the peek window opens;
+      // peekExpireAt is set exactly while those initial-peek cards are
+      // visible. Before that there is nothing to memorize yet.
+      if (props.peekExpireAt) {
+        return "Memorize your bottom two cards!";
+      }
+      if (!localPlayer.isReady) {
+        return "Press Ready — cards are revealed once everyone is ready.";
+      }
       return "Waiting for other players to get ready…";
     }
     return null;
@@ -462,6 +469,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       turnPhase,
       isMyTurn,
       isAbilityPlayer,
+      serverClockOffset,
     } = props;
     const now = Date.now();
     if (peekExpireAt && peekExpireAt > now) {
@@ -472,12 +480,18 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     // everyone during the initial peek (that deadline is shared). Spectators
     // get the status chips instead. The matching window renders its own
     // countdown on the Pass button, so it is excluded here.
+    // turnDeadline is a SERVER timestamp — convert it to this client's clock
+    // so skewed devices neither hide the bar nor stretch it.
+    const clientDeadline =
+      typeof turnDeadline === "number"
+        ? turnDeadline - serverClockOffset
+        : null;
     const isMyDeadline =
       gameStage === GameStage.INITIAL_PEEK ||
       (turnPhase === TurnPhase.ABILITY ? isAbilityPlayer : isMyTurn);
     if (
-      turnDeadline &&
-      turnDeadline > now &&
+      clientDeadline &&
+      clientDeadline > now &&
       turnTimerMs > 0 &&
       !matchingOpportunity &&
       isMyDeadline &&
@@ -485,7 +499,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         gameStage === GameStage.FINAL_TURNS ||
         gameStage === GameStage.INITIAL_PEEK)
     ) {
-      return { expireAt: turnDeadline, durationMs: turnTimerMs };
+      return { expireAt: clientDeadline, durationMs: turnTimerMs };
     }
     return null;
   }, [props]);
