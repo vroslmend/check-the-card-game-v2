@@ -53,46 +53,51 @@ const ActionBarComponent: React.FC = () => {
         ))}
       </motion.div>
 
-      <AnimatePresence mode="popLayout">
-        {promptText && (
-          <motion.div
-            layout
-            key="prompt-text"
-            className="mt-2 text-center"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
-          >
-            <p className="max-w-[min(92vw,40rem)] px-4 py-1 text-sm font-semibold text-ink-muted text-balance">
+      {/* Fixed-height slot: the prompt fades in place and can wrap to two
+          lines without ever changing the bar's height (which would reflow
+          the whole board). */}
+      <div className="mt-2 flex h-10 items-start justify-center">
+        <AnimatePresence>
+          {promptText && (
+            <motion.p
+              key="prompt-text"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="max-w-[min(92vw,40rem)] px-4 text-center text-sm font-semibold text-ink-muted text-balance"
+            >
               {promptText}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.p>
+          )}
+        </AnimatePresence>
+      </div>
 
-      {/* Countdown for the active timed peek. Pure CSS-driven animation keyed
-          by deadline: no per-frame re-renders. */}
-      <AnimatePresence>
-        {timedIndicator && remainingMs > 0 && (
-          <motion.div
-            key={timedIndicator.expireAt}
-            className="mt-2 h-0.5 w-48 max-w-[60vw] overflow-hidden rounded-full bg-hairline"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
+      {/* Countdown for the active timed window. Pure CSS-driven animation
+          keyed by deadline: no per-frame re-renders. Fixed-height slot for
+          the same no-reflow reason. */}
+      <div className="mt-1 flex h-1 w-full items-center justify-center">
+        <AnimatePresence>
+          {timedIndicator && remainingMs > 0 && (
             <motion.div
-              className="h-full rounded-full bg-accent"
-              initial={{
-                width: `${(remainingMs / timedIndicator.durationMs) * 100}%`,
-              }}
-              animate={{ width: "0%" }}
-              transition={{ duration: remainingMs / 1000, ease: "linear" }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+              key={timedIndicator.expireAt}
+              className="h-0.5 w-48 max-w-[60vw] overflow-hidden rounded-full bg-hairline"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="h-full rounded-full bg-accent"
+                initial={{
+                  width: `${(remainingMs / timedIndicator.durationMs) * 100}%`,
+                }}
+                animate={{ width: "0%" }}
+                transition={{ duration: remainingMs / 1000, ease: "linear" }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 };
