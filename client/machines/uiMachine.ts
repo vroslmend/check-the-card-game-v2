@@ -826,7 +826,10 @@ export const uiMachine = setup({
           ],
         },
         lobby: {
-          entry: "log_ENTER_LOBBY",
+          // dismissModal: belt-and-braces — GameUI pins the view to the join
+          // modal whenever context.modal is set, so a stale modal must never
+          // survive into the lobby.
+          entry: ["log_ENTER_LOBBY", "dismissModal"],
           tags: ["lobby", "playing"],
           on: {
             // Manual "refresh" from the lobby re-runs the rejoin handshake to
@@ -1032,6 +1035,19 @@ export const uiMachine = setup({
         },
         joiningGame: {
           tags: ["loading"],
+          // The server broadcasts the post-join state BEFORE the join ack
+          // reaches this client (the machine's broadcast is emitted
+          // synchronously inside the join send). The inGame-level handler
+          // for this event targets .routing, which would cancel this invoke
+          // and discard the ack — _SESSION_ESTABLISHED (persistSession +
+          // dismissModal) would never run and the join modal never leaves
+          // the screen. Store the state here without transitioning; the ack
+          // then completes the session and routes.
+          on: {
+            CLIENT_GAME_STATE_UPDATED: {
+              actions: ["setCurrentGameState", "syncAbilityContext"],
+            },
+          },
           invoke: {
             src: "joinGame",
             input: ({ event }) => {
