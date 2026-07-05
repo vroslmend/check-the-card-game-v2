@@ -79,6 +79,9 @@ export interface UIMachineContext {
   isSidePanelOpen: boolean;
   reconnectionAttempts: number;
   hasPassedMatch: boolean;
+  /** serverNow − client Date.now(), from the latest broadcast. Server
+   *  timestamps convert to client-clock via `ts - serverClockOffset`. */
+  serverClockOffset: number;
   modal: { type: "rejoin" | "error"; title: string; message: string } | null;
 }
 
@@ -169,6 +172,18 @@ export const uiMachine = setup({
           prev.startTimestamp === next.startTimestamp &&
           prev.cardToMatch.id === next.cardToMatch.id;
         return sameOpportunity ? context.hasPassedMatch : false;
+      },
+      serverClockOffset: ({ context, event }) => {
+        const nextState =
+          event.type === "CLIENT_GAME_STATE_UPDATED"
+            ? event.gameState
+            : event.type === "_SESSION_ESTABLISHED" &&
+                "gameState" in event.response
+              ? event.response.gameState
+              : undefined;
+        return typeof nextState?.serverNow === "number"
+          ? nextState.serverNow - Date.now()
+          : context.serverClockOffset;
       },
       localPlayerId: ({ context, event }) => {
         if (context.localPlayerId) return context.localPlayerId;
@@ -623,6 +638,7 @@ export const uiMachine = setup({
     isSidePanelOpen: false,
     reconnectionAttempts: 0,
     hasPassedMatch: false,
+    serverClockOffset: 0,
     modal: null,
   }),
   initial: "initializing",
@@ -981,6 +997,10 @@ export const uiMachine = setup({
               actions: [
                 assign({
                   currentGameState: ({ event }) => event.output.gameState,
+                  serverClockOffset: ({ event, context }) =>
+                    typeof event.output.gameState?.serverNow === "number"
+                      ? event.output.gameState.serverNow - Date.now()
+                      : context.serverClockOffset,
                   reconnectionAttempts: 0,
                   hasPassedMatch: false,
                 }),

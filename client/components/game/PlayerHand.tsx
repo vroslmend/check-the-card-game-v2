@@ -39,6 +39,7 @@ const selectContext = (state: UIMachineSnapshot) => {
     selectedSwapTargets: ability?.selectedSwapTargets,
     publicPeek: state.context.currentGameState?.publicPeek ?? null,
     publicSwap: state.context.currentGameState?.publicSwap ?? null,
+    serverClockOffset: state.context.serverClockOffset,
     localPlayerId: state.context.localPlayerId,
     gameStage: state.context.currentGameState?.gameStage ?? null,
   };
@@ -60,17 +61,25 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     selectedSwapTargets,
     publicPeek,
     publicSwap,
+    serverClockOffset,
     localPlayerId,
     gameStage,
   } = useUISelector(selectContext);
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine)");
 
-  // publicSwap is a momentary flash: show the rings for 2.5s after the swap,
-  // then drop them without waiting for a server clear.
+  // publicSwap is a momentary flash: show the rings for a few seconds after
+  // the swap, then drop them without waiting for a server clear. occurredAt
+  // is a SERVER timestamp — compare on the server's clock (via the tracked
+  // offset), otherwise a client whose clock runs ahead computes remaining<=0
+  // and never shows the ring at all (the "sometimes it works" bug).
+  const SWAP_RING_VISIBLE_MS = 4000;
   const [expiredSwapAt, setExpiredSwapAt] = React.useState<number | null>(null);
   React.useEffect(() => {
     if (!publicSwap) return;
-    const remaining = publicSwap.occurredAt + 2500 - Date.now();
+    const remaining =
+      publicSwap.occurredAt +
+      SWAP_RING_VISIBLE_MS -
+      (Date.now() + serverClockOffset);
     if (remaining <= 0) {
       setExpiredSwapAt(publicSwap.occurredAt);
       return;
@@ -80,7 +89,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
       remaining,
     );
     return () => clearTimeout(t);
-  }, [publicSwap]);
+  }, [publicSwap, serverClockOffset]);
   const swapIndicatorLive =
     !!publicSwap && expiredSwapAt !== publicSwap.occurredAt;
 

@@ -160,6 +160,13 @@ export interface ClientCheckGameState {
   turnDeadline: number | null;
   /** Length of a full turn-timer window, for rendering countdowns. */
   turnTimerMs: number;
+  /**
+   * Server wall-clock at redaction time. All absolute timestamps in this
+   * state (turnDeadline, matchingOpportunity.startTimestamp,
+   * publicSwap.occurredAt, publicPeek.startedAt) are on the server's clock;
+   * clients derive an offset from this field instead of trusting Date.now().
+   */
+  serverNow: number;
 }
 
 // ================================================================================================

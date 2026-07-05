@@ -127,6 +127,7 @@ export const generatePlayerView = (
     publicSwap: fullGameContext.publicSwap,
     turnDeadline: fullGameContext.turnDeadline,
     turnTimerMs: fullGameContext.turnTimerMs,
+    serverNow: Date.now(),
   };
 
   logger.debug(
