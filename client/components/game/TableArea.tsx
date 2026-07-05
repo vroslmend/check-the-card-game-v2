@@ -16,6 +16,7 @@ import {
 import { VisualCardStack } from "../cards/VisualCardStack";
 import { AnimatePresence, motion } from "framer-motion";
 import { PlayingCard } from "../cards/PlayingCard";
+import { CardFlight } from "../cards/CardFlight";
 import { cardTravelTransition } from "@/lib/card-motion";
 
 export interface TableAreaProps {
@@ -131,29 +132,25 @@ export const TableArea = ({
       {/* The drawn-card slot keeps its full size even while empty so the deck
           and discard piles don't shift sideways on every draw/discard. */}
       <div className="relative w-[min(8vh,15vw)] aspect-[5/7]">
-        <AnimatePresence>
-          {drawnCard && (
-            <motion.div
-              layoutId={drawnCard.id}
-              initial={{ opacity: 0, scale: 0.5, y: -50 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.5, y: 50 }}
-              transition={{
-                type: "spring",
-                stiffness: 400,
-                damping: 30,
-                ...cardTravelTransition,
-              }}
-              className="absolute inset-0 z-10"
-            >
-              <PlayingCard
-                card={"rank" in drawnCard ? (drawnCard as Card) : undefined}
-                faceDown={"facedown" in drawnCard}
-                className="w-full h-full"
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Single-owner layoutId handoff — no entrance/exit poses here. On
+            mount the card flies from the pile top that unmounted in the same
+            commit; on unmount the hand cell or discard top picks the layoutId
+            up and flies from this slot. Poses on layoutId elements
+            double-animate against the shared-layout crossfade (the old
+            draw/place flicker). */}
+        {drawnCard && (
+          <CardFlight
+            key={drawnCard.id}
+            layoutId={drawnCard.id}
+            className="absolute inset-0 z-10"
+          >
+            <PlayingCard
+              card={"rank" in drawnCard ? (drawnCard as Card) : undefined}
+              faceDown={"facedown" in drawnCard}
+              className="w-full h-full"
+            />
+          </CardFlight>
+        )}
         <AnimatePresence>
           {drawnCard && drawnByName && (
             <motion.div

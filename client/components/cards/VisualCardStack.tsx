@@ -4,7 +4,7 @@ import React from "react";
 import { type Card, PublicCard } from "shared-types";
 import { PlayingCard } from "./PlayingCard";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useDevice } from "@/context/DeviceContext";
 import { cardTravelTransition } from "@/lib/card-motion";
 import { Lock } from "lucide-react";
@@ -66,39 +66,38 @@ export const VisualCardStack = ({
             )}
           </div>
         )}
-        <AnimatePresence>
-          {hasCards && topCard ? (
-            <motion.div
-              layoutId={topCard.id}
-              key={topCard.id}
-              className="absolute inset-0 z-10"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.2, ...cardTravelTransition }}
-            >
-              {faceDown ? (
-                // The stock pile shows its count on the top card's back.
-                <PlayingCard
-                  faceDown
-                  backCount={count}
-                  className="h-full w-full"
-                />
-              ) : "facedown" in topCard ? (
-                <PlayingCard faceDown className="h-full w-full" />
-              ) : (
-                <PlayingCard card={topCard} className="h-full w-full" />
-              )}
-            </motion.div>
-          ) : (
-            <motion.div
-              className="relative z-10 h-full w-full rounded-card border border-hairline bg-ink/[0.04]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            />
-          )}
-        </AnimatePresence>
+        {/* No enter/exit poses on the layoutId element: a departing top card
+            unmounts instantly (the static under-card keeps the pile visually
+            whole — that is its job) and its layoutId is picked up by the
+            drawn slot / hand in the same commit for a clean flight; a landing
+            card flies in from wherever its layoutId last was. */}
+        {hasCards && topCard ? (
+          <motion.div
+            layoutId={topCard.id}
+            key={topCard.id}
+            className="absolute inset-0 z-10"
+            transition={cardTravelTransition}
+          >
+            {faceDown ? (
+              // The stock pile shows its count on the top card's back.
+              <PlayingCard
+                faceDown
+                backCount={count}
+                className="h-full w-full"
+              />
+            ) : "facedown" in topCard ? (
+              <PlayingCard faceDown className="h-full w-full" />
+            ) : (
+              <PlayingCard card={topCard} className="h-full w-full" />
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            className="relative z-10 h-full w-full rounded-card border border-hairline bg-ink/[0.04]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          />
+        )}
         {isSealed && (
           <div className="absolute inset-0 z-20 flex items-center justify-center rounded-card bg-ink/35">
             <Lock className="h-[26%] w-[26%] text-accent-ink" strokeWidth={2.5} />
