@@ -36,6 +36,13 @@ const socketSessionMap = new Map<
 
 const MAX_CHAT_MESSAGE_LENGTH = 500;
 const ABANDONED_GAME_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+// How long a disconnected socket's session entry survives. Must cover the
+// connectionStateRecovery window (2 min): a recovered socket returns with the
+// SAME socket id and must still find its session, or every action it sends is
+// dropped ("socket without a session"). Stale entries for sockets that never
+// return are deleted after this delay; registerSocketSession also sweeps a
+// player's old entries whenever they rejoin on a new socket.
+const SESSION_RETENTION_MS = 2 * 60 * 1000 + 30_000;
 
 // Only client-originated player actions may be forwarded into a game machine.
 // Everything else (PLAYER_RECONNECTED, PLAYER_JOIN_REQUEST, timer events, ...)
@@ -156,6 +163,31 @@ io.on("connection", (socket: Socket) => {
       }
     });
   };
+
+  // A socket restored by connection-state recovery keeps its id (and, with
+  // R5.1b, its retained session) — but the machine flagged the player
+  // disconnected when the transport dropped. Heal it server-side right away
+  // instead of waiting for the client's ATTEMPT_REJOIN round-trip.
+  if ((socket as { recovered?: boolean }).recovered) {
+    const recoveredSession = socketSessionMap.get(socket.id);
+    if (recoveredSession) {
+      const gameActor = activeGameMachines.get(recoveredSession.gameId);
+      if (
+        gameActor?.getSnapshot().context.players[recoveredSession.playerId]
+      ) {
+        logger.info(
+          { socketId: socket.id, session: recoveredSession },
+          "Recovered socket — restoring player connection",
+        );
+        gameActor.send({
+          type: "PLAYER_RECONNECTED",
+          playerId: recoveredSession.playerId,
+          newSocketId: socket.id,
+        });
+        broadcastGameState(recoveredSession.gameId, gameActor);
+      }
+    }
+  }
 
   socket.on(
     SocketEventName.CREATE_GAME,
@@ -547,7 +579,15 @@ io.on("connection", (socket: Socket) => {
           playerId: session.playerId,
         });
       }
-      socketSessionMap.delete(socket.id);
+      // Deleting immediately would orphan a connection-state-recovered
+      // socket (same id, session gone). Keep the entry for the recovery
+      // window; drop it later only if this socket never came back.
+      setTimeout(() => {
+        const current = socketSessionMap.get(socket.id);
+        if (current === session && !io.sockets.sockets.has(socket.id)) {
+          socketSessionMap.delete(socket.id);
+        }
+      }, SESSION_RETENTION_MS).unref();
     }
   });
 });

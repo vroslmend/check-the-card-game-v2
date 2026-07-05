@@ -49,8 +49,10 @@ const MATCHING_STAGE_DURATION_MS = parseInt(
 );
 const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || "4", 10);
 const CARDS_PER_PLAYER = parseInt(process.env.CARDS_PER_PLAYER || "4", 10);
+// 120s: phone screen-locks routinely exceed 30s, and the socket layer's
+// connection-state recovery window is 2 minutes — forfeit only after that.
 const RECONNECT_TIMEOUT_MS = parseInt(
-  process.env.RECONNECT_TIMEOUT_MS || "30000",
+  process.env.RECONNECT_TIMEOUT_MS || "120000",
   10,
 );
 const LOBBY_DISCONNECT_TIMEOUT_MS = parseInt(

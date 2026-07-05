@@ -946,13 +946,20 @@ export const uiMachine = setup({
           on: {
             CONNECT: [
               {
+                // No session to rejoin with (e.g. the join prompt) — just
+                // resume routing instead of invoking a doomed rejoin.
                 target: "routing",
-                guard: ({ event }) =>
-                  event.type === "CONNECT" &&
-                  "recovered" in event &&
-                  event.recovered === true,
+                guard: ({ context }) => !context.localPlayerId,
                 actions: "resetReconnectionAttempts",
               },
+              // Always re-run the rejoin handshake — even when socket.io
+              // connection-state recovery succeeded (recovered === true).
+              // The server deletes the socket session on disconnect and marks
+              // the player disconnected; a recovered socket that skips
+              // ATTEMPT_REJOIN has no server-side session, so every action it
+              // sends is silently dropped and broadcasts skip it — the exact
+              // "joined back but frozen board" hardstuck. Rejoining is
+              // idempotent and cheap.
               { target: "reconnecting" },
             ],
             RETRY_REJOIN: { target: "reconnecting" },
