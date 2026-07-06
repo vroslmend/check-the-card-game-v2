@@ -296,12 +296,13 @@ const baseTurnStateNode = {
     [TurnPhase.DISCARD]: {
       entry: [
         "log_ENTER_TURN_DISCARD",
-        // Deliberately no turnDeadline reassign: draw + discard share the
-        // single deadline set at DRAW entry, so an idle player can't burn a
-        // full timer window per segment. When it has already expired, the
-        // turnTimer delay clamp (min 1s) rushes the auto-resolve through.
+        // Fresh deadline: drawing was an action, so the decide window gets
+        // its own full budget (inactivity model — acting resets the clock).
+        // The turnTimer delay is scheduled after entry actions run, so the
+        // auto-resolve re-arms from this new deadline.
         assign(() => ({
           currentTurnSegment: TurnPhase.DISCARD,
+          turnDeadline: Date.now() + TURN_TIMER_MS,
         })),
         "broadcastGameState",
       ],
@@ -1744,10 +1745,10 @@ export const gameMachine = setup({
       ),
   },
   delays: {
-    // Time left until the current turn deadline. States that own a fresh
-    // window (DRAW at turn start, each ability, INITIAL_PEEK) assign
-    // turnDeadline in their entry actions, which run before this delay is
-    // scheduled; DISCARD inherits the DRAW deadline. Clamped so an
+    // Time left until the current turn deadline. Every decision window
+    // (DRAW, DISCARD, each ability, INITIAL_PEEK) assigns its own fresh
+    // turnDeadline in its entry actions, which run before this delay is
+    // scheduled — acting resets the clock (inactivity model). Clamped so an
     // already-expired deadline still auto-resolves (after 1s) rather than
     // firing at 0/negative, and can never exceed a full window.
     turnTimer: ({ context }) => {
