@@ -136,6 +136,10 @@ export const io = new SocketIOServer<
     maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes buffer
     skipMiddlewares: true, // keep auth cost low during recovery
   },
+  // Game-state broadcasts are repetitive JSON that deflates 5-10×; slow
+  // client links are the binding constraint, not server CPU. Frames under
+  // 1 KB skip compression.
+  perMessageDeflate: { threshold: 1024 },
 });
 
 io.on("connection", (socket: Socket) => {
