@@ -61,6 +61,7 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
       (currentGameState?.discardPileSize ?? 0) > 0 &&
       !isSpecialCard,
     canDiscardDrawnCard: !!canDiscardDrawnCard,
+    matchWindowOpen: !!currentGameState?.matchingOpportunity,
   };
 };
 
@@ -79,6 +80,7 @@ export const TableArea = ({
     canDrawFromDeck,
     canDrawFromDiscard,
     canDiscardDrawnCard,
+    matchWindowOpen,
   } = useUISelector(selectTableAreaProps);
 
   const handleDeckClick = () => {
@@ -159,6 +161,7 @@ export const TableArea = ({
           topCard={topDiscardCard}
           secondCard={secondDiscardCard}
           isSealed={discardPileIsSealed}
+          isMatchTarget={matchWindowOpen}
           canInteract={canDrawFromDiscard || canDiscardDrawnCard}
           onClick={handleDiscardClick}
           className="w-[min(8vh,15vw)]"

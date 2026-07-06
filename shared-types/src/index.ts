@@ -294,6 +294,7 @@ export interface RichGameLogMessage {
     | "system-message"
     | "error"
     | "ability"
+    | "penalty"
   )[];
   payload?: Record<string, unknown>;
   actor?: {

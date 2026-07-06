@@ -1546,7 +1546,10 @@ export const gameMachine = setup({
         createLogEntry(context.gameId, {
           message: logMessageText,
           type: "public",
-          tags: ["player-action", "game-event"],
+          // "penalty" + actor drive the client's PENALTY. stamp (and keep
+          // the event off the toast rail — one announcement surface).
+          tags: ["player-action", "game-event", "penalty"],
+          actor: { id: playerId, name: playerName },
         }),
       ];
       if (disqualified) {

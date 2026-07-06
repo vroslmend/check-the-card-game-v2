@@ -33,7 +33,9 @@ export const GameEventToasts = () => {
       if (
         entry.type === "public" &&
         entry.tags.includes("game-event") &&
-        !entry.tags.includes("ability")
+        !entry.tags.includes("ability") &&
+        // Penalties get the center PENALTY. stamp — not a toast as well.
+        !entry.tags.includes("penalty")
       ) {
         toast(entry.message, { duration: 4000 });
       }

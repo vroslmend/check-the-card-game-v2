@@ -6,7 +6,7 @@ import { PlayingCard } from "./PlayingCard";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { cardTravelTransition } from "@/lib/card-motion";
-import { Lock } from "lucide-react";
+import { Equal, Lock } from "lucide-react";
 
 interface VisualCardStackProps {
   title: string;
@@ -18,6 +18,8 @@ interface VisualCardStackProps {
   canInteract?: boolean;
   onClick?: () => void;
   isSealed?: boolean;
+  /** A matching window is open on this pile's top card. */
+  isMatchTarget?: boolean;
   className?: string;
 }
 
@@ -30,6 +32,7 @@ export const VisualCardStack = ({
   canInteract = false,
   onClick,
   isSealed = false,
+  isMatchTarget = false,
   className,
 }: VisualCardStackProps) => {
   const hasCards = count > 0;
@@ -108,6 +111,19 @@ export const VisualCardStack = ({
             className="absolute -top-2 -right-2 z-20 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
           >
             <Lock className="h-3 w-3" strokeWidth={2.5} />
+          </span>
+        )}
+        {/* Matching window open: a corner chip in the SlotBadge vocabulary
+            (the MATCH? center splash it replaces took over the scene to say
+            something every player already knows). Top-LEFT — a discarded
+            K/Q/J opens a window AND seals the pile, and the seal owns the
+            right corner. */}
+        {isMatchTarget && (
+          <span
+            aria-label="Matching window open"
+            className="absolute -top-2 -left-2 z-20 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
+          >
+            <Equal className="h-3 w-3" strokeWidth={2.5} />
           </span>
         )}
       </motion.div>
