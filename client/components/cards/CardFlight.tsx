@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import {
   cardTravelTransition,
   CARD_LIFT_SCALE,
@@ -21,13 +21,33 @@ type CardFlightProps = ComponentProps<typeof motion.div>;
  */
 export function CardFlight({ style, transition, ...rest }: CardFlightProps) {
   const [inFlight, setInFlight] = useState(false);
+  // Backstop: Gecko occasionally drops onLayoutAnimationComplete when a
+  // flight is interrupted, which left cards stuck at the lift pose. Clear
+  // the lift shortly after the 0.65s travel tween even if the callback
+  // never arrives.
+  const clearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (clearRef.current) clearTimeout(clearRef.current);
+    },
+    [],
+  );
+  const liftOn = () => {
+    if (clearRef.current) clearTimeout(clearRef.current);
+    setInFlight(true);
+    clearRef.current = setTimeout(() => setInFlight(false), 900);
+  };
+  const liftOff = () => {
+    if (clearRef.current) clearTimeout(clearRef.current);
+    setInFlight(false);
+  };
   return (
     <motion.div
       {...rest}
       style={{ ...style, zIndex: inFlight ? 40 : undefined }}
       transition={{ ...cardTravelTransition, ...transition }}
-      onLayoutAnimationStart={() => setInFlight(true)}
-      onLayoutAnimationComplete={() => setInFlight(false)}
+      onLayoutAnimationStart={liftOn}
+      onLayoutAnimationComplete={liftOff}
       animate={{
         scale: inFlight ? CARD_LIFT_SCALE : 1,
         boxShadow: inFlight ? CARD_LIFT_SHADOW : CARD_REST_SHADOW,

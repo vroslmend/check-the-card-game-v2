@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Action } from "./ActionBarComponent";
 import { cn } from "@/lib/utils";
-import { useDevice } from "@/context/DeviceContext";
 import {
   Tooltip,
   TooltipContent,
@@ -16,9 +15,6 @@ interface ActionButtonProps {
 }
 
 const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
-  // whileHover on touch devices sticks after a tap (pointerenter without a
-  // matching leave), leaving the button scaled up. Hover is mouse-only.
-  const { isTouchDevice } = useDevice();
   const {
     label,
     variant = "secondary",
@@ -104,12 +100,12 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
       <Tooltip>
         <TooltipTrigger asChild>
           <motion.button
-            whileHover={
-              disabled || isTouchDevice ? undefined : { scale: 1.1 }
-            }
-            whileTap={{ scale: disabled ? 1 : 0.9 }}
+            // CSS-only press/hover feedback: a whileTap pose can strand at
+            // scale 0.9 when the pointer sequence breaks (Gecko), and CSS
+            // pseudo-classes cannot. Tailwind v4 gates hover: to
+            // hover-capable devices, covering the old isTouchDevice check.
             className={cn(
-              "relative flex h-10 shrink-0 items-center justify-center overflow-hidden rounded-full transition-colors",
+              "relative flex h-10 shrink-0 items-center justify-center overflow-hidden rounded-full transition enabled:hover:scale-110 enabled:active:scale-90",
               icon ? "w-10" : "px-4",
               // One accent-filled primary; secondary label = hairline-outline
               // pill, secondary icon = bare ink-muted button.

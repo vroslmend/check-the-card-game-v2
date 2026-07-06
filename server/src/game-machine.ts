@@ -271,12 +271,24 @@ const baseTurnStateNode = {
           ],
         },
         {
-          target: "#game.error",
+          // Rules 11.A: the draw pile is exhausted — rebuild it from the
+          // discard pile (minus its top card) inline and play on. This is a
+          // normal game event, not an error: the old detour through
+          // #game.error tried to come back via #game.history, and a
+          // root-level history node never records anything (its parent, the
+          // machine root, never exits), so the "resume" silently landed in
+          // WAITING_FOR_PLAYERS and hard-locked the game. Targetless: the
+          // reshuffle refills the deck, the guard turns false, and DRAW
+          // continues with the deadline its entry already armed.
+          guard: ({ context }: { context: GameContext }) =>
+            context.deck.length === 0 && context.discardPile.length > 1,
+          actions: ["reshuffleDiscardIntoDeck", "broadcastGameState"],
+        },
+        {
+          // Rules 11.B: no cards anywhere to rebuild a deck — the round ends
+          // and everyone scores their current hand.
+          target: `#game.${GameStage.SCORING}`,
           guard: "isDeckEmpty",
-          actions: {
-            type: "enterErrorState",
-            params: { errorType: "DECK_EMPTY" as const },
-          },
         },
       ],
     },
@@ -284,12 +296,13 @@ const baseTurnStateNode = {
     [TurnPhase.DISCARD]: {
       entry: [
         "log_ENTER_TURN_DISCARD",
-        // Deliberately no turnDeadline reassign: draw + discard share the
-        // single deadline set at DRAW entry, so an idle player can't burn a
-        // full timer window per segment. When it has already expired, the
-        // turnTimer delay clamp (min 1s) rushes the auto-resolve through.
+        // Fresh deadline: drawing was an action, so the decide window gets
+        // its own full budget (inactivity model — acting resets the clock).
+        // The turnTimer delay is scheduled after entry actions run, so the
+        // auto-resolve re-arms from this new deadline.
         assign(() => ({
           currentTurnSegment: TurnPhase.DISCARD,
+          turnDeadline: Date.now() + TURN_TIMER_MS,
         })),
         "broadcastGameState",
       ],
@@ -1381,19 +1394,18 @@ export const gameMachine = setup({
           }
         : {};
     }),
+    // Deck exhaustion is handled inline in DRAW (Rules 11.A/11.B), so the
+    // pause-and-recover state only ever handles a disconnected current player.
     enterErrorState: assign(
       (
         _,
         params: {
-          errorType: "DECK_EMPTY" | "NETWORK_ERROR";
+          errorType: "NETWORK_ERROR";
           playerId?: PlayerId;
         },
       ) => ({
         errorState: {
-          message:
-            params.errorType === "DECK_EMPTY"
-              ? "The deck is empty and cannot be drawn from."
-              : `Player ${params.playerId} has disconnected.`,
+          message: `Player ${params.playerId} has disconnected.`,
           errorType: params.errorType,
           affectedPlayerId: params.playerId,
         },
@@ -1733,10 +1745,10 @@ export const gameMachine = setup({
       ),
   },
   delays: {
-    // Time left until the current turn deadline. States that own a fresh
-    // window (DRAW at turn start, each ability, INITIAL_PEEK) assign
-    // turnDeadline in their entry actions, which run before this delay is
-    // scheduled; DISCARD inherits the DRAW deadline. Clamped so an
+    // Time left until the current turn deadline. Every decision window
+    // (DRAW, DISCARD, each ability, INITIAL_PEEK) assigns its own fresh
+    // turnDeadline in its entry actions, which run before this delay is
+    // scheduled — acting resets the clock (inactivity model). Clamped so an
     // already-expired deadline still auto-resolves (after 1s) rather than
     // firing at 0/negative, and can never exceed a full window.
     turnTimer: ({ context }) => {
@@ -2157,10 +2169,6 @@ export const gameMachine = setup({
         },
       },
     },
-    history: {
-      type: "history",
-      history: "deep",
-    },
     error: {
       id: "game.error",
       entry: "log_ENTER_ERROR",
@@ -2184,40 +2192,111 @@ export const gameMachine = setup({
       },
       states: {
         recovering: {
-          always: [
-            {
-              // Rules 11.A: reshuffle the discard pile (minus its top card)
-              // into a fresh draw pile.
-              guard: ({ context }) =>
-                context.errorState?.errorType === "DECK_EMPTY" &&
-                context.discardPile.length > 1,
-              actions: [
-                "reshuffleDiscardIntoDeck",
-                "broadcastGameState",
-              ] as const,
-              target: "#game.history",
-            },
-            {
-              // Rules 11.B: no cards anywhere to reshuffle — the round ends
-              // immediately and everyone scores their current hand.
-              guard: ({ context }) =>
-                context.errorState?.errorType === "DECK_EMPTY",
-              actions: "clearErrorState",
-              target: `#game.${GameStage.SCORING}`,
-            },
-          ],
           invoke: { src: "reconnectTimer", onDone: "failedRecovery" },
           on: {
-            PLAYER_RECONNECTED: {
-              target: "#game.history",
-              actions: [
-                "markPlayerAsConnected",
-                "clearErrorState",
-                "broadcastGameState",
-              ] as const,
-              guard: ({ context, event }) =>
-                context.errorState?.affectedPlayerId === event.playerId,
-            },
+            // Resume exactly where the game paused. The old target
+            // (#game.history) could never work: a history node records its
+            // value only when its PARENT exits, and this one's parent was
+            // the machine root — which never exits — so its history was
+            // always empty and the "resume" fell through to the root's
+            // initial state (WAITING_FOR_PLAYERS), hard-locking the game.
+            // gameStage + currentTurnSegment identify the pause point; each
+            // target's entry re-arms its own deadline/timers, and matching
+            // deliberately reopens a fresh window.
+            PLAYER_RECONNECTED: [
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.gameStage === GameStage.FINAL_TURNS &&
+                  context.currentTurnSegment === TurnPhase.DISCARD,
+                target: "#FINAL_TURNS.turn.DISCARD",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.gameStage === GameStage.FINAL_TURNS &&
+                  context.currentTurnSegment === TurnPhase.MATCHING,
+                target: "#FINAL_TURNS.turn.matching",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.gameStage === GameStage.FINAL_TURNS &&
+                  context.currentTurnSegment === TurnPhase.ABILITY,
+                target: "#FINAL_TURNS.turn.ability",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.gameStage === GameStage.FINAL_TURNS,
+                target: `#${GameStage.FINAL_TURNS}`,
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.currentTurnSegment === TurnPhase.DISCARD,
+                target: "#game.PLAYING.turn.DISCARD",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.currentTurnSegment === TurnPhase.MATCHING,
+                target: "#game.PLAYING.turn.matching",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.currentTurnSegment === TurnPhase.ABILITY,
+                target: "#game.PLAYING.turn.ability",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                // DRAW pause (or anything unexpected): a fresh turn entry for
+                // the same current player re-arms the draw window.
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId,
+                target: `#game.${GameStage.PLAYING}`,
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+            ],
           },
         },
         failedRecovery: {

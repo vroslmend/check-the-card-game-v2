@@ -14,15 +14,13 @@ import {
   CardRank,
 } from "shared-types";
 import { VisualCardStack } from "../cards/VisualCardStack";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
 import { cardTravelTransition } from "@/lib/card-motion";
 
 export interface TableAreaProps {
   drawnCard?: PublicCard;
-  /** Name of the drawn card's holder when it isn't the local player. */
-  drawnByName?: string;
   dealingDeck?: PublicCard[];
 }
 
@@ -67,7 +65,6 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
 
 export const TableArea = ({
   drawnCard,
-  drawnByName,
   dealingDeck = [],
 }: TableAreaProps) => {
   const { send } = useUIActorRef();
@@ -151,18 +148,6 @@ export const TableArea = ({
             />
           </CardFlight>
         )}
-        <AnimatePresence>
-          {drawnCard && drawnByName && (
-            <motion.div
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="absolute -bottom-7 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full border border-hairline bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-ink-muted"
-            >
-              {drawnByName} is deciding…
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       <div className="flex justify-start w-full justify-self-start">

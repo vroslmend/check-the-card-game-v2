@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { Eye, ArrowLeftRight, type LucideIcon } from "lucide-react";
 
 /** Corner badge on a ringed card slot: surface chip, ink glyph. The icon
@@ -65,8 +64,6 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     localPlayerId,
     gameStage,
   } = useUISelector(selectContext);
-  const canHover = useMediaQuery("(hover: hover) and (pointer: fine)");
-
   // publicSwap is a momentary flash: show the rings for a few seconds after
   // the swap, then drop them without waiting for a server clear. occurredAt
   // is a SERVER timestamp — compare on the server's clock (via the tracked
@@ -175,6 +172,10 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             key={card.id}
             className="relative w-[min(8vh,15vw)] aspect-[5/7]"
           >
+            {/* No whileHover here: this is the layoutId projection node, and
+                a hover pose on it fights the flight projection for the same
+                transform (the Gecko skip/stuck-pose class). The brightness
+                cue in the classes is the hover feedback. */}
             <CardFlight
               key={card.id}
               layoutId={card.id}
@@ -185,11 +186,6 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               )}
               data-interactive={canInteract && !isLocked}
               onClick={() => canInteract && !isLocked && onCardClick?.(index)}
-              whileHover={
-                canInteract && !isLocked && canHover
-                  ? { y: -8, scale: 1.05 }
-                  : {}
-              }
             >
               <AnimatePresence>
                 {/* Your own selection — accent ring; the badge icon (eye vs

@@ -218,12 +218,6 @@ export function GameBoard() {
             <div className="flex items-center justify-center @container">
               <TableArea
                 drawnCard={drawnCardData}
-                drawnByName={
-                  playerWithPendingCard &&
-                  playerWithPendingCard.id !== localPlayerId
-                    ? playerWithPendingCard.name
-                    : undefined
-                }
                 dealingDeck={dealingDeck}
               />
             </div>
