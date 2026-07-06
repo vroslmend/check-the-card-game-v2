@@ -5,6 +5,13 @@ import { motion, MotionConfig, type Variants } from "framer-motion";
 import { ArrowRight, ChevronLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import type { ReactNode } from "react";
+import {
+  AbilityTriptych,
+  CardValuesStrip,
+  LifoStack,
+  PileDiagram,
+  SetupPeekGrid,
+} from "./illustrations";
 
 // One quiet fade-up for every reveal. The variants carry no `ease`/`type`
 // fields; the transition sits on the element so a per-instance delay can
@@ -190,7 +197,7 @@ export default function RulesContent() {
             </p>
           </RuleSection>
 
-          <RuleSection meta={sec("card-values")}>
+          <RuleSection meta={sec("card-values")} figure={<CardValuesStrip />}>
             <p>
               Check! uses a standard 52-card deck, no jokers.{" "}
               <Term>Aces are worth −1</Term> — the only cards that subtract.
@@ -201,7 +208,7 @@ export default function RulesContent() {
             </p>
           </RuleSection>
 
-          <RuleSection meta={sec("the-table")}>
+          <RuleSection meta={sec("the-table")} figure={<PileDiagram showHand />}>
             <p>Three things live on the table:</p>
             <ul className="list-disc space-y-1.5 pl-5">
               <li>
@@ -220,7 +227,7 @@ export default function RulesContent() {
             </ul>
           </RuleSection>
 
-          <RuleSection meta={sec("setup")}>
+          <RuleSection meta={sec("setup")} figure={<SetupPeekGrid />}>
             <p>
               Players gather in a lobby and the game master starts the game —{" "}
               <Term>the moment it starts, the lobby locks</Term>; nobody else
@@ -286,7 +293,7 @@ export default function RulesContent() {
             </div>
           </RuleSection>
 
-          <RuleSection meta={sec("matching")}>
+          <RuleSection meta={sec("matching")} figure={<PileDiagram sealed />}>
             <p>
               The instant <Term>any</Term> card lands face up on the discard
               pile, a short real-time window opens — about{" "}
@@ -323,7 +330,15 @@ export default function RulesContent() {
             </p>
           </RuleSection>
 
-          <RuleSection meta={sec("special-cards")}>
+          <RuleSection
+            meta={sec("special-cards")}
+            figure={
+              <div className="space-y-4">
+                <AbilityTriptych />
+                <LifoStack />
+              </div>
+            }
+          >
             <p>
               Discarding a King, Queen, or Jack — on your turn or as a match —
               triggers its ability:
