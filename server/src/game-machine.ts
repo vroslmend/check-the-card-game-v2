@@ -165,6 +165,18 @@ type EmittedEvent =
       };
     };
 
+// Log copy formatter: CardRank's wire values are single characters ("T",
+// "K"), which read as debug output in player-facing sentences.
+const RANK_LOG_NAMES: Partial<Record<CardRank, string>> = {
+  [CardRank.Ace]: "Ace",
+  [CardRank.Ten]: "10",
+  [CardRank.Jack]: "Jack",
+  [CardRank.Queen]: "Queen",
+  [CardRank.King]: "King",
+};
+const formatRankForLog = (rank: CardRank): string =>
+  RANK_LOG_NAMES[rank] ?? rank;
+
 interface DiscardLogicParams {
   discardPile: Card[];
   abilityStack: ServerActiveAbility[];
@@ -184,6 +196,8 @@ const applyDiscardLogic = ({
   playerId,
 }: DiscardLogicParams) => {
   const newAbilityStack = [...abilityStack];
+  const rankName = formatRankForLog(cardToDiscard.rank);
+  const article = /^(A|8)/.test(rankName) ? "an" : "a";
   const isSealed = abilityRanks.has(cardToDiscard.rank);
   if (isSealed) {
     const type: AbilityType =
@@ -209,7 +223,7 @@ const applyDiscardLogic = ({
     log: [
       ...log,
       createLogEntry(gameId, {
-        message: `${getPlayerNameForLog(playerId, players)} discarded a ${cardToDiscard.rank}.`,
+        message: `${getPlayerNameForLog(playerId, players)} discarded ${article} ${rankName}.`,
         type: "public",
         tags: ["player-action"],
       }),
@@ -1301,6 +1315,9 @@ export const gameMachine = setup({
         newAbilityStack = [...context.abilityStack, matcherAbility];
       }
 
+      const matchedRankName = formatRankForLog(cardFromHand.rank);
+      const matchedArticle = /^(A|8)/.test(matchedRankName) ? "an" : "a";
+
       return {
         players: newPlayers,
         discardPile: [...context.discardPile, cardFromHand],
@@ -1310,9 +1327,13 @@ export const gameMachine = setup({
         log: [
           ...context.log,
           createLogEntry(context.gameId, {
-            message: `${getPlayerNameForLog(playerId, context.players)} matched a ${cardFromHand.rank}.`,
+            message: `${getPlayerNameForLog(playerId, context.players)} matched ${matchedArticle} ${matchedRankName}.`,
             type: "public",
             tags: ["player-action", "game-event"],
+            actor: {
+              id: playerId,
+              name: getPlayerNameForLog(playerId, context.players),
+            },
           }),
         ],
         checkDetails: newCheckDetails,
