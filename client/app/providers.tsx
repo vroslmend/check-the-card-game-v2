@@ -59,7 +59,8 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
       actor.send({ type: "NEW_CHAT_MESSAGE", chatMessage: m });
     const pk = (d: { hand: any[] }) =>
       actor.send({ type: "INITIAL_PEEK_INFO", hand: d.hand });
-    const pr = (d: any) => actor.send({ type: "ABILITY_PEEK_RESULT", ...d });
+    const pr = (d: { results: any[] }) =>
+      actor.send({ type: "ABILITY_PEEK_RESULT", results: d.results });
     const er = (e: { message: string }) =>
       actor.send({ type: "ERROR_RECEIVED", error: e.message });
     const ce = (err: any) =>

@@ -180,9 +180,14 @@ export interface ServerToClientEvents {
   [SocketEventName.SERVER_LOG_ENTRY]: (logMessage: RichGameLogMessage) => void;
   [SocketEventName.INITIAL_PEEK_INFO]: (data: { hand: Card[] }) => void;
   [SocketEventName.ABILITY_PEEK_RESULT]: (payload: {
-    card: Card;
-    playerId: PlayerId;
-    cardIndex: number;
+    /** Every card of one confirmed peek, in one message, so all its flips
+     *  start in the same client commit (per-card messages opened out of
+     *  sync under network jitter). */
+    results: Array<{
+      card: Card;
+      playerId: PlayerId;
+      cardIndex: number;
+    }>;
   }) => void;
   [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
   [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;

@@ -43,9 +43,7 @@ type ServerToClientEvents =
   | { type: "INITIAL_PEEK_INFO"; hand: Card[] }
   | {
       type: "ABILITY_PEEK_RESULT";
-      card: Card;
-      playerId: PlayerId;
-      cardIndex: number;
+      results: Array<{ card: Card; playerId: PlayerId; cardIndex: number }>;
     }
   | { type: "ERROR_RECEIVED"; error: string }
   | { type: "INITIAL_LOGS_RECEIVED"; logs: RichGameLogMessage[] };
@@ -375,31 +373,27 @@ export const uiMachine = setup({
     }),
     addPeekedCardToContext: enqueueActions(({ context, event, enqueue }) => {
       assertEvent(event, "ABILITY_PEEK_RESULT");
-      // One shared expiry per peek batch: a King peek arrives as one
-      // ABILITY_PEEK_RESULT event PER card, a few ms apart, and per-event
-      // Date.now() stamps gave the countdown bar two keys in a row — an
-      // extra remount. Cards of one batch reuse the first card's deadline.
-      const batchExpireAt =
-        context.visibleCards.find(
-          (c) =>
-            c.source === "ability" && !!c.expireAt && c.expireAt > Date.now(),
-        )?.expireAt ?? Date.now() + PEEK_ABILITY_DURATION_MS;
-      const newCard: PeekedCardInfo = {
-        playerId: event.playerId,
-        cardIndex: event.cardIndex,
-        card: event.card,
+      // A whole peek batch arrives as ONE event, so a single deadline stamp
+      // covers it (the old per-card events needed a find-the-batch dance to
+      // share one expiry, and their separate commits opened flips out of
+      // sync).
+      const batchExpireAt = Date.now() + PEEK_ABILITY_DURATION_MS;
+      const newCards: PeekedCardInfo[] = event.results.map((r) => ({
+        playerId: r.playerId,
+        cardIndex: r.cardIndex,
+        card: r.card,
         source: "ability",
         expireAt: batchExpireAt,
-      };
+      }));
       enqueue.assign({
         visibleCards: [
           ...context.visibleCards.filter(
             (c) =>
-              !(
-                c.playerId === event.playerId && c.cardIndex === event.cardIndex
+              !newCards.some(
+                (n) => n.playerId === c.playerId && n.cardIndex === c.cardIndex,
               ),
           ),
-          newCard,
+          ...newCards,
         ],
       });
       enqueue.raise(
