@@ -6,6 +6,7 @@ import {
   useUISelector,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
+import { play } from "@/lib/sounds";
 
 // An action is "in flight" from emit until the next server state lands; cap
 // the disable so a silently-rejected action (no broadcast) can't wedge the
@@ -57,7 +58,10 @@ const ActionBarComponent: React.FC = () => {
     if (revealAt === null) return;
     const wait = revealAt - Date.now();
     if (wait <= 0) return;
-    const t = setTimeout(forceTick, wait + 20);
+    const t = setTimeout(() => {
+      forceTick();
+      play("timerTail");
+    }, wait + 20);
     return () => clearTimeout(t);
   }, [revealAt]);
   const isPending =
