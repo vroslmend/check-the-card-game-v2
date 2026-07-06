@@ -368,13 +368,13 @@ function HomePage() {
       <main className="flex-1">
         <section
           ref={heroRef}
-          className="relative flex min-h-screen items-center justify-center"
+          className="relative flex min-h-[100svh] items-center justify-center"
         >
           <motion.div
             style={{ y: heroY }}
             className="container relative z-10 mx-auto px-4"
           >
-            <div className="grid min-h-screen items-center lg:grid-cols-2 text-center lg:text-left">
+            <div className="grid min-h-[100svh] items-center lg:grid-cols-2 text-center lg:text-left">
               <motion.div className="flex flex-col justify-center items-center lg:items-start space-y-12">
                 <motion.div
                   initial={{ opacity: 0, y: 60 }}
@@ -697,9 +697,43 @@ function HomePage() {
         <div ref={endOfPageRef} className="h-20" />
       </main>
 
+      <footer className="border-t border-hairline bg-surface-2 lg:hidden">
+        <div className="container mx-auto flex flex-col items-center gap-y-3 px-4 py-6 text-center text-sm font-normal text-ink-muted">
+          <div className="flex items-center gap-3">
+            <Spade className="h-5 w-5 text-ink-muted" />
+            <span className="text-lg font-bold text-ink">Check</span>
+          </div>
+          <span>© {new Date().getFullYear()} Check Card Game.</span>
+          <div className="flex items-center gap-2">
+            <span>Made by</span>
+            <Signature isInView={true} />
+          </div>
+          <div className="flex items-center justify-center gap-6">
+            <a
+              href="https://github.com/vroslmend"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-ink-muted transition-colors duration-300 hover:text-ink"
+            >
+              <span className="sr-only">GitHub</span>
+              <FaGithub className="h-5 w-5" />
+            </a>
+            <a
+              href="https://open.spotify.com/user/6tf81fs0qm2akdo4yt1wp1akw"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-ink-muted transition-colors duration-300 hover:text-ink"
+            >
+              <span className="sr-only">Spotify</span>
+              <FaSpotify className="h-5 w-5" />
+            </a>
+          </div>
+        </div>
+      </footer>
+
       <motion.footer
         style={{ y: footerY }}
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-hairline bg-surface-2"
+        className="fixed bottom-0 left-0 right-0 z-40 hidden border-t border-hairline bg-surface-2 lg:block"
       >
         <div className="container mx-auto grid grid-cols-1 items-center gap-y-4 px-4 py-4 text-center sm:grid-cols-3 sm:text-left">
           <div className="hidden sm:flex items-center gap-3 justify-self-start">
