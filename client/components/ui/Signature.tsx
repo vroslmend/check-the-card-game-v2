@@ -6,6 +6,7 @@ import {
   useTransform,
   useAnimation,
   useInView,
+  type Variants,
 } from "framer-motion";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -31,7 +32,7 @@ const svgVariants = {
   },
 };
 
-const pathVariants = {
+const pathVariants: Variants = {
   hidden: {
     pathLength: 0,
     opacity: 0,

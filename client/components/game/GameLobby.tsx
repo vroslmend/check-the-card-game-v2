@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   useUISelector,
   useUIActorRef,
@@ -52,7 +52,7 @@ const StatusIndicator = ({
   </motion.div>
 );
 
-const playerCardVariants = {
+const playerCardVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
     opacity: 1,
