@@ -123,10 +123,13 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             onPointerDown={onPointerDown}
             onPointerUp={onPointerUp}
             onPointerLeave={onPointerLeave}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            // No remount pose: buttons are keyed by label and every phase
+            // change swaps the whole set, so a mount fade dipped the entire
+            // bar to transparent on each action (worst on Gecko, where each
+            // spring churns compositor layers). Buttons appear in place; the
+            // row's layout spring still animates the resize. The old exit
+            // pose was dead code — no AnimatePresence wraps the list.
+            initial={false}
           >
             {buttonContent}
           </motion.button>
