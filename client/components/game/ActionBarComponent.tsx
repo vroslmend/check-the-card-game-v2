@@ -96,12 +96,16 @@ const ActionBarComponent: React.FC = () => {
       {/* Countdown for the active timed window. Pure CSS-driven animation
           keyed by deadline: no per-frame re-renders. Fixed-height slot for
           the same no-reflow reason. */}
-      <div className="mt-1 flex h-1 w-full items-center justify-center">
+      {/* Grid-stacked so a re-keyed bar and its exiting predecessor overlap
+          in one cell. As flex siblings they sat side by side during the
+          crossfade — the new bar mounted half a bar-width off-center and
+          snapped back when the exit finished (the "teleporting" bar). */}
+      <div className="mt-1 grid h-1 w-full items-center justify-items-center">
         <AnimatePresence>
           {timedIndicator && remainingMs > 0 && countdownRevealed && (
             <motion.div
               key={timedIndicator.expireAt}
-              className="h-0.5 w-48 max-w-[60vw] overflow-hidden rounded-full bg-hairline"
+              className="h-0.5 w-48 max-w-[60vw] overflow-hidden rounded-full bg-hairline [grid-area:1/1]"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
