@@ -92,6 +92,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       turnDeadline: null as number | null,
       turnTimerMs: 0,
       serverClockOffset: 0,
+      isSidePanelOpen: false,
+      hasModal: false,
     };
   }
 
@@ -148,6 +150,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     turnDeadline: currentGameState.turnDeadline,
     turnTimerMs: currentGameState.turnTimerMs,
     serverClockOffset: state.context.serverClockOffset,
+    isSidePanelOpen: state.context.isSidePanelOpen,
+    hasModal: !!state.context.modal,
   };
 };
 
@@ -183,28 +187,29 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
 
   const sendEvent = send;
 
+  // Event-free core so the keyboard path (hold Space) can drive the same
+  // hold the pointer does.
+  const beginCallCheckHold = useCallback(() => {
+    if (!props.isMyTurn) return;
+    setIsHoldingCallCheck(true);
+    setCallCheckProgress(0);
+
+    callCheckIntervalRef.current = setInterval(() => {
+      setCallCheckProgress((prev) => {
+        const newProgress = prev + 4;
+        if (newProgress >= 100) {
+          clearCallCheckTimers();
+          sendEvent({ type: PlayerActionType.CALL_CHECK });
+          return 100;
+        }
+        return newProgress;
+      });
+    }, 40);
+  }, [props.isMyTurn, sendEvent, clearCallCheckTimers]);
+
   const handleStartCallCheckHold = useCallback<
     React.PointerEventHandler<HTMLButtonElement>
-  >(
-    (e) => {
-      if (!props.isMyTurn) return;
-      setIsHoldingCallCheck(true);
-      setCallCheckProgress(0);
-
-      callCheckIntervalRef.current = setInterval(() => {
-        setCallCheckProgress((prev) => {
-          const newProgress = prev + 4;
-          if (newProgress >= 100) {
-            clearCallCheckTimers();
-            sendEvent({ type: PlayerActionType.CALL_CHECK });
-            return 100;
-          }
-          return newProgress;
-        });
-      }, 40);
-    },
-    [props.isMyTurn, sendEvent, clearCallCheckTimers],
-  );
+  >(() => beginCallCheckHold(), [beginCallCheckHold]);
 
   const handleEndCallCheckHold = useCallback<
     React.PointerEventHandler<HTMLButtonElement>
@@ -518,6 +523,125 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     }
     return null;
   }, [props]);
+
+  // Keyboard play: keys map onto the exact handlers the pointer UI uses, so
+  // eligibility rules stay single-sourced (an action you can't click, you
+  // can't key). Skipped while typing or while a modal is up.
+  useEffect(() => {
+    const isTyping = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      return (
+        !!el &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.isContentEditable)
+      );
+    };
+    const clickByLabel = (label: string) => {
+      const a = getActions().find((x) => x.label === label);
+      if (a && !a.disabled) a.onClick?.();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isTyping(e.target) || props.hasModal) return;
+      if (e.key === " ") {
+        // Hold-to-check: keydown starts the same hold the pointer path uses,
+        // keyup releases. preventDefault also stops a focused button from
+        // double-firing on space.
+        e.preventDefault();
+        if (e.repeat) return;
+        const offered = getActions().some(
+          (x) => x.label === "Hold to Check!" && !x.disabled,
+        );
+        if (offered) beginCallCheckHold();
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === "d") return clickByLabel("Draw from Deck");
+      if (key === "f") return clickByLabel("Draw from Discard");
+      if (key === "x") return clickByLabel("Discard Card");
+      if (key === "p") return clickByLabel("Pass Match");
+      if (key === "s") {
+        const a = getActions().find(
+          (x) => x.label.startsWith("Skip") && !x.disabled,
+        );
+        a?.onClick?.();
+        return;
+      }
+      if (e.key === "Enter") {
+        const a = getActions().find(
+          (x) => x.variant === "primary" && !x.disabled,
+        );
+        a?.onClick?.();
+        return;
+      }
+      if (key === "c") {
+        sendEvent({ type: "TOGGLE_SIDE_PANEL" });
+        return;
+      }
+      if (e.key === "Escape") {
+        if (matchAttempt) setMatchAttempt(null);
+        else if (props.isSidePanelOpen)
+          sendEvent({ type: "TOGGLE_SIDE_PANEL" });
+        return;
+      }
+      if (/^[1-8]$/.test(e.key)) {
+        const index = Number(e.key) - 1;
+        const hand = props.localPlayer?.hand;
+        if (!props.localPlayer || !hand || index >= hand.length) return;
+        // Same routing as clicking your own card: matching first, then
+        // ability targeting, then the discard-phase swap.
+        const canMatchNow =
+          !!props.matchingOpportunity &&
+          props.matchingOpportunity.remainingPlayerIDs.includes(
+            props.localPlayer.id,
+          ) &&
+          !props.hasPassedMatch;
+        if (canMatchNow) {
+          setMatchAttempt({ cardIndex: index });
+          return;
+        }
+        if (
+          props.abilityContext &&
+          props.isAbilityPlayer &&
+          props.isAbilitySelecting
+        ) {
+          sendEvent({
+            type: "PLAYER_SLOT_CLICKED_FOR_ABILITY",
+            playerId: props.localPlayer.id,
+            cardIndex: index,
+          });
+          return;
+        }
+        if (
+          props.isMyTurn &&
+          props.turnPhase === TurnPhase.DISCARD &&
+          props.localPlayer.pendingDrawnCard
+        ) {
+          sendEvent({
+            type: PlayerActionType.SWAP_AND_DISCARD,
+            payload: { handCardIndex: index },
+          });
+        }
+        return;
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === " ") clearCallCheckTimers();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [
+    getActions,
+    props,
+    matchAttempt,
+    beginCallCheckHold,
+    clearCallCheckTimers,
+    sendEvent,
+  ]);
 
   const contextValue = useMemo(
     () => ({

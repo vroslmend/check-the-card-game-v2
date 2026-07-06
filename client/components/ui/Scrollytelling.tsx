@@ -75,16 +75,6 @@ const FeatureCard = ({
     isMobile ? [1, 1, 1] : [0.6, 1, 0.6],
   );
 
-  const rotate = useTransform(
-    scrollXProgress,
-    [
-      (i - 1) / (numFeatures - 1),
-      i / (numFeatures - 1),
-      (i + 1) / (numFeatures - 1),
-    ],
-    isMobile ? [0, 0, 0] : [-20, 0, 20],
-  );
-
   const opacity = useTransform(
     scrollXProgress,
     [
@@ -109,20 +99,19 @@ const FeatureCard = ({
     <motion.div
       style={{
         scale: isMobile ? 1 : scale,
-        rotateY: isMobile ? 0 : rotate,
         opacity,
       }}
-      className="relative w-full h-[350px] bg-stone-100 dark:bg-zinc-900 border border-stone-200 dark:border-zinc-800 rounded-3xl p-8 flex flex-col justify-between"
+      className="relative w-full h-[350px] bg-surface border border-hairline rounded-3xl p-8 flex flex-col justify-between"
     >
       <div>
-        <feature.icon className="w-10 h-10 mb-4 text-stone-500" />
-        <h3 className="text-3xl font-light text-stone-900 dark:text-stone-100">
+        <feature.icon className="w-10 h-10 mb-4 text-ink-muted" />
+        <h3 className="text-3xl font-bold text-ink">
           {feature.title}
         </h3>
       </div>
       <motion.p
         style={{ opacity: isMobile ? 1 : textOpacity }}
-        className="text-lg font-light text-stone-600 dark:text-stone-400"
+        className="text-lg font-normal text-ink-muted"
       >
         {feature.description}
       </motion.p>
@@ -210,10 +199,10 @@ function DesktopScrollytelling() {
               style={{ opacity: principlesTitleOpacity, y: principlesTitleY }}
               className="text-center"
             >
-              <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+              <h2 className="mb-6 text-6xl font-extrabold tracking-tight text-ink">
                 The Art of the Game
               </h2>
-              <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
+              <p className="mx-auto max-w-2xl text-xl font-normal text-ink-muted">
                 Simple rules give rise to complex strategies.
               </p>
             </motion.div>
@@ -243,10 +232,10 @@ function DesktopScrollytelling() {
         <div className="relative h-[300vh]" ref={featuresContainerRef}>
           <div className="sticky top-1/4 left-0 overflow-hidden">
             <AnimateOnView className="text-center mb-16">
-              <h2 className="mb-6 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+              <h2 className="mb-6 text-6xl font-extrabold tracking-tight text-ink">
                 Built for Strategy
               </h2>
-              <p className="mx-auto max-w-2xl text-xl font-light text-stone-600 dark:text-stone-400">
+              <p className="mx-auto max-w-2xl text-xl font-normal text-ink-muted">
                 Every card holds the potential for a game-changing move.
               </p>
             </AnimateOnView>
@@ -293,10 +282,10 @@ function MobileScrollytelling() {
       <div className="container mx-auto px-4 space-y-24">
         {/* Principles Section */}
         <AnimateOnView className="text-center">
-          <h2 className="mb-6 text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+          <h2 className="mb-6 text-5xl font-extrabold tracking-tight text-ink">
             The Art of the Game
           </h2>
-          <p className="mx-auto max-w-2xl text-lg font-light text-stone-600 dark:text-stone-400">
+          <p className="mx-auto max-w-2xl text-lg font-normal text-ink-muted">
             Simple rules give rise to complex strategies.
           </p>
         </AnimateOnView>
@@ -317,10 +306,10 @@ function MobileScrollytelling() {
         {/* Features Section */}
         <div className="space-y-16">
           <AnimateOnView className="text-center">
-            <h2 className="mb-6 text-5xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
+            <h2 className="mb-6 text-5xl font-extrabold tracking-tight text-ink">
               Built for Strategy
             </h2>
-            <p className="mx-auto max-w-2xl text-lg font-light text-stone-600 dark:text-stone-400">
+            <p className="mx-auto max-w-2xl text-lg font-normal text-ink-muted">
               Every card holds the potential for a game-changing move.
             </p>
           </AnimateOnView>
@@ -329,15 +318,15 @@ function MobileScrollytelling() {
             {features.map((feature, i) => (
               <AnimateOnView
                 key={i}
-                className="bg-stone-100 dark:bg-zinc-900 border border-stone-200 dark:border-zinc-800 rounded-3xl p-8"
+                className="bg-surface border border-hairline rounded-3xl p-8"
               >
                 <div>
-                  <feature.icon className="w-10 h-10 mb-4 text-stone-500" />
-                  <h3 className="text-3xl font-light text-stone-900 dark:text-stone-100">
+                  <feature.icon className="w-10 h-10 mb-4 text-ink-muted" />
+                  <h3 className="text-3xl font-bold text-ink">
                     {feature.title}
                   </h3>
                 </div>
-                <p className="text-lg font-light text-stone-600 dark:text-stone-400 mt-4">
+                <p className="text-lg font-normal text-ink-muted mt-4">
                   {feature.description}
                 </p>
               </AnimateOnView>

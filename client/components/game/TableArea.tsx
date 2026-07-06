@@ -14,7 +14,7 @@ import {
   CardRank,
 } from "shared-types";
 import { VisualCardStack } from "../cards/VisualCardStack";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
 import { cardTravelTransition } from "@/lib/card-motion";
@@ -23,6 +23,57 @@ export interface TableAreaProps {
   drawnCard?: PublicCard;
   dealingDeck?: PublicCard[];
 }
+
+// Newest match announcement in the log, as a primitive id.
+const selectLatestMatchLogId = (state: UIMachineSnapshot) => {
+  const log = state.context.currentGameState?.log;
+  if (!log) return null;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const entry = log[i]!;
+    if (
+      entry.type === "public" &&
+      entry.tags.includes("game-event") &&
+      entry.message.includes(" matched a")
+    ) {
+      return entry.id;
+    }
+  }
+  return null;
+};
+
+const MATCH_FLIGHT_MS = 650; // cardTravelTransition duration — pulse on landing
+const MATCH_PULSE_MS = 400;
+
+/** Momentary token that fires when a NEW match lands (baselined on mount,
+ *  same rule as the stamps), delayed so the pulse hits as the card arrives. */
+const useMatchPulse = (): string | null => {
+  const latestId = useUISelector(selectLatestMatchLogId);
+  const [pulse, setPulse] = React.useState<string | null>(null);
+  const prevRef = React.useRef<string | null>(null);
+  const initializedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      prevRef.current = latestId;
+      return;
+    }
+    if (latestId && latestId !== prevRef.current) {
+      prevRef.current = latestId;
+      const arm = setTimeout(() => setPulse(latestId), MATCH_FLIGHT_MS);
+      return () => clearTimeout(arm);
+    }
+    prevRef.current = latestId;
+  }, [latestId]);
+
+  React.useEffect(() => {
+    if (!pulse) return;
+    const t = setTimeout(() => setPulse(null), MATCH_PULSE_MS);
+    return () => clearTimeout(t);
+  }, [pulse]);
+
+  return pulse;
+};
 
 const selectTableAreaProps = (state: UIMachineSnapshot) => {
   const { currentGameState, localPlayerId } = state.context;
@@ -82,6 +133,9 @@ export const TableArea = ({
     canDiscardDrawnCard,
     matchWindowOpen,
   } = useUISelector(selectTableAreaProps);
+
+  const matchPulse = useMatchPulse();
+  const reduced = useReducedMotion();
 
   const handleDeckClick = () => {
     if (canDrawFromDeck && dealingDeck.length === 0) {
@@ -155,17 +209,36 @@ export const TableArea = ({
       </div>
 
       <div className="flex justify-start w-full justify-self-start">
-        <VisualCardStack
-          title="Discard"
-          count={discardPileSize}
-          topCard={topDiscardCard}
-          secondCard={secondDiscardCard}
-          isSealed={discardPileIsSealed}
-          isMatchTarget={matchWindowOpen}
-          canInteract={canDrawFromDiscard || canDiscardDrawnCard}
-          onClick={handleDiscardClick}
-          className="w-[min(8vh,15vw)]"
-        />
+        <div className="relative">
+          <VisualCardStack
+            title="Discard"
+            count={discardPileSize}
+            topCard={topDiscardCard}
+            secondCard={secondDiscardCard}
+            isSealed={discardPileIsSealed}
+            isMatchTarget={matchWindowOpen}
+            canInteract={canDrawFromDiscard || canDiscardDrawnCard}
+            onClick={handleDiscardClick}
+            className="w-[min(8vh,15vw)]"
+          />
+          {/* A match lands with one quiet accent beat at the point of impact
+              (the PENALTY. stamp owns the failure case). */}
+          <AnimatePresence>
+            {matchPulse && !reduced && (
+              <motion.div
+                key={matchPulse}
+                className="pointer-events-none absolute inset-0 z-30 rounded-card ring-2 ring-accent"
+                initial={{ opacity: 0.9, scale: 1 }}
+                animate={{ opacity: 0, scale: 1.12 }}
+                exit={{ opacity: 0 }}
+                transition={{
+                  duration: MATCH_PULSE_MS / 1000,
+                  ease: "easeOut",
+                }}
+              />
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

@@ -15,7 +15,10 @@
   --surface: 0 0% 100%;
   --surface-2: 40 14% 92%;
   --ink: 34 10% 14%;
-  --ink-muted: 37 5% 52%;
+  /* 38 7% 37% clears WCAG AA for small text on ground/surface/surface-2
+     (the old 52% lightness measured 2.74:1 on ground — below even the
+     large-text floor — and carried the action prompt). */
+  --ink-muted: 38 7% 37%;
   --hairline: 38 9% 76%;
   --accent: 0 49% 50%;
   --accent-ink: 23 100% 97%;
@@ -50,9 +53,6 @@
   --cursor-bg-link: hsl(20 14% 8% / 0.2);
   --cursor-bg-pressed: hsl(20 14% 8% / 0.3);
   --cursor-bg-text: hsl(20 14% 8% / 1);
-
-  --feature-item-bg-rgb: 245, 245, 244;
-  --feature-item-text-color-hsl: 60 9% 98%;
 }
 
 .dark {
@@ -62,7 +62,8 @@
   --surface: 0 0% 14%;
   --surface-2: 0 0% 11%;
   --ink: 38 22% 93%;
-  --ink-muted: 36 4% 53%;
+  /* Nudged from 53% so muted text clears 4.5:1 on surface (#242424) too. */
+  --ink-muted: 36 5% 57%;
   --hairline: 0 0% 23%;
   --accent: 2 57% 57%;
   --accent-ink: 6 22% 9%;
@@ -73,9 +74,6 @@
   --cursor-bg-link: hsl(60 9% 98% / 0.2);
   --cursor-bg-pressed: hsl(60 9% 98% / 0.3);
   --cursor-bg-text: hsl(60 9% 98% / 1);
-
-  --feature-item-bg-rgb: 39, 39, 42;
-  --feature-item-text-color-hsl: 60 9% 98%;
 }
 
 /* Map raw vars into Tailwind's namespaces so utilities generate. `inline` keeps
@@ -131,6 +129,15 @@ body {
     "calt" 1;
 }
 
+/* The identity's focus spec, systematized: 2px accent outline, offset 2,
+   visible on keyboard focus everywhere (raw buttons included). */
+@layer base {
+  :where(button, a, [role="button"], input, select, textarea):focus-visible {
+    outline: 2px solid hsl(var(--accent));
+    outline-offset: 2px;
+  }
+}
+
 html {
   scroll-behavior: smooth;
   /* Fixed root font size: a viewport-scaled rem base makes every rem-derived
@@ -156,14 +163,6 @@ html {
   background: hsl(var(--muted-foreground));
 }
 
-.font-serif {
-  font-family: var(--font-playfair), serif;
-}
-
-.font-sans {
-  font-family: var(--font-inter), sans-serif;
-}
-
 @layer utilities {
   .will-change-transform {
     will-change: transform;
@@ -173,66 +172,6 @@ html {
     will-change: auto;
   }
 
-  .animate-float {
-    animation: float 8s ease-in-out infinite;
-    will-change: transform;
-  }
-
-  @keyframes float {
-    0%,
-    100% {
-      transform: translateY(0px);
-    }
-    50% {
-      transform: translateY(-15px);
-    }
-  }
-
-  .text-stone-gradient {
-    background: linear-gradient(135deg, hsl(25, 5%, 45%), hsl(25, 5%, 65%));
-    background-size: 200% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shift 4s ease-in-out infinite;
-    will-change: background-position;
-  }
-
-  .dark .text-stone-gradient {
-    background: linear-gradient(135deg, hsl(240, 5%, 65%), hsl(240, 5%, 85%));
-    background-size: 200% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shift 4s ease-in-out infinite;
-    will-change: background-position;
-  }
-
-  @keyframes gradient-shift {
-    0%,
-    100% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
-  }
-
-  /* Primary gradient button */
-  .btn-primary {
-    @apply rounded-full px-3 py-1.5 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white transition-colors pointer-events-auto select-none;
-  }
-
-  .btn-icon {
-    @apply rounded-full p-2 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white;
-  }
-
-  .gpu-accelerated {
-    transform: translateZ(0);
-    backface-visibility: hidden;
-    perspective: 1000px;
-  }
-
   .noselect {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
@@ -240,10 +179,6 @@ html {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-  }
-
-  .animation-delay-n5 {
-    animation-delay: -5s;
   }
 
   /* --- Container Query Helper ------------------------------------------- */
@@ -293,12 +228,4 @@ html {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-.goo-filter {
-  display: none;
-}
-
-.cursor-blend-difference {
-  mix-blend-mode: difference;
 }

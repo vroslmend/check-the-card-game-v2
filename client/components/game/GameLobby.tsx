@@ -9,6 +9,7 @@ import {
 } from "@/context/GameUIContext";
 import {
   CheckCircle,
+  Crown,
   Users,
   WifiOff,
   Clock,
@@ -20,16 +21,6 @@ import {
 import { type Player, PlayerActionType } from "shared-types";
 import { cn } from "@/lib/utils";
 import { CopyToClipboardButton } from "../ui/CopyToClipboardButton";
-
-const spinnerStyle = `
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  .loading-spinner {
-    animation: spin 1.5s linear infinite;
-  }
-`;
 
 // Status is text + icon only — no hue coding. `muted` dims passive states
 // (waiting/disconnected) to ink-muted; active states (ready) read ink.
@@ -81,6 +72,9 @@ const PlayerRow = ({
     (state) =>
       state.context.currentGameState?.gameMasterId ===
       state.context.localPlayerId,
+  );
+  const isRowHost = useUISelector(
+    (state) => state.context.currentGameState?.gameMasterId === player.id,
   );
 
   const [isHolding, setIsHolding] = useState(false);
@@ -163,6 +157,12 @@ const PlayerRow = ({
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-3">
+        {isRowHost && (
+          <div className="flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-2.5 py-1 text-xs font-semibold text-ink">
+            <Crown className="h-3.5 w-3.5" />
+            <span>Host</span>
+          </div>
+        )}
         <div
           className={cn(
             "flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-2.5 py-1 text-xs font-semibold",
@@ -300,7 +300,6 @@ export const GameLobby = () => {
   if (isLoading) {
     return (
       <div className="w-full max-w-2xl mx-auto">
-        <style>{spinnerStyle}</style>
         <motion.div
           className="w-full font-game"
           initial={{ opacity: 0 }}
@@ -308,7 +307,7 @@ export const GameLobby = () => {
           transition={{ duration: 0.5 }}
         >
           <div className="flex flex-col items-center gap-4">
-            <div className="h-10 w-10 rounded-full border-2 border-hairline border-t-ink loading-spinner" />
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-hairline border-t-ink" />
             <p className="text-ink-muted">
               {reconnectionTimeout
                 ? "Reconnection is taking longer than expected..."
@@ -632,13 +631,9 @@ export const GameLobby = () => {
                 </motion.span>
                 <motion.div
                   key={buttonConfig.disabled ? "disabled-icon" : "enabled-icon"}
-                  animate={{ x: [0, 4, 0] }}
-                  transition={{
-                    duration: 1.2,
-                    repeat: Infinity,
-                    repeatDelay: 1,
-                    ease: "easeInOut",
-                  }}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
                 >
                   {buttonConfig.icon}
                 </motion.div>

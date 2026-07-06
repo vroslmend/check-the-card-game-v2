@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { PanelLeftClose, PanelLeftOpen, ChevronLeft, User } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, ChevronLeft, User } from 'lucide-react';
 import { useUIActorRef, useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -16,12 +16,22 @@ const selectGameHeaderProps = (state: UIMachineSnapshot) => {
     gameId: state.context.gameId,
     isSidePanelOpen: state.context.isSidePanelOpen,
     playerName,
+    chatCount: state.context.currentGameState?.chat?.length ?? 0,
   };
 };
 
 export const GameHeader = () => {
   const { send } = useUIActorRef();
-  const { gameId, isSidePanelOpen, playerName } = useUISelector(selectGameHeaderProps);
+  const { gameId, isSidePanelOpen, playerName, chatCount } = useUISelector(selectGameHeaderProps);
+
+  // Baseline on first sight: history isn't news (mount/rejoin shows no dot).
+  const seenChatCountRef = React.useRef<number | null>(null);
+  if (seenChatCountRef.current === null) seenChatCountRef.current = chatCount;
+  React.useEffect(() => {
+    if (isSidePanelOpen) seenChatCountRef.current = chatCount;
+  }, [isSidePanelOpen, chatCount]);
+  const hasUnread =
+    !isSidePanelOpen && chatCount > (seenChatCountRef.current ?? 0);
 
   const toggleSidePanel = () => {
     send({ type: 'TOGGLE_SIDE_PANEL' });
@@ -60,7 +70,7 @@ export const GameHeader = () => {
           variant="ghost"
           size="icon"
           onClick={toggleSidePanel}
-          className="h-10 w-10 min-w-[40px] rounded-full border border-hairline bg-surface hover:bg-surface-2 flex items-center justify-center"
+          className="relative h-10 w-10 min-w-[40px] rounded-full border border-hairline bg-surface hover:bg-surface-2 flex items-center justify-center"
           data-cursor-link
         >
           <AnimatePresence initial={false} mode="wait">
@@ -72,10 +82,20 @@ export const GameHeader = () => {
               transition={{ duration: 0.2 }}
               className="flex items-center justify-center"
             >
-              {isSidePanelOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
+              {isSidePanelOpen ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
             </motion.div>
           </AnimatePresence>
-          <span className="sr-only">Toggle side panel</span>
+          {hasUnread && (
+            <span
+              className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent"
+              aria-hidden
+            />
+          )}
+          <span className="sr-only">
+            {hasUnread
+              ? 'Toggle side panel (new messages)'
+              : 'Toggle side panel'}
+          </span>
         </Button>
       </div>
     </header>

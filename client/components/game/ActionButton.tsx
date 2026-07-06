@@ -118,6 +118,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
               isLoading && "cursor-wait",
               className,
             )}
+            aria-label={label}
             disabled={disabled || isLoading}
             onClick={onClick}
             onPointerDown={onPointerDown}

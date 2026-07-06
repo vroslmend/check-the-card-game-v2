@@ -101,7 +101,10 @@ const ActionBarComponent: React.FC = () => {
       {/* Fixed-height slot: the prompt fades in place and can wrap to two
           lines without ever changing the bar's height (which would reflow
           the whole board). */}
-      <div className="mt-2 flex h-10 items-start justify-center">
+      <div
+        className="mt-2 flex h-10 items-start justify-center"
+        aria-live="polite"
+      >
         <AnimatePresence>
           {promptText && (
             <motion.p

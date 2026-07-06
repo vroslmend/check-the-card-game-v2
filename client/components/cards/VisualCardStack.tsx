@@ -1,10 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { type Card, PublicCard } from "shared-types";
 import { PlayingCard } from "./PlayingCard";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { cardTravelTransition } from "@/lib/card-motion";
 import { Equal, Lock } from "lucide-react";
 
@@ -36,6 +36,29 @@ export const VisualCardStack = ({
   className,
 }: VisualCardStackProps) => {
   const hasCards = count > 0;
+
+  // The seal/match chips key off broadcast state that arrives when the
+  // discarded card BEGINS its 0.65s flight — they used to appear on the pile
+  // before the card did. Track the top card's layout animation (same
+  // start/complete + backstop pattern as CardFlight; Gecko can drop the
+  // completion callback on interrupted flights).
+  const [topInFlight, setTopInFlight] = useState(false);
+  const clearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (clearRef.current) clearTimeout(clearRef.current);
+    },
+    [],
+  );
+  const flightOn = () => {
+    if (clearRef.current) clearTimeout(clearRef.current);
+    setTopInFlight(true);
+    clearRef.current = setTimeout(() => setTopInFlight(false), 900);
+  };
+  const flightOff = () => {
+    if (clearRef.current) clearTimeout(clearRef.current);
+    setTopInFlight(false);
+  };
 
   return (
     <div className="flex flex-col items-center">
@@ -80,6 +103,8 @@ export const VisualCardStack = ({
             key={topCard.id}
             className="absolute inset-0 z-10"
             transition={cardTravelTransition}
+            onLayoutAnimationStart={flightOn}
+            onLayoutAnimationComplete={flightOff}
           >
             {faceDown ? (
               // The stock pile shows its count on the top card's back.
@@ -101,31 +126,39 @@ export const VisualCardStack = ({
             animate={{ opacity: 1 }}
           />
         )}
-        {/* Sealed = "can't be drawn this turn" (a K/Q/J was just discarded).
-            A corner chip in the SlotBadge vocabulary says "restricted"
-            without covering the face — the old full-card scrim hid the rank
-            at the exact moment a matching window on it opened. */}
-        {isSealed && (
-          <span
-            aria-label="Sealed: can't be drawn this turn"
-            className="absolute -top-2 -right-2 z-20 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
-          >
-            <Lock className="h-3 w-3" strokeWidth={2.5} />
-          </span>
-        )}
-        {/* Matching window open: a corner chip in the SlotBadge vocabulary
-            (the MATCH? center splash it replaces took over the scene to say
-            something every player already knows). Top-LEFT — a discarded
-            K/Q/J opens a window AND seals the pile, and the seal owns the
-            right corner. */}
-        {isMatchTarget && (
-          <span
-            aria-label="Matching window open"
-            className="absolute -top-2 -left-2 z-20 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
-          >
-            <Equal className="h-3 w-3" strokeWidth={2.5} />
-          </span>
-        )}
+        {/* Chips wait for the card to land (topInFlight). Sealed = "can't be
+            DRAWN this turn" — but while the matching window is open the pile
+            IS matchable, and a lock over an active match affordance read as a
+            contradiction. The seal surfaces when the window closes, exactly
+            when the next player faces the draw decision. */}
+        <AnimatePresence>
+          {isSealed && !isMatchTarget && !topInFlight && (
+            <motion.span
+              key="seal"
+              aria-label="Sealed: can't be drawn this turn"
+              className="absolute -top-2 -right-2 z-20 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              <Lock className="h-3 w-3" strokeWidth={2.5} />
+            </motion.span>
+          )}
+          {isMatchTarget && !topInFlight && (
+            <motion.span
+              key="match"
+              aria-label="Matching window open"
+              className="absolute -top-2 -left-2 z-20 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              <Equal className="h-3 w-3" strokeWidth={2.5} />
+            </motion.span>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );

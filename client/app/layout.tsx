@@ -1,22 +1,12 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Playfair_Display, Inter, Nunito_Sans } from "next/font/google";
+import { Nunito_Sans } from "next/font/google";
 import { Providers } from "./providers";
 import { cn } from "@/lib/utils";
 import "lenis/dist/lenis.css";
 
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  variable: "--font-playfair",
-});
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
-
-// The game's one type family (exposed as --font-game). Playfair/Inter remain
-// for the landing page; game views use Nunito Sans.
+// The one type family, app-wide (exposed as --font-game). The landing page
+// joined the game's identity in Round 11; Playfair/Inter are retired.
 const nunito = Nunito_Sans({
   subsets: ["latin"],
   variable: "--font-nunito",
@@ -45,9 +35,9 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${playfair.variable} ${inter.variable} ${nunito.variable}`}
+      className={nunito.variable}
     >
-      <body className="font-serif antialiased">
+      <body className="font-game antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

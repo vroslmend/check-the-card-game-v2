@@ -11,10 +11,10 @@ import {
   type Variants,
 } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Crown, PartyPopper } from "lucide-react";
+import { Crown } from "lucide-react";
 import { PlayingCard } from "@/components/cards/PlayingCard";
 import { cn } from "@/lib/utils";
-import { useUISelector } from "@/context/GameUIContext";
+import { useUISelector, useUIActorRef } from "@/context/GameUIContext";
 
 interface GameEndScreenProps {
   players: Player[];
@@ -22,6 +22,7 @@ interface GameEndScreenProps {
   localPlayerId: string;
   onPlayAgain: () => void;
   onLeave: () => void;
+  onToggleChat: () => void;
 }
 
 const containerVariants: Variants = {
@@ -55,6 +56,9 @@ const itemVariants: Variants = {
 
 const selectIsGameMaster = (state: any) =>
   state.context.currentGameState?.gameMasterId === state.context.localPlayerId;
+
+const selectCheckCallerId = (state: any) =>
+  state.context.currentGameState?.checkDetails?.callerId ?? null;
 
 // Scores count up in accent — the animated payoff of the reveal. Static under
 // reduced-motion (starts already at the final value).
@@ -111,11 +115,40 @@ export const GameEndScreen = ({
   localPlayerId,
   onPlayAgain,
   onLeave,
+  onToggleChat,
 }: GameEndScreenProps) => {
   const winners = players.filter((p) => winnerIds.includes(p.id));
   const sortedPlayers = [...players].sort((a, b) => a.score - b.score);
   const isGameMaster = useUISelector(selectIsGameMaster);
   const reduced = !!useReducedMotion();
+
+  const callerId = useUISelector(selectCheckCallerId);
+  const caller = callerId ? players.find((p) => p.id === callerId) : null;
+  const callerLine = caller
+    ? winnerIds.includes(caller.id)
+      ? `${caller.name} called Check — and it held.`
+      : `${caller.name} called Check — it didn't hold.`
+    : "The round ended without a Check.";
+
+  // One-shot recap from the accumulated log (append-only; merged in the
+  // machine). Counted once on mount — no new entries can land post-scoring.
+  // Late joiners hold only a log tail, so counts can undercount for them.
+  const actorRef = useUIActorRef();
+  const recap = React.useMemo(() => {
+    const log = actorRef.getSnapshot().context.currentGameState?.log ?? [];
+    const matches: Record<string, number> = {};
+    const penalties: Record<string, number> = {};
+    for (const entry of log) {
+      const aId = entry.actor?.id;
+      if (!aId) continue;
+      if (entry.tags.includes("penalty")) {
+        penalties[aId] = (penalties[aId] ?? 0) + 1;
+      } else if (entry.message.includes(" matched a")) {
+        matches[aId] = (matches[aId] ?? 0) + 1;
+      }
+    }
+    return { matches, penalties };
+  }, [actorRef]);
 
   const title =
     winners.length === 0
@@ -135,18 +168,6 @@ export const GameEndScreen = ({
           variants={itemVariants}
           className="flex flex-col items-center gap-2 text-center"
         >
-          <motion.div
-            initial={{ scale: 0, rotate: -30 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{
-              type: "spring",
-              stiffness: 260,
-              damping: 12,
-              delay: 0.25,
-            }}
-          >
-            <PartyPopper className="w-16 h-16 text-accent" />
-          </motion.div>
           <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight text-ink">
             {title}
           </h1>
@@ -163,7 +184,7 @@ export const GameEndScreen = ({
               }
             />
           )}
-          <p className="text-lg text-ink-muted">Final Scores</p>
+          <p className="text-lg text-ink-muted">{callerLine}</p>
         </motion.div>
 
         <motion.div
@@ -206,6 +227,24 @@ export const GameEndScreen = ({
                     </span>
                   )}
                 </div>
+                {recap.matches[player.id] || recap.penalties[player.id] ? (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {recap.matches[player.id] ? (
+                      <span className="rounded-full border border-hairline bg-surface px-2 py-0.5 text-[0.65rem] font-semibold text-ink-muted">
+                        {recap.matches[player.id]} match
+                        {recap.matches[player.id]! > 1 ? "es" : ""}
+                      </span>
+                    ) : null}
+                    {recap.penalties[player.id] ? (
+                      <span className="rounded-full border border-hairline bg-surface px-2 py-0.5 text-[0.65rem] font-semibold text-ink-muted">
+                        {recap.penalties[player.id]}{" "}
+                        {recap.penalties[player.id]! > 1
+                          ? "penalties"
+                          : "penalty"}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="flex flex-col items-end">
                   <span className="text-2xl font-extrabold text-accent">
                     <CountUp value={player.score} reduced={reduced} />
@@ -247,12 +286,20 @@ export const GameEndScreen = ({
           )}
           {/* Non-masters previously had no way off this screen at all (a
               forfeit can even leave the winner without a Play Again). */}
-          <button
-            onClick={onLeave}
-            className="rounded-full border border-hairline bg-surface px-5 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
-          >
-            Back to Home
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onToggleChat}
+              className="rounded-full border border-hairline bg-surface px-5 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
+            >
+              Table talk
+            </button>
+            <button
+              onClick={onLeave}
+              className="rounded-full border border-hairline bg-surface px-5 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
+            >
+              Back to Home
+            </button>
+          </div>
         </motion.div>
       </motion.div>
     </motion.div>
