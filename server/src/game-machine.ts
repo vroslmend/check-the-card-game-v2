@@ -271,12 +271,24 @@ const baseTurnStateNode = {
           ],
         },
         {
-          target: "#game.error",
+          // Rules 11.A: the draw pile is exhausted — rebuild it from the
+          // discard pile (minus its top card) inline and play on. This is a
+          // normal game event, not an error: the old detour through
+          // #game.error tried to come back via #game.history, and a
+          // root-level history node never records anything (its parent, the
+          // machine root, never exits), so the "resume" silently landed in
+          // WAITING_FOR_PLAYERS and hard-locked the game. Targetless: the
+          // reshuffle refills the deck, the guard turns false, and DRAW
+          // continues with the deadline its entry already armed.
+          guard: ({ context }: { context: GameContext }) =>
+            context.deck.length === 0 && context.discardPile.length > 1,
+          actions: ["reshuffleDiscardIntoDeck", "broadcastGameState"],
+        },
+        {
+          // Rules 11.B: no cards anywhere to rebuild a deck — the round ends
+          // and everyone scores their current hand.
+          target: `#game.${GameStage.SCORING}`,
           guard: "isDeckEmpty",
-          actions: {
-            type: "enterErrorState",
-            params: { errorType: "DECK_EMPTY" as const },
-          },
         },
       ],
     },
@@ -1381,19 +1393,18 @@ export const gameMachine = setup({
           }
         : {};
     }),
+    // Deck exhaustion is handled inline in DRAW (Rules 11.A/11.B), so the
+    // pause-and-recover state only ever handles a disconnected current player.
     enterErrorState: assign(
       (
         _,
         params: {
-          errorType: "DECK_EMPTY" | "NETWORK_ERROR";
+          errorType: "NETWORK_ERROR";
           playerId?: PlayerId;
         },
       ) => ({
         errorState: {
-          message:
-            params.errorType === "DECK_EMPTY"
-              ? "The deck is empty and cannot be drawn from."
-              : `Player ${params.playerId} has disconnected.`,
+          message: `Player ${params.playerId} has disconnected.`,
           errorType: params.errorType,
           affectedPlayerId: params.playerId,
         },
@@ -2184,28 +2195,6 @@ export const gameMachine = setup({
       },
       states: {
         recovering: {
-          always: [
-            {
-              // Rules 11.A: reshuffle the discard pile (minus its top card)
-              // into a fresh draw pile.
-              guard: ({ context }) =>
-                context.errorState?.errorType === "DECK_EMPTY" &&
-                context.discardPile.length > 1,
-              actions: [
-                "reshuffleDiscardIntoDeck",
-                "broadcastGameState",
-              ] as const,
-              target: "#game.history",
-            },
-            {
-              // Rules 11.B: no cards anywhere to reshuffle — the round ends
-              // immediately and everyone scores their current hand.
-              guard: ({ context }) =>
-                context.errorState?.errorType === "DECK_EMPTY",
-              actions: "clearErrorState",
-              target: `#game.${GameStage.SCORING}`,
-            },
-          ],
           invoke: { src: "reconnectTimer", onDone: "failedRecovery" },
           on: {
             PLAYER_RECONNECTED: {
