@@ -182,8 +182,8 @@ const SETUP_POSITIONS = [
 
 export const SetupPeekGrid = () => (
   <Figure
-    label="A two-by-two grid of face-down cards; the bottom two carry an eye badge — you may peek at those once"
-    caption="Your bottom two, one look — then back face down."
+    label="A two-by-two grid of face-down cards; the bottom two carry an eye badge, and you may peek at those once"
+    caption="Your bottom two, one look. Then back face down."
   >
     <div className="flex justify-center">
       <div className="inline-grid grid-cols-2 gap-2">
@@ -226,7 +226,7 @@ const ABILITIES: { c: Card; icons: LucideIcon[]; text: string }[] = [
 export const AbilityTriptych = () => (
   <Figure
     label="King: peek two then swap one. Queen: peek one then swap one. Jack: swap one."
-    caption="eye = peek · arrows = swap — the same badges the table shows in play"
+    caption="Eye means peek, arrows mean swap. The same badges appear in play."
   >
     <div className="grid grid-cols-3 gap-3 sm:gap-6">
       {ABILITIES.map(({ c, icons, text }) => (
@@ -252,7 +252,7 @@ export const AbilityTriptych = () => (
 export const LifoStack = () => (
   <Figure
     label="Bob's king of hearts lies on top of Alice's king of spades; Bob's resolves first, then Alice's"
-    caption="Matched specials stack — last in resolves first."
+    caption="Matched specials stack. Last in resolves first."
   >
     <div className="flex flex-col items-center justify-center gap-6 sm:flex-row sm:gap-10">
       <div className="flex pt-3 pl-2">
@@ -264,7 +264,7 @@ export const LifoStack = () => (
       <ol className="space-y-2 text-sm text-ink-muted">
         <li className="flex items-center gap-2.5">
           <StepChip>1</StepChip>
-          Bob’s King resolves first — it landed last.
+          Bob’s King resolves first because it landed last.
         </li>
         <li className="flex items-center gap-2.5">
           <StepChip>2</StepChip>
