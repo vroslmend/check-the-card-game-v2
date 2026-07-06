@@ -193,6 +193,7 @@ export function GameBoard() {
               localPlayerId={localPlayerId}
               onPlayAgain={handlePlayAgain}
               onLeave={() => send({ type: "LEAVE_GAME" })}
+              onToggleChat={() => send({ type: "TOGGLE_SIDE_PANEL" })}
             />
           )}
         </AnimatePresence>

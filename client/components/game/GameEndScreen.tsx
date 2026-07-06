@@ -22,6 +22,7 @@ interface GameEndScreenProps {
   localPlayerId: string;
   onPlayAgain: () => void;
   onLeave: () => void;
+  onToggleChat: () => void;
 }
 
 const containerVariants: Variants = {
@@ -114,6 +115,7 @@ export const GameEndScreen = ({
   localPlayerId,
   onPlayAgain,
   onLeave,
+  onToggleChat,
 }: GameEndScreenProps) => {
   const winners = players.filter((p) => winnerIds.includes(p.id));
   const sortedPlayers = [...players].sort((a, b) => a.score - b.score);
@@ -284,12 +286,20 @@ export const GameEndScreen = ({
           )}
           {/* Non-masters previously had no way off this screen at all (a
               forfeit can even leave the winner without a Play Again). */}
-          <button
-            onClick={onLeave}
-            className="rounded-full border border-hairline bg-surface px-5 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
-          >
-            Back to Home
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onToggleChat}
+              className="rounded-full border border-hairline bg-surface px-5 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
+            >
+              Table talk
+            </button>
+            <button
+              onClick={onLeave}
+              className="rounded-full border border-hairline bg-surface px-5 py-2 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
+            >
+              Back to Home
+            </button>
+          </div>
         </motion.div>
       </motion.div>
     </motion.div>
