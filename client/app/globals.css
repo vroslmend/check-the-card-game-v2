@@ -15,7 +15,10 @@
   --surface: 0 0% 100%;
   --surface-2: 40 14% 92%;
   --ink: 34 10% 14%;
-  --ink-muted: 37 5% 52%;
+  /* 38 7% 37% clears WCAG AA for small text on ground/surface/surface-2
+     (the old 52% lightness measured 2.74:1 on ground — below even the
+     large-text floor — and carried the action prompt). */
+  --ink-muted: 38 7% 37%;
   --hairline: 38 9% 76%;
   --accent: 0 49% 50%;
   --accent-ink: 23 100% 97%;
@@ -62,7 +65,8 @@
   --surface: 0 0% 14%;
   --surface-2: 0 0% 11%;
   --ink: 38 22% 93%;
-  --ink-muted: 36 4% 53%;
+  /* Nudged from 53% so muted text clears 4.5:1 on surface (#242424) too. */
+  --ink-muted: 36 5% 57%;
   --hairline: 0 0% 23%;
   --accent: 2 57% 57%;
   --accent-ink: 6 22% 9%;
