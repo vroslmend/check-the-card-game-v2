@@ -81,6 +81,9 @@ export interface UIMachineContext {
    *  timestamps convert to client-clock via `ts - serverClockOffset`. */
   serverClockOffset: number;
   modal: { type: "rejoin" | "error"; title: string; message: string } | null;
+  /** Date.now() when the last game action was emitted; null once any state
+   *  update lands. Drives the action bar's in-flight disable. */
+  pendingActionSince: number | null;
 }
 
 export type UIMachineEvents =
@@ -246,6 +249,7 @@ export const uiMachine = setup({
         }
         return undefined;
       },
+      pendingActionSince: () => null,
     }),
     addGameLog: assign({
       currentGameState: ({ context, event }) => {
@@ -291,7 +295,9 @@ export const uiMachine = setup({
       currentAbilityContext: undefined,
       visibleCards: [],
       reconnectionAttempts: 0,
+      pendingActionSince: null,
     }),
+    markActionPending: assign({ pendingActionSince: () => Date.now() }),
     persistSession: ({ event }) => {
       assertEvent(event, "_SESSION_ESTABLISHED");
       if (
@@ -680,6 +686,7 @@ export const uiMachine = setup({
     hasPassedMatch: false,
     serverClockOffset: 0,
     modal: null,
+    pendingActionSince: null,
   }),
   initial: "initializing",
   on: {
@@ -818,19 +825,33 @@ export const uiMachine = setup({
         DECLARE_LOBBY_READY: { actions: "emitPlayerAction" },
         DECLARE_LOBBY_UNREADY: { actions: "emitPlayerAction" },
         REMOVE_PLAYER: { actions: "emitPlayerAction" },
-        DRAW_FROM_DECK: { actions: "emitPlayerAction" },
-        DRAW_FROM_DISCARD: { actions: "emitPlayerAction" },
-        SWAP_AND_DISCARD: { actions: "emitPlayerAction" },
-        DISCARD_DRAWN_CARD: { actions: "emitPlayerAction" },
-        ATTEMPT_MATCH: { actions: "emitPlayerAction" },
-        PASS_ON_MATCH_ATTEMPT: {
-          actions: ["emitPlayerAction", assign({ hasPassedMatch: true })],
+        DRAW_FROM_DECK: { actions: ["markActionPending", "emitPlayerAction"] },
+        DRAW_FROM_DISCARD: {
+          actions: ["markActionPending", "emitPlayerAction"],
         },
-        CALL_CHECK: { actions: "emitPlayerAction" },
-        DECLARE_READY_FOR_PEEK: { actions: "emitPlayerAction" },
-        PLAY_AGAIN: { actions: "emitPlayerAction" },
+        SWAP_AND_DISCARD: {
+          actions: ["markActionPending", "emitPlayerAction"],
+        },
+        DISCARD_DRAWN_CARD: {
+          actions: ["markActionPending", "emitPlayerAction"],
+        },
+        ATTEMPT_MATCH: { actions: ["markActionPending", "emitPlayerAction"] },
+        PASS_ON_MATCH_ATTEMPT: {
+          actions: [
+            "markActionPending",
+            "emitPlayerAction",
+            assign({ hasPassedMatch: true }),
+          ],
+        },
+        CALL_CHECK: { actions: ["markActionPending", "emitPlayerAction"] },
+        DECLARE_READY_FOR_PEEK: {
+          actions: ["markActionPending", "emitPlayerAction"],
+        },
+        PLAY_AGAIN: { actions: ["markActionPending", "emitPlayerAction"] },
         DISMISS_MODAL: { actions: "dismissModal" },
-        SKIP_ABILITY_STAGE: { actions: "emitSkipAbilityStage" },
+        SKIP_ABILITY_STAGE: {
+          actions: ["markActionPending", "emitSkipAbilityStage"],
+        },
         CLEANUP_EXPIRED_CARDS: { actions: "cleanupExpiredVisibleCards" },
         DISCONNECT: { target: ".disconnected" },
       },
@@ -958,11 +979,11 @@ export const uiMachine = setup({
             ],
             CONFIRM_ABILITY_ACTION: {
               guard: "isAbilityActionComplete",
-              actions: "emitConfirmAbility",
+              actions: ["markActionPending", "emitConfirmAbility"],
               target: ".resolving",
             },
             SKIP_ABILITY_STAGE: {
-              actions: "emitSkipAbilityStage",
+              actions: ["markActionPending", "emitSkipAbilityStage"],
             },
           },
           states: {
