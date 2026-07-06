@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { X, HelpCircle } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 
@@ -9,7 +9,7 @@ const backdropVariants = {
   visible: { opacity: 1 },
 };
 
-const modalVariants = {
+const modalVariants: Variants = {
   hidden: { y: "100vh", opacity: 0 },
   visible: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 100, damping: 20 } },
   exit: { y: "100vh", opacity: 0, transition: { duration: 0.3 } },

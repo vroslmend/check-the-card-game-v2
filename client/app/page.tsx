@@ -13,6 +13,7 @@ import {
   MotionValue,
   useMotionTemplate,
   useReducedMotion,
+  type Variants,
 } from "framer-motion";
 import { useTheme } from "next-themes";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -53,7 +54,7 @@ const textContainerVariants = {
   },
 };
 
-const letterVariants = {
+const letterVariants: Variants = {
   initial: {
     y: 0,
   },
@@ -181,7 +182,7 @@ function HomePage() {
     hover: { y: -2 },
   };
 
-  const dealtCardVariants = {
+  const dealtCardVariants: Variants = {
     initial: {
       x: "-50%",
       y: "-100%",
