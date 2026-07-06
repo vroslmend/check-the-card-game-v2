@@ -86,6 +86,7 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       allPlayersReady: false,
       hasPassedMatch: false,
       isAbilitySelecting: false,
+      decidingPlayerName: null as string | null,
       peekExpireAt: null as number | null,
       peekDurationMs: 0,
       turnDeadline: null as number | null,
@@ -96,6 +97,12 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
 
   const localPlayer = currentGameState.players[localPlayerId];
   const isMyTurn = currentGameState.currentPlayerId === localPlayerId;
+  // Another player holding a drawn card = the "deciding" window spectators
+  // see; a primitive string keeps the selector shallow-comparable.
+  const decidingPlayerName =
+    Object.values(currentGameState.players).find(
+      (p) => p.pendingDrawnCard && p.id !== localPlayerId,
+    )?.name ?? null;
   const topDiscardCard = currentGameState.discardPile.at(-1);
   const isSpecialCard =
     !!topDiscardCard &&
@@ -135,6 +142,7 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     ),
     hasPassedMatch,
     isAbilitySelecting,
+    decidingPlayerName,
     peekExpireAt,
     peekDurationMs,
     turnDeadline: currentGameState.turnDeadline,
@@ -400,6 +408,7 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     const {
       localPlayer,
       isMyTurn,
+      decidingPlayerName,
       matchingOpportunity,
       abilityContext,
       isAbilityPlayer,
@@ -442,7 +451,13 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         return "You must swap the card from the discard pile with a card in your hand.";
       }
     }
-  
+
+    // Another player holds a drawn card: the spectator prompt slot carries
+    // the status line (the old chip floated unanchored under the slot).
+    if (!isMyTurn && decidingPlayerName) {
+      return `${decidingPlayerName} is deciding…`;
+    }
+
     if (props.gameStage === GameStage.INITIAL_PEEK) {
       // The bottom-two faces only appear once the peek window opens;
       // peekExpireAt is set exactly while those initial-peek cards are
