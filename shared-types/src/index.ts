@@ -128,7 +128,11 @@ export interface ClientCheckGameState {
   gameMasterId: PlayerId | null;
   players: Record<PlayerId, Player>;
   deckSize: number;
+  /** Only the visible top of the pile (last =2 cards); use discardPileSize
+   *  for the count. Broadcasting the whole pile grew every payload by the
+   *  length of the game. */
   discardPile: Card[];
+  discardPileSize: number;
   deckTop: FacedownCard | null;
   turnOrder: PlayerId[];
   gameStage: GameStage;

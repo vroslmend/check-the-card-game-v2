@@ -144,6 +144,18 @@ const adoptServerClockOffset = (
     : current;
 };
 
+/** Broadcasts carry only a recent tail of the append-only log/chat; keep the
+ *  locally accumulated history and append whatever is new (dedup by id,
+ *  incoming version wins). */
+const mergeAppendOnly = <T extends { id: string }>(
+  prev: T[] | undefined,
+  incoming: T[],
+): T[] => {
+  if (!prev?.length) return incoming;
+  const incomingIds = new Set(incoming.map((e) => e.id));
+  return [...prev.filter((e) => !incomingIds.has(e.id)), ...incoming];
+};
+
 export const uiMachine = setup({
   types: {
     context: {} as UIMachineContext,
@@ -158,18 +170,23 @@ export const uiMachine = setup({
   },
   actions: {
     setCurrentGameState: assign({
-      currentGameState: ({ event }) => {
+      currentGameState: ({ context, event }) => {
         assertEvent(event, [
           "CLIENT_GAME_STATE_UPDATED",
           "_SESSION_ESTABLISHED",
         ]);
-        if (event.type === "CLIENT_GAME_STATE_UPDATED") return event.gameState;
-        if (
-          event.type === "_SESSION_ESTABLISHED" &&
-          "gameState" in event.response
-        )
-          return event.response.gameState;
-        return undefined;
+        const incoming =
+          event.type === "CLIENT_GAME_STATE_UPDATED"
+            ? event.gameState
+            : "gameState" in event.response
+              ? event.response.gameState
+              : undefined;
+        if (!incoming) return undefined;
+        return {
+          ...incoming,
+          log: mergeAppendOnly(context.currentGameState?.log, incoming.log),
+          chat: mergeAppendOnly(context.currentGameState?.chat, incoming.chat),
+        };
       },
       // "Pass" is final per matching opportunity, so only reset the flag when
       // the incoming state carries a different (or no) matching opportunity.
