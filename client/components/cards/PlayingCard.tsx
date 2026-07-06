@@ -86,7 +86,12 @@ export function PlayingCard({
         <motion.div
           className="absolute w-full h-full"
           variants={{ front: { opacity: 1 }, back: { opacity: 0 } }}
-          transition={{ duration: 0, delay: 0.25 }}
+          // Short crossfade centered on the flip midpoint (0.25s of 0.5s):
+          // a duration-0 swap could land on a frame with BOTH faces
+          // transparent when style flushes skew or frames drop (Gecko), which
+          // read as the card blinking out. The fade window stays inside the
+          // near-edge-on part of the sweep, so no double image is visible.
+          transition={{ duration: 0.1, delay: 0.2 }}
         >
           {faceCard && <PlayingCardRenderer card={faceCard} />}
         </motion.div>
@@ -95,7 +100,7 @@ export function PlayingCard({
           className="absolute w-full h-full"
           style={{ scaleX: -1 }}
           variants={{ front: { opacity: 0 }, back: { opacity: 1 } }}
-          transition={{ duration: 0, delay: 0.25 }}
+          transition={{ duration: 0.1, delay: 0.2 }}
         >
           <CardBack count={backCount} />
         </motion.div>
