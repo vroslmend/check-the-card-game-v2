@@ -134,24 +134,6 @@ function HomePage() {
     },
   };
 
-  const features = [
-    {
-      title: "Master Your Memory",
-      description:
-        "Keep track of your cards and your opponents'. A sharp memory is your greatest weapon.",
-    },
-    {
-      title: "Unleash Chaos",
-      description:
-        "Use special abilities from Jacks, Queens, and Kings to peek, swap, and disrupt your way to victory.",
-    },
-    {
-      title: "Call Their Bluff",
-      description:
-        "Think you have the lowest score? Call 'Check' to end the round, but be careful—a wrong move could cost you the game.",
-    },
-  ];
-
   const { scrollYProgress: footerScrollYProgress } = useScroll({
     target: endOfPageRef,
     offset: ["start end", "end end"],
