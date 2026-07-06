@@ -58,6 +58,13 @@ export function PlayingCard({
   useEffect(() => {
     if (card) lastCardRef.current = card;
   }, [card]);
+  // Always render the live prop when present — the ref exists only to keep
+  // the last face visible while flipping back DOWN (card removed mid-flip).
+  // Rendering the ref alone left the front face empty for the whole flip
+  // whenever the card data and the flip arrived in one broadcast: a ref
+  // write triggers no re-render, so the face only appeared on the next
+  // unrelated render ("face pops in late" on slow connections).
+  const faceCard = card ?? lastCardRef.current;
 
   // 2D flip: the container sweeps scaleX 1 → -1 (through 0 at the midpoint,
   // which reads exactly like a Y-rotation edge-on) while the faces
@@ -81,9 +88,7 @@ export function PlayingCard({
           variants={{ front: { opacity: 1 }, back: { opacity: 0 } }}
           transition={{ duration: 0, delay: 0.25 }}
         >
-          {lastCardRef.current && (
-            <PlayingCardRenderer card={lastCardRef.current} />
-          )}
+          {faceCard && <PlayingCardRenderer card={faceCard} />}
         </motion.div>
 
         <motion.div
