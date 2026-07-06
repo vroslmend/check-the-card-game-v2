@@ -2168,10 +2168,6 @@ export const gameMachine = setup({
         },
       },
     },
-    history: {
-      type: "history",
-      history: "deep",
-    },
     error: {
       id: "game.error",
       entry: "log_ENTER_ERROR",
@@ -2197,16 +2193,109 @@ export const gameMachine = setup({
         recovering: {
           invoke: { src: "reconnectTimer", onDone: "failedRecovery" },
           on: {
-            PLAYER_RECONNECTED: {
-              target: "#game.history",
-              actions: [
-                "markPlayerAsConnected",
-                "clearErrorState",
-                "broadcastGameState",
-              ] as const,
-              guard: ({ context, event }) =>
-                context.errorState?.affectedPlayerId === event.playerId,
-            },
+            // Resume exactly where the game paused. The old target
+            // (#game.history) could never work: a history node records its
+            // value only when its PARENT exits, and this one's parent was
+            // the machine root — which never exits — so its history was
+            // always empty and the "resume" fell through to the root's
+            // initial state (WAITING_FOR_PLAYERS), hard-locking the game.
+            // gameStage + currentTurnSegment identify the pause point; each
+            // target's entry re-arms its own deadline/timers, and matching
+            // deliberately reopens a fresh window.
+            PLAYER_RECONNECTED: [
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.gameStage === GameStage.FINAL_TURNS &&
+                  context.currentTurnSegment === TurnPhase.DISCARD,
+                target: "#FINAL_TURNS.turn.DISCARD",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.gameStage === GameStage.FINAL_TURNS &&
+                  context.currentTurnSegment === TurnPhase.MATCHING,
+                target: "#FINAL_TURNS.turn.matching",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.gameStage === GameStage.FINAL_TURNS &&
+                  context.currentTurnSegment === TurnPhase.ABILITY,
+                target: "#FINAL_TURNS.turn.ability",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.gameStage === GameStage.FINAL_TURNS,
+                target: `#${GameStage.FINAL_TURNS}`,
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.currentTurnSegment === TurnPhase.DISCARD,
+                target: "#game.PLAYING.turn.DISCARD",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.currentTurnSegment === TurnPhase.MATCHING,
+                target: "#game.PLAYING.turn.matching",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId &&
+                  context.currentTurnSegment === TurnPhase.ABILITY,
+                target: "#game.PLAYING.turn.ability",
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+              {
+                // DRAW pause (or anything unexpected): a fresh turn entry for
+                // the same current player re-arms the draw window.
+                guard: ({ context, event }) =>
+                  context.errorState?.affectedPlayerId === event.playerId,
+                target: `#game.${GameStage.PLAYING}`,
+                actions: [
+                  "markPlayerAsConnected",
+                  "clearErrorState",
+                  "broadcastGameState",
+                ] as const,
+              },
+            ],
           },
         },
         failedRecovery: {
