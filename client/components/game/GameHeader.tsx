@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { PanelLeftClose, PanelLeftOpen, ChevronLeft, User } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, ChevronLeft, User } from 'lucide-react';
 import { useUIActorRef, useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -72,7 +72,7 @@ export const GameHeader = () => {
               transition={{ duration: 0.2 }}
               className="flex items-center justify-center"
             >
-              {isSidePanelOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
+              {isSidePanelOpen ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
             </motion.div>
           </AnimatePresence>
           <span className="sr-only">Toggle side panel</span>

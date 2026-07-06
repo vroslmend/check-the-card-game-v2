@@ -113,7 +113,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   const isEndStage =
     gameStage === GameStage.SCORING || gameStage === GameStage.GAMEOVER;
 
-  const combinedClass = cn(isLocked && "grayscale opacity-60");
+  const combinedClass = cn(isLocked && "opacity-60");
 
   return (
     <HandGrid numItems={handToDisplay.length} className={combinedClass}>
