@@ -2,7 +2,7 @@ import http from "http";
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { createActor, ActorRefFrom } from "xstate";
 import dotenv from "dotenv";
-import { nanoid } from "nanoid";
+import { nanoid, customAlphabet } from "nanoid";
 
 dotenv.config();
 
@@ -33,6 +33,19 @@ const socketSessionMap = new Map<
   string,
   { gameId: GameId; playerId: PlayerId }
 >();
+
+// Short, shareable lobby codes: uppercase, no lookalikes (0/O, 1/I/L).
+// ~28.6M combinations at length 5; collision-checked against live games.
+const LOBBY_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const generateLobbyCode = customAlphabet(LOBBY_CODE_ALPHABET, 5);
+const newGameId = (): GameId => {
+  for (let i = 0; i < 5; i++) {
+    const code = generateLobbyCode();
+    if (!activeGameMachines.has(code)) return code;
+  }
+  // Practically unreachable; fall back to a long unique id.
+  return nanoid(12);
+};
 
 const MAX_CHAT_MESSAGE_LENGTH = 500;
 const ABANDONED_GAME_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
@@ -196,7 +209,7 @@ io.on("connection", (socket: Socket) => {
       callback: (response: CreateGameResponse) => void,
     ) => {
       try {
-        const gameId = nanoid(6);
+        const gameId = newGameId();
         const playerId = nanoid();
         const finalPlayerSetupData = {
           ...playerSetupData,
@@ -311,6 +324,8 @@ io.on("connection", (socket: Socket) => {
       callback: (response: JoinGameResponse) => void,
     ) => {
       try {
+        // Codes are generated uppercase; accept any casing from typed input.
+        gameId = gameId.trim().toUpperCase();
         const gameActor = activeGameMachines.get(gameId);
 
         if (!playerSetupData) {

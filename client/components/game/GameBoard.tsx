@@ -16,6 +16,7 @@ import { GameEndScreen } from "./GameEndScreen";
 import { GameHeader } from "./GameHeader";
 import SidePanel from "@/components/layout/SidePanel";
 import { useCheckMoment, CheckStamp } from "./CheckMoment";
+import { GameEventToasts } from "./GameEventToasts";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
   state.matches({ inGame: "disconnected" });
@@ -176,6 +177,7 @@ export function GameBoard() {
         </AnimatePresence>
 
         <ConnectionStatusBanner />
+        <GameEventToasts />
         {localPlayerForfeited &&
           gameStage !== GameStage.GAMEOVER &&
           gameStage !== GameStage.SCORING && (
@@ -241,8 +243,11 @@ export function GameBoard() {
                 />
               ) : null}
             </div>
-            {/* Action bar */}
-            <div className="min-h-16 flex items-center justify-center transition-all duration-300 ease-in-out pb-4">
+            {/* Action bar: fixed-height row so its changing content (button
+                sets, prompt, countdown) never resizes the 1fr table row
+                above — that reflow was the board visibly shifting up/down on
+                every phase change. */}
+            <div className="h-32 flex items-start justify-center pb-2">
               <ActionControllerView />
             </div>
           </div>
