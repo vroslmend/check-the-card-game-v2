@@ -31,6 +31,9 @@ interface PlayerHandStripProps {
   player: Player;
   isLocalPlayer: boolean;
   isCurrentTurn: boolean;
+  /** Position around the table; staggers the end-of-round reveal and the
+   *  deal ripple. */
+  tableIndex: number;
 }
 
 const selectStripContext = (state: UIMachineSnapshot) => {
@@ -160,6 +163,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
   player,
   isLocalPlayer,
   isCurrentTurn,
+  tableIndex,
 }) => {
   const {
     canSwap,
@@ -225,6 +229,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         onCardClick={handleCardClick}
         canInteract={canInteract}
         isLocked={player.isLocked}
+        tableIndex={tableIndex}
         selectedCardIndex={
           isLocalPlayer && canMatch ? matchAttempt?.cardIndex : undefined
         }
