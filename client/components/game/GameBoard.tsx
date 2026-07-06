@@ -16,6 +16,7 @@ import { GameEndScreen } from "./GameEndScreen";
 import { GameHeader } from "./GameHeader";
 import SidePanel from "@/components/layout/SidePanel";
 import { useCheckMoment, CheckStamp } from "./CheckMoment";
+import { useMatchMoment, MatchStamp } from "./MatchMoment";
 import { GameEventToasts } from "./GameEventToasts";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
@@ -130,6 +131,7 @@ export function GameBoard() {
   } = useUISelector(selectGameBoardProps);
   const { gameStage, players, winnerIds } = useUISelector(selectGameEndProps);
   const checkMoment = useCheckMoment();
+  const matchMoment = useMatchMoment();
   const reducedMotion = useReducedMotion();
 
   if (!localPlayerId || !gameState) {
@@ -249,6 +251,7 @@ export function GameBoard() {
       </motion.div>
 
       <CheckStamp moment={checkMoment} />
+      <MatchStamp moment={matchMoment} />
     </div>
   );
 }
