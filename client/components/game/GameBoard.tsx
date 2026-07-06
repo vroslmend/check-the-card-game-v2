@@ -17,7 +17,7 @@ import { GameHeader } from "./GameHeader";
 import SidePanel from "@/components/layout/SidePanel";
 import { useCheckMoment, CheckStamp } from "./CheckMoment";
 import { usePenaltyMoment, PenaltyStamp } from "./PenaltyMoment";
-import { GameEventToasts } from "./GameEventToasts";
+import { GameEventCaption } from "./GameEventCaption";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
   state.matches({ inGame: "disconnected" });
@@ -180,7 +180,7 @@ export function GameBoard() {
     <div className="relative h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
       <GameHeader />
       <motion.div
-        className="relative flex-1 grid grid-rows-[auto_1fr_auto_auto]"
+        className="relative flex-1 grid grid-rows-[auto_auto_1fr_auto_auto]"
         animate={{ scale: checkMoment && !reducedMotion ? 0.92 : 1 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
         style={{ transformOrigin: "center" }}
@@ -199,7 +199,6 @@ export function GameBoard() {
         </AnimatePresence>
 
         <ConnectionStatusBanner />
-        <GameEventToasts />
         {localPlayerForfeited && !isEndStage && (
           <ForfeitNotice onLeave={() => send({ type: "LEAVE_GAME" })} />
         )}
@@ -211,6 +210,7 @@ export function GameBoard() {
 
         <ActionController>
           <div className="contents">
+            <GameEventCaption />
             {/* Opponents area */}
             <div className="flex justify-center items-center py-2">
               {opponentPlayers.length > 0 ? (
