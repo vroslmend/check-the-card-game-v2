@@ -186,7 +186,7 @@ export function GameBoard() {
         animate={{
           scale:
             isEndStage && tableSettled && !reducedMotion
-              ? 0.9
+              ? 0.85
               : checkMoment && !reducedMotion
                 ? 0.92
                 : 1,
