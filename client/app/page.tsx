@@ -6,12 +6,8 @@ import {
   useScroll,
   useTransform,
   useSpring,
-  useInView,
-  useMotionValue,
   AnimatePresence,
   useMotionValueEvent,
-  MotionValue,
-  useMotionTemplate,
   useReducedMotion,
   type Variants,
 } from "framer-motion";
@@ -19,20 +15,10 @@ import { useTheme } from "next-themes";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import {
-  ChevronDown,
-  Spade,
-  Heart,
-  Diamond,
-  Users,
-  ArrowRight,
-} from "lucide-react";
+import { ChevronDown, Spade, Users, ArrowRight } from "lucide-react";
 import { Menu, X } from "lucide-react";
-import { FaGithub, FaSpotify, FaDiscord } from "react-icons/fa";
-import { OptimizedShapes } from "@/components/ui/OptimizedShapes";
-import { SmoothFloatingElements } from "@/components/ui/SmoothFloatingElements";
-import { PrincipleCard } from "@/components/ui/PrincipleCard";
-import { CardStack } from "@/components/ui/CardStack";
+import { FaGithub, FaSpotify } from "react-icons/fa";
+import { HeroCards } from "@/components/ui/HeroCards";
 import { AnimateOnView } from "@/components/ui/AnimateOnView";
 import { Signature } from "@/components/ui/Signature";
 import { Scrollytelling } from "@/components/ui/Scrollytelling";
@@ -68,70 +54,6 @@ const letterVariants: Variants = {
   },
 };
 
-function FeatureItem({
-  index,
-  feature,
-  continuousActiveCard,
-}: {
-  index: number;
-  feature: { title: string; description: string };
-  continuousActiveCard: MotionValue<number>;
-}) {
-  const diff = useTransform(continuousActiveCard, (latest) => index - latest);
-
-  const opacity = useTransform(
-    diff,
-    [-1, -0.5, 0, 0.5, 1],
-    [0.5, 1, 1, 1, 0.5],
-  );
-  const scale = useTransform(diff, [-1, -0.5, 0, 0.5, 1], [0.9, 1, 1, 1, 0.9]);
-
-  const bgOpacity = useTransform(diff, [-0.5, 0, 0.5], [0, 1, 0]);
-
-  const backgroundColor = useTransform(
-    bgOpacity,
-    (v) => `rgba(var(--feature-item-bg-rgb), ${v})`,
-  );
-
-  const textColor = useTransform(
-    bgOpacity,
-    [0, 1],
-    [`hsl(var(--foreground))`, `hsl(var(--feature-item-text-color-hsl))`],
-  );
-  const mutedTextColor = useTransform(
-    bgOpacity,
-    [0, 1],
-    [
-      `hsl(var(--muted-foreground))`,
-      `hsl(var(--feature-item-text-color-hsl) / 0.7)`,
-    ],
-  );
-
-  return (
-    <motion.div
-      className="p-8 rounded-3xl"
-      style={{
-        opacity,
-        scale,
-        backgroundColor,
-      }}
-    >
-      <motion.h3
-        style={{ color: textColor }}
-        className="text-2xl font-normal text-stone-900 dark:text-stone-100 mb-3"
-      >
-        {feature.title}
-      </motion.h3>
-      <motion.p
-        style={{ color: mutedTextColor }}
-        className="text-stone-600 dark:text-stone-400 font-light leading-relaxed"
-      >
-        {feature.description}
-      </motion.p>
-    </motion.div>
-  );
-}
-
 function HomePage() {
   const [showNewGame, setShowNewGame] = useState(false);
   const [showJoinGame, setShowJoinGame] = useState(false);
@@ -150,7 +72,6 @@ function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const endOfPageRef = useRef<HTMLDivElement>(null);
-  const isHeroInView = useInView(heroRef, { amount: 0.3 });
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const shouldReduceMotion = useReducedMotion();
@@ -259,28 +180,6 @@ function HomePage() {
 
   const checkText = (isCheckHovered ? "Check!" : "Check").split("");
 
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-
-  const springConfig = { damping: 40, stiffness: 200, mass: 0.7 };
-
-  const textX1 = useSpring(
-    useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15]),
-    springConfig,
-  );
-  const textY1 = useSpring(
-    useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-15, 15]),
-    springConfig,
-  );
-  const textX2 = useSpring(
-    useTransform(mouseX, [-1, 1], shouldReduceMotion ? [0, 0] : [-25, 25]),
-    springConfig,
-  );
-  const textY2 = useSpring(
-    useTransform(mouseY, [-1, 1], shouldReduceMotion ? [0, 0] : [-25, 25]),
-    springConfig,
-  );
-
   const { scrollY, scrollYProgress } = useScroll();
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 100,
@@ -303,22 +202,6 @@ function HomePage() {
     [0, 1],
     shouldReduceMotion ? ["0%", "0%"] : ["0%", "-30%"],
   );
-  const shapeY = useTransform(
-    smoothProgress,
-    [0, 1],
-    shouldReduceMotion ? ["0%", "0%"] : ["0%", "20%"],
-  );
-
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth) * 2 - 1;
-      const y = (e.clientY / window.innerHeight) * 2 - 1;
-
-      mouseX.set(x);
-      mouseY.set(y);
-    },
-    [mouseX, mouseY],
-  );
 
   useEffect(() => {
     if ("scrollRestoration" in history) {
@@ -330,34 +213,6 @@ function HomePage() {
       setIsMobileMenuOpen(false);
     }
   }, [isMobileMenuOpen, isMobile]);
-
-  useEffect(() => {
-    if (isModalOpen) {
-      mouseX.set(0);
-      mouseY.set(0);
-    }
-
-    const throttle = (func: (e: MouseEvent) => void, limit: number) => {
-      let inThrottle: boolean;
-      return function (this: any, e: MouseEvent) {
-        const context = this;
-        if (!inThrottle) {
-          func.apply(context, [e]);
-          inThrottle = true;
-          setTimeout(() => (inThrottle = false), limit);
-        }
-      };
-    };
-
-    const throttledMouseMove = throttle(handleMouseMove, 16);
-
-    if (!isMobile && !isModalOpen) {
-      window.addEventListener("mousemove", throttledMouseMove);
-      return () => {
-        window.removeEventListener("mousemove", throttledMouseMove);
-      };
-    }
-  }, [isMobile, handleMouseMove, isModalOpen, mouseX, mouseY]);
 
   const handleCreateGame = () => {
     startTransition(() => {
@@ -374,25 +229,19 @@ function HomePage() {
   return (
     <div
       ref={containerRef}
-      className="relative flex min-h-screen flex-col bg-stone-50 dark:bg-zinc-950 noselect"
+      className="relative flex min-h-screen flex-col bg-ground noselect"
     >
       <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
       <JoinGameModal
         isModalOpen={showJoinGame}
         setIsModalOpen={setShowJoinGame}
       />
-      <OptimizedShapes
-        mouseX={mouseX}
-        mouseY={mouseY}
-        scrollY={shapeY}
-        shouldReduceMotion={shouldReduceMotion ?? false}
-      />
 
       <motion.header
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-        className="fixed top-0 z-50 w-full backdrop-blur-xl transition-all duration-700"
+        className="fixed top-0 z-50 w-full border-b border-hairline bg-ground"
       >
         <div className="container mx-auto flex h-24 items-center justify-between px-4">
           <a
@@ -408,26 +257,15 @@ function HomePage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6, duration: 1 }}
             >
-              <motion.div
-                animate={{
-                  rotate: !shouldReduceMotion ? [0, 3, -3, 0] : 0,
-                  scale: !shouldReduceMotion ? [1, 1.02, 1] : 1,
-                }}
-                transition={{
-                  duration: 6,
-                  repeat: Number.POSITIVE_INFINITY,
-                  ease: "easeInOut",
-                }}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-900/5 backdrop-blur-sm dark:bg-stone-100/5"
-              >
-                <Spade className="h-5 w-5 text-stone-900 dark:text-stone-100" />
-              </motion.div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-hairline bg-surface">
+                <Spade className="h-5 w-5 text-ink" />
+              </div>
             </motion.div>
             <motion.span
               initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6, duration: 1 }}
-              className="text-3xl font-light tracking-tight text-stone-900 dark:text-stone-100"
+              className="text-2xl font-extrabold tracking-tight text-ink"
             >
               Check
             </motion.span>
@@ -439,7 +277,7 @@ function HomePage() {
             transition={{ delay: 0.6, duration: 1 }}
             className="hidden lg:flex items-center gap-12"
           >
-            {["Rules", "Features", "Leaderboard"].map((item, index) => (
+            {["Rules", "Features"].map((item, index) => (
               <motion.div
                 key={item}
                 initial={{ opacity: 0, y: -10 }}
@@ -448,12 +286,12 @@ function HomePage() {
               >
                 <Link
                   href={item === "Rules" ? "/rules" : `#${item.toLowerCase()}`}
-                  className="relative text-sm font-light tracking-wide text-stone-600 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                  className="relative text-sm font-semibold tracking-wide text-ink-muted transition-colors duration-300 hover:text-ink"
                   data-cursor-icon
                 >
                   {item}
                   <motion.div
-                    className="absolute -bottom-1 left-0 h-px bg-stone-900 dark:bg-stone-100"
+                    className="absolute -bottom-1 left-0 h-px bg-ink"
                     initial={{ width: 0 }}
                     whileHover={{ width: "100%" }}
                     transition={{ duration: 0.3 }}
@@ -488,10 +326,10 @@ function HomePage() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: "100vw" }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-[100] bg-stone-50 dark:bg-zinc-950 p-8 flex flex-col overscroll-y-contain"
+            className="fixed inset-0 z-[100] bg-ground p-8 flex flex-col overscroll-y-contain"
           >
             <div className="flex justify-between items-center">
-              <span className="text-3xl font-light tracking-tight text-stone-900 dark:text-stone-100">
+              <span className="text-2xl font-extrabold tracking-tight text-ink">
                 Menu
               </span>
               <Button
@@ -503,7 +341,7 @@ function HomePage() {
               </Button>
             </div>
             <nav className="flex flex-col items-center justify-center flex-1 gap-12 text-2xl">
-              {["Rules", "Features", "Leaderboard"].map((item, index) => (
+              {["Rules", "Features"].map((item, index) => (
                 <motion.div
                   key={item}
                   initial={{ opacity: 0, y: 20 }}
@@ -512,7 +350,7 @@ function HomePage() {
                 >
                   <Link
                     href={item === "Rules" ? "/rules" : `#${item.toLowerCase()}`}
-                    className="relative font-light tracking-wide text-stone-600 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                    className="relative font-semibold tracking-wide text-ink-muted transition-colors duration-300 hover:text-ink"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     {item}
@@ -536,10 +374,7 @@ function HomePage() {
             style={{ y: heroY }}
             className="container relative z-10 mx-auto px-4"
           >
-            <div
-              className="grid min-h-screen items-center lg:grid-cols-2 text-center lg:text-left"
-              style={{ perspective: "1000px" }}
-            >
+            <div className="grid min-h-screen items-center lg:grid-cols-2 text-center lg:text-left">
               <motion.div className="flex flex-col justify-center items-center lg:items-start space-y-12">
                 <motion.div
                   initial={{ opacity: 0, y: 60 }}
@@ -551,56 +386,31 @@ function HomePage() {
                   }}
                   className="space-y-8"
                 >
-                  <motion.div
-                    className="inline-flex items-center gap-3 rounded-full border border-stone-200/60 bg-white/40 px-6 py-3 backdrop-blur-sm dark:border-stone-800/60 dark:bg-stone-900/40"
-                    whileHover={{ scale: 1.02 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <motion.div
-                      animate={{
-                        scale: [1, 1.3, 1],
-                        opacity: [0.7, 1, 0.7],
-                      }}
-                      transition={{
-                        duration: 2.5,
-                        repeat: Number.POSITIVE_INFINITY,
-                        ease: "easeInOut",
-                      }}
-                      className="h-2 w-2 rounded-full bg-emerald-500"
-                    />
-                    <span className="text-sm font-light tracking-wide text-stone-700 dark:text-stone-300">
-                      Multiplayer Card Experience
+                  <div className="inline-flex items-center gap-3 rounded-full border border-hairline bg-surface px-6 py-3">
+                    <div className="h-2 w-2 rounded-full bg-accent" />
+                    <span className="text-sm font-semibold tracking-wide text-ink-muted">
+                      Multiplayer card game
                     </span>
-                  </motion.div>
+                  </div>
 
                   <div className="space-y-10 text-center lg:text-left">
-                    <h1 className="inline-block text-left text-6xl font-light leading-none tracking-tighter text-stone-900 dark:text-stone-100 sm:text-7xl md:text-8xl lg:text-8xl xl:text-9xl">
+                    <h1 className="inline-block text-left text-6xl font-extrabold leading-none tracking-tight text-ink sm:text-7xl md:text-8xl lg:text-8xl xl:text-9xl">
                       <motion.span
                         className="block"
                         initial={{ opacity: 0, y: 40 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 1, delay: 1.2 }}
-                        style={{
-                          x: textX1,
-                          y: textY1,
-                          willChange: "transform",
-                        }}
                       >
                         The
                       </motion.span>
                       <motion.span
-                        className="relative ml-8 inline-block font-normal italic"
+                        className="relative ml-8 inline-block"
                         initial={{ opacity: 0, x: -60 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{
                           duration: 1.2,
                           delay: 1.5,
                           ease: [0.6, 0.01, 0.05, 0.95],
-                        }}
-                        style={{
-                          x: textX2,
-                          y: textY2,
-                          willChange: "transform",
                         }}
                       >
                         <motion.span
@@ -668,7 +478,7 @@ function HomePage() {
                             delay: 2.2,
                             ease: [0.6, 0.01, 0.05, 0.95],
                           }}
-                          className="absolute -bottom-3 left-[52%] h-1 w-[96%] -translate-x-1/2 bg-gradient-to-r from-stone-900 to-stone-600 dark:from-stone-100 dark:to-stone-400"
+                          className="absolute -bottom-3 left-[52%] h-1 w-[96%] -translate-x-1/2 rounded-full bg-accent"
                         />
                       </motion.span>
                     </h1>
@@ -677,7 +487,7 @@ function HomePage() {
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 1, delay: 0.5 }}
-                      className="max-w-lg text-xl font-light leading-relaxed text-stone-600 dark:text-stone-400"
+                      className="max-w-lg text-xl font-normal leading-relaxed text-ink-muted"
                     >
                       Outwit your friends in a tense game of memory, strategy,
                       and pure luck. Keep your cards close, your score low, and
@@ -696,7 +506,7 @@ function HomePage() {
                         <Button
                           size="lg"
                           onClick={handleCreateGame}
-                          className="bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+                          className="rounded-full bg-accent px-8 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
                         >
                           Create a Lobby
                         </Button>
@@ -704,7 +514,7 @@ function HomePage() {
                           variant="outline"
                           size="lg"
                           onClick={handleJoinGame}
-                          className="border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+                          className="rounded-full border border-hairline bg-surface px-8 py-4 text-lg font-bold text-ink hover:bg-surface-2"
                         >
                           <Users className="mr-2 h-4 w-4" />
                           Join a Lobby
@@ -723,29 +533,12 @@ function HomePage() {
                             size="lg"
                             onClick={handleCreateGame}
                             data-cursor-link
-                            className="group relative z-10 overflow-hidden rounded-full bg-stone-900 px-8 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+                            className="relative z-10 rounded-full bg-accent px-8 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
                           >
                             <span className="pointer-events-none relative z-10 flex items-center gap-2">
                               Create a Lobby
-                              <motion.div
-                                animate={{
-                                  x: !shouldReduceMotion ? [0, 4, 0] : 0,
-                                }}
-                                transition={{
-                                  duration: 2,
-                                  repeat: Number.POSITIVE_INFINITY,
-                                  ease: "easeInOut",
-                                }}
-                              >
-                                <ArrowRight className="h-4 w-4" />
-                              </motion.div>
+                              <ArrowRight className="h-4 w-4" />
                             </span>
-                            <motion.div
-                              className="absolute inset-0 bg-gradient-to-r from-stone-800 to-stone-700 dark:from-stone-200 dark:to-stone-300"
-                              initial={{ x: "-100%" }}
-                              whileHover={{ x: "0%" }}
-                              transition={{ duration: 0.4, ease: "easeOut" }}
-                            />
                           </Button>
                           <motion.div
                             variants={dealtCardVariants}
@@ -771,7 +564,7 @@ function HomePage() {
                             size="lg"
                             onClick={handleJoinGame}
                             data-cursor-link
-                            className="relative z-10 rounded-full border-2 border-stone-200 bg-white/60 px-8 py-4 text-lg font-light text-stone-900 backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+                            className="relative z-10 rounded-full border border-hairline bg-surface px-8 py-4 text-lg font-bold text-ink hover:bg-surface-2"
                           >
                             <Users className="mr-2 h-4 w-4" />
                             Join a Lobby
@@ -795,15 +588,7 @@ function HomePage() {
               </motion.div>
 
               <div className="relative hidden h-full items-center justify-center lg:flex">
-                {!shouldReduceMotion && (
-                  <SmoothFloatingElements
-                    mouseX={mouseX}
-                    mouseY={mouseY}
-                    isVisible={isHeroInView}
-                    isCheckHovered={isCheckHovered}
-                    shouldReduceMotion={shouldReduceMotion ?? false}
-                  />
-                )}
+                <HeroCards checkHovered={isCheckHovered} />
               </div>
             </div>
 
@@ -824,14 +609,14 @@ function HomePage() {
                   duration: 3,
                   ease: "easeInOut",
                 }}
-                className="flex cursor-pointer flex-col items-center gap-2 text-stone-500 transition-colors duration-300 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-300"
+                className="flex cursor-pointer flex-col items-center gap-2 text-ink-muted transition-colors duration-300 hover:text-ink"
                 onClick={() => {
                   document
                     .getElementById("game-principles-anchor")
                     ?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
               >
-                <span className="text-sm font-light tracking-wide">
+                <span className="text-sm font-semibold tracking-wide">
                   Discover more
                 </span>
                 <ChevronDown className="h-4 w-4" />
@@ -842,13 +627,13 @@ function HomePage() {
 
         <Scrollytelling />
 
-        <section id="leaderboard" className="relative py-40">
+        <section id="play" className="relative py-40">
           <div className="container px-4 mx-auto">
             <AnimateOnView className="mx-auto max-w-4xl text-center">
-              <h2 className="mb-8 text-6xl font-light tracking-tighter text-stone-900 dark:text-stone-100">
-                Your Turn to Play
+              <h2 className="mb-8 text-6xl font-extrabold tracking-tight text-ink">
+                Your turn to play
               </h2>
-              <p className="mb-16 text-xl font-light text-stone-600 dark:text-stone-400">
+              <p className="mb-16 text-xl font-normal text-ink-muted">
                 The table is set, the cards are shuffled. All that's missing is
                 you.
               </p>
@@ -859,7 +644,7 @@ function HomePage() {
                     <Button
                       size="lg"
                       onClick={handleCreateGame}
-                      className="rounded-full bg-stone-900 px-12 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+                      className="rounded-full bg-accent px-12 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
                     >
                       Create a Lobby
                     </Button>
@@ -867,7 +652,7 @@ function HomePage() {
                       variant="outline"
                       size="lg"
                       onClick={handleJoinGame}
-                      className="rounded-full border-2 border-stone-200 bg-white/60 px-12 py-4 text-lg font-light backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+                      className="rounded-full border border-hairline bg-surface px-12 py-4 text-lg font-bold text-ink hover:bg-surface-2"
                     >
                       Join a Lobby
                     </Button>
@@ -882,7 +667,7 @@ function HomePage() {
                       <Button
                         size="lg"
                         onClick={handleCreateGame}
-                        className="rounded-full bg-stone-900 px-12 py-4 text-lg font-light text-white dark:bg-stone-100 dark:text-stone-900"
+                        className="rounded-full bg-accent px-12 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
                         data-cursor-link
                       >
                         Create a Lobby
@@ -897,7 +682,7 @@ function HomePage() {
                         variant="outline"
                         size="lg"
                         onClick={handleJoinGame}
-                        className="rounded-full border-2 border-stone-200 bg-white/60 px-12 py-4 text-lg font-light backdrop-blur-sm dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-100"
+                        className="rounded-full border border-hairline bg-surface px-12 py-4 text-lg font-bold text-ink hover:bg-surface-2"
                         data-cursor-link
                       >
                         Join a Lobby
@@ -914,16 +699,16 @@ function HomePage() {
 
       <motion.footer
         style={{ y: footerY }}
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/60 bg-white/80 backdrop-blur-sm dark:border-stone-800/60 dark:bg-zinc-950/80"
+        className="fixed bottom-0 left-0 right-0 z-40 border-t border-hairline bg-surface-2"
       >
         <div className="container mx-auto grid grid-cols-1 items-center gap-y-4 px-4 py-4 text-center sm:grid-cols-3 sm:text-left">
           <div className="hidden sm:flex items-center gap-3 justify-self-start">
-            <Spade className="h-5 w-5 text-stone-700 dark:text-stone-300" />
-            <span className="text-lg font-light text-stone-900 dark:text-stone-100">
+            <Spade className="h-5 w-5 text-ink-muted" />
+            <span className="text-lg font-bold text-ink">
               Check
             </span>
           </div>
-          <div className="flex flex-col items-center justify-center gap-y-1 text-sm font-light text-stone-500 dark:text-stone-500">
+          <div className="flex flex-col items-center justify-center gap-y-1 text-sm font-normal text-ink-muted">
             <div className="flex flex-row items-center gap-x-2">
               <div className="flex items-center">
                 <span>© {new Date().getFullYear()} Check Card Game.</span>
@@ -991,7 +776,7 @@ function HomePage() {
               href="https://github.com/vroslmend"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+              className="text-ink-muted transition-colors duration-300 hover:text-ink"
               whileHover={{ y: -3, scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
               data-cursor-icon
@@ -1003,25 +788,13 @@ function HomePage() {
               href="https://open.spotify.com/user/6tf81fs0qm2akdo4yt1wp1akw"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+              className="text-ink-muted transition-colors duration-300 hover:text-ink"
               whileHover={{ y: -3, scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
               data-cursor-icon
             >
               <span className="sr-only">Spotify</span>
               <FaSpotify className="h-5 w-5" />
-            </motion.a>
-            <motion.a
-              href="https://discord.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-stone-500 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-              whileHover={{ y: -3, scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              data-cursor-icon
-            >
-              <span className="sr-only">Discord</span>
-              <FaDiscord className="h-5 w-5" />
             </motion.a>
           </div>
         </div>

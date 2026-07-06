@@ -53,9 +53,6 @@
   --cursor-bg-link: hsl(20 14% 8% / 0.2);
   --cursor-bg-pressed: hsl(20 14% 8% / 0.3);
   --cursor-bg-text: hsl(20 14% 8% / 1);
-
-  --feature-item-bg-rgb: 245, 245, 244;
-  --feature-item-text-color-hsl: 60 9% 98%;
 }
 
 .dark {
@@ -77,9 +74,6 @@
   --cursor-bg-link: hsl(60 9% 98% / 0.2);
   --cursor-bg-pressed: hsl(60 9% 98% / 0.3);
   --cursor-bg-text: hsl(60 9% 98% / 1);
-
-  --feature-item-bg-rgb: 39, 39, 42;
-  --feature-item-text-color-hsl: 60 9% 98%;
 }
 
 /* Map raw vars into Tailwind's namespaces so utilities generate. `inline` keeps
@@ -169,14 +163,6 @@ html {
   background: hsl(var(--muted-foreground));
 }
 
-.font-serif {
-  font-family: var(--font-playfair), serif;
-}
-
-.font-sans {
-  font-family: var(--font-inter), sans-serif;
-}
-
 @layer utilities {
   .will-change-transform {
     will-change: transform;
@@ -186,66 +172,6 @@ html {
     will-change: auto;
   }
 
-  .animate-float {
-    animation: float 8s ease-in-out infinite;
-    will-change: transform;
-  }
-
-  @keyframes float {
-    0%,
-    100% {
-      transform: translateY(0px);
-    }
-    50% {
-      transform: translateY(-15px);
-    }
-  }
-
-  .text-stone-gradient {
-    background: linear-gradient(135deg, hsl(25, 5%, 45%), hsl(25, 5%, 65%));
-    background-size: 200% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shift 4s ease-in-out infinite;
-    will-change: background-position;
-  }
-
-  .dark .text-stone-gradient {
-    background: linear-gradient(135deg, hsl(240, 5%, 65%), hsl(240, 5%, 85%));
-    background-size: 200% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: gradient-shift 4s ease-in-out infinite;
-    will-change: background-position;
-  }
-
-  @keyframes gradient-shift {
-    0%,
-    100% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
-  }
-
-  /* Primary gradient button */
-  .btn-primary {
-    @apply rounded-full px-3 py-1.5 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white transition-colors pointer-events-auto select-none;
-  }
-
-  .btn-icon {
-    @apply rounded-full p-2 shadow-xl bg-gradient-to-br from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 text-white;
-  }
-
-  .gpu-accelerated {
-    transform: translateZ(0);
-    backface-visibility: hidden;
-    perspective: 1000px;
-  }
-
   .noselect {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
@@ -253,10 +179,6 @@ html {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-  }
-
-  .animation-delay-n5 {
-    animation-delay: -5s;
   }
 
   /* --- Container Query Helper ------------------------------------------- */
@@ -306,12 +228,4 @@ html {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-.goo-filter {
-  display: none;
-}
-
-.cursor-blend-difference {
-  mix-blend-mode: difference;
 }

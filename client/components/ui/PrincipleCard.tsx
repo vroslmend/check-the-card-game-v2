@@ -87,7 +87,7 @@ export function PrincipleCard({
         <div className="flex h-full flex-col items-start justify-end text-left">
           <motion.h3
             style={{ transform: "translateZ(40px)" }}
-            className="mb-2 font-serif text-2xl text-stone-900 dark:text-stone-100"
+            className="mb-2 text-2xl font-bold text-stone-900 dark:text-stone-100"
           >
             {title}
           </motion.h3>
