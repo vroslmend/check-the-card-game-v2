@@ -5,7 +5,6 @@ import { type Card, PublicCard } from "shared-types";
 import { PlayingCard } from "./PlayingCard";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { useDevice } from "@/context/DeviceContext";
 import { cardTravelTransition } from "@/lib/card-motion";
 import { Lock } from "lucide-react";
 
@@ -34,32 +33,24 @@ export const VisualCardStack = ({
   className,
 }: VisualCardStackProps) => {
   const hasCards = count > 0;
-  const { isTouchDevice } = useDevice();
 
   return (
     <div className="flex flex-col items-center">
       <motion.div
         layout
         aria-label={`${title}${count ? ` (${count})` : ""}`}
-        whileHover={
-          canInteract && !isTouchDevice ? { scale: 1.05, y: -5 } : undefined
-        }
-        // Hover keeps its spring; layout shifts ride the shared card-travel
-        // tween so the base, lock overlay, ring and top card move as one
-        // instead of the top card trailing the rest.
-        transition={{
-          type: "spring",
-          stiffness: 400,
-          damping: 20,
-          ...cardTravelTransition,
-        }}
+        // No transform poses on this element: it is a projection node
+        // (layout), and a hover spring fighting the projection for the same
+        // transform is what intermittently skipped flights and stranded
+        // hover poses on Gecko (Zen/Firefox). The interactive cue is the
+        // accent ring plus a CSS brightness lift — hover: is hover-capable
+        // gated by Tailwind v4, so touch devices never stick.
+        transition={cardTravelTransition}
         onClick={onClick}
         className={cn(
           "relative w-[min(8vh,15vw)] aspect-[5/7] rounded-card",
-          // Interactivity reads as a hairline accent ring + the hover lift —
-          // no glow blur.
           canInteract
-            ? "cursor-pointer ring-[1.5px] ring-accent"
+            ? "cursor-pointer ring-[1.5px] ring-accent transition-[filter] hover:brightness-110"
             : "cursor-default",
           className,
         )}
