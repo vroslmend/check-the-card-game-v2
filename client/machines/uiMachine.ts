@@ -43,9 +43,7 @@ type ServerToClientEvents =
   | { type: "INITIAL_PEEK_INFO"; hand: Card[] }
   | {
       type: "ABILITY_PEEK_RESULT";
-      card: Card;
-      playerId: PlayerId;
-      cardIndex: number;
+      results: Array<{ card: Card; playerId: PlayerId; cardIndex: number }>;
     }
   | { type: "ERROR_RECEIVED"; error: string }
   | { type: "INITIAL_LOGS_RECEIVED"; logs: RichGameLogMessage[] };
@@ -83,6 +81,9 @@ export interface UIMachineContext {
    *  timestamps convert to client-clock via `ts - serverClockOffset`. */
   serverClockOffset: number;
   modal: { type: "rejoin" | "error"; title: string; message: string } | null;
+  /** Date.now() when the last game action was emitted; null once any state
+   *  update lands. Drives the action bar's in-flight disable. */
+  pendingActionSince: number | null;
 }
 
 export type UIMachineEvents =
@@ -146,6 +147,18 @@ const adoptServerClockOffset = (
     : current;
 };
 
+/** Broadcasts carry only a recent tail of the append-only log/chat; keep the
+ *  locally accumulated history and append whatever is new (dedup by id,
+ *  incoming version wins). */
+const mergeAppendOnly = <T extends { id: string }>(
+  prev: T[] | undefined,
+  incoming: T[],
+): T[] => {
+  if (!prev?.length) return incoming;
+  const incomingIds = new Set(incoming.map((e) => e.id));
+  return [...prev.filter((e) => !incomingIds.has(e.id)), ...incoming];
+};
+
 export const uiMachine = setup({
   types: {
     context: {} as UIMachineContext,
@@ -160,18 +173,23 @@ export const uiMachine = setup({
   },
   actions: {
     setCurrentGameState: assign({
-      currentGameState: ({ event }) => {
+      currentGameState: ({ context, event }) => {
         assertEvent(event, [
           "CLIENT_GAME_STATE_UPDATED",
           "_SESSION_ESTABLISHED",
         ]);
-        if (event.type === "CLIENT_GAME_STATE_UPDATED") return event.gameState;
-        if (
-          event.type === "_SESSION_ESTABLISHED" &&
-          "gameState" in event.response
-        )
-          return event.response.gameState;
-        return undefined;
+        const incoming =
+          event.type === "CLIENT_GAME_STATE_UPDATED"
+            ? event.gameState
+            : "gameState" in event.response
+              ? event.response.gameState
+              : undefined;
+        if (!incoming) return undefined;
+        return {
+          ...incoming,
+          log: mergeAppendOnly(context.currentGameState?.log, incoming.log),
+          chat: mergeAppendOnly(context.currentGameState?.chat, incoming.chat),
+        };
       },
       // "Pass" is final per matching opportunity, so only reset the flag when
       // the incoming state carries a different (or no) matching opportunity.
@@ -231,6 +249,7 @@ export const uiMachine = setup({
         }
         return undefined;
       },
+      pendingActionSince: () => null,
     }),
     addGameLog: assign({
       currentGameState: ({ context, event }) => {
@@ -276,7 +295,9 @@ export const uiMachine = setup({
       currentAbilityContext: undefined,
       visibleCards: [],
       reconnectionAttempts: 0,
+      pendingActionSince: null,
     }),
+    markActionPending: assign({ pendingActionSince: () => Date.now() }),
     persistSession: ({ event }) => {
       assertEvent(event, "_SESSION_ESTABLISHED");
       if (
@@ -375,31 +396,27 @@ export const uiMachine = setup({
     }),
     addPeekedCardToContext: enqueueActions(({ context, event, enqueue }) => {
       assertEvent(event, "ABILITY_PEEK_RESULT");
-      // One shared expiry per peek batch: a King peek arrives as one
-      // ABILITY_PEEK_RESULT event PER card, a few ms apart, and per-event
-      // Date.now() stamps gave the countdown bar two keys in a row — an
-      // extra remount. Cards of one batch reuse the first card's deadline.
-      const batchExpireAt =
-        context.visibleCards.find(
-          (c) =>
-            c.source === "ability" && !!c.expireAt && c.expireAt > Date.now(),
-        )?.expireAt ?? Date.now() + PEEK_ABILITY_DURATION_MS;
-      const newCard: PeekedCardInfo = {
-        playerId: event.playerId,
-        cardIndex: event.cardIndex,
-        card: event.card,
+      // A whole peek batch arrives as ONE event, so a single deadline stamp
+      // covers it (the old per-card events needed a find-the-batch dance to
+      // share one expiry, and their separate commits opened flips out of
+      // sync).
+      const batchExpireAt = Date.now() + PEEK_ABILITY_DURATION_MS;
+      const newCards: PeekedCardInfo[] = event.results.map((r) => ({
+        playerId: r.playerId,
+        cardIndex: r.cardIndex,
+        card: r.card,
         source: "ability",
         expireAt: batchExpireAt,
-      };
+      }));
       enqueue.assign({
         visibleCards: [
           ...context.visibleCards.filter(
             (c) =>
-              !(
-                c.playerId === event.playerId && c.cardIndex === event.cardIndex
+              !newCards.some(
+                (n) => n.playerId === c.playerId && n.cardIndex === c.cardIndex,
               ),
           ),
-          newCard,
+          ...newCards,
         ],
       });
       enqueue.raise(
@@ -669,6 +686,7 @@ export const uiMachine = setup({
     hasPassedMatch: false,
     serverClockOffset: 0,
     modal: null,
+    pendingActionSince: null,
   }),
   initial: "initializing",
   on: {
@@ -807,19 +825,33 @@ export const uiMachine = setup({
         DECLARE_LOBBY_READY: { actions: "emitPlayerAction" },
         DECLARE_LOBBY_UNREADY: { actions: "emitPlayerAction" },
         REMOVE_PLAYER: { actions: "emitPlayerAction" },
-        DRAW_FROM_DECK: { actions: "emitPlayerAction" },
-        DRAW_FROM_DISCARD: { actions: "emitPlayerAction" },
-        SWAP_AND_DISCARD: { actions: "emitPlayerAction" },
-        DISCARD_DRAWN_CARD: { actions: "emitPlayerAction" },
-        ATTEMPT_MATCH: { actions: "emitPlayerAction" },
-        PASS_ON_MATCH_ATTEMPT: {
-          actions: ["emitPlayerAction", assign({ hasPassedMatch: true })],
+        DRAW_FROM_DECK: { actions: ["markActionPending", "emitPlayerAction"] },
+        DRAW_FROM_DISCARD: {
+          actions: ["markActionPending", "emitPlayerAction"],
         },
-        CALL_CHECK: { actions: "emitPlayerAction" },
-        DECLARE_READY_FOR_PEEK: { actions: "emitPlayerAction" },
-        PLAY_AGAIN: { actions: "emitPlayerAction" },
+        SWAP_AND_DISCARD: {
+          actions: ["markActionPending", "emitPlayerAction"],
+        },
+        DISCARD_DRAWN_CARD: {
+          actions: ["markActionPending", "emitPlayerAction"],
+        },
+        ATTEMPT_MATCH: { actions: ["markActionPending", "emitPlayerAction"] },
+        PASS_ON_MATCH_ATTEMPT: {
+          actions: [
+            "markActionPending",
+            "emitPlayerAction",
+            assign({ hasPassedMatch: true }),
+          ],
+        },
+        CALL_CHECK: { actions: ["markActionPending", "emitPlayerAction"] },
+        DECLARE_READY_FOR_PEEK: {
+          actions: ["markActionPending", "emitPlayerAction"],
+        },
+        PLAY_AGAIN: { actions: ["markActionPending", "emitPlayerAction"] },
         DISMISS_MODAL: { actions: "dismissModal" },
-        SKIP_ABILITY_STAGE: { actions: "emitSkipAbilityStage" },
+        SKIP_ABILITY_STAGE: {
+          actions: ["markActionPending", "emitSkipAbilityStage"],
+        },
         CLEANUP_EXPIRED_CARDS: { actions: "cleanupExpiredVisibleCards" },
         DISCONNECT: { target: ".disconnected" },
       },
@@ -947,11 +979,11 @@ export const uiMachine = setup({
             ],
             CONFIRM_ABILITY_ACTION: {
               guard: "isAbilityActionComplete",
-              actions: "emitConfirmAbility",
+              actions: ["markActionPending", "emitConfirmAbility"],
               target: ".resolving",
             },
             SKIP_ABILITY_STAGE: {
-              actions: "emitSkipAbilityStage",
+              actions: ["markActionPending", "emitSkipAbilityStage"],
             },
           },
           states: {

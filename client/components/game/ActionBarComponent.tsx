@@ -2,6 +2,17 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ActionButton from "./ActionButton";
 import { useActionController } from "./ActionController";
+import {
+  useUISelector,
+  type UIMachineSnapshot,
+} from "@/context/GameUIContext";
+
+// An action is "in flight" from emit until the next server state lands; cap
+// the disable so a silently-rejected action (no broadcast) can't wedge the
+// bar on a slow link.
+const PENDING_UNSTICK_MS = 4000;
+const selectPendingSince = (s: UIMachineSnapshot) =>
+  s.context.pendingActionSince;
 
 export interface Action {
   label: string;
@@ -34,6 +45,7 @@ const ActionBarComponent: React.FC = () => {
   const actions = getActions();
   const promptText = getPromptText();
   const timedIndicator = getTimedIndicator();
+  const pendingSince = useUISelector(selectPendingSince);
   // Re-render once when a hidden bar's reveal moment arrives — broadcasts
   // alone won't wake this component at the right time.
   const [, forceTick] = React.useReducer((n: number) => n + 1, 0);
@@ -48,6 +60,16 @@ const ActionBarComponent: React.FC = () => {
     const t = setTimeout(forceTick, wait + 20);
     return () => clearTimeout(t);
   }, [revealAt]);
+  const isPending =
+    pendingSince !== null && Date.now() - pendingSince < PENDING_UNSTICK_MS;
+  // Same wake-up trick for the unstick moment.
+  React.useEffect(() => {
+    if (pendingSince === null) return;
+    const wait = pendingSince + PENDING_UNSTICK_MS - Date.now();
+    if (wait <= 0) return;
+    const t = setTimeout(forceTick, wait + 20);
+    return () => clearTimeout(t);
+  }, [pendingSince]);
   const remainingMs = timedIndicator
     ? Math.max(0, timedIndicator.expireAt - Date.now())
     : 0;
@@ -69,7 +91,10 @@ const ActionBarComponent: React.FC = () => {
         className="flex flex-row flex-wrap items-center justify-center gap-2 rounded-full border border-hairline bg-surface p-2 shadow-lg"
       >
         {actions.map((action, i) => (
-          <ActionButton key={action.label || i} action={action} />
+          <ActionButton
+            key={action.label || i}
+            action={isPending ? { ...action, disabled: true } : action}
+          />
         ))}
       </motion.div>
 

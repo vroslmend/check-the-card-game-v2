@@ -16,6 +16,10 @@ const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(URL, {
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
+  // Websocket first: the default polling-first upgrade pays an extra HTTP
+  // handshake round-trip exactly on the slow links that can least afford
+  // it. tryAllTransports falls back down this list if websocket fails.
+  transports: ["websocket", "polling"],
   tryAllTransports: true,
   timeout: 20_000,
 });

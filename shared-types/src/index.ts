@@ -128,7 +128,11 @@ export interface ClientCheckGameState {
   gameMasterId: PlayerId | null;
   players: Record<PlayerId, Player>;
   deckSize: number;
+  /** Only the visible top of the pile (last =2 cards); use discardPileSize
+   *  for the count. Broadcasting the whole pile grew every payload by the
+   *  length of the game. */
   discardPile: Card[];
+  discardPileSize: number;
   deckTop: FacedownCard | null;
   turnOrder: PlayerId[];
   gameStage: GameStage;
@@ -180,9 +184,14 @@ export interface ServerToClientEvents {
   [SocketEventName.SERVER_LOG_ENTRY]: (logMessage: RichGameLogMessage) => void;
   [SocketEventName.INITIAL_PEEK_INFO]: (data: { hand: Card[] }) => void;
   [SocketEventName.ABILITY_PEEK_RESULT]: (payload: {
-    card: Card;
-    playerId: PlayerId;
-    cardIndex: number;
+    /** Every card of one confirmed peek, in one message, so all its flips
+     *  start in the same client commit (per-card messages opened out of
+     *  sync under network jitter). */
+    results: Array<{
+      card: Card;
+      playerId: PlayerId;
+      cardIndex: number;
+    }>;
   }) => void;
   [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
   [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;
@@ -285,6 +294,7 @@ export interface RichGameLogMessage {
     | "system-message"
     | "error"
     | "ability"
+    | "penalty"
   )[];
   payload?: Record<string, unknown>;
   actor?: {

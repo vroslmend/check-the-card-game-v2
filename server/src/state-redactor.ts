@@ -91,6 +91,13 @@ export const generatePlayerView = (
       (entry.type === "private" && entry.actor?.id === viewingPlayerId),
   );
 
+  // Broadcasts carry only the recent tail — log and chat are append-only and
+  // the client merges by id, keeping its full accumulated copy (rejoin gets
+  // the complete log out-of-band). Without the cap every broadcast grew with
+  // the length of the game.
+  const BROADCAST_LOG_TAIL = 30;
+  const BROADCAST_CHAT_TAIL = 30;
+
   const clientGameState: ClientCheckGameState = {
     gameId: fullGameContext.gameId,
     viewingPlayerId,
@@ -104,7 +111,8 @@ export const generatePlayerView = (
             id: fullGameContext.deck[fullGameContext.deck.length - 1]!.id,
           }
         : null,
-    discardPile: fullGameContext.discardPile,
+    discardPile: fullGameContext.discardPile.slice(-2),
+    discardPileSize: fullGameContext.discardPile.length,
     turnOrder: fullGameContext.turnOrder,
     // context.gameStage is the single source of truth. Deriving the stage from
     // the machine's state value breaks whenever the machine is in a non-stage
@@ -118,8 +126,8 @@ export const generatePlayerView = (
     winnerId: fullGameContext.winnerId,
     gameover: fullGameContext.gameover,
     lastRoundLoserId: fullGameContext.lastRoundLoserId,
-    log: clientLog,
-    chat: fullGameContext.chat ?? [],
+    log: clientLog.slice(-BROADCAST_LOG_TAIL),
+    chat: (fullGameContext.chat ?? []).slice(-BROADCAST_CHAT_TAIL),
     discardPileIsSealed: fullGameContext.discardPileIsSealed,
     // Positions only — card faces are never part of publicPeek.
     publicPeek: fullGameContext.publicPeek,

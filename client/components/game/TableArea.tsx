@@ -50,16 +50,18 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
   return {
     deckSize: currentGameState?.deckSize ?? 0,
     deckTop: currentGameState?.deckTop ?? null,
-    discardPile: currentGameState?.discardPile ?? [],
+    discardPileSize: currentGameState?.discardPileSize ?? 0,
     topDiscardCard: topDiscardCard,
+    secondDiscardCard: currentGameState?.discardPile.at(-2) ?? null,
     discardPileIsSealed: currentGameState?.discardPileIsSealed ?? false,
     canDrawFromDeck: isDrawPhase,
     canDrawFromDiscard:
       isDrawPhase &&
       !currentGameState?.discardPileIsSealed &&
-      !!currentGameState?.discardPile.length &&
+      (currentGameState?.discardPileSize ?? 0) > 0 &&
       !isSpecialCard,
     canDiscardDrawnCard: !!canDiscardDrawnCard,
+    matchWindowOpen: !!currentGameState?.matchingOpportunity,
   };
 };
 
@@ -71,12 +73,14 @@ export const TableArea = ({
   const {
     deckSize,
     deckTop,
-    discardPile,
+    discardPileSize,
     topDiscardCard,
+    secondDiscardCard,
     discardPileIsSealed,
     canDrawFromDeck,
     canDrawFromDiscard,
     canDiscardDrawnCard,
+    matchWindowOpen,
   } = useUISelector(selectTableAreaProps);
 
   const handleDeckClick = () => {
@@ -153,10 +157,11 @@ export const TableArea = ({
       <div className="flex justify-start w-full justify-self-start">
         <VisualCardStack
           title="Discard"
-          count={discardPile.length}
+          count={discardPileSize}
           topCard={topDiscardCard}
-          secondCard={discardPile.at(-2) ?? null}
+          secondCard={secondDiscardCard}
           isSealed={discardPileIsSealed}
+          isMatchTarget={matchWindowOpen}
           canInteract={canDrawFromDiscard || canDiscardDrawnCard}
           onClick={handleDiscardClick}
           className="w-[min(8vh,15vw)]"

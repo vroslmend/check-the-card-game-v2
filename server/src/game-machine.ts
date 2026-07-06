@@ -537,6 +537,11 @@ const emitPeekResults = enqueueActions(({ context, event, enqueue }) => {
 
   if (!Array.isArray(targets)) return;
 
+  const results: Array<{
+    card: Card;
+    playerId: PlayerId;
+    cardIndex: number;
+  }> = [];
   for (const target of targets) {
     const targetPlayer = context.players[target.playerId];
 
@@ -553,19 +558,23 @@ const emitPeekResults = enqueueActions(({ context, event, enqueue }) => {
       continue;
     }
 
-    const card = targetPlayer.hand[target.cardIndex];
+    results.push({
+      card: targetPlayer.hand[target.cardIndex]!,
+      playerId: target.playerId,
+      cardIndex: target.cardIndex,
+    });
+  }
 
+  // One message per peek batch: per-card messages arrive as separate client
+  // commits, which started the two flips of a King peek out of sync.
+  if (results.length > 0) {
     enqueue(
       emit({
         type: "SEND_EVENT_TO_PLAYER",
         payload: {
           playerId: actingPlayerId,
           eventName: SocketEventName.ABILITY_PEEK_RESULT,
-          eventData: {
-            card,
-            playerId: target.playerId,
-            cardIndex: target.cardIndex,
-          },
+          eventData: { results },
         },
       }) as any,
     );
@@ -1537,7 +1546,10 @@ export const gameMachine = setup({
         createLogEntry(context.gameId, {
           message: logMessageText,
           type: "public",
-          tags: ["player-action", "game-event"],
+          // "penalty" + actor drive the client's PENALTY. stamp (and keep
+          // the event off the toast rail — one announcement surface).
+          tags: ["player-action", "game-event", "penalty"],
+          actor: { id: playerId, name: playerName },
         }),
       ];
       if (disqualified) {

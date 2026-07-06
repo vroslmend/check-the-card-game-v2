@@ -123,6 +123,10 @@ const CustomCursor = () => {
   const springY = useSpring(mouseY, springConfig);
 
   useEffect(() => {
+    // The cursor never renders on /game or touch devices — without this
+    // guard its mousemove work (closest() walks, spring writes, variant
+    // state churn) kept running under the game for nothing.
+    if (!isCursorActive || isMobile) return;
     const resetIdleTimeout = () => {
       if (idleTimeoutRef.current) {
         clearTimeout(idleTimeoutRef.current);
@@ -201,7 +205,15 @@ const CustomCursor = () => {
       window.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [setVariant, isPointerInViewport, variant, mouseX, mouseY]);
+  }, [
+    setVariant,
+    isPointerInViewport,
+    variant,
+    mouseX,
+    mouseY,
+    isCursorActive,
+    isMobile,
+  ]);
 
   if (!mounted || !isCursorActive || isMobile) {
     return null;
