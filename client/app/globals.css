@@ -131,6 +131,15 @@ body {
     "calt" 1;
 }
 
+/* The identity's focus spec, systematized: 2px accent outline, offset 2,
+   visible on keyboard focus everywhere (raw buttons included). */
+@layer base {
+  :where(button, a, [role="button"], input, select, textarea):focus-visible {
+    outline: 2px solid hsl(var(--accent));
+    outline-offset: 2px;
+  }
+}
+
 html {
   scroll-behavior: smooth;
   /* Fixed root font size: a viewport-scaled rem base makes every rem-derived
