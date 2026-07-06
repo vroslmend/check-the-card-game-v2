@@ -1192,6 +1192,7 @@ export const gameMachine = setup({
           ...context.players,
           [playerId]: {
             ...context.players[playerId]!,
+            hasCalledCheck: true,
             isLocked: true,
             status: PlayerStatus.CALLED_CHECK,
           },
