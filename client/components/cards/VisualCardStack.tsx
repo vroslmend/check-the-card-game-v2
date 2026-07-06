@@ -98,10 +98,17 @@ export const VisualCardStack = ({
             animate={{ opacity: 1 }}
           />
         )}
+        {/* Sealed = "can't be drawn this turn" (a K/Q/J was just discarded).
+            A corner chip in the SlotBadge vocabulary says "restricted"
+            without covering the face — the old full-card scrim hid the rank
+            at the exact moment a matching window on it opened. */}
         {isSealed && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-card bg-ink/35">
-            <Lock className="h-[26%] w-[26%] text-accent-ink" strokeWidth={2.5} />
-          </div>
+          <span
+            aria-label="Sealed: can't be drawn this turn"
+            className="absolute -top-2 -right-2 z-20 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
+          >
+            <Lock className="h-3 w-3" strokeWidth={2.5} />
+          </span>
         )}
       </motion.div>
     </div>
