@@ -128,6 +128,20 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEndStage, reducedMotion, player.hand.length, tableIndex]);
 
+  // Deal ripple: only the commit that swaps DEALING -> INITIAL_PEEK mounts
+  // the hand cells, and only that commit gets per-card layout delays (a
+  // dealer's sweep: tableIndex*80 + cardIndex*40ms). Interrupted flights
+  // never carry a delay — the R11 projection-timing concern (findings §5.4)
+  // applied to delays on live flights, not on mount-time ones; the WAAPI
+  // class itself was closed by motion 12.42.2.
+  const prevStageRef = React.useRef(gameStage);
+  const dealtThisCommit =
+    prevStageRef.current === GameStage.DEALING &&
+    gameStage === GameStage.INITIAL_PEEK;
+  React.useEffect(() => {
+    prevStageRef.current = gameStage;
+  });
+
   const handToDisplay =
     isLocalPlayer && !isEndStage
       ? player.hand.map((card) => ({ facedown: true as const, id: card.id }))
@@ -219,6 +233,18 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             <CardFlight
               key={card.id}
               layoutId={card.id}
+              transition={
+                dealtThisCommit && !reducedMotion
+                  ? {
+                      layout: {
+                        type: "tween",
+                        duration: 0.65,
+                        ease: [0.55, 0.06, 0.19, 0.98],
+                        delay: (tableIndex * 80 + index * 40) / 1000,
+                      },
+                    }
+                  : undefined
+              }
               className={cn(
                 "absolute inset-0 rounded-lg",
                 "data-[interactive=true]:cursor-pointer",
