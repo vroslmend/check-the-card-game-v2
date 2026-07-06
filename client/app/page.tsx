@@ -447,7 +447,7 @@ function HomePage() {
                 transition={{ delay: 0.8 + index * 0.1, duration: 0.6 }}
               >
                 <Link
-                  href={`#${item.toLowerCase()}`}
+                  href={item === "Rules" ? "/rules" : `#${item.toLowerCase()}`}
                   className="relative text-sm font-light tracking-wide text-stone-600 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
                   data-cursor-icon
                 >
@@ -511,7 +511,7 @@ function HomePage() {
                   transition={{ delay: 0.2 + index * 0.1, duration: 0.6 }}
                 >
                   <Link
-                    href={`#${item.toLowerCase()}`}
+                    href={item === "Rules" ? "/rules" : `#${item.toLowerCase()}`}
                     className="relative font-light tracking-wide text-stone-600 transition-colors duration-300 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
