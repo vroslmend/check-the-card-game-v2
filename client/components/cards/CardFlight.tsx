@@ -19,7 +19,12 @@ type CardFlightProps = ComponentProps<typeof motion.div>;
  * penalty card widening the hand) also trigger a small lift on neighbours —
  * acceptable: they visibly "make room".
  */
-export function CardFlight({ style, transition, ...rest }: CardFlightProps) {
+export function CardFlight({
+  style,
+  transition,
+  children,
+  ...rest
+}: CardFlightProps) {
   const [inFlight, setInFlight] = useState(false);
   // Backstop: Gecko occasionally drops onLayoutAnimationComplete when a
   // flight is interrupted, which left cards stuck at the lift pose. Clear
@@ -48,10 +53,22 @@ export function CardFlight({ style, transition, ...rest }: CardFlightProps) {
       transition={{ ...cardTravelTransition, ...transition }}
       onLayoutAnimationStart={liftOn}
       onLayoutAnimationComplete={liftOff}
-      animate={{
-        scale: inFlight ? CARD_LIFT_SCALE : 1,
-        boxShadow: inFlight ? CARD_LIFT_SHADOW : CARD_REST_SHADOW,
-      }}
-    />
+    >
+      {/* The lift lives on a CHILD of the layoutId element: the projection
+          system owns the parent's transform during flights, and a scale
+          pose on that same element is the pose/projection conflict class
+          (R7.4) — this was the one instance of it left after Round 7. The
+          child composes cleanly with the parent's flight on every engine.
+          rounded-[inherit] keeps the shadow hugging rounded consumers. */}
+      <motion.div
+        className="relative h-full w-full rounded-[inherit]"
+        animate={{
+          scale: inFlight ? CARD_LIFT_SCALE : 1,
+          boxShadow: inFlight ? CARD_LIFT_SHADOW : CARD_REST_SHADOW,
+        }}
+      >
+        {children}
+      </motion.div>
+    </motion.div>
   );
 }

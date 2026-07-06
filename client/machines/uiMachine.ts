@@ -375,12 +375,21 @@ export const uiMachine = setup({
     }),
     addPeekedCardToContext: enqueueActions(({ context, event, enqueue }) => {
       assertEvent(event, "ABILITY_PEEK_RESULT");
+      // One shared expiry per peek batch: a King peek arrives as one
+      // ABILITY_PEEK_RESULT event PER card, a few ms apart, and per-event
+      // Date.now() stamps gave the countdown bar two keys in a row — an
+      // extra remount. Cards of one batch reuse the first card's deadline.
+      const batchExpireAt =
+        context.visibleCards.find(
+          (c) =>
+            c.source === "ability" && !!c.expireAt && c.expireAt > Date.now(),
+        )?.expireAt ?? Date.now() + PEEK_ABILITY_DURATION_MS;
       const newCard: PeekedCardInfo = {
         playerId: event.playerId,
         cardIndex: event.cardIndex,
         card: event.card,
         source: "ability",
-        expireAt: Date.now() + PEEK_ABILITY_DURATION_MS,
+        expireAt: batchExpireAt,
       };
       enqueue.assign({
         visibleCards: [

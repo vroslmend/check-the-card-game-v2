@@ -10,32 +10,27 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      position="top-right"
+      // Game events are table announcements, and the table's language is
+      // centered (header, piles, prompt, stamps) — not OS-notification
+      // top-right. The offset clears the game header.
+      position="top-center"
+      offset={64}
+      gap={8}
+      visibleToasts={3}
       className="toaster group"
       toastOptions={{
         classNames: {
+          // The table's own voice: surface card, hairline border, game
+          // type. No glass blur (a Gecko repaint sink) and no hue-coded
+          // borders — the identity reserves color for the one accent.
           toast: cn(
-            "group border border-white/20 dark:border-white/10",
-            "bg-white/40 dark:bg-zinc-900/40 backdrop-blur-xl",
-            "rounded-xl shadow-[0_4px_15px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_15px_rgba(0,0,0,0.2)]",
-            "text-stone-800 dark:text-stone-200 font-serif",
-            "relative overflow-hidden",
+            "group rounded-card border border-hairline bg-surface shadow-lg",
+            "px-4 py-3 font-game text-sm font-semibold text-ink",
           ),
-          title: "text-stone-800 dark:text-stone-200 font-medium",
-          description: "text-stone-600 dark:text-stone-400 font-light",
-          actionButton:
-            "bg-stone-900/90 dark:bg-stone-100/90 text-white dark:text-stone-900 backdrop-blur-md",
-          cancelButton:
-            "bg-stone-200/50 dark:bg-zinc-800/50 text-stone-600 dark:text-stone-400 backdrop-blur-md",
-          success:
-            "border-l-4 border-l-emerald-500 before:absolute before:inset-0 before:bg-emerald-500/5 before:-z-10",
-          error:
-            "border-l-4 border-l-red-500 before:absolute before:inset-0 before:bg-red-500/5 before:-z-10",
-          warning:
-            "border-l-4 border-l-amber-500 before:absolute before:inset-0 before:bg-amber-500/5 before:-z-10",
-          info: "border-l-4 border-l-stone-500 dark:border-l-stone-400 before:absolute before:inset-0 before:bg-stone-500/5 before:-z-10",
-          loading:
-            "border-l-4 border-l-stone-300 dark:border-l-stone-600 before:absolute before:inset-0 before:bg-stone-500/5 before:-z-10",
+          title: "text-ink font-semibold",
+          description: "text-ink-muted font-medium",
+          actionButton: "bg-accent text-accent-ink",
+          cancelButton: "bg-surface-2 text-ink-muted",
         },
       }}
       {...props}

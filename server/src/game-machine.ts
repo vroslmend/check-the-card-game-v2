@@ -383,6 +383,37 @@ const baseTurnStateNode = {
       on: {
         [PlayerActionType.USE_ABILITY]: [
           {
+            // Peek confirm / skip-peek: the ability STAYS on the stack and a
+            // new decision window begins (the peek view, then the swap
+            // selection). Re-enter so entry assigns a fresh turnDeadline and
+            // re-arms after(turnTimer) — acting resets the clock, the same
+            // model R7.3 gave DISCARD. The old targetless transition left
+            // the entry-armed timer running, so confirming a peek near the
+            // deadline got the ability fizzled mid-peek-view, or the swap
+            // stage squeezed into the window's leftovers (proven in
+            // .remember/repro-peek-swap.mjs). The pending delayed
+            // TIMER.PEEK_TO_SWAP raise is actor-scoped and survives the
+            // re-entry. Entry broadcasts, so no broadcast action here —
+            // emitPeekResults still runs first, preserving today's
+            // results-then-broadcast order.
+            guard: and([
+              "isValidAbilityAction",
+              ({ context, event }: { context: GameContext; event: any }) =>
+                event.payload?.action === "peek" ||
+                (event.payload?.action === "skip" &&
+                  context.abilityStack.at(-1)?.stage === "peeking"),
+            ]),
+            target: "ability",
+            reenter: true,
+            actions: [
+              "performAbilityAction",
+              "emitPeekResults",
+              "schedulePeekToSwap",
+            ],
+          },
+          {
+            // Swap / skip-swap: pops the ability; stay targetless and let
+            // the always-transition advance the turn exactly as before.
             guard: "isValidAbilityAction",
             actions: [
               "performAbilityAction",
@@ -392,6 +423,25 @@ const baseTurnStateNode = {
             ],
           },
         ],
+        // The peek display is over — the swap selection is a NEW decision
+        // window: re-enter for a fresh deadline and a re-armed auto-resolve.
+        // This replaces the machine-root handler, which flipped the stage as
+        // a bare context assign and left the stale deadline (and the
+        // entry-armed fizzle timer) running. Guarded so a stale timer whose
+        // ability already resolved or fizzled no-ops, exactly as before.
+        "TIMER.PEEK_TO_SWAP": {
+          guard: ({ context, event }: { context: GameContext; event: any }) => {
+            const top = context.abilityStack.at(-1);
+            return (
+              !!top &&
+              top.stage === "peeking" &&
+              top.sourceCard.id === event.sourceCardId
+            );
+          },
+          target: "ability",
+          reenter: true,
+          actions: "transitionToSwapStage",
+        },
       },
     },
 
@@ -1805,9 +1855,6 @@ export const gameMachine = setup({
   }),
   initial: GameStage.WAITING_FOR_PLAYERS,
   on: {
-    "TIMER.PEEK_TO_SWAP": {
-      actions: ["transitionToSwapStage", "broadcastGameState"] as const,
-    },
     // Reconnection never re-targets a state node: re-entering a stage would
     // reset the in-flight turn (draw phase, matching timer, ability stack).
     // Marking the player connected and re-broadcasting is sufficient; the
