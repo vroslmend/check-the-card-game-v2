@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useUISelector,
   useUIActorRef,
@@ -134,6 +134,26 @@ export function GameBoard() {
   const penaltyMoment = usePenaltyMoment();
   const reducedMotion = useReducedMotion();
 
+  // The round-ending broadcast both moves the last card and flips the stage:
+  // mounting the end sheet immediately buries a flight ~0.3s into its 0.65s
+  // travel (the owner's "abrupt end"). Hold the sheet until the table has
+  // visibly settled. GAMEOVER can also arrive directly (forfeit path).
+  const isEndStage =
+    gameStage === GameStage.SCORING || gameStage === GameStage.GAMEOVER;
+  const [tableSettled, setTableSettled] = useState(false);
+  useEffect(() => {
+    if (!isEndStage) {
+      setTableSettled(false);
+      return;
+    }
+    if (reducedMotion) {
+      setTableSettled(true);
+      return;
+    }
+    const t = setTimeout(() => setTableSettled(true), 1100);
+    return () => clearTimeout(t);
+  }, [isEndStage, reducedMotion]);
+
   if (!localPlayerId || !gameState) {
     return <LoadingIndicator />;
   }
@@ -166,8 +186,7 @@ export function GameBoard() {
         style={{ transformOrigin: "center" }}
       >
         <AnimatePresence>
-          {(gameStage === GameStage.GAMEOVER ||
-            gameStage === GameStage.SCORING) && (
+          {isEndStage && tableSettled && (
             <GameEndScreen
               players={players}
               winnerIds={winnerIds}
@@ -180,11 +199,9 @@ export function GameBoard() {
 
         <ConnectionStatusBanner />
         <GameEventToasts />
-        {localPlayerForfeited &&
-          gameStage !== GameStage.GAMEOVER &&
-          gameStage !== GameStage.SCORING && (
-            <ForfeitNotice onLeave={() => send({ type: "LEAVE_GAME" })} />
-          )}
+        {localPlayerForfeited && !isEndStage && (
+          <ForfeitNotice onLeave={() => send({ type: "LEAVE_GAME" })} />
+        )}
         <SidePanel />
         <GameStateError
           hasPlayers={opponentPlayers.length > 0}

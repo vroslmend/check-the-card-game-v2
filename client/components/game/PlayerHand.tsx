@@ -107,6 +107,12 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     gameStage === GameStage.INITIAL_PEEK &&
     visibleCards.some((vc) => vc.source === "initial-peek");
 
+  // SCORING/GAMEOVER broadcasts reveal every hand; the board keeps its cards
+  // down so the reveal stays owned by the end screen's ripple (and Gecko
+  // isn't handed 8-16 extra concurrent flips beneath an opaque sheet).
+  const isEndStage =
+    gameStage === GameStage.SCORING || gameStage === GameStage.GAMEOVER;
+
   const combinedClass = cn(isLocked && "grayscale opacity-60");
 
   return (
@@ -127,7 +133,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
         if (isCardVisible) {
           cardToRender = visibleCardData || player.hand[index];
         }
-        const isFaceUp = "rank" in cardToRender;
+        const isFaceUp = "rank" in cardToRender && !isEndStage;
 
         const isMatchSelected = selectedCardIndex === index;
         const isAbilityPeekSelected =
