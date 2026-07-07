@@ -108,12 +108,12 @@ export const RoundSummary = ({
           : { type: "spring", stiffness: 300, damping: 30, delay: 0.35 }
       }
     >
-      <div className="mx-auto flex max-h-[60vh] w-full max-w-3xl flex-col gap-4 overflow-y-auto px-5 py-6 sm:px-8 lg:max-h-[44vh]">
+      <div className="mx-auto flex max-h-[50vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto px-5 py-5 sm:px-8 lg:max-h-[34vh]">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
             Round over
           </p>
-          <h2 className="mt-1 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
+          <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {title}
           </h2>
           {winners.length > 0 && (
@@ -139,7 +139,7 @@ export const RoundSummary = ({
             const m = recap.matches[player.id] ?? 0;
             const pen = recap.penalties[player.id] ?? 0;
             return (
-              <div key={player.id} className="flex items-center gap-3 py-2.5">
+              <div key={player.id} className="flex items-center gap-3 py-2">
                 <span className="w-5 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
                   {i + 1}
                 </span>

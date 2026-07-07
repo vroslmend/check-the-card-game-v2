@@ -125,6 +125,10 @@ const PlayerInfoBadge = ({
 
   const { Icon, text, muted } = getStatus();
   const isDisqualified = player.status === PlayerStatus.DISQUALIFIED;
+  // End scene: the results panel carries every status; the chips would be
+  // stale noise and their height crowds the revealed hands.
+  const hideChip =
+    gameStage === GameStage.SCORING || gameStage === GameStage.GAMEOVER;
 
   return (
     <div className="flex flex-col items-center gap-2 font-game">
@@ -146,15 +150,17 @@ const PlayerInfoBadge = ({
         </motion.span>
       </h3>
 
-      <div
-        className={cn(
-          "flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-2 py-0.5 text-[clamp(0.7rem,2vw,0.75rem)] font-semibold",
-          muted ? "text-ink-muted" : "text-ink",
-        )}
-      >
-        <Icon className="h-3 w-3" />
-        <span>{text}</span>
-      </div>
+      {!hideChip && (
+        <div
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-2 py-0.5 text-[clamp(0.7rem,2vw,0.75rem)] font-semibold",
+            muted ? "text-ink-muted" : "text-ink",
+          )}
+        >
+          <Icon className="h-3 w-3" />
+          <span>{text}</span>
+        </div>
+      )}
     </div>
   );
 };

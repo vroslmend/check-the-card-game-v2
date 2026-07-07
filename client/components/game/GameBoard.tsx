@@ -9,6 +9,7 @@ import {
 import { TableArea } from "./TableArea";
 import PlayerHandStrip from "./PlayerHandStrip";
 import { GameStage, PlayerActionType, type PublicCard } from "shared-types";
+import { cn } from "@/lib/utils";
 import { ActionController } from "./ActionController";
 import { ActionControllerView } from "./ActionControllerView";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -155,6 +156,7 @@ export function GameBoard() {
     const t = setTimeout(() => setTableSettled(true), 1100);
     return () => clearTimeout(t);
   }, [isEndStage, reducedMotion]);
+  const endScene = isEndStage && tableSettled;
 
   if (!localPlayerId || !gameState) {
     return <LoadingIndicator />;
@@ -181,27 +183,21 @@ export function GameBoard() {
   return (
     <div className="relative h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
       <GameHeader />
+      {/* CHECK's recede is momentary and returns to identity. A HELD scale
+          here (the R12 end-of-round recede) made every layout-projected card
+          under it fight the projection system on Gecko — the board bounced
+          up and down indefinitely. The end scene now makes room with real
+          layout (row order + hidden rows) instead of a transform. */}
       <motion.div
         className="relative flex-1 grid grid-rows-[auto_auto_1fr_auto_auto]"
-        animate={{
-          scale:
-            isEndStage && tableSettled && !reducedMotion
-              ? 0.85
-              : checkMoment && !reducedMotion
-                ? 0.92
-                : 1,
-        }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        style={{
-          transformOrigin:
-            isEndStage && tableSettled ? "50% 0%" : "center",
-        }}
+        animate={{ scale: checkMoment && !reducedMotion ? 0.92 : 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        style={{ transformOrigin: "center" }}
       >
         <ConnectionStatusBanner />
         {localPlayerForfeited && !isEndStage && (
           <ForfeitNotice onLeave={() => send({ type: "LEAVE_GAME" })} />
         )}
-        <SidePanel />
         <GameStateError
           hasPlayers={opponentPlayers.length > 0}
           hasGameState={!!gameState}
@@ -209,9 +205,18 @@ export function GameBoard() {
 
         <ActionController>
           <div className="contents">
-            <GameEventCaption />
+            {/* End scene: the caption and action rows retire, and the grid
+                reorders — opponents, then YOUR revealed hand, then the piles
+                sinking into the leftover row under the results panel. Pure
+                CSS order: the layoutId cards glide once and settle. */}
+            {!endScene && <GameEventCaption />}
             {/* Opponents area */}
-            <div className="flex justify-center items-center py-2">
+            <div
+              className={cn(
+                "flex justify-center items-center py-2",
+                endScene && "order-1",
+              )}
+            >
               {opponentPlayers.length > 0 ? (
                 <div className="w-full flex flex-wrap justify-evenly gap-2">
                   {opponentPlayers.map((op, i) => (
@@ -235,7 +240,12 @@ export function GameBoard() {
             </div>
 
             {/* Table Area - takes up remaining space */}
-            <div className="flex items-center justify-center @container">
+            <div
+              className={cn(
+                "flex items-center justify-center @container",
+                endScene && "order-3",
+              )}
+            >
               <TableArea
                 drawnCard={drawnCardData}
                 dealingDeck={dealingDeck}
@@ -243,7 +253,12 @@ export function GameBoard() {
             </div>
 
             {/* Local player area */}
-            <div className="flex flex-col items-center justify-center py-2">
+            <div
+              className={cn(
+                "flex flex-col items-center justify-center py-2",
+                endScene && "order-2",
+              )}
+            >
               {localPlayerId && gameState.players[localPlayerId] ? (
                 <PlayerHandStrip
                   player={{
@@ -261,10 +276,13 @@ export function GameBoard() {
             {/* Action bar: fixed-height row so its changing content (button
                 sets, prompt, countdown) never resizes the 1fr table row
                 above — that reflow was the board visibly shifting up/down on
-                every phase change. */}
-            <div className="h-32 flex items-start justify-center pb-2">
-              <ActionControllerView />
-            </div>
+                every phase change. Retired for the end scene (it would be an
+                empty pill floating under the results panel). */}
+            {!endScene && (
+              <div className="h-32 flex items-start justify-center pb-2">
+                <ActionControllerView />
+              </div>
+            )}
           </div>
         </ActionController>
       </motion.div>
@@ -273,7 +291,7 @@ export function GameBoard() {
       <PenaltyStamp moment={penaltyMoment} />
 
       <AnimatePresence>
-        {isEndStage && tableSettled && (
+        {endScene && (
           <RoundSummary
             players={players}
             winnerIds={winnerIds}
@@ -284,6 +302,11 @@ export function GameBoard() {
           />
         )}
       </AnimatePresence>
+
+      {/* Root level, painted last: never inside the (transformable) board
+          container — a scaled ancestor shrank it off the right edge — and
+          always above the results panel, so post-game chat stays usable. */}
+      <SidePanel />
     </div>
   );
 }
