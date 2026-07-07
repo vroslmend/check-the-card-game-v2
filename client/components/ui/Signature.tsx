@@ -21,6 +21,14 @@ export type SignatureData = {
    * signatures ink in a solid fill just behind the drawing stroke.
    */
   filled?: boolean;
+  /** SVG fill-rule to use when filled is true. */
+  fillRule?: "nonzero" | "evenodd";
+  /**
+   * Duration (seconds) for each path segment's draw animation.
+   * Increase this for paths with fewer segments so the total draw time
+   * feels similar to the first signature's staggered multi-stroke timing.
+   */
+  animDuration?: number;
 };
 
 /** The original signature — a single-stroke centerline path. */
@@ -32,18 +40,73 @@ export const firstSignature: SignatureData = {
 
 /** The second signature (traced from /public/signature.svg, cropped to its ink). */
 export const secondSignature: SignatureData = {
-  path: "M400.8 28.1c-1.4.8-1.5 3.1-1 20.3l.5 19.3-4 4.4c-6.5 7.1-6.6 7.6-5.9 22.9l.7 13.5-2.6 2.5c-3.2 3-4.4 2.4-9.7-4.6-2.8-3.6-3.8-5.9-3.8-8.6 0-2.3-1.4-6.4-3.8-11-3.2-6.4-4.1-7.3-6.7-7.6-1.7-.1-5.1-.5-7.6-.8-4.2-.5-5-.3-8.3 2.7-2.1 1.8-4.8 5.3-6.1 7.9l-2.4 4.7-8.8 1.8c-4.8 1-12.2 2.6-16.5 3.6-4.2 1.1-9.4 1.9-11.5 1.9h-3.9l-1.2-18.8c-.7-10.3-1.2-20.8-1.2-23.3v-4.6l8.8-.6c4.8-.4 13.7-2 19.7-3.7 6.1-1.6 13-3 15.5-3 5.2 0 6.5-.7 7.4-3.6.4-1.5.1-2.8-1.1-3.9-2.4-2.4-12-1.3-24.3 2.8-8.2 2.7-11 3.1-20.9 3.3-13.3.2-13.8.5-13.4 8.5.1 3 .4 26 .7 51.2.4 46.3.6 48.7 4.1 48.7.6 0 1.9-.8 2.9-1.8 1.4-1.6 1.7-5.2 2.3-22.3l.6-20.5 8.1-1.2c4.5-.7 13.4-2.3 19.9-3.6l11.8-2.3-.7 2.9c-1.1 5.1.5 15.4 3 19 4.1 6.2 12.4 8.4 18.2 4.9 2.3-1.4 9.7-9.2 13.2-14.1.2-.3 1 .4 1.8 1.4 4 5.6 10.8 7 18 3.7 3.3-1.5 4.5-2.8 6.3-7.2 2.1-4.8 2.2-6.1 1.5-12.9-1.5-13.2-1.2-16.3 1.8-20.2 1.5-1.9 3-4.8 3.4-6.4l.7-2.8 1.4 3.8c1.4 4.3 6.1 26.3 6.5 31.1.2 2.4.8 3.1 3 3.3 3.6.4 4.1-1.8 2.8-11.9-.5-4.6-1-11.7-1-15.9.1-7.4.1-7.5 1.5-4.2 3.9 9 15.5 21.7 22 24.2 3.8 1.5 7.7 1.2 10.4-.6 2.1-1.5 2.5-1.5 5.3.6 3.9 2.9 10 3 13.6.3 1.8-1.3 3.4-4.1 4.7-8l2-6.1 5.5 4.4c5.6 4.4 8.9 5.4 10.8 3.1 1.1-1.4.9-11-.7-25.6-.7-5.7-.9-10.6-.6-10.9 1-1 3.9 1.3 6.2 4.9 9.1 13.9 21 30.3 23.1 31.7 5.8 3.8 16.8-.3 19.7-7.1.7-1.8 1.6-7.9 2-13.6.4-5.8 1.1-11.7 1.5-13.3 1.2-3.9-1.7-7.6-4.7-6-2.1 1.2-3.3 5.4-5.3 20.2-1.3 9.1-3 12-7 12-3.4 0-5.6-2.7-16.2-19.4C504.2 54 500.3 50 495.6 50c-4.8 0-9.4 2.4-10.1 5.3-.3 1.2-.1 7.1.5 13.2.5 6 1 11.6 1 12.4 0 2.9-3.5-1.8-7.5-9.9-3-6.2-4.5-8.2-6.5-8.7-1.4-.3-3.8-1.7-5.3-3-3.5-2.8-6-2.9-9.7-.3-5.1 3.6-10.1 21.3-8.1 28.6.8 2.9.7 3.6-.9 4.4-3 1.6-5 1.2-9.1-2-3.5-2.9-12.9-15.6-12.9-17.7 0-.5-1.2-2.4-2.7-4.2-2.4-2.8-3.2-3.2-5.6-2.6-1.6.4-3.6 1.9-4.5 3.2-1.6 2.5-1.7 2.3-4.4-11.3-1.5-7.7-3.1-17.2-3.4-21.2-.7-7.7-2.3-10-5.6-8.1m61.8 48.3c-.7 3.6-4.5 9.1-4.6 6.5 0-1.8 2.9-11.9 3.9-13.4.9-1.5 1.4 3.2.7 6.9m6.8 11.3c-.9 6.8-2.8 8.6-6.3 6.4-1.1-.7-.7-1.8 2.2-5.2 2.1-2.3 3.7-4.6 3.7-5.1 0-.4.3-.8.6-.8s.2 2.1-.2 4.7m-104.5 18.1c.1 3.2-1.5 6-6.2 10.9-5.3 5.6-8.2 5.7-10.4.6-1.5-3.7-1.4-12.4.2-16.5.4-.9 3.2-2.7 6.3-4.1l5.7-2.5 2.2 4.7c1.2 2.5 2.2 5.6 2.2 6.9",
-  viewBox: "278 24.2 275.1 136.4",
+  path: "M 281.5 29.2 C 276 30.8 267.2 32.7 262 33.5 C 256.8 34.2 251 35.3 249.1 35.9 C 247.3 36.5 238.1 37.7 228.8 38.7 C 213 40.3 211.8 40.3 209.1 38.7 C 206.4 37.1 206.1 37.1 204.1 38.8 C 201.9 40.5 201.9 40.7 201.6 97.5 C 201.3 138.4 200.9 155.4 200 157.7 C 199.4 159.5 197.4 161.8 195.4 162.9 C 191.9 165 191.3 166.8 193 170.1 C 195.1 173.9 202.8 171.3 207.5 165.1 C 209.3 162.8 209.6 160.3 210.2 143 C 210.5 132.3 210.9 120.3 210.9 116.4 L 211 109.3 L 220.3 108.6 C 229.6 107.9 248.9 105.7 256.8 104.4 C 260.8 103.8 262.6 104.9 260 106.5 C 259.4 106.9 258.1 108.9 256.9 111.1 C 254.2 116.5 254.1 127.2 256.8 133.3 C 260.9 142.6 269.3 148.5 285.3 153.5 C 293.4 156 294.5 156.2 300 155.1 C 309.6 153.2 312.8 151.4 316.1 146.2 C 317.7 143.6 319.5 139.9 320.1 137.8 L 321.1 134.1 L 324.6 138 C 329.3 143.2 341.8 152.7 345.8 154.1 C 348.4 155 349.5 154.9 351.5 153.6 C 354.7 151.5 354.7 148.5 351.6 137.6 C 348 125.2 347.5 118.7 349.5 109.9 C 352.3 97.6 353.2 95.6 356.7 94.5 C 361.7 92.8 363.8 90.2 366.2 82.6 C 367.4 78.7 368.7 75.2 369 74.8 C 370 73.5 377 94.1 379.4 105.5 C 381.5 115.5 381.7 117.6 380.8 128 C 380.3 134.3 380.1 145.3 380.4 152.5 C 380.9 164.2 381.2 165.7 383.1 167.3 C 385 168.8 385.6 168.9 387.4 167.7 C 389.2 166.5 389.7 164.5 390.9 153.6 C 392.2 141.1 392.2 140.6 389.6 127.5 C 386.3 110.6 386.2 103 389.3 97 C 394.1 87.4 400.2 90.8 417.2 112.8 C 421.6 118.5 428.6 126 432.8 129.6 L 440.3 136 L 447.2 136 C 452.8 136 454.7 136.5 457.8 138.4 C 463.2 142 466 142.4 469.7 140.1 C 473.5 137.7 475 133.3 475 124 L 475.1 117.5 L 480 127 C 487 140.5 494.6 147.8 499.7 145.9 C 503.3 144.6 503.4 141.1 500.1 132 C 494.9 117.8 492.8 105.7 493.2 92.5 L 493.5 80.8 L 496.8 77.9 C 498.6 76.3 500.9 75 502 75 C 505.4 75 513.1 85.8 532 117.1 C 556.3 157.3 565.2 168 574.4 168 C 578.7 168 579.2 167.7 590.3 159.3 C 598.5 153.1 599.6 151.1 601 141.7 C 602.6 130.3 602.2 126.6 599.1 126.2 C 595.6 125.7 594.9 127 593.9 136.1 C 593.4 140.6 592.4 145.5 591.7 146.9 C 590.4 149.5 578.1 159.5 574.8 160.6 C 571.9 161.5 565.8 157 559.1 148.8 C 552.6 141 549.1 135.3 535.6 110.5 C 525.8 92.7 515.8 77 510.5 71.4 C 507.2 67.9 506.8 67.8 502 68.2 C 496.5 68.8 492.2 71.9 489.3 77.5 C 485.9 83.9 486.9 113.8 491 128.1 C 492.6 133.6 491.4 132.5 487.1 124.8 C 483.4 118.3 477.2 100.7 473.9 87.6 C 473 84.1 471.2 81.2 467.3 76.9 C 458.8 67.8 452.4 66.9 444.7 73.9 C 439.5 78.6 438 82.4 437.3 92.9 C 436.7 102.7 439.3 115.1 443.6 122.9 C 446.5 128.2 446.5 128 443.9 128 C 440.9 128 430 117.2 421.8 106 C 414.6 96.3 411.5 93 404.6 87.9 C 397.5 82.6 388.2 84.8 384.5 92.6 L 382.7 96.4 L 379.3 86 C 373.3 67.4 371.8 58.9 371.5 42.9 C 371.4 34.8 371 27.8 370.6 27.1 C 369.7 25.6 365.3 25.7 364.4 27.2 C 364 27.8 363.5 35 363.4 43.1 C 363.1 57.8 362.1 64.4 357.9 78.1 C 356.1 84.2 355.5 85 352.6 86 C 346 88.1 343.8 92 340.9 106.6 C 338.9 116.4 338.8 118.3 339.9 126.5 C 340.6 131.5 341.4 136.7 341.7 138 L 342.3 140.3 L 339 138.4 C 333.6 135.3 325.9 125.9 318.5 113.5 C 311.4 101.6 305.5 95 302.1 95 C 300.9 95 299.5 93.8 298.8 92.2 C 297.5 89.6 297.2 89.5 290 89.8 C 286 89.9 278.8 91 274.1 92.1 C 256 96.5 231.7 100 219.4 100 L 211.3 100 L 210.7 81.8 C 210.3 71.9 210 60.2 210 56 L 210 48.2 L 221.8 47 C 228.2 46.4 238.5 45.1 244.5 44.3 C 250.6 43.4 258.9 42.4 263 42 C 270.8 41.2 292.5 35.6 294.8 33.7 C 296.6 32.3 295.9 29 293.5 27.5 C 291.9 26.5 289.7 26.8 281.5 29.2 Z M 458.8 80.6 C 460.7 81.9 461 83 461 88.7 C 461 92.4 461.9 98.8 463.1 103.1 L 465.2 110.8 L 462.7 115.6 C 459.8 121.2 455.7 125.5 454.1 124.5 C 449.8 121.9 445.5 105.6 446.4 95.2 C 447.5 81.6 452.3 76 458.8 80.6 Z M 290.5 101.8 C 290.8 103.4 292.7 106.2 294.7 108.1 C 300.2 113.4 310.1 126.7 311.1 130.3 C 312.2 134.1 310.7 139.4 307.7 142.7 C 304.8 145.9 296.7 147.5 290.2 146.1 C 280 143.9 268.5 136.7 265.6 130.6 C 263.5 126.2 263.5 118.8 265.7 114.3 C 267.7 109.9 276.6 103.2 283.3 100.9 C 290 98.6 289.7 98.5 290.5 101.8 Z M 465.6 131.7 C 465.3 132 464.3 132 463.4 131.6 C 461.9 131 461.9 130.8 463.6 128.9 L 465.5 126.8 L 465.8 129 C 466 130.2 465.9 131.4 465.6 131.7 Z M 576.9 104.7 C 574.6 105.3 573.9 108.5 575.7 110.9 C 578.1 114.3 583 113 583 109 C 583 107.5 579.9 103.8 578.9 104.1 C 578.7 104.2 577.8 104.4 576.9 104.7 Z M 559.9 110.7 C 557.6 111.3 556.9 114.5 558.7 116.9 C 561.1 120.3 566 119 566 115 C 566 113.5 562.9 109.8 561.9 110.1 C 561.7 110.2 560.8 110.4 559.9 110.7 Z",
+  viewBox: "188.3 22.6 417.3 154.3",
   strokeWidth: 3,
   filled: true,
+  fillRule: "evenodd",
+  animDuration: 1.5,
 };
 
-/** Splits a path string into its "M...Z" sub-paths so each animates in turn. */
-function toSegments(path: string) {
-  return path
-    .split("M")
-    .filter((d) => d.trim() !== "")
-    .map((d) => "M" + d.trim());
+/**
+ * Splits a compound SVG path into individual sub-paths so each animates in
+ * sequence via staggerChildren. Handles both absolute `M` and relative `m`
+ * moveto commands — relative ones are converted to absolute so each segment
+ * is self-contained and renders correctly on its own.
+ */
+function toSegments(path: string): string[] {
+  const tokens = path.match(/[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:[0-9]*\.)?[0-9]+(?:[eE][-+]?[0-9]+)?/g) ?? [];
+  const segments: string[] = [];
+  let current: string[] = [];
+  let cx = 0, cy = 0;
+
+  const flush = () => {
+    if (current.length) { segments.push(current.join(" ")); current = []; }
+  };
+
+  let i = 0;
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (cmd === "M") {
+      flush();
+      const x = parseFloat(tokens[i++]), y = parseFloat(tokens[i++]);
+      cx = x; cy = y;
+      current.push(`M ${x} ${y}`);
+      while (i < tokens.length && !/[A-Za-z]/.test(tokens[i])) {
+        const lx = parseFloat(tokens[i++]), ly = parseFloat(tokens[i++]);
+        cx = lx; cy = ly;
+        current.push(`L ${lx} ${ly}`);
+      }
+    } else if (cmd === "m") {
+      flush();
+      const dx = parseFloat(tokens[i++]), dy = parseFloat(tokens[i++]);
+      cx += dx; cy += dy;
+      current.push(`M ${cx} ${cy}`);
+      while (i < tokens.length && !/[A-Za-z]/.test(tokens[i])) {
+        const ldx = parseFloat(tokens[i++]), ldy = parseFloat(tokens[i++]);
+        cx += ldx; cy += ldy;
+        current.push(`L ${cx} ${cy}`);
+      }
+    } else if (cmd === "Z" || cmd === "z") {
+      current.push("Z");
+    } else {
+      const args: string[] = [cmd];
+      while (i < tokens.length && !/[A-Za-z]/.test(tokens[i])) args.push(tokens[i++]);
+      current.push(args.join(" "));
+      const nums = args.slice(1).map(Number);
+      const uc = cmd.toUpperCase();
+      if (["L","C","S","Q","T"].includes(uc) && nums.length >= 2) {
+        if (cmd === cmd.toUpperCase()) { cx = nums[nums.length - 2]; cy = nums[nums.length - 1]; }
+        else { cx += nums[nums.length - 2]; cy += nums[nums.length - 1]; }
+      } else if (uc === "H" && nums.length >= 1) {
+        if (cmd === "H") cx = nums[nums.length - 1]; else cx += nums[nums.length - 1];
+      } else if (uc === "V" && nums.length >= 1) {
+        if (cmd === "V") cy = nums[nums.length - 1]; else cy += nums[nums.length - 1];
+      }
+    }
+  }
+  flush();
+  return segments;
 }
 
 const svgVariants = {
@@ -56,42 +119,37 @@ const svgVariants = {
   },
 };
 
-const pathVariants: Variants = {
-  hidden: {
-    pathLength: 0,
-    opacity: 0,
-  },
-  visible: {
-    pathLength: 1,
-    opacity: 1,
-    transition: {
-      duration: 0.5,
-      ease: "easeInOut",
+/** Returns per-segment draw variants with a configurable duration. */
+function makePathVariants(duration: number): Variants {
+  return {
+    hidden: { pathLength: 0, opacity: 0 },
+    visible: {
+      pathLength: 1,
+      opacity: 1,
+      transition: { duration, ease: "easeInOut" },
     },
-  },
-};
+  };
+}
 
 /**
  * For filled (outline-trace) signatures: the stroke "writes" the outline, then
  * the solid ink fades in just behind it so the letters end filled, not hollow.
  */
-const filledPathVariants: Variants = {
-  hidden: {
-    pathLength: 0,
-    opacity: 0,
-    fillOpacity: 0,
-  },
-  visible: {
-    pathLength: 1,
-    opacity: 1,
-    fillOpacity: 1,
-    transition: {
-      pathLength: { duration: 0.5, ease: "easeInOut" },
-      opacity: { duration: 0.2 },
-      fillOpacity: { delay: 0.35, duration: 0.4, ease: "easeOut" },
+function makeFilledPathVariants(duration: number): Variants {
+  return {
+    hidden: { pathLength: 0, opacity: 0, fillOpacity: 0 },
+    visible: {
+      pathLength: 1,
+      opacity: 1,
+      fillOpacity: 1,
+      transition: {
+        pathLength: { duration, ease: "easeInOut" },
+        opacity: { duration: 0.2 },
+        fillOpacity: { delay: duration * 0.7, duration: duration * 0.8, ease: "easeOut" },
+      },
     },
-  },
-};
+  };
+}
 
 export function Signature({
   isInView,
@@ -102,6 +160,8 @@ export function Signature({
 }) {
   const pathSegments = toSegments(data.path);
   const filled = data.filled ?? false;
+  const duration = data.animDuration ?? 0.5;
+  const pv = filled ? makeFilledPathVariants(duration) : makePathVariants(duration);
 
   return (
     <motion.svg
@@ -118,11 +178,12 @@ export function Signature({
           key={i}
           d={path}
           fill={filled ? "currentColor" : "none"}
+          fillRule={data.fillRule}
           stroke="currentColor"
           strokeWidth={data.strokeWidth ?? 2}
           strokeLinejoin="round"
           strokeLinecap="round"
-          variants={filled ? filledPathVariants : pathVariants}
+          variants={pv}
         />
       ))}
     </motion.svg>
