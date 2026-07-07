@@ -30,6 +30,9 @@ interface PlayerHandProps {
   /** Position around the table; staggers the end-of-round reveal and the
    *  deal ripple. */
   tableIndex: number;
+  /** Dense seat: smaller cells and tighter grid, so a full table of
+   *  opponents fits a phone. The local player's own hand stays regular. */
+  dense?: boolean;
 }
 
 const selectContext = (state: UIMachineSnapshot) => {
@@ -56,6 +59,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   isLocked = false,
   selectedCardIndex = null,
   tableIndex,
+  dense = false,
 }) => {
   const {
     visibleCards,
@@ -160,7 +164,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     gameStage === GameStage.INITIAL_PEEK &&
     visibleCards.some((vc) => vc.source === "initial-peek");
 
-  const combinedClass = cn(isLocked && "opacity-60");
+  const combinedClass = cn(isLocked && "opacity-60", dense && "gap-1");
 
   return (
     <HandGrid numItems={handToDisplay.length} className={combinedClass}>
@@ -224,7 +228,18 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
         return (
           <div
             key={card.id}
-            className="relative w-[min(8vh,15vw)] aspect-[5/7]"
+            className={cn(
+              "relative aspect-[5/7]",
+              // svh, not vh: stable while mobile browser chrome collapses.
+              // Dense cells trade size for fitting six seats on a phone —
+              // their taps are occasional (ability targeting), not constant.
+              // The 3.5rem cap is for mid-width portrait tablets; at @4xl a
+              // full row fits anyway and the cap lifts, so desktop and
+              // half-screen sizes are unchanged.
+              dense
+                ? "w-[min(8svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
+                : "w-[min(8svh,15vw)]",
+            )}
           >
             {/* No whileHover here: this is the layoutId projection node, and
                 a hover pose on it fights the flight projection for the same

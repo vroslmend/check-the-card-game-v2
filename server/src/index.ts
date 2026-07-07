@@ -11,6 +11,7 @@ import { generatePlayerView } from "./state-redactor.js";
 import logger from "./lib/logger.js";
 import {
   InitialPlayerSetupData,
+  CreateGamePayload,
   PlayerActionType,
   CreateGameResponse,
   JoinGameResponse,
@@ -209,12 +210,18 @@ io.on("connection", (socket: Socket) => {
   socket.on(
     SocketEventName.CREATE_GAME,
     (
-      playerSetupData: InitialPlayerSetupData,
+      playerSetupData: CreateGamePayload,
       callback: (response: CreateGameResponse) => void,
     ) => {
       try {
         const gameId = newGameId();
         const playerId = nanoid();
+        // The host's table size, clamped server-side. Omitted or invalid
+        // falls through to the machine's env default.
+        const requestedSeats = Number(playerSetupData?.maxPlayers);
+        const maxPlayers = Number.isInteger(requestedSeats)
+          ? Math.min(6, Math.max(2, requestedSeats))
+          : undefined;
         const finalPlayerSetupData = {
           ...playerSetupData,
           id: playerId,
@@ -227,7 +234,7 @@ io.on("connection", (socket: Socket) => {
         );
 
         const gameActor = createActor(gameMachine, {
-          input: { gameId },
+          input: { gameId, maxPlayers },
         });
 
         // General listener for broadcasting game state to all in the room

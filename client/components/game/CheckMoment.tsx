@@ -19,15 +19,20 @@ interface CheckMomentInfo {
   key: number;
 }
 
-// Just the caller's identity — shallow-compared so an unchanged checker
-// across broadcasts doesn't re-render this out of the whole game state.
-// handCount distinguishes the button path from the matched-last-card path.
-const selectChecker = (state: UIMachineSnapshot) => {
+// The full set of players who have called Check, as one shallow-comparable
+// string (`id:handCount:name` per checker, join order). Selecting the whole
+// set — not just the first match — means a SECOND check during FINAL_TURNS
+// (a player emptying their hand after someone already called) is still seen;
+// the old `.find(hasCalledCheck)` returned the first checker forever, so that
+// second call either mis-stamped or, since MATCH. stands down for an empty
+// hand, produced no announcement at all. handCount distinguishes the button
+// path (>0) from the matched-last-card path (0).
+const selectCheckersKey = (state: UIMachineSnapshot) => {
   const players = state.context.currentGameState?.players ?? {};
-  const checker = Object.values(players).find((p) => p.hasCalledCheck);
-  return checker
-    ? { id: checker.id, name: checker.name, handCount: checker.hand.length }
-    : null;
+  return Object.values(players)
+    .filter((p) => p.hasCalledCheck)
+    .map((p) => `${p.id}:${p.hand.length}:${p.name}`)
+    .join("|");
 };
 
 /**
@@ -39,34 +44,42 @@ const selectChecker = (state: UIMachineSnapshot) => {
  * caption tells that story, and the MATCH. stamp stands down for it.
  */
 export function useCheckMoment(): CheckMomentInfo | null {
-  const checker = useUISelector(selectChecker);
+  const checkersKey = useUISelector(selectCheckersKey);
   const [moment, setMoment] = useState<CheckMomentInfo | null>(null);
-  const prevIdRef = useRef<string | null>(null);
-  const initializedRef = useRef(false);
+  const prevIdsRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
-    if (!initializedRef.current) {
+    const entries = checkersKey ? checkersKey.split("|") : [];
+    const parsed = entries.map((e) => {
+      const [id, handCount, ...name] = e.split(":");
+      return { id: id!, handCount: Number(handCount), name: name.join(":") };
+    });
+    const ids = new Set(parsed.map((p) => p.id));
+
+    if (prevIdsRef.current === null) {
       // First snapshot is the baseline: a Check that predates mount is not a
       // flip we witnessed, so don't stamp it.
-      initializedRef.current = true;
-      prevIdRef.current = checker?.id ?? null;
+      prevIdsRef.current = ids;
       return;
     }
-    if (checker && checker.id !== prevIdRef.current) {
-      prevIdRef.current = checker.id;
-      const caption =
-        checker.handCount === 0
-          ? `${checker.name} matched their last card.`
-          : `${checker.name} called it.`;
-      const delay = claimStampSlot(CHECK_SLOT_MS);
-      const t = setTimeout(
-        () => setMoment({ name: checker.name, caption, key: Date.now() }),
-        delay,
-      );
-      return () => clearTimeout(t);
-    }
-    prevIdRef.current = checker?.id ?? null;
-  }, [checker]);
+    const added = parsed.filter((p) => !prevIdsRef.current!.has(p.id));
+    prevIdsRef.current = ids;
+    if (added.length === 0) return;
+
+    // Stamp the newest caller (button check or a matched last card). Two in
+    // one broadcast is vanishingly rare; the last one wins the beat.
+    const checker = added[added.length - 1]!;
+    const caption =
+      checker.handCount === 0
+        ? `${checker.name} matched their last card.`
+        : `${checker.name} called it.`;
+    const delay = claimStampSlot(CHECK_SLOT_MS);
+    const t = setTimeout(
+      () => setMoment({ name: checker.name, caption, key: Date.now() }),
+      delay,
+    );
+    return () => clearTimeout(t);
+  }, [checkersKey]);
 
   useEffect(() => {
     if (!moment) return;

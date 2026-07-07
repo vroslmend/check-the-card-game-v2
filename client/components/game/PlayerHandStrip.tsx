@@ -34,6 +34,11 @@ interface PlayerHandStripProps {
   /** Position around the table; staggers the end-of-round reveal and the
    *  deal ripple. */
   tableIndex: number;
+  /** Tightly set table (3+ opponents): one-line seat header. */
+  compact?: boolean;
+  /** Small cards. Opponents on a dense table, and every seat at the end-scene
+   *  reveal; the local hand stays regular-size during play. */
+  denseCards?: boolean;
 }
 
 const selectStripContext = (state: UIMachineSnapshot) => {
@@ -83,6 +88,7 @@ const PlayerInfoBadge = ({
   isInMatchingWindow,
   isPeekingCards,
   isInitialPeekWindow,
+  compact = false,
 }: {
   player: Player;
   isCurrentTurn: boolean;
@@ -91,6 +97,7 @@ const PlayerInfoBadge = ({
   isInMatchingWindow: boolean;
   isPeekingCards: boolean;
   isInitialPeekWindow: boolean;
+  compact?: boolean;
 }) => {
   // Status is text + icon only — no hue coding. `muted` dims passive states
   // (waiting/disconnected/disqualified) to ink-muted; active states read ink.
@@ -129,6 +136,52 @@ const PlayerInfoBadge = ({
   // stale noise and their height crowds the revealed hands.
   const hideChip =
     gameStage === GameStage.SCORING || gameStage === GameStage.GAMEOVER;
+
+  // Dense table: one-line header (dot + name + status icon), no full chip —
+  // the two-line header is what made every seat cost ~54px of chrome. The
+  // full status text still lives on the results sheet and in the log. The
+  // local player keeps its status text inline (it is the acting signal).
+  if (compact) {
+    return (
+      <div className="flex max-w-full items-center gap-1.5 font-game">
+        {isCurrentTurn && (
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+            aria-hidden
+          />
+        )}
+        <span
+          className={cn(
+            "truncate text-sm font-bold text-ink",
+            isLocalPlayer ? "max-w-[8rem]" : "max-w-[5.5rem]",
+            isDisqualified && "text-ink-muted line-through",
+          )}
+        >
+          {player.name}
+        </span>
+        {!hideChip &&
+          (isLocalPlayer ? (
+            <span
+              className={cn(
+                "flex shrink-0 items-center gap-1 text-[11px] font-semibold",
+                muted ? "text-ink-muted" : "text-ink",
+              )}
+            >
+              <Icon className="h-3 w-3" />
+              <span>{text}</span>
+            </span>
+          ) : (
+            <Icon
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                muted ? "text-ink-muted" : "text-ink",
+              )}
+              aria-label={text}
+            />
+          ))}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center gap-2 font-game">
@@ -193,6 +246,8 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
   isLocalPlayer,
   isCurrentTurn,
   tableIndex,
+  compact = false,
+  denseCards = false,
 }) => {
   const {
     canSwap,
@@ -241,9 +296,21 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
   return (
     <motion.div
       layout
-      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+      // The dq dip is three keyframes and motion springs only take two: on
+      // the shared spring the beat threw motion's invariant mid-frame-batch
+      // and could leave every later animation dead (reveal flips, results
+      // sheet). y gets its own tween; layout keeps the spring.
+      transition={{
+        type: "spring",
+        stiffness: 500,
+        damping: 40,
+        y: { type: "tween", duration: 0.35, ease: "easeInOut" },
+      }}
       animate={dqBeat ? { y: [0, 3, 0] } : { y: 0 }}
-      className="flex flex-col items-center gap-2"
+      className={cn(
+        "flex flex-col items-center",
+        compact ? "gap-1" : "gap-2",
+      )}
     >
       <PlayerInfoBadge
         player={player}
@@ -253,6 +320,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         isInMatchingWindow={!!matchingPlayerIds?.includes(player.id)}
         isPeekingCards={publicPeekerId === player.id}
         isInitialPeekWindow={initialPeekWindowActive}
+        compact={compact}
       />
       <PlayerHand
         player={player}
@@ -265,6 +333,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
           isLocalPlayer && canMatch ? matchAttempt?.cardIndex : undefined
         }
         className="w-full max-w-md"
+        dense={denseCards}
       />
     </motion.div>
   );

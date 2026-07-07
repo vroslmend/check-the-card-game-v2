@@ -174,9 +174,34 @@ export function GameBoard() {
 
   const drawnCardData = playerWithPendingCard?.pendingDrawnCard?.card;
 
-  const opponentPlayers = Object.values(gameState.players).filter(
-    (p) => p.id !== localPlayerId,
-  );
+  // Seat opponents in turn order starting just after the local player, so the
+  // band reads the way the table plays (your left, going clockwise). Falls
+  // back to object order before turnOrder is populated.
+  const seatOrder =
+    gameState.turnOrder && gameState.turnOrder.length > 0
+      ? gameState.turnOrder
+      : Object.keys(gameState.players);
+  const localSeatPos = seatOrder.indexOf(localPlayerId);
+  const rotatedIds =
+    localSeatPos >= 0
+      ? [
+          ...seatOrder.slice(localSeatPos + 1),
+          ...seatOrder.slice(0, localSeatPos),
+        ]
+      : seatOrder;
+  const opponentPlayers = rotatedIds
+    .map((id) => gameState.players[id])
+    .filter((p): p is NonNullable<typeof p> => !!p && p.id !== localPlayerId);
+
+  // Dense the opponent band once the table is tightly set: 3+ opponents in
+  // play, or 4+ seats total at the reveal (where the local hand joins the
+  // band). Below that, seats render at their regular full size, so the 2-4
+  // player experience is unchanged.
+  const totalPlayers = Object.keys(gameState.players).length;
+  const denseBand = endScene
+    ? totalPlayers >= 4
+    : opponentPlayers.length >= 3;
+  const localPlayerData = gameState.players[localPlayerId];
 
   const handlePlayAgain = () => {
     send({ type: PlayerActionType.PLAY_AGAIN });
@@ -219,8 +244,15 @@ export function GameBoard() {
                 endScene && "order-1",
               )}
             >
-              {opponentPlayers.length > 0 ? (
-                <div className="w-full flex flex-wrap justify-evenly gap-2">
+              {opponentPlayers.length > 0 || endScene ? (
+                <div
+                  className={cn(
+                    "w-full flex flex-wrap justify-evenly",
+                    // The wider x-gap is what deterministically wraps the dense
+                    // seats (3 per row at 393px) instead of cramming a fourth.
+                    denseBand ? "gap-x-3 gap-y-2" : "gap-2",
+                  )}
+                >
                   {opponentPlayers.map((op, i) => (
                     <PlayerHandStrip
                       key={op.id}
@@ -231,8 +263,25 @@ export function GameBoard() {
                       isLocalPlayer={false}
                       isCurrentTurn={gameState.currentPlayerId === op.id}
                       tableIndex={i}
+                      compact={denseBand}
+                      denseCards={denseBand}
                     />
                   ))}
+                  {/* At the reveal the local hand joins the band as a final
+                      dense seat, so every hand lands on the table together
+                      above the results sheet. During play it lives in its own
+                      row below (full size). */}
+                  {endScene && localPlayerData && (
+                    <PlayerHandStrip
+                      key={localPlayerData.id}
+                      player={localPlayerData}
+                      isLocalPlayer
+                      isCurrentTurn={false}
+                      tableIndex={opponentPlayers.length}
+                      compact={denseBand}
+                      denseCards={denseBand}
+                    />
+                  )}
                 </div>
               ) : (
                 <p className="font-game text-ink-muted">
@@ -254,24 +303,26 @@ export function GameBoard() {
               />
             </div>
 
-            {/* Local player area */}
+            {/* Local player area. At the reveal the local hand moves up into
+                the opponents band, so this row is left empty (the grid track
+                collapses) rather than duplicating the hand. */}
             <div
               className={cn(
                 "flex flex-col items-center justify-center py-2",
                 endScene && "order-2",
               )}
             >
-              {localPlayerId && gameState.players[localPlayerId] ? (
+              {!endScene && localPlayerData ? (
                 <PlayerHandStrip
                   player={{
-                    ...gameState.players[localPlayerId],
-                    hand: isDealing
-                      ? []
-                      : gameState.players[localPlayerId].hand,
+                    ...localPlayerData,
+                    hand: isDealing ? [] : localPlayerData.hand,
                   }}
                   isLocalPlayer={true}
                   isCurrentTurn={isMyTurn}
                   tableIndex={opponentPlayers.length}
+                  compact={denseBand}
+                  denseCards={false}
                 />
               ) : null}
             </div>
@@ -281,7 +332,7 @@ export function GameBoard() {
                 every phase change. Retired for the end scene (it would be an
                 empty pill floating under the results panel). */}
             {!endScene && (
-              <div className="h-32 flex items-start justify-center pb-2">
+              <div className="h-28 @md:h-32 flex items-start justify-center pb-2">
                 <ActionControllerView />
               </div>
             )}

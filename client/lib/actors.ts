@@ -10,7 +10,7 @@ import {
 
 export const createGameActor = fromPromise<
   CreateGameResponse,
-  { name: string }
+  { name: string; maxPlayers?: number }
 >(async ({ input }) => {
   return new Promise((resolve, reject) => {
     socket.emit(SocketEventName.CREATE_GAME, input, (response) => {

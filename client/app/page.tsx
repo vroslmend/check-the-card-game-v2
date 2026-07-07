@@ -490,7 +490,7 @@ function HomePage() {
                       transition={{ duration: 1, delay: 0.7 }}
                       className="flex flex-wrap justify-center gap-2 lg:justify-start"
                     >
-                      <MetaChip>2–4 players</MetaChip>
+                      <MetaChip>2–6 players</MetaChip>
                       <MetaChip>52 cards</MetaChip>
                       <MetaChip>one round</MetaChip>
                       <MetaChip>free</MetaChip>

@@ -92,7 +92,7 @@ export type UIMachineEvents =
       type: "_SESSION_ESTABLISHED";
       response: CreateGameResponse | JoinGameResponse;
     }
-  | { type: "CREATE_GAME_REQUESTED"; playerName: string }
+  | { type: "CREATE_GAME_REQUESTED"; playerName: string; maxPlayers?: number }
   | { type: "JOIN_GAME_REQUESTED"; playerName: string; gameId: string }
   | { type: "LEAVE_GAME" }
   | { type: "SUBMIT_CHAT_MESSAGE"; message: string }
@@ -735,7 +735,7 @@ export const uiMachine = setup({
             src: "createGame",
             input: ({ event }) => {
               assertEvent(event, "CREATE_GAME_REQUESTED");
-              return { name: event.playerName };
+              return { name: event.playerName, maxPlayers: event.maxPlayers };
             },
             onDone: {
               target: "idle",
