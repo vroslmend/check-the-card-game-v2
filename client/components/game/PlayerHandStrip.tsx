@@ -241,7 +241,16 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
   return (
     <motion.div
       layout
-      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+      // The dq dip is three keyframes and motion springs only take two: on
+      // the shared spring the beat threw motion's invariant mid-frame-batch
+      // and could leave every later animation dead (reveal flips, results
+      // sheet). y gets its own tween; layout keeps the spring.
+      transition={{
+        type: "spring",
+        stiffness: 500,
+        damping: 40,
+        y: { type: "tween", duration: 0.35, ease: "easeInOut" },
+      }}
       animate={dqBeat ? { y: [0, 3, 0] } : { y: 0 }}
       className="flex flex-col items-center gap-2"
     >
