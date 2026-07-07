@@ -11,8 +11,10 @@ export interface HandGridProps {
 
 export const HandGrid = ({ numItems, children, className }: HandGridProps) => {
   // 2x2 for the standard four-card hand; grows a column per two extra cards
-  // (penalty cards from failed match attempts).
-  const numColumns = Math.max(2, Math.ceil(numItems / 2));
+  // (penalty cards from failed match attempts). The floor is one column, not
+  // two: a hand collapsed to a single vertical pair keeps its vertical shape
+  // instead of re-wrapping into a row.
+  const numColumns = Math.max(1, Math.ceil(numItems / 2));
 
   return (
     <div

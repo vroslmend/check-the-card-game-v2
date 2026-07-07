@@ -118,7 +118,12 @@ const compactFullColumns = (hand: (Card | null)[]): (Card | null)[] => {
   if (kept.length === C) return hand;
   const tops = kept.map((c) => c[0]);
   const bottoms = kept.map((c) => c[1]);
-  while (bottoms.length && bottoms[bottoms.length - 1] === null) bottoms.pop();
+  // Trim at most one trailing empty bottom slot (the structural hole of an
+  // odd-sized hand). The result must stay at exactly kept.length columns so
+  // no surviving card changes rows; popping more than one shrinks the slot
+  // count past a column boundary and re-wraps the grid, which reads as a
+  // shuffle.
+  if (bottoms.length && bottoms[bottoms.length - 1] === null) bottoms.pop();
   return [...tops, ...bottoms];
 };
 
