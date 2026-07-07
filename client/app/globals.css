@@ -11,11 +11,11 @@
    ============================================================================ */
 :root {
   /* Semantic palette — light "Chalk" */
-  --ground: 40 9% 87%;
+  --ground: 38 11% 83%;
   /* A hair off pure white: keeps cards reading white but drops the clinical
      maximal step against the warm ground. */
-  --surface: 40 33% 99%;
-  --surface-2: 40 14% 92%;
+  --surface: 38 25% 97%;
+  --surface-2: 38 12% 88%;
   --ink: 34 10% 14%;
   /* 38 7% 37% clears WCAG AA for small text on ground/surface/surface-2
      (the old 52% lightness measured 2.74:1 on ground — below even the
@@ -70,8 +70,8 @@
   /* Nudged from 53% so muted text clears 4.5:1 on surface (#242424) too. */
   --ink-muted: 36 5% 57%;
   --hairline: 0 0% 23%;
-  --accent: 2 57% 57%;
-  --accent-ink: 6 22% 9%;
+  --accent: 2 52% 48%;
+  --accent-ink: 23 100% 97%;
 
   /* Custom cursor variables (landing) */
   --cursor-bg: hsl(60 9% 98% / 0.1);

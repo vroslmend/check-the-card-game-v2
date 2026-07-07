@@ -114,7 +114,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
                 ? "bg-accent text-accent-ink hover:brightness-110"
                 : icon
                   ? "text-ink-muted hover:bg-surface-2 hover:text-ink"
-                  : "border border-hairline bg-surface text-ink hover:bg-surface-2",
+                  : "border border-hairline bg-surface text-ink hover:bg-surface-2 hover:shadow-sm",
               "disabled:cursor-not-allowed disabled:opacity-50",
               isLoading && "cursor-wait",
               className,
