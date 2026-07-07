@@ -6,6 +6,7 @@ import { Crown } from "lucide-react";
 import { type Player, PlayerStatus } from "shared-types";
 import { useUIActorRef, useUISelector } from "@/context/GameUIContext";
 import { cn } from "@/lib/utils";
+import { play } from "@/lib/sounds";
 
 interface RoundSummaryProps {
   players: Player[];
@@ -190,14 +191,20 @@ export const RoundSummary = ({
         <div className="flex flex-wrap items-center gap-3 pt-1">
           {isGameMaster && (
             <button
-              onClick={onPlayAgain}
+              onClick={() => {
+                play("click");
+                onPlayAgain();
+              }}
               className="flex h-11 items-center rounded-full bg-accent px-6 text-sm font-bold text-accent-ink transition-colors hover:bg-accent/90"
             >
               Play again
             </button>
           )}
           <button
-            onClick={onToggleChat}
+            onClick={() => {
+              play("click");
+              onToggleChat();
+            }}
             className="flex h-11 items-center rounded-full border border-hairline bg-surface px-5 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
           >
             Table talk

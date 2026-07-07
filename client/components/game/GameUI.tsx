@@ -12,6 +12,7 @@ import { RejoinModal } from "@/components/modals/RejoinModal";
 import { motion, AnimatePresence } from "framer-motion";
 import CardAnimationRoot from "@/components/cards/CardAnimationRoot";
 import { GameStage } from "shared-types";
+import { useGameSounds } from "@/components/game/useGameSounds";
 
 type GameView = "prompting" | "lobby" | "game" | "connecting";
 
@@ -30,6 +31,9 @@ const selectView = (s: UIMachineSnapshot): GameView => {
 
 export default function GameUI() {
   const view = useUISelector(selectView);
+  // Mounted here so the table's voice covers the lobby (joins, readies,
+  // start) as well as the board.
+  useGameSounds();
 
   const renderContent = () => {
     switch (view) {

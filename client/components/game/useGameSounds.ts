@@ -35,21 +35,25 @@ const selectSoundSignals = (state: UIMachineSnapshot) => {
       if (latestMatchId && latestPenaltyId && latestShuffleId) break;
     }
   }
+  const playerList = Object.values(players);
   return {
     gameStage: gs?.gameStage ?? null,
-    hasPendingDraw: Object.values(players).some((p) => p.pendingDrawnCard),
+    hasPendingDraw: playerList.some((p) => p.pendingDrawnCard),
     discardPileSize: gs?.discardPileSize ?? 0,
     visibleCount: state.context.visibleCards.length,
     latestMatchId,
     latestPenaltyId,
     latestShuffleId,
-    checkerId:
-      Object.values(players).find((p) => p.hasCalledCheck)?.id ?? null,
+    checkerId: playerList.find((p) => p.hasCalledCheck)?.id ?? null,
     isMyTurn:
       !!gs?.currentPlayerId &&
       gs.currentPlayerId === state.context.localPlayerId,
     chatCount: gs?.chat?.length ?? 0,
     isSidePanelOpen: state.context.isSidePanelOpen,
+    playerCount: playerList.length,
+    readyCount: playerList.filter((p) => p.isReady).length,
+    abilityStackLen: gs?.abilityStack?.length ?? 0,
+    publicSwapAt: gs?.publicSwap?.occurredAt ?? null,
   };
 };
 
@@ -84,12 +88,37 @@ export function useGameSounds() {
   }, []);
 
   useDelta(s.gameStage, (prev, next) => {
-    if (next === GameStage.DEALING) play("deal");
+    // Start = leaving the lobby; the deal riffle plays when the cards
+    // actually fly (DEALING -> INITIAL_PEEK is the commit that animates).
+    if (prev === GameStage.WAITING_FOR_PLAYERS && next === GameStage.DEALING)
+      play("start");
+    if (prev === GameStage.DEALING && next === GameStage.INITIAL_PEEK)
+      play("deal");
     const wasEnd =
       prev === GameStage.SCORING || prev === GameStage.GAMEOVER;
     const isEnd =
       next === GameStage.SCORING || next === GameStage.GAMEOVER;
     if (isEnd && !wasEnd) play("roundOver");
+  });
+
+  useDelta(s.playerCount, (prev, next) => {
+    if (s.gameStage !== GameStage.WAITING_FOR_PLAYERS) return;
+    if (next > prev) play("join");
+    if (next < prev) play("leave");
+  });
+
+  useDelta(s.readyCount, (prev, next) => {
+    if (s.gameStage !== GameStage.WAITING_FOR_PLAYERS) return;
+    if (next > prev) play("ready");
+    if (next < prev) play("unready");
+  });
+
+  useDelta(s.abilityStackLen, (prev, next) => {
+    if (next > prev) play("ability");
+  });
+
+  useDelta(s.publicSwapAt, (_prev, next) => {
+    if (next) play("swap");
   });
 
   useDelta(s.hasPendingDraw, (prev, next) => {

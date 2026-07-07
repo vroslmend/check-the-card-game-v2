@@ -30,6 +30,7 @@ import {
   createStartGameAction,
 } from "./ActionFactories";
 import { isDrawnCard } from "@/lib/types";
+import { play } from "@/lib/sounds";
 
 const MATCHING_STAGE_DURATION_MS = 5000;
 // Must match the server's PEEK_DURATION_MS / ABILITY_PEEK_VIEW_DURATION_MS.
@@ -300,10 +301,10 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
 
         if (sourceCard.rank === "K" || sourceCard.rank === "Q") {
           actions.push(
-            createSkipAbilityAction(
-              () => sendEvent({ type: "SKIP_ABILITY_STAGE" }),
-              "Skip Peek",
-            ),
+            createSkipAbilityAction(() => {
+              play("skip");
+              sendEvent({ type: "SKIP_ABILITY_STAGE" });
+            }, "Skip Peek"),
           );
         }
       } else if (stage === "swapping") {
@@ -319,10 +320,10 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
           ),
         );
         actions.push(
-          createSkipAbilityAction(
-            () => sendEvent({ type: "SKIP_ABILITY_STAGE" }),
-            "Skip Swap",
-          ),
+          createSkipAbilityAction(() => {
+            play("skip");
+            sendEvent({ type: "SKIP_ABILITY_STAGE" });
+          }, "Skip Swap"),
         );
       }
       return actions;

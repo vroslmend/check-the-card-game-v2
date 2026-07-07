@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Action } from "./ActionBarComponent";
 import { cn } from "@/lib/utils";
+import { play } from "@/lib/sounds";
 import {
   Tooltip,
   TooltipContent,
@@ -121,7 +122,10 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             aria-label={label}
             disabled={disabled || isLoading}
             onClick={onClick}
-            onPointerDown={onPointerDown}
+            onPointerDown={(e) => {
+              play("click");
+              onPointerDown?.(e);
+            }}
             onPointerUp={onPointerUp}
             onPointerLeave={onPointerLeave}
             // No remount pose: buttons are keyed by label and every phase
