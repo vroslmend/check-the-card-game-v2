@@ -1,12 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { PlayingCard } from "@/components/cards/PlayingCard";
 import { Suit, CardRank, type Card } from "shared-types";
 
-// A hand of four on the table — facedown accent backs at rest; hovering
-// "Check" in the headline spreads the fan and flips the bottom two, the
-// game's own initial-peek gesture. Pure presentation.
+// A hand of four on the table. The cards deal themselves in on load, breathe
+// while idle, and every few seconds sneak a look at the bottom two — the
+// game's initial-peek gesture. Hovering "Check" in the headline spreads the
+// fan and shows the same peek deliberately.
 const HAND: Card[] = [
   { id: "hero-1", suit: Suit.Spades, rank: CardRank.Ace },
   { id: "hero-2", suit: Suit.Hearts, rank: CardRank.King },
@@ -21,10 +23,40 @@ const POSES = [
   { x: 66, y: 6, rest: 8, spread: 14, flips: true },
 ];
 
+const PEEK_EVERY_MS = 7000;
+const PEEK_HOLD_MS = 1600;
+
 export function HeroCards({ checkHovered }: { checkHovered: boolean }) {
   const reduced = useReducedMotion();
+  const [dealt, setDealt] = useState(false);
+  const [autoPeek, setAutoPeek] = useState(false);
+
+  // Entrance: the fan deals itself in once, card by card.
+  useEffect(() => {
+    const t = setTimeout(() => setDealt(true), 1400);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Idle life: a periodic peek at the bottom two, paused while hovered.
+  useEffect(() => {
+    if (reduced || checkHovered) {
+      setAutoPeek(false);
+      return;
+    }
+    let hold: ReturnType<typeof setTimeout> | null = null;
+    const interval = setInterval(() => {
+      setAutoPeek(true);
+      hold = setTimeout(() => setAutoPeek(false), PEEK_HOLD_MS);
+    }, PEEK_EVERY_MS);
+    return () => {
+      clearInterval(interval);
+      if (hold) clearTimeout(hold);
+    };
+  }, [reduced, checkHovered]);
+
   // Reduced motion: rest in the spread pose with the two faces showing.
   const spread = checkHovered || !!reduced;
+  const peeking = spread || autoPeek;
 
   return (
     <div
@@ -37,19 +69,44 @@ export function HeroCards({ checkHovered }: { checkHovered: boolean }) {
           <motion.div
             key={card.id}
             className="absolute h-56 w-40"
-            initial={false}
+            initial={
+              reduced
+                ? false
+                : { x: p.x, y: p.y - 48, rotate: 0, opacity: 0 }
+            }
             animate={{
               x: spread ? p.x * 1.6 : p.x,
               y: spread ? p.y - 10 : p.y,
               rotate: spread ? p.spread : p.rest,
+              opacity: 1,
             }}
-            transition={{ type: "spring", stiffness: 220, damping: 22 }}
+            transition={{
+              type: "spring",
+              stiffness: 220,
+              damping: 22,
+              delay: dealt ? 0 : 0.35 + i * 0.12,
+            }}
           >
-            <PlayingCard
-              card={card}
-              faceDown={!(spread && p.flips)}
+            <motion.div
               className="h-full w-full"
-            />
+              animate={reduced ? { y: 0 } : { y: [0, -4, 0] }}
+              transition={
+                reduced
+                  ? { duration: 0 }
+                  : {
+                      duration: 4.5 + i * 0.6,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: 1.8 + i * 0.45,
+                    }
+              }
+            >
+              <PlayingCard
+                card={card}
+                faceDown={!(peeking && p.flips)}
+                className="h-full w-full"
+              />
+            </motion.div>
           </motion.div>
         );
       })}

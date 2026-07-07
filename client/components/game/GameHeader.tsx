@@ -18,6 +18,7 @@ import {
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { BrandMark } from "@/components/ui/BrandMark";
 import { isMuted, play, setMuted } from "@/lib/sounds";
 
 const selectGameHeaderProps = (state: UIMachineSnapshot) => ({
@@ -72,9 +73,10 @@ export const GameHeader = () => {
       <div className="flex min-w-0 items-center gap-3">
         <Link
           href="/"
-          className="group flex items-center gap-1 text-lg font-extrabold tracking-tight text-ink"
+          className="group flex items-center gap-2 text-lg font-extrabold tracking-tight text-ink"
         >
           <ChevronLeft className="h-4 w-4 text-ink-muted transition-transform group-hover:-translate-x-0.5" />
+          <BrandMark className="h-6 rounded-[4px]" />
           Check
         </Link>
         <span className="text-hairline" aria-hidden>
