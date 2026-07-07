@@ -165,7 +165,7 @@ export const SidePanel = () => {
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
           transition={{ type: "spring", stiffness: 380, damping: 40 }}
-          className="absolute inset-y-0 right-0 z-[60] flex w-full max-w-sm flex-col border-l border-hairline bg-surface-2 font-game"
+          className="absolute bottom-0 right-0 top-14 z-[60] flex w-full max-w-sm flex-col border-l border-hairline bg-surface-2 font-game"
         >
           <div className="flex h-14 shrink-0 items-center justify-between border-b border-hairline px-3">
             <div className="flex items-center gap-1">

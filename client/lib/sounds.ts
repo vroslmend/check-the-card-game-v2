@@ -17,6 +17,15 @@ const SPRITES = {
   roundOver: "/sounds/round-over.mp3",
   chat: "/sounds/chat.mp3",
   shuffle: "/sounds/shuffle.mp3",
+  click: "/sounds/click.mp3",
+  swap: "/sounds/swap.mp3",
+  ability: "/sounds/ability.mp3",
+  join: "/sounds/join.mp3",
+  leave: "/sounds/leave.mp3",
+  ready: "/sounds/ready.mp3",
+  unready: "/sounds/unready.mp3",
+  start: "/sounds/start.mp3",
+  skip: "/sounds/skip.mp3",
 } as const;
 export type SpriteName = keyof typeof SPRITES;
 
@@ -26,10 +35,10 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 const buffers = new Map<SpriteName, AudioBuffer>();
 
-/** Sound defaults OFF; the header button is the invitation. */
+/** Sound defaults ON; the header button is the opt-out. */
 export const isMuted = (): boolean => {
   if (typeof window === "undefined") return true;
-  return localStorage.getItem(MUTE_KEY) !== "0";
+  return localStorage.getItem(MUTE_KEY) === "1";
 };
 
 export const setMuted = (muted: boolean) => {

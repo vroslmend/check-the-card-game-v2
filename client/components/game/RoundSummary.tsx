@@ -6,6 +6,7 @@ import { Crown } from "lucide-react";
 import { type Player, PlayerStatus } from "shared-types";
 import { useUIActorRef, useUISelector } from "@/context/GameUIContext";
 import { cn } from "@/lib/utils";
+import { play } from "@/lib/sounds";
 
 interface RoundSummaryProps {
   players: Player[];
@@ -108,12 +109,12 @@ export const RoundSummary = ({
           : { type: "spring", stiffness: 300, damping: 30, delay: 0.35 }
       }
     >
-      <div className="mx-auto flex max-h-[60vh] w-full max-w-3xl flex-col gap-4 overflow-y-auto px-5 py-6 sm:px-8 lg:max-h-[44vh]">
+      <div className="mx-auto flex max-h-[50vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto px-5 py-5 sm:px-8 lg:max-h-[34vh]">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
             Round over
           </p>
-          <h2 className="mt-1 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
+          <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {title}
           </h2>
           {winners.length > 0 && (
@@ -139,7 +140,7 @@ export const RoundSummary = ({
             const m = recap.matches[player.id] ?? 0;
             const pen = recap.penalties[player.id] ?? 0;
             return (
-              <div key={player.id} className="flex items-center gap-3 py-2.5">
+              <div key={player.id} className="flex items-center gap-3 py-2">
                 <span className="w-5 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
                   {i + 1}
                 </span>
@@ -190,14 +191,20 @@ export const RoundSummary = ({
         <div className="flex flex-wrap items-center gap-3 pt-1">
           {isGameMaster && (
             <button
-              onClick={onPlayAgain}
+              onClick={() => {
+                play("click");
+                onPlayAgain();
+              }}
               className="flex h-11 items-center rounded-full bg-accent px-6 text-sm font-bold text-accent-ink transition-colors hover:bg-accent/90"
             >
               Play again
             </button>
           )}
           <button
-            onClick={onToggleChat}
+            onClick={() => {
+              play("click");
+              onToggleChat();
+            }}
             className="flex h-11 items-center rounded-full border border-hairline bg-surface px-5 text-sm font-semibold text-ink-muted transition-colors hover:border-ink-muted hover:text-ink"
           >
             Table talk

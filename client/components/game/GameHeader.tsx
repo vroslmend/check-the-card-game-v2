@@ -18,7 +18,7 @@ import {
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { isMuted, setMuted } from "@/lib/sounds";
+import { isMuted, play, setMuted } from "@/lib/sounds";
 
 const selectGameHeaderProps = (state: UIMachineSnapshot) => ({
   gameId: state.context.gameId,
@@ -62,6 +62,9 @@ export const GameHeader = () => {
   const toggleMute = () => {
     setMuted(!muted);
     setMutedState(!muted);
+    // Audible confirmation exactly when turning sound ON (gain is already
+    // open by the time this fires; muting stays silent).
+    play("click");
   };
 
   return (
@@ -109,7 +112,10 @@ export const GameHeader = () => {
         <ThemeToggle />
 
         <button
-          onClick={() => send({ type: "TOGGLE_SIDE_PANEL" })}
+          onClick={() => {
+            play("click");
+            send({ type: "TOGGLE_SIDE_PANEL" });
+          }}
           className={`relative ${ICON_BUTTON}`}
           aria-label={
             hasUnread

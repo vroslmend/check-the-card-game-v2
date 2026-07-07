@@ -10,6 +10,7 @@ import {
   SetupPeekGrid,
 } from "@/app/rules/illustrations";
 import { cn } from "@/lib/utils";
+import { play } from "@/lib/sounds";
 
 interface Page {
   kicker: string;
@@ -61,11 +62,15 @@ export function LearnCheckSheet({
     }
   }, [open]);
 
+  const flip = (dir: 1 | -1) => {
+    play("click");
+    setPage((p) => Math.min(Math.max(p + dir, 0), PAGES.length - 1));
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") onClose();
-    if (e.key === "ArrowRight")
-      setPage((p) => Math.min(p + 1, PAGES.length - 1));
-    if (e.key === "ArrowLeft") setPage((p) => Math.max(p - 1, 0));
+    if (e.key === "ArrowRight") flip(1);
+    if (e.key === "ArrowLeft") flip(-1);
   };
 
   const current = PAGES[page]!;
@@ -165,7 +170,7 @@ export function LearnCheckSheet({
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPage((p) => Math.max(p - 1, 0))}
+                  onClick={() => flip(-1)}
                   disabled={page === 0}
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-hairline bg-surface text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
                   aria-label="Previous"
@@ -174,7 +179,7 @@ export function LearnCheckSheet({
                 </button>
                 {page < PAGES.length - 1 ? (
                   <button
-                    onClick={() => setPage((p) => p + 1)}
+                    onClick={() => flip(1)}
                     className="flex h-9 items-center gap-1.5 rounded-full bg-accent px-4 text-sm font-bold text-accent-ink hover:bg-accent/90"
                   >
                     Next

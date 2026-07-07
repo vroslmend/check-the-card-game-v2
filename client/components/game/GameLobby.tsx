@@ -22,6 +22,7 @@ import { CardBack } from "@/components/cards/CardBack";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { LearnCheckSheet } from "./LearnCheckSheet";
 import { cn } from "@/lib/utils";
+import { play } from "@/lib/sounds";
 
 const HOLD_TO_REMOVE_SECONDS = 1.5;
 
@@ -298,12 +299,14 @@ export const GameLobby = () => {
 
   const isReady = !!localPlayer?.isReady;
   const canStart = isGameMaster && allPlayersReady && hasEnoughPlayers;
-  const toggleReady = () =>
+  const toggleReady = () => {
+    play("click");
     send({
       type: isReady
         ? PlayerActionType.DECLARE_LOBBY_UNREADY
         : PlayerActionType.DECLARE_LOBBY_READY,
     });
+  };
 
   const statusLine = !hasEnoughPlayers
     ? "Waiting for players"
@@ -318,7 +321,10 @@ export const GameLobby = () => {
   const action = canStart
     ? {
         label: "Start game",
-        onClick: () => send({ type: PlayerActionType.START_GAME }),
+        onClick: () => {
+          play("click");
+          send({ type: PlayerActionType.START_GAME });
+        },
         accent: true,
       }
     : !isReady
