@@ -2,19 +2,13 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
-import { PlusCircle, Sparkles, ArrowRight, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useUIActorRef, useUISelector } from "@/context/GameUIContext";
 
 interface NewGameModalProps {
@@ -59,100 +53,55 @@ export function NewGameModal({
         onInteractOutside={(e) => {
           if (isLoading) e.preventDefault();
         }}
-        className="sm:max-w-[425px] p-0 overflow-hidden bg-surface border border-hairline"
+        className="gap-0 p-6 font-game sm:max-w-md sm:p-8"
       >
-        <div className="relative">
-          <div className="relative p-6">
-            <DialogHeader className="mb-8">
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className="mb-2 flex items-center gap-2"
-              >
-                <div className="rounded-full bg-surface-2 p-1.5">
-                  <PlusCircle className="h-4 w-4 text-ink-muted" />
-                </div>
-                <DialogTitle className="text-2xl font-bold text-ink">
-                  Create a New Game
-                </DialogTitle>
-              </motion.div>
-              <DialogDescription className="text-ink-muted">
-                Start a new game session and invite friends to join.
-              </DialogDescription>
-            </DialogHeader>
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
+          New table
+        </p>
+        <DialogTitle className="mt-2 text-3xl font-extrabold tracking-tight text-ink">
+          Create a game
+        </DialogTitle>
+        <DialogDescription className="mt-2 text-sm leading-relaxed text-ink-muted">
+          You host the table: share the code, wait for your friends, start
+          when everyone is ready.
+        </DialogDescription>
 
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className="mb-8 space-y-6"
-            >
-              <div className="space-y-2">
-                <Label
-                  htmlFor="name"
-                  className="text-sm font-normal text-ink-muted"
-                >
-                  What should we call you?
-                </Label>
-                <Input
-                  id="name"
-                  placeholder="Enter your name"
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                  className="rounded-xl border-hairline bg-surface h-12 px-4"
-                  onKeyDown={onKeyDown}
-                  autoComplete="off"
-                />
-              </div>
+        <div className="mt-6">
+          <label
+            htmlFor="name"
+            className="text-sm font-semibold text-ink"
+          >
+            Your name
+          </label>
+          <input
+            id="name"
+            placeholder="Enter your name"
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+            onKeyDown={onKeyDown}
+            autoComplete="off"
+            autoFocus
+            maxLength={20}
+            className="mt-2 h-12 w-full rounded-full border border-hairline bg-surface px-5 text-base text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent"
+          />
+        </div>
 
-              <div className="bg-surface-2 rounded-xl p-4 border border-hairline">
-                <div className="flex items-start gap-3">
-                  <div className="bg-surface rounded-full p-2 mt-0.5">
-                    <Sparkles className="h-4 w-4 text-ink-muted" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-ink mb-1">
-                      Game Master
-                    </h4>
-                    <p className="text-xs text-ink-muted">
-                      As the creator, you'll be the Game Master with special
-                      privileges to manage the game session.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-
-            <DialogFooter className="flex justify-end">
-              <Button
-                onClick={handleCreateGame}
-                disabled={isLoading}
-                className="rounded-full px-8 py-6 h-auto bg-accent text-accent-ink hover:bg-accent/90"
-                data-cursor-link
-              >
-                {/* Constant label + arrow↔spinner swap keeps the button the
-                    same width while loading (no size jump). */}
-                <span className="flex items-center gap-2">
-                  Create Game
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <motion.div
-                      animate={{ x: [0, 4, 0] }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                    </motion.div>
-                  )}
-                </span>
-              </Button>
-            </DialogFooter>
-          </div>
+        <div className="mt-8 flex justify-end">
+          <button
+            onClick={handleCreateGame}
+            disabled={isLoading}
+            className="flex h-12 items-center gap-2 rounded-full bg-accent px-7 text-base font-bold text-accent-ink transition-colors hover:bg-accent/90 disabled:cursor-wait disabled:opacity-70"
+            data-cursor-link
+          >
+            {/* Constant label + arrow/spinner swap keeps the button the same
+                width while loading (no size jump). */}
+            Create game
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ArrowRight className="h-4 w-4" />
+            )}
+          </button>
         </div>
       </DialogContent>
     </Dialog>

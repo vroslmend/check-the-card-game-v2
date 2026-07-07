@@ -22,8 +22,9 @@ import {
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ChevronDown, Spade, Users, ArrowRight, Menu, X } from "lucide-react";
+import { ChevronDown, Users, ArrowRight, Menu, X } from "lucide-react";
 import { FaGithub, FaSpotify } from "react-icons/fa";
+import { BrandMark } from "@/components/ui/BrandMark";
 import { HeroCards } from "@/components/ui/HeroCards";
 import { Signature } from "@/components/ui/Signature";
 import { NewGameModal } from "@/components/modals/NewGameModal";
@@ -280,9 +281,7 @@ function HomePage() {
             }}
             className="flex items-center gap-3"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-hairline bg-surface">
-              <Spade className="h-4 w-4 text-ink" />
-            </div>
+            <BrandMark className="h-8" />
             <span className="text-2xl font-extrabold tracking-tight text-ink">
               Check
             </span>
@@ -715,7 +714,7 @@ function HomePage() {
       <footer className="border-t border-hairline bg-surface-2">
         <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-y-4 px-5 py-6 text-center sm:grid-cols-3 sm:px-8 sm:text-left">
           <div className="hidden items-center gap-3 justify-self-start sm:flex">
-            <Spade className="h-5 w-5 text-ink-muted" />
+            <BrandMark className="h-6 rounded-[4px]" />
             <span className="text-lg font-bold text-ink">Check</span>
           </div>
           <div className="flex flex-col items-center justify-center gap-y-1 text-sm font-normal text-ink-muted">

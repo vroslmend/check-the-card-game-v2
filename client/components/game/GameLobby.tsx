@@ -19,6 +19,7 @@ import {
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
 import { CardBack } from "@/components/cards/CardBack";
+import { BrandMark } from "@/components/ui/BrandMark";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { LearnCheckSheet } from "./LearnCheckSheet";
 import { cn } from "@/lib/utils";
@@ -338,8 +339,9 @@ export const GameLobby = () => {
       <div className="flex h-14 shrink-0 items-center justify-between px-4 md:px-6">
         <Link
           href="/"
-          className="text-lg font-extrabold tracking-tight text-ink"
+          className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-ink"
         >
+          <BrandMark className="h-6 rounded-[4px]" />
           Check
         </Link>
         <div className="flex items-center gap-2">
