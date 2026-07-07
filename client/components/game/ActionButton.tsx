@@ -106,7 +106,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             // pseudo-classes cannot. Tailwind v4 gates hover: to
             // hover-capable devices, covering the old isTouchDevice check.
             className={cn(
-              "relative flex h-10 shrink-0 items-center justify-center overflow-hidden rounded-full transition enabled:hover:scale-110 enabled:active:scale-90",
+              "relative flex h-10 shrink-0 select-none items-center justify-center overflow-hidden rounded-full transition enabled:hover:scale-110 enabled:active:scale-90",
               icon ? "w-10" : "px-4",
               // One accent-filled primary; secondary label = hairline-outline
               // pill, secondary icon = bare ink-muted button.
