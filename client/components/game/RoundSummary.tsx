@@ -67,12 +67,16 @@ export const RoundSummary = ({
   const sorted = [...players].sort((a, b) => a.score - b.score);
   const caller = callerId ? players.find((p) => p.id === callerId) : null;
 
+  // A shared lowest score is a tie, not a group of separate winners: name it
+  // that way. Two tied read as "A and B tie"; three or more as "It's a tie".
   const title =
     winners.length === 0
       ? "Round over"
       : winners.length === 1
         ? `${winners[0]!.name} wins`
-        : `${winners.map((w) => w.name).join(" and ")} win`;
+        : winners.length === 2
+          ? `${winners[0]!.name} and ${winners[1]!.name} tie`
+          : "It's a tie";
   const caption = caller
     ? `${caller.name} called Check.`
     : "The round ended without a Check.";
