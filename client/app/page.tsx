@@ -1,35 +1,43 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useTransition } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useTransition,
+  type ReactNode,
+} from "react";
 import {
   motion,
   useScroll,
   useTransform,
   useSpring,
+  useInView,
   AnimatePresence,
   useMotionValueEvent,
   useReducedMotion,
   type Variants,
 } from "framer-motion";
-import { useTheme } from "next-themes";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ChevronDown, Spade, Users, ArrowRight } from "lucide-react";
-import { Menu, X } from "lucide-react";
+import { ChevronDown, Spade, Users, ArrowRight, Menu, X } from "lucide-react";
 import { FaGithub, FaSpotify } from "react-icons/fa";
 import { HeroCards } from "@/components/ui/HeroCards";
-import { AnimateOnView } from "@/components/ui/AnimateOnView";
 import { Signature } from "@/components/ui/Signature";
-import { Scrollytelling } from "@/components/ui/Scrollytelling";
-import { socket } from "@/lib/socket";
-import { useRouter } from "next/navigation";
 import { NewGameModal } from "@/components/modals/NewGameModal";
 import { JoinGameModal } from "@/components/modals/JoinGameModal";
 import { useDevice } from "@/context/DeviceContext";
 import { PlayingCard } from "@/components/cards/PlayingCard";
 import type { Card } from "shared-types";
 import { Suit, CardRank } from "shared-types";
+import { AbilityTriptych, PileDiagram } from "@/app/rules/illustrations";
+
+const NAV_ITEMS = [
+  { label: "How it plays", href: "#how" },
+  { label: "Rules", href: "/rules" },
+] as const;
 
 const textContainerVariants = {
   hover: {
@@ -54,29 +62,96 @@ const letterVariants: Variants = {
   },
 };
 
+const REVEAL_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+/** The rules page's quiet fade-up, reused as the landing's only reveal. */
+const Reveal = ({
+  children,
+  className,
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+}) => (
+  <motion.div
+    className={className}
+    initial={{ opacity: 0, y: 16 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true, amount: 0.2 }}
+    transition={{ duration: 0.5, ease: REVEAL_EASE, delay }}
+  >
+    {children}
+  </motion.div>
+);
+
+const MetaChip = ({ children }: { children: ReactNode }) => (
+  <span className="rounded-full border border-hairline bg-surface px-2.5 py-1 text-xs font-semibold text-ink">
+    {children}
+  </span>
+);
+
+/** Editorial section in the rules page's grammar: numbered kicker, title,
+ *  copy on one side, one of the game's own figures on the other. */
+const StorySection = ({
+  num,
+  title,
+  figure,
+  flip = false,
+  children,
+}: {
+  num: string;
+  title: string;
+  figure: ReactNode;
+  flip?: boolean;
+  children: ReactNode;
+}) => (
+  <section className="border-t border-hairline py-14 sm:py-20">
+    <Reveal>
+      <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+        <div className={flip ? "lg:order-2" : undefined}>
+          <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
+            {num}
+          </p>
+          <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+            {title}
+          </h2>
+          <div className="mt-4 max-w-lg space-y-4 text-base leading-relaxed text-ink-muted">
+            {children}
+          </div>
+        </div>
+        <div className={flip ? "lg:order-1" : undefined}>{figure}</div>
+      </div>
+    </Reveal>
+  </section>
+);
+
+/** Draws the signature once its spot scrolls into view. */
+const SignatureInView = () => {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const inView = useInView(ref, { once: true, amount: 0.5 });
+  return (
+    <span ref={ref} className="inline-flex">
+      <Signature isInView={inView} />
+    </span>
+  );
+};
+
 function HomePage() {
   const [showNewGame, setShowNewGame] = useState(false);
   const [showJoinGame, setShowJoinGame] = useState(false);
   const [isCheckHovered, setIsCheckHovered] = useState(false);
   const [isAtTop, setIsAtTop] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [isSignatureVisible, setIsSignatureVisible] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPrecisionHovered, setIsPrecisionHovered] = useState(false);
   const { isMobile } = useDevice();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const router = useRouter();
 
-  const containerRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
-  const endOfPageRef = useRef<HTMLDivElement>(null);
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
   const shouldReduceMotion = useReducedMotion();
-
-  const isModalOpen = showNewGame || showJoinGame;
 
   const getRandomCard = useCallback((): Card => {
     const suits = Object.values(Suit);
@@ -134,32 +209,6 @@ function HomePage() {
     },
   };
 
-  const { scrollYProgress: footerScrollYProgress } = useScroll({
-    target: endOfPageRef,
-    offset: ["start end", "end end"],
-  });
-
-  const smoothFooterScrollYProgress = useSpring(footerScrollYProgress, {
-    stiffness: 50,
-    damping: 25,
-  });
-
-  const footerY = useTransform(
-    smoothFooterScrollYProgress,
-    [0, 0.6],
-    ["100%", "0%"],
-  );
-
-  const signatureTriggerProgress = useTransform(
-    smoothFooterScrollYProgress,
-    [0.5, 0.9],
-    [0, 1],
-  );
-
-  useMotionValueEvent(signatureTriggerProgress, "change", (latest: number) => {
-    setIsSignatureVisible(latest > 0);
-  });
-
   const checkText = (isCheckHovered ? "Check!" : "Check").split("");
 
   const { scrollY, scrollYProgress } = useScroll();
@@ -209,10 +258,7 @@ function HomePage() {
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative flex min-h-screen flex-col bg-ground noselect"
-    >
+    <div className="relative flex min-h-screen flex-col bg-ground font-game noselect">
       <NewGameModal isModalOpen={showNewGame} setIsModalOpen={setShowNewGame} />
       <JoinGameModal
         isModalOpen={showJoinGame}
@@ -225,71 +271,38 @@ function HomePage() {
         transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
         className="fixed top-0 z-50 w-full border-b border-hairline bg-ground"
       >
-        <div className="container mx-auto flex h-24 items-center justify-between px-4">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-8">
           <a
             href="/"
             onClick={(e) => {
               e.preventDefault();
               window.location.reload();
             }}
-            className="flex items-center gap-4 cursor-pointer"
+            className="flex items-center gap-3"
           >
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.6, duration: 1 }}
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-hairline bg-surface">
-                <Spade className="h-5 w-5 text-ink" />
-              </div>
-            </motion.div>
-            <motion.span
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.6, duration: 1 }}
-              className="text-2xl font-extrabold tracking-tight text-ink"
-            >
+            <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-hairline bg-surface">
+              <Spade className="h-4 w-4 text-ink" />
+            </div>
+            <span className="text-2xl font-extrabold tracking-tight text-ink">
               Check
-            </motion.span>
+            </span>
           </a>
 
-          <motion.nav
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6, duration: 1 }}
-            className="hidden lg:flex items-center gap-12"
-          >
-            {["Rules", "Features"].map((item, index) => (
-              <motion.div
-                key={item}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8 + index * 0.1, duration: 0.6 }}
+          <nav className="hidden items-center gap-8 lg:flex">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="relative text-sm font-semibold tracking-wide text-ink-muted transition-colors duration-300 hover:text-ink"
+                data-cursor-icon
               >
-                <Link
-                  href={item === "Rules" ? "/rules" : `#${item.toLowerCase()}`}
-                  className="relative text-sm font-semibold tracking-wide text-ink-muted transition-colors duration-300 hover:text-ink"
-                  data-cursor-icon
-                >
-                  {item}
-                  <motion.div
-                    className="absolute -bottom-1 left-0 h-px bg-ink"
-                    initial={{ width: 0 }}
-                    whileHover={{ width: "100%" }}
-                    transition={{ duration: 0.3 }}
-                  />
-                </Link>
-              </motion.div>
+                {item.label}
+              </Link>
             ))}
             <ThemeToggle />
-          </motion.nav>
+          </nav>
 
-          <motion.div
-            className="lg:hidden"
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6, duration: 1 }}
-          >
+          <div className="lg:hidden">
             <Button
               variant="ghost"
               size="icon"
@@ -297,7 +310,7 @@ function HomePage() {
             >
               <Menu />
             </Button>
-          </motion.div>
+          </div>
         </div>
       </motion.header>
 
@@ -307,10 +320,10 @@ function HomePage() {
             initial={{ opacity: 0, x: "100vw" }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: "100vw" }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-[100] bg-ground p-8 flex flex-col overscroll-y-contain"
+            transition={{ duration: 0.5, ease: REVEAL_EASE }}
+            className="fixed inset-0 z-[100] flex flex-col overscroll-y-contain bg-ground p-8"
           >
-            <div className="flex justify-between items-center">
+            <div className="flex items-center justify-between">
               <span className="text-2xl font-extrabold tracking-tight text-ink">
                 Menu
               </span>
@@ -322,22 +335,16 @@ function HomePage() {
                 <X />
               </Button>
             </div>
-            <nav className="flex flex-col items-center justify-center flex-1 gap-12 text-2xl">
-              {["Rules", "Features"].map((item, index) => (
-                <motion.div
-                  key={item}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 + index * 0.1, duration: 0.6 }}
+            <nav className="flex flex-1 flex-col items-center justify-center gap-12 text-2xl">
+              {NAV_ITEMS.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="font-semibold tracking-wide text-ink-muted transition-colors duration-300 hover:text-ink"
+                  onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  <Link
-                    href={item === "Rules" ? "/rules" : `#${item.toLowerCase()}`}
-                    className="relative font-semibold tracking-wide text-ink-muted transition-colors duration-300 hover:text-ink"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    {item}
-                  </Link>
-                </motion.div>
+                  {item.label}
+                </Link>
               ))}
               <div className="mt-8">
                 <ThemeToggle />
@@ -354,34 +361,34 @@ function HomePage() {
         >
           <motion.div
             style={{ y: heroY }}
-            className="container relative z-10 mx-auto px-4"
+            className="mx-auto w-full max-w-6xl px-5 sm:px-8"
           >
-            <div className="grid min-h-[100svh] items-center lg:grid-cols-2 text-center lg:text-left">
-              <motion.div className="flex flex-col justify-center items-center lg:items-start space-y-12">
+            <div className="grid min-h-[100svh] items-center text-center lg:grid-cols-2 lg:text-left">
+              <div className="flex flex-col items-center justify-center space-y-10 lg:items-start">
                 <motion.div
                   initial={{ opacity: 0, y: 60 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{
                     duration: 1.2,
-                    delay: 1,
+                    delay: 0.6,
                     ease: [0.6, 0.01, 0.05, 0.95],
                   }}
-                  className="space-y-8"
+                  className="space-y-7"
                 >
-                  <div className="inline-flex items-center gap-3 rounded-full border border-hairline bg-surface px-6 py-3">
+                  <div className="inline-flex items-center gap-3 rounded-full border border-hairline bg-surface px-5 py-2.5">
                     <div className="h-2 w-2 rounded-full bg-accent" />
                     <span className="text-sm font-semibold tracking-wide text-ink-muted">
                       Multiplayer card game
                     </span>
                   </div>
 
-                  <div className="space-y-10 text-center lg:text-left">
-                    <h1 className="inline-block text-left text-6xl font-extrabold leading-none tracking-tight text-ink sm:text-7xl md:text-8xl lg:text-8xl xl:text-9xl">
+                  <div className="space-y-8 text-center lg:text-left">
+                    <h1 className="inline-block text-left text-6xl font-extrabold leading-none tracking-tight text-ink sm:text-7xl md:text-8xl xl:text-9xl">
                       <motion.span
                         className="block"
                         initial={{ opacity: 0, y: 40 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 1, delay: 1.2 }}
+                        transition={{ duration: 1, delay: 0.8 }}
                       >
                         The
                       </motion.span>
@@ -391,7 +398,7 @@ function HomePage() {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{
                           duration: 1.2,
-                          delay: 1.5,
+                          delay: 1,
                           ease: [0.6, 0.01, 0.05, 0.95],
                         }}
                       >
@@ -457,7 +464,7 @@ function HomePage() {
                           animate={{ scaleX: 1 }}
                           transition={{
                             duration: 1.5,
-                            delay: 2.2,
+                            delay: 1.6,
                             ease: [0.6, 0.01, 0.05, 0.95],
                           }}
                           className="absolute -bottom-3 left-[52%] h-1 w-[96%] -translate-x-1/2 rounded-full bg-accent"
@@ -475,6 +482,18 @@ function HomePage() {
                       and pure luck. Keep your cards close, your score low, and
                       call "Check" at the perfect moment to snatch victory.
                     </motion.p>
+
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 1, delay: 0.7 }}
+                      className="flex flex-wrap justify-center gap-2 lg:justify-start"
+                    >
+                      <MetaChip>2–4 players</MetaChip>
+                      <MetaChip>52 cards</MetaChip>
+                      <MetaChip>one round</MetaChip>
+                      <MetaChip>free</MetaChip>
+                    </motion.div>
                   </div>
 
                   <motion.div
@@ -567,7 +586,7 @@ function HomePage() {
                     )}
                   </motion.div>
                 </motion.div>
-              </motion.div>
+              </div>
 
               <div className="relative hidden h-full items-center justify-center lg:flex">
                 <HeroCards checkHovered={isCheckHovered} />
@@ -582,7 +601,7 @@ function HomePage() {
                   ? { delay: 3, duration: 1.5 }
                   : { duration: 0.5, ease: "easeOut" }
               }
-              className="absolute bottom-12 left-1/2 -translate-x-1/2"
+              className="absolute bottom-10 left-1/2 -translate-x-1/2"
             >
               <motion.div
                 animate={!shouldReduceMotion ? { y: [0, 8, 0] } : {}}
@@ -594,12 +613,12 @@ function HomePage() {
                 className="flex cursor-pointer flex-col items-center gap-2 text-ink-muted transition-colors duration-300 hover:text-ink"
                 onClick={() => {
                   document
-                    .getElementById("game-principles-anchor")
+                    .getElementById("how")
                     ?.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
               >
                 <span className="text-sm font-semibold tracking-wide">
-                  Discover more
+                  How it plays
                 </span>
                 <ChevronDown className="h-4 w-4" />
               </motion.div>
@@ -607,128 +626,101 @@ function HomePage() {
           </motion.div>
         </section>
 
-        <Scrollytelling />
+        <div id="how" className="mx-auto w-full max-w-4xl scroll-mt-20 px-5 sm:px-8">
+          <StorySection
+            num="01"
+            title="A hand you barely know"
+            figure={<PileDiagram showHand />}
+          >
+            <p>
+              Four cards land face down in front of you, and you may peek at
+              your bottom two, once. From then on it is draw, swap, and
+              discard: every card that crosses the table is information, and
+              the sharpest memory holds the advantage.
+            </p>
+          </StorySection>
 
-        <section id="play" className="relative py-40">
-          <div className="container px-4 mx-auto">
-            <AnimateOnView className="mx-auto max-w-4xl text-center">
-              <h2 className="mb-8 text-6xl font-extrabold tracking-tight text-ink">
+          <StorySection
+            num="02"
+            title="Specials earn their keep"
+            figure={<AbilityTriptych />}
+            flip
+          >
+            <p>
+              Kings, Queens and Jacks score heavy, but discarding one triggers
+              its ability: peek at hidden cards or swap anything on the table.
+              Everyone sees which cards you touch. Only you see the faces.
+            </p>
+          </StorySection>
+
+          <StorySection
+            num="03"
+            title="One call ends it"
+            figure={
+              <div className="rounded-card border border-hairline p-10 sm:p-14">
+                <div className="flex flex-col items-center text-center">
+                  <span className="-rotate-2 text-5xl font-extrabold leading-none tracking-tight text-ink sm:text-6xl">
+                    CHECK.
+                  </span>
+                  <span className="mt-4 text-xs font-semibold text-ink-muted">
+                    Your hand locks. Everyone gets one last turn.
+                  </span>
+                </div>
+              </div>
+            }
+          >
+            <p>
+              Convinced your total is the lowest? Call Check. Your hand locks,
+              every other player takes one final turn, then all cards flip and
+              the lowest hand wins the round.
+            </p>
+          </StorySection>
+        </div>
+
+        <section id="play" className="border-t border-hairline py-24 sm:py-32">
+          <div className="mx-auto w-full max-w-4xl px-5 sm:px-8">
+            <Reveal className="text-center">
+              <h2 className="text-4xl font-extrabold tracking-tight text-ink sm:text-6xl">
                 Your turn to play
               </h2>
-              <p className="mb-16 text-xl font-normal text-ink-muted">
+              <p className="mx-auto mt-4 max-w-xl text-lg font-normal text-ink-muted">
                 The table is set, the cards are shuffled. All that's missing is
                 you.
               </p>
 
-              <div className="flex flex-col gap-6 sm:flex-row sm:justify-center">
-                {isMobile ? (
-                  <>
-                    <Button
-                      size="lg"
-                      onClick={handleCreateGame}
-                      className="rounded-full bg-accent px-12 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
-                    >
-                      Create a Lobby
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={handleJoinGame}
-                      className="rounded-full border border-hairline bg-surface px-12 py-4 text-lg font-bold text-ink hover:bg-surface-2"
-                    >
-                      Join a Lobby
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <motion.div
-                      whileHover={{ y: -3, scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Button
-                        size="lg"
-                        onClick={handleCreateGame}
-                        className="rounded-full bg-accent px-12 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
-                        data-cursor-link
-                      >
-                        Create a Lobby
-                      </Button>
-                    </motion.div>
-                    <motion.div
-                      whileHover={{ y: -3, scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        onClick={handleJoinGame}
-                        className="rounded-full border border-hairline bg-surface px-12 py-4 text-lg font-bold text-ink hover:bg-surface-2"
-                        data-cursor-link
-                      >
-                        Join a Lobby
-                      </Button>
-                    </motion.div>
-                  </>
-                )}
+              <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
+                <Button
+                  size="lg"
+                  onClick={handleCreateGame}
+                  className="rounded-full bg-accent px-12 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
+                  data-cursor-link
+                >
+                  Create a Lobby
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={handleJoinGame}
+                  className="rounded-full border border-hairline bg-surface px-12 py-4 text-lg font-bold text-ink hover:bg-surface-2"
+                  data-cursor-link
+                >
+                  Join a Lobby
+                </Button>
               </div>
-            </AnimateOnView>
+            </Reveal>
           </div>
         </section>
-        <div ref={endOfPageRef} className="h-20" />
       </main>
 
-      <footer className="border-t border-hairline bg-surface-2 lg:hidden">
-        <div className="container mx-auto flex flex-col items-center gap-y-3 px-4 py-6 text-center text-sm font-normal text-ink-muted">
-          <div className="flex items-center gap-3">
+      <footer className="border-t border-hairline bg-surface-2">
+        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-y-4 px-5 py-6 text-center sm:grid-cols-3 sm:px-8 sm:text-left">
+          <div className="hidden items-center gap-3 justify-self-start sm:flex">
             <Spade className="h-5 w-5 text-ink-muted" />
             <span className="text-lg font-bold text-ink">Check</span>
           </div>
-          <span>© {new Date().getFullYear()} Check Card Game.</span>
-          <div className="flex items-center gap-2">
-            <span>Made by</span>
-            <Signature isInView={true} />
-          </div>
-          <div className="flex items-center justify-center gap-6">
-            <a
-              href="https://github.com/vroslmend"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ink-muted transition-colors duration-300 hover:text-ink"
-            >
-              <span className="sr-only">GitHub</span>
-              <FaGithub className="h-5 w-5" />
-            </a>
-            <a
-              href="https://open.spotify.com/user/6tf81fs0qm2akdo4yt1wp1akw"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ink-muted transition-colors duration-300 hover:text-ink"
-            >
-              <span className="sr-only">Spotify</span>
-              <FaSpotify className="h-5 w-5" />
-            </a>
-          </div>
-        </div>
-      </footer>
-
-      <motion.footer
-        style={{ y: footerY }}
-        className="fixed bottom-0 left-0 right-0 z-40 hidden border-t border-hairline bg-surface-2 lg:block"
-      >
-        <div className="container mx-auto grid grid-cols-1 items-center gap-y-4 px-4 py-4 text-center sm:grid-cols-3 sm:text-left">
-          <div className="hidden sm:flex items-center gap-3 justify-self-start">
-            <Spade className="h-5 w-5 text-ink-muted" />
-            <span className="text-lg font-bold text-ink">
-              Check
-            </span>
-          </div>
           <div className="flex flex-col items-center justify-center gap-y-1 text-sm font-normal text-ink-muted">
             <div className="flex flex-row items-center gap-x-2">
-              <div className="flex items-center">
-                <span>© {new Date().getFullYear()} Check Card Game.</span>
-              </div>
+              <span>© {new Date().getFullYear()} Check Card Game.</span>
               <div className="hidden sm:block">|</div>
               <div
                 className="flex items-center"
@@ -775,46 +767,35 @@ function HomePage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center" data-cursor-icon>
-              <span>Made by&nbsp;</span>
-              <div className="relative h-6 min-w-[5rem] ml-2">
-                <motion.div
-                  key="signature"
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  <Signature isInView={isSignatureVisible} />
-                </motion.div>
-              </div>
+            <div className="flex items-center gap-2" data-cursor-icon>
+              <span>Made by</span>
+              <SignatureInView />
             </div>
           </div>
           <div className="flex items-center justify-center gap-6 sm:justify-self-end">
-            <motion.a
+            <a
               href="https://github.com/vroslmend"
               target="_blank"
               rel="noopener noreferrer"
               className="text-ink-muted transition-colors duration-300 hover:text-ink"
-              whileHover={{ y: -3, scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
               data-cursor-icon
             >
               <span className="sr-only">GitHub</span>
               <FaGithub className="h-5 w-5" />
-            </motion.a>
-            <motion.a
+            </a>
+            <a
               href="https://open.spotify.com/user/6tf81fs0qm2akdo4yt1wp1akw"
               target="_blank"
               rel="noopener noreferrer"
               className="text-ink-muted transition-colors duration-300 hover:text-ink"
-              whileHover={{ y: -3, scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
               data-cursor-icon
             >
               <span className="sr-only">Spotify</span>
               <FaSpotify className="h-5 w-5" />
-            </motion.a>
+            </a>
           </div>
         </div>
-      </motion.footer>
+      </footer>
     </div>
   );
 }
