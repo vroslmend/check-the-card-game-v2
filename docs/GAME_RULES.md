@@ -80,7 +80,7 @@ This is a timed, real-time event that occurs immediately after *any* card is dis
 #### **Outcomes of Matching**
 *   **Successful Match:**
     1.  The first player to play a card of the correct rank succeeds.
-    2.  The matching card is removed from their hand and placed on the Discard Pile. Their hand size is reduced by one.
+    2.  The matching card is removed from their hand and placed on the Discard Pile. Their hand size is reduced by one, and the card's grid slot stays empty (see **The Hand Grid & Empty Slots** below).
     3.  The Discard Pile is now considered **"sealed."** A sealed pile cannot be drawn from. It remains sealed until the start of the next player's turn or until another action unseals it.
     4.  If the matched pair consists of two Special Cards (e.g., a King on a King), this triggers a LIFO ability stack (see Section 8.B).
     5.  If a player's hand becomes empty as a result of a successful match, they have automatically **Called "Check"** (see Section 9.B).
@@ -95,6 +95,15 @@ This is a timed, real-time event that occurs immediately after *any* card is dis
     2.  **Penalty:** The player must immediately **draw one (1) card** from the Draw Pile and add it to their hand. The invalid card returns to their hand.
     3.  The matching opportunity then **continues** for all other eligible players until the stage ends. The penalized player may attempt to match again if they have another valid card.
     4.  **Penalty Limit (Disqualification):** If a penalty card brings a player's hand to **eight (8) cards**, that player is **disqualified** from the round. They are immediately **locked** (see Section 9.D): they take no further turns, cannot match, and their pending abilities fizzle. Their hand is still revealed and scored at the end of the round, but a disqualified player **cannot win**. If disqualifications leave fewer than two active players and no "Check" is in progress, the round ends immediately and proceeds to Scoring.
+
+#### **The Hand Grid & Empty Slots**
+
+A player's cards occupy fixed positions in a two-row grid, and those positions are part of the game's memory challenge:
+
+1.  When a card is **matched** away, its grid slot stays **empty** for the rest of the round. No other card moves.
+2.  A **penalty card** fills the earliest empty slot in the player's grid if one exists; otherwise it is added to the grid as a new slot.
+3.  When both slots of a vertical **column** become empty, that column closes up and the columns to its right shift one step left. Cards never change rows. This is the only time the grid rearranges itself.
+4.  Apart from that single case, nothing ever moves a card between slots except the **swap** of a Special Card ability (Section 8). Empty slots cannot be targeted, swapped into, or chosen when placing a drawn card.
 
 ## **8. Special Card Abilities**
 
