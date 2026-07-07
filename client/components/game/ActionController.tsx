@@ -139,7 +139,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       !localPlayer?.pendingDrawnCard &&
       !!topDiscardCard &&
       !isSpecialCard &&
-      !currentGameState.discardPileIsSealed,
+      !currentGameState.discardPileIsSealed &&
+      !currentGameState.discardTopIsLocked,
     allPlayersReady: Object.values(currentGameState.players).every(
       (p) => p.isReady,
     ),
