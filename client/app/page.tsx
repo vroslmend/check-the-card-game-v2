@@ -26,7 +26,7 @@ import { ChevronDown, Users, ArrowRight, Menu, X } from "lucide-react";
 import { FaGithub, FaSpotify } from "react-icons/fa";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { HeroCards } from "@/components/ui/HeroCards";
-import { Signature } from "@/components/ui/Signature";
+import { Signature, secondSignature } from "@/components/ui/Signature";
 import { NewGameModal } from "@/components/modals/NewGameModal";
 import { JoinGameModal } from "@/components/modals/JoinGameModal";
 import { useDevice } from "@/context/DeviceContext";
@@ -127,13 +127,15 @@ const StorySection = ({
   </section>
 );
 
-/** Draws the signature once its spot scrolls into view. */
+/** Draws both signatures once their spot scrolls into view. */
 const SignatureInView = () => {
   const ref = useRef<HTMLSpanElement | null>(null);
   const inView = useInView(ref, { once: true, amount: 0.5 });
   return (
-    <span ref={ref} className="inline-flex">
+    <span ref={ref} className="inline-flex items-center gap-2">
       <Signature isInView={inView} />
+      <span>&amp;</span>
+      <Signature isInView={inView} data={secondSignature} />
     </span>
   );
 };
