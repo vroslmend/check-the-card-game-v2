@@ -23,6 +23,7 @@ import {
   ClientToServerEvents,
   ServerToClientEvents,
   AttemptRejoinResponse,
+  Card,
 } from "shared-types";
 
 type GameMachineActorRef = ActorRefFrom<typeof gameMachine>;
@@ -490,7 +491,9 @@ io.on("connection", (socket: Socket) => {
         // INITIAL_PEEK_INFO packet.  Re-emit it so their client can flip the two cards.
         if (snapshot.context.gameStage === GameStage.INITIAL_PEEK) {
           const peekHand =
-            snapshot.context.players[playerId]?.hand.slice(-2) ?? [];
+            snapshot.context.players[playerId]?.hand
+              .slice(-2)
+              .filter((c): c is Card => c !== null) ?? [];
           if (peekHand.length > 0) {
             io.to(socket.id).emit(SocketEventName.INITIAL_PEEK_INFO, {
               hand: peekHand,

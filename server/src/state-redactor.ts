@@ -37,7 +37,9 @@ export const generatePlayerView = (
       fullGameContext.gameStage === GameStage.SCORING ||
       fullGameContext.gameStage === GameStage.GAMEOVER;
 
-    const clientHand: PublicCard[] = serverPlayer.hand.map((card: Card) => {
+    const clientHand: (PublicCard | null)[] = serverPlayer.hand.map((card) => {
+      // An empty gap stays an empty gap for everyone.
+      if (card === null) return null;
       // During scoring/gameover everyone can see all cards
       if (revealAll) return card;
 

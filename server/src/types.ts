@@ -23,7 +23,7 @@ export interface ServerPlayer {
   id: PlayerId;
   name: string;
   socketId: string;
-  hand: Card[];
+  hand: (Card | null)[];
   isReady: boolean;
   isDealer: boolean;
   hasCalledCheck: boolean;
