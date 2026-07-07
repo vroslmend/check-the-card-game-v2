@@ -146,17 +146,21 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
       topDiscardCard.rank,
     );
 
+  const discardTopIsLocked = currentGameState?.discardTopIsLocked ?? false;
+
   return {
     deckSize: currentGameState?.deckSize ?? 0,
     deckTop: currentGameState?.deckTop ?? null,
     discardPileSize: currentGameState?.discardPileSize ?? 0,
     topDiscardCard: topDiscardCard,
     secondDiscardCard: currentGameState?.discardPile.at(-2) ?? null,
-    discardPileIsSealed: currentGameState?.discardPileIsSealed ?? false,
+    discardPileIsSealed:
+      (currentGameState?.discardPileIsSealed ?? false) || discardTopIsLocked,
     canDrawFromDeck: isDrawPhase,
     canDrawFromDiscard:
       isDrawPhase &&
       !currentGameState?.discardPileIsSealed &&
+      !discardTopIsLocked &&
       (currentGameState?.discardPileSize ?? 0) > 0 &&
       !isSpecialCard,
     canDiscardDrawnCard: !!canDiscardDrawnCard,

@@ -158,6 +158,9 @@ export interface ClientCheckGameState {
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
+  /** True when the top discard card is a matched (permanently locked) card and
+   *  can never be drawn from the pile, even after the seal lifts. */
+  discardTopIsLocked: boolean;
   publicPeek: PublicPeekInfo | null;
   publicSwap: PublicSwapInfo | null;
   /** When the current timed decision window (draw/discard/ability) expires. */

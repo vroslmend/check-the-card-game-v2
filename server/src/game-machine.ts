@@ -653,7 +653,11 @@ export const gameMachine = setup({
     canDrawFromDiscard: ({ context }) => {
       if (context.discardPileIsSealed) return false;
       const topOfDiscard = context.discardPile.at(-1);
-      return !!topOfDiscard && !specialRanks.has(topOfDiscard.rank);
+      if (!topOfDiscard) return false;
+      if (specialRanks.has(topOfDiscard.rank)) return false;
+      // A matched card is locked for the round, even once the seal lifts.
+      if (context.lockedCardIds.includes(topOfDiscard.id)) return false;
+      return true;
     },
     isValidHandIndex: ({ context, event }) => {
       assertEvent(event, PlayerActionType.SWAP_AND_DISCARD);
@@ -1067,6 +1071,7 @@ export const gameMachine = setup({
         deck,
         players: playersAfterDeal,
         discardPile: [] as Card[],
+        lockedCardIds: [] as string[],
         log: [
           ...context.log,
           createLogEntry(context.gameId, {
@@ -1264,6 +1269,8 @@ export const gameMachine = setup({
       } = event;
 
       const cardFromHand = context.players[playerId]!.hand[handCardIndex]!;
+      // The card already on top of the pile is the one being matched onto.
+      const matchedBaseCard = context.discardPile.at(-1);
       const handWillBeEmpty = context.players[playerId]!.hand.length === 1;
 
       const newPlayers = produce(context.players, (draft) => {
@@ -1323,6 +1330,12 @@ export const gameMachine = setup({
         discardPile: [...context.discardPile, cardFromHand],
         matchingOpportunity: null,
         discardPileIsSealed: true,
+        // Both the matched card and the card played on it are locked forever.
+        lockedCardIds: [
+          ...context.lockedCardIds,
+          ...(matchedBaseCard ? [matchedBaseCard.id] : []),
+          cardFromHand.id,
+        ],
         abilityStack: newAbilityStack,
         log: [
           ...context.log,
@@ -1419,6 +1432,7 @@ export const gameMachine = setup({
         players: updatedPlayers,
         deck: [],
         discardPile: [],
+        lockedCardIds: [],
         abilityStack: [],
         checkDetails: null,
         gameover: null,
@@ -1881,6 +1895,7 @@ export const gameMachine = setup({
     log: [],
     chat: [],
     discardPileIsSealed: false,
+    lockedCardIds: [],
     errorState: null,
     publicPeek: null,
     publicSwap: null,
