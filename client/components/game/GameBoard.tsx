@@ -19,6 +19,7 @@ import SidePanel from "@/components/layout/SidePanel";
 import { useCheckMoment, CheckStamp } from "./CheckMoment";
 import { usePenaltyMoment, PenaltyStamp } from "./PenaltyMoment";
 import { useAbilityMoment, AbilityStamp } from "./AbilityMoment";
+import { useMatchMoment, MatchStamp } from "./MatchMoment";
 import { GameEventCaption } from "./GameEventCaption";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
@@ -135,6 +136,7 @@ export function GameBoard() {
   const checkMoment = useCheckMoment();
   const penaltyMoment = usePenaltyMoment();
   const abilityMoment = useAbilityMoment();
+  const matchMoment = useMatchMoment();
   const reducedMotion = useReducedMotion();
 
   // The round-ending broadcast both moves the last card and flips the stage:
@@ -290,6 +292,7 @@ export function GameBoard() {
       <CheckStamp moment={checkMoment} />
       <PenaltyStamp moment={penaltyMoment} />
       <AbilityStamp moment={abilityMoment} />
+      <MatchStamp moment={matchMoment} />
 
       <AnimatePresence>
         {endScene && (
