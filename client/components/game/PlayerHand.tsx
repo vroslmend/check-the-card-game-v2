@@ -260,11 +260,11 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                     }
                   : undefined
               }
-              className={cn(
-                "absolute inset-0 rounded-lg",
-                "data-[interactive=true]:cursor-pointer",
-                "data-[interactive=true]:hover:filter-[brightness(1.15)]",
-              )}
+            className={cn(
+              "absolute inset-0 rounded-card",
+              "data-[interactive=true]:cursor-pointer",
+              "data-[interactive=true]:hover:filter-[brightness(1.15)]",
+            )}
               data-interactive={canInteract && !isLocked}
               onClick={() => canInteract && !isLocked && onCardClick?.(index)}
             >
