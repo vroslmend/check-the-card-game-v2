@@ -44,7 +44,7 @@ The current player **must** perform one of the following two actions:
     *   **Option B: Discard Drawn Card.** The player immediately places the newly drawn card face-up on top of the Discard Pile. This does not alter the player's hand.
     
 **Action 2: Draw from the Discard Pile**
-1.  This action is only possible if the Discard Pile is **not sealed** (see Section 7 for details on a sealed pile).
+1.  This action is only possible if the Discard Pile is **not sealed** (see Section 7) and the top card is **not a locked (matched) card** (see Section 7, Successful Match).
 2.  A player **cannot** draw a special card (King, Queen, or Jack) from the Discard Pile.
 3.  If the top card is drawable, the player takes it. They **must** then swap this card with one card from their hand, placing the discard pile card face-down in their grid. The card from their hand is then placed face-up on the Discard Pile.
 
@@ -84,6 +84,11 @@ This is a timed, real-time event that occurs immediately after *any* card is dis
     3.  The Discard Pile is now considered **"sealed."** A sealed pile cannot be drawn from. It remains sealed until the start of the next player's turn or until another action unseals it.
     4.  If the matched pair consists of two Special Cards (e.g., a King on a King), this triggers a LIFO ability stack (see Section 8.B).
     5.  If a player's hand becomes empty as a result of a successful match, they have automatically **Called "Check"** (see Section 9.B).
+    6.  **Matched cards are locked for the round.** Both the card that was matched and the card
+        played on top of it become **locked**: they can never be drawn from the Discard Pile by any
+        player for the rest of the round, even after the pile is unsealed. (The "sealed" state in
+        point 3 blocks *any* draw for the brief window after a match; the permanent lock keeps the
+        matched cards themselves undrawable forever.)
 
 *   **Failed Match (Penalty):**
     1.  If a player attempts to match with a card of the wrong rank, the attempt fails.

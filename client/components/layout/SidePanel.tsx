@@ -122,7 +122,10 @@ export const SidePanel = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (chatVisible && window.matchMedia("(pointer: fine)").matches) {
-      inputRef.current?.focus();
+      // preventScroll: focusing an input still off-screen (the panel enters
+      // from x:100%) otherwise scrolls the overflow-hidden board sideways and
+      // drags every layoutId card with it (the chat-tab-only board jolt).
+      inputRef.current?.focus({ preventScroll: true });
     }
   }, [chatVisible]);
 

@@ -168,7 +168,9 @@ export function GameBoard() {
 
   const dealingDeck: PublicCard[] = isDealing
     ? Object.values(gameState.players).flatMap((p) =>
-        p.hand.map((card) => ({ id: card.id, facedown: true as const })),
+        p.hand
+          .filter((c): c is PublicCard => c !== null)
+          .map((card) => ({ id: card.id, facedown: true as const })),
       )
     : [];
 

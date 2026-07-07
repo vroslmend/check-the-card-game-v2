@@ -100,6 +100,28 @@ const cardScoreValues: Record<CardRank, number> = {
 const specialRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
 const abilityRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
 
+// A hand is a fixed-slot array with holes (null = an empty gap where a matched
+// card was). Two rows, row-major, C = ceil(slots/2) columns; a "column" is the
+// vertical pair {j, C+j}. Drop any column whose top and bottom are both empty,
+// preserving order and re-centering. This is the only automatic reshuffle: a
+// full line clearing, per the spatial-memory identity of the game.
+const compactFullColumns = (hand: (Card | null)[]): (Card | null)[] => {
+  const S = hand.length;
+  if (S === 0) return hand;
+  const C = Math.ceil(S / 2);
+  const kept: [Card | null, Card | null][] = [];
+  for (let j = 0; j < C; j++) {
+    const top = j < S ? (hand[j] ?? null) : null;
+    const bottom = C + j < S ? (hand[C + j] ?? null) : null;
+    if (top !== null || bottom !== null) kept.push([top, bottom]);
+  }
+  if (kept.length === C) return hand;
+  const tops = kept.map((c) => c[0]);
+  const bottoms = kept.map((c) => c[1]);
+  while (bottoms.length && bottoms[bottoms.length - 1] === null) bottoms.pop();
+  return [...tops, ...bottoms];
+};
+
 // -----------------------------------------------------------------------------
 // Action & Event Type Unions
 // -----------------------------------------------------------------------------
@@ -134,6 +156,7 @@ type PlayerActionEvents =
       type: PlayerActionType.SEND_CHAT_MESSAGE;
       payload: Omit<ChatMessage, "id" | "timestamp">;
     }
+  | { type: PlayerActionType.TIDY_HAND; playerId: PlayerId }
   | { type: PlayerActionType.LEAVE_GAME; playerId: PlayerId }
   | {
       type: PlayerActionType.REMOVE_PLAYER;
@@ -563,7 +586,8 @@ const emitPeekResults = enqueueActions(({ context, event, enqueue }) => {
       !targetPlayer ||
       !Number.isInteger(target.cardIndex) ||
       target.cardIndex < 0 ||
-      target.cardIndex >= targetPlayer.hand.length
+      target.cardIndex >= targetPlayer.hand.length ||
+      targetPlayer.hand[target.cardIndex] == null
     ) {
       logger.warn(
         { target, gameId: context.gameId },
@@ -653,14 +677,22 @@ export const gameMachine = setup({
     canDrawFromDiscard: ({ context }) => {
       if (context.discardPileIsSealed) return false;
       const topOfDiscard = context.discardPile.at(-1);
-      return !!topOfDiscard && !specialRanks.has(topOfDiscard.rank);
+      if (!topOfDiscard) return false;
+      if (specialRanks.has(topOfDiscard.rank)) return false;
+      // A matched card is locked for the round, even once the seal lifts.
+      if (context.lockedCardIds.includes(topOfDiscard.id)) return false;
+      return true;
     },
     isValidHandIndex: ({ context, event }) => {
       assertEvent(event, PlayerActionType.SWAP_AND_DISCARD);
       const hand = context.players[event.playerId]?.hand;
       const index = event.payload?.handCardIndex;
       return (
-        !!hand && Number.isInteger(index) && index >= 0 && index < hand.length
+        !!hand &&
+        Number.isInteger(index) &&
+        index >= 0 &&
+        index < hand.length &&
+        hand[index] != null
       );
     },
     canCallCheck: ({ context, event }) => {
@@ -728,7 +760,8 @@ export const gameMachine = setup({
           !targetPlayer ||
           !Number.isInteger(target.cardIndex) ||
           target.cardIndex < 0 ||
-          target.cardIndex >= targetPlayer.hand.length
+          target.cardIndex >= targetPlayer.hand.length ||
+          targetPlayer.hand[target.cardIndex] == null
         ) {
           return false;
         }
@@ -756,7 +789,8 @@ export const gameMachine = setup({
           !owner ||
           !Number.isInteger(slot.cardIndex) ||
           slot.cardIndex < 0 ||
-          slot.cardIndex >= owner.hand.length
+          slot.cardIndex >= owner.hand.length ||
+          owner.hand[slot.cardIndex] == null
         ) {
           return false;
         }
@@ -1067,6 +1101,7 @@ export const gameMachine = setup({
         deck,
         players: playersAfterDeal,
         discardPile: [] as Card[],
+        lockedCardIds: [] as string[],
         log: [
           ...context.log,
           createLogEntry(context.gameId, {
@@ -1264,11 +1299,17 @@ export const gameMachine = setup({
       } = event;
 
       const cardFromHand = context.players[playerId]!.hand[handCardIndex]!;
-      const handWillBeEmpty = context.players[playerId]!.hand.length === 1;
+      // The card already on top of the pile is the one being matched onto.
+      const matchedBaseCard = context.discardPile.at(-1);
+      const handWillBeEmpty =
+        context.players[playerId]!.hand.filter((c) => c !== null).length === 1;
 
       const newPlayers = produce(context.players, (draft) => {
         const player = draft[playerId]!;
-        player.hand.splice(handCardIndex, 1);
+        // Leave a gap where the matched card was, then collapse any column that
+        // is now fully empty (the only automatic reshuffle).
+        player.hand[handCardIndex] = null;
+        player.hand = compactFullColumns(player.hand);
         if (handWillBeEmpty) {
           player.hasCalledCheck = true;
           player.isLocked = true;
@@ -1323,6 +1364,12 @@ export const gameMachine = setup({
         discardPile: [...context.discardPile, cardFromHand],
         matchingOpportunity: null,
         discardPileIsSealed: true,
+        // Both the matched card and the card played on it are locked forever.
+        lockedCardIds: [
+          ...context.lockedCardIds,
+          ...(matchedBaseCard ? [matchedBaseCard.id] : []),
+          cardFromHand.id,
+        ],
         abilityStack: newAbilityStack,
         log: [
           ...context.log,
@@ -1358,7 +1405,7 @@ export const gameMachine = setup({
       const updatedPlayers = produce(context.players, (draft) => {
         for (const p of Object.values(draft)) {
           const score = p.hand.reduce(
-            (acc, card) => acc + cardScoreValues[card.rank],
+            (acc, card) => acc + (card ? cardScoreValues[card.rank] : 0),
             0,
           );
           p.score = score;
@@ -1419,6 +1466,7 @@ export const gameMachine = setup({
         players: updatedPlayers,
         deck: [],
         discardPile: [],
+        lockedCardIds: [],
         abilityStack: [],
         checkDetails: null,
         gameover: null,
@@ -1550,10 +1598,14 @@ export const gameMachine = setup({
 
       const penaltyCard = tempDeck.pop()!;
       const disqualified =
-        context.players[playerId]!.hand.length + 1 >= MAX_HAND_SIZE;
+        context.players[playerId]!.hand.filter((c) => c !== null).length + 1 >=
+        MAX_HAND_SIZE;
       const updatedPlayers = produce(context.players, (draft) => {
         const player = draft[playerId]!;
-        player.hand.push(penaltyCard);
+        // Reuse the first empty gap if there is one, else grow the hand.
+        const gap = player.hand.indexOf(null);
+        if (gap >= 0) player.hand[gap] = penaltyCard;
+        else player.hand.push(penaltyCard);
         if (disqualified) {
           player.isLocked = true;
           player.status = PlayerStatus.DISQUALIFIED;
@@ -1652,7 +1704,7 @@ export const gameMachine = setup({
         const playerScores: Record<PlayerId, number> = {};
         for (const p of Object.values(newPlayers)) {
           const score = p.hand.reduce(
-            (acc, card) => acc + cardScoreValues[card.rank],
+            (acc, card) => acc + (card ? cardScoreValues[card.rank] : 0),
             0,
           );
           newPlayers[p.id] = { ...p, score };
@@ -1722,7 +1774,11 @@ export const gameMachine = setup({
     sendInitialPeekInfo: enqueueActions(({ context, enqueue }) => {
       context.turnOrder.forEach((playerId: PlayerId) => {
         const playerHand = context.players[playerId]!.hand;
-        const peekableCards = playerHand.slice(-2);
+        // The initial-peek hand is always dense (freshly dealt, no gaps); the
+        // filter only satisfies the Card[] wire type.
+        const peekableCards: Card[] = playerHand.slice(-2).filter(
+          (c: Card | null): c is Card => c !== null,
+        );
         enqueue(
           emit({
             type: "SEND_EVENT_TO_PLAYER",
@@ -1881,6 +1937,7 @@ export const gameMachine = setup({
     log: [],
     chat: [],
     discardPileIsSealed: false,
+    lockedCardIds: [],
     errorState: null,
     publicPeek: null,
     publicSwap: null,
@@ -1896,6 +1953,37 @@ export const gameMachine = setup({
     // whose disconnect paused the game.
     PLAYER_RECONNECTED: {
       actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+    },
+    [PlayerActionType.TIDY_HAND]: {
+      guard: ({ context, event }) => {
+        assertEvent(event, PlayerActionType.TIDY_HAND);
+        const player = context.players[event.playerId];
+        return (
+          !!player &&
+          !player.isLocked &&
+          (context.gameStage === GameStage.PLAYING ||
+            context.gameStage === GameStage.FINAL_TURNS) &&
+          !context.matchingOpportunity &&
+          context.abilityStack.length === 0
+        );
+      },
+      actions: [
+        assign(({ context, event }) => {
+          assertEvent(event, PlayerActionType.TIDY_HAND);
+          const player = context.players[event.playerId];
+          if (!player) return {};
+          return {
+            players: {
+              ...context.players,
+              [event.playerId]: {
+                ...player,
+                hand: player.hand.filter((c) => c !== null),
+              },
+            },
+          };
+        }),
+        "broadcastGameState",
+      ],
     },
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: enqueueActions(({ context, event, enqueue }) => {

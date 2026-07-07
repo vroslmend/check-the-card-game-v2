@@ -83,7 +83,7 @@ export type PublicCard = Card | FacedownCard;
 export interface Player {
   id: PlayerId;
   name: string;
-  hand: PublicCard[];
+  hand: (PublicCard | null)[];
   status: PlayerStatus;
   isReady: boolean;
   isDealer: boolean;
@@ -158,6 +158,9 @@ export interface ClientCheckGameState {
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
+  /** True when the top discard card is a matched (permanently locked) card and
+   *  can never be drawn from the pile, even after the seal lifts. */
+  discardTopIsLocked: boolean;
   publicPeek: PublicPeekInfo | null;
   publicSwap: PublicSwapInfo | null;
   /** When the current timed decision window (draw/discard/ability) expires. */
@@ -333,6 +336,7 @@ export enum PlayerActionType {
   CALL_CHECK = "CALL_CHECK",
   DECLARE_READY_FOR_PEEK = "DECLARE_READY_FOR_PEEK",
   PLAY_AGAIN = "PLAY_AGAIN",
+  TIDY_HAND = "TIDY_HAND",
 
   // Ability Resolution
   USE_ABILITY = "USE_ABILITY",

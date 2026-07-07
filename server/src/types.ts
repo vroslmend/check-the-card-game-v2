@@ -23,7 +23,7 @@ export interface ServerPlayer {
   id: PlayerId;
   name: string;
   socketId: string;
-  hand: Card[];
+  hand: (Card | null)[];
   isReady: boolean;
   isDealer: boolean;
   hasCalledCheck: boolean;
@@ -66,6 +66,9 @@ export interface GameContext {
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
+  /** Ids of cards locked for the round by a successful match. A locked card can
+   *  never be drawn from the discard pile. Reset each deal / new round. */
+  lockedCardIds: string[];
   errorState: {
     message: string;
     errorType: "DECK_EMPTY" | "NETWORK_ERROR";

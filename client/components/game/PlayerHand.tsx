@@ -148,7 +148,9 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
 
   const handToDisplay =
     isLocalPlayer && !isEndStage
-      ? player.hand.map((card) => ({ facedown: true as const, id: card.id }))
+      ? player.hand.map((card) =>
+          card === null ? null : { facedown: true as const, id: card.id },
+        )
       : player.hand;
 
   // Opponents sit across the table: rotate their grid 180° (row-major
@@ -169,6 +171,25 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   return (
     <HandGrid numItems={handToDisplay.length} className={combinedClass}>
       {displayEntries.map(({ card, index }) => {
+        // An empty slot: a hairline-outlined placeholder, no card, no motion,
+        // keyed by position so it never animates and never takes a click.
+        if (card === null) {
+          return (
+            <div
+              key={`slot-${index}`}
+              aria-hidden
+              className={cn(
+                "relative aspect-[5/7]",
+                dense
+                  ? "w-[min(8svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
+                  : "w-[min(8svh,15vw)]",
+              )}
+            >
+              <div className="absolute inset-0 rounded-card border border-hairline" />
+            </div>
+          );
+        }
+
         const isCardVisible = visibleCards.some(
           (vc) => vc.playerId === player.id && vc.cardIndex === index,
         );
@@ -179,10 +200,10 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             )?.card
           : undefined;
 
-        let cardToRender = handToDisplay[index];
+        let cardToRender: Card | { facedown: true; id: string } = card;
 
         if (isCardVisible) {
-          cardToRender = visibleCardData || player.hand[index];
+          cardToRender = visibleCardData || player.hand[index]!;
         }
         const isFaceUp =
           "rank" in cardToRender && (!isEndStage || revealed.has(index));
@@ -260,11 +281,11 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                     }
                   : undefined
               }
-              className={cn(
-                "absolute inset-0 rounded-lg",
-                "data-[interactive=true]:cursor-pointer",
-                "data-[interactive=true]:hover:filter-[brightness(1.15)]",
-              )}
+            className={cn(
+              "absolute inset-0 rounded-card",
+              "data-[interactive=true]:cursor-pointer",
+              "data-[interactive=true]:hover:filter-[brightness(1.15)]",
+            )}
               data-interactive={canInteract && !isLocked}
               onClick={() => canInteract && !isLocked && onCardClick?.(index)}
             >
