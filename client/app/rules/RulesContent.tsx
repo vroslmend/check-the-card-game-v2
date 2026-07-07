@@ -158,7 +158,7 @@ export default function RulesContent() {
               call it when you’re sure.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
-              <MetaChip>2–4 players</MetaChip>
+              <MetaChip>2–6 players</MetaChip>
               <MetaChip>52 cards</MetaChip>
               <MetaChip>one round</MetaChip>
             </div>

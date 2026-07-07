@@ -202,7 +202,7 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
   [SocketEventName.CREATE_GAME]: (
-    payload: InitialPlayerSetupData,
+    payload: CreateGamePayload,
     callback: (response: CreateGameResponse) => void,
   ) => void;
   [SocketEventName.JOIN_GAME]: (
@@ -271,6 +271,12 @@ export interface InitialPlayerSetupData {
   name: string;
   id?: string;
   socketId?: string;
+}
+
+/** CREATE_GAME payload: the host's setup data plus the table size they
+ *  picked (2-6). Optional so older clients keep working; the server clamps. */
+export interface CreateGamePayload extends InitialPlayerSetupData {
+  maxPlayers?: number;
 }
 
 export interface ChatMessage {

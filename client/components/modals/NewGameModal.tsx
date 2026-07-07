@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useUIActorRef, useUISelector } from "@/context/GameUIContext";
+import { cn } from "@/lib/utils";
 
 interface NewGameModalProps {
   isModalOpen: boolean;
@@ -26,6 +27,7 @@ export function NewGameModal({
     }
     return "";
   });
+  const [maxPlayers, setMaxPlayers] = useState(4);
 
   const { send } = useUIActorRef();
   // Loading state lives in the machine, so a failed request re-enables the
@@ -38,7 +40,7 @@ export function NewGameModal({
       return;
     }
     localStorage.setItem("localPlayerName", playerName);
-    send({ type: "CREATE_GAME_REQUESTED", playerName });
+    send({ type: "CREATE_GAME_REQUESTED", playerName, maxPlayers });
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -84,6 +86,38 @@ export function NewGameModal({
             maxLength={20}
             className="mt-2 h-12 w-full rounded-full border border-hairline bg-surface px-5 text-base text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent"
           />
+        </div>
+
+        <div className="mt-6">
+          <span className="text-sm font-semibold text-ink">Seats</span>
+          <div
+            className="mt-2 flex gap-2"
+            role="radiogroup"
+            aria-label="Table size"
+          >
+            {/* Selection is ink-filled, not accent: the Create pill stays the
+                one accent action on this sheet. */}
+            {[2, 3, 4, 5, 6].map((n) => (
+              <button
+                key={n}
+                type="button"
+                role="radio"
+                aria-checked={n === maxPlayers}
+                onClick={() => setMaxPlayers(n)}
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold transition-colors",
+                  n === maxPlayers
+                    ? "border-ink bg-ink text-ground"
+                    : "border-hairline bg-surface text-ink-muted hover:text-ink",
+                )}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">
+            A game can start once two players are seated.
+          </p>
         </div>
 
         <div className="mt-8 flex justify-end">

@@ -161,7 +161,7 @@ Create `.env` files in the `server` and `client` directories for local developme
 *   **Server (`server/.env`):**
     *   `PORT`: Port for the backend server (default: `8000`).
     *   `CORS_ORIGIN`: The client URL for CORS validation (default: `http://localhost:3000`).
-    *   `MAX_PLAYERS`: The maximum number of players in a game (default: `4`).
+    *   `MAX_PLAYERS`: Default seat cap for games whose host does not pick one; hosts can pick 2–6 in the app (default: `4`).
     *   `CARDS_PER_PLAYER`: The number of cards dealt to each player (default: `4`).
     *   `MAX_HAND_SIZE`: Hand size at which a player is disqualified from the round (default: `8`).
     *   `PEEK_DURATION_MS`: Duration of the initial card peek phase in milliseconds (default: `10000`).
@@ -191,7 +191,7 @@ CORS_ORIGIN=http://localhost:3000
 PORT=8000
 
 # --- Game Rules & Configuration ---
-# The maximum number of players allowed in a game.
+# Default seat cap when the host does not pick a table size (hosts pick 2-6 in the app).
 MAX_PLAYERS=4
 # The number of cards dealt to each player at the start of a round.
 CARDS_PER_PLAYER=4
