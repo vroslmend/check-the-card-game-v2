@@ -6,6 +6,10 @@ import {
   useUISelector,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
+import { claimStampSlot } from "@/lib/stampQueue";
+
+const PENALTY_HOLD_MS = 1200;
+const PENALTY_SLOT_MS = 1500;
 
 interface PenaltyMomentInfo {
   name: string;
@@ -45,7 +49,15 @@ export function usePenaltyMoment(): PenaltyMomentInfo | null {
       return;
     }
     if (latest && latest.id !== prevIdRef.current && latest.name) {
-      setMoment({ name: latest.name, key: latest.id });
+      prevIdRef.current = latest.id;
+      // Queue behind any stamp already playing (two players can earn
+      // MATCH. and PENALTY. inside one matching window).
+      const delay = claimStampSlot(PENALTY_SLOT_MS);
+      const t = setTimeout(
+        () => setMoment({ name: latest.name!, key: latest.id }),
+        delay,
+      );
+      return () => clearTimeout(t);
     }
     prevIdRef.current = latest?.id ?? null;
   }, [latest]);
@@ -53,7 +65,7 @@ export function usePenaltyMoment(): PenaltyMomentInfo | null {
   useEffect(() => {
     if (!moment) return;
     // Hold the beat, then clear so the exit fade plays out.
-    const t = setTimeout(() => setMoment(null), 1200);
+    const t = setTimeout(() => setMoment(null), PENALTY_HOLD_MS);
     return () => clearTimeout(t);
   }, [moment]);
 

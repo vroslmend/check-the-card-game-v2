@@ -7,6 +7,10 @@ import {
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
 import { CardRank } from "shared-types";
+import { claimStampSlot } from "@/lib/stampQueue";
+
+const ABILITY_HOLD_MS = 1100;
+const ABILITY_SLOT_MS = 1400;
 
 const RANK_WORDS: Partial<Record<string, string>> = {
   [CardRank.King]: "KING.",
@@ -64,30 +68,31 @@ export function useAbilityMoment(): AbilityMomentInfo | null {
     });
     const word = RANK_WORDS[added[0]!.rank];
     if (!word) return;
-    if (added.length === 1) {
-      setMoment({
-        key: stackKey,
-        title: word,
-        caption: `${added[0]!.name} plays it.`,
-      });
-    } else {
-      // Push order is [discarder, matcher]; the matcher resolves first.
-      const sameOwner = added.every((a) => a.name === added[0]!.name);
-      const matcher = added[added.length - 1]!.name;
-      const discarder = added[0]!.name;
-      setMoment({
-        key: stackKey,
-        title: `${word} ×${added.length}`,
-        caption: sameOwner
-          ? `${discarder} plays both.`
-          : `${matcher} first, then ${discarder}.`,
-      });
-    }
+    const next: AbilityMomentInfo =
+      added.length === 1
+        ? {
+            key: stackKey,
+            title: word,
+            caption: `${added[0]!.name} plays it.`,
+          }
+        : {
+            // Push order is [discarder, matcher]; the matcher resolves first.
+            key: stackKey,
+            title: `${word} ×${added.length}`,
+            caption: added.every((a) => a.name === added[0]!.name)
+              ? `${added[0]!.name} plays both.`
+              : `${added[added.length - 1]!.name} first, then ${added[0]!.name}.`,
+          };
+    // Queue behind any stamp already playing (a matched-last-card special
+    // raises CHECK. from the same broadcast; CHECK. goes first).
+    const delay = claimStampSlot(ABILITY_SLOT_MS);
+    const t = setTimeout(() => setMoment(next), delay);
+    return () => clearTimeout(t);
   }, [stackKey]);
 
   useEffect(() => {
     if (!moment) return;
-    const t = setTimeout(() => setMoment(null), 1100);
+    const t = setTimeout(() => setMoment(null), ABILITY_HOLD_MS);
     return () => clearTimeout(t);
   }, [moment]);
 

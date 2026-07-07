@@ -6,10 +6,13 @@ import {
   useUISelector,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
+import { claimStampSlot } from "@/lib/stampQueue";
 
 // The stamp lands with the card (cardTravelTransition = 0.65s), together
 // with the pile pulse and the match chime.
 const MATCH_FLIGHT_MS = 650;
+const MATCH_HOLD_MS = 1100;
+const MATCH_SLOT_MS = 1400;
 
 interface MatchMomentInfo {
   key: string;
@@ -17,8 +20,8 @@ interface MatchMomentInfo {
 }
 
 /** Latest successful-match announcement, as primitives. Special ranks are
- *  excluded: a matched King/Queen/Jack pushes abilities and the KING. x2
- *  stamp owns that moment. */
+ *  excluded (the KING. x2 stamp owns those), and so is a match that emptied
+ *  the matcher's hand — that IS the check, and CHECK. tells that story. */
 const selectLatestMatch = (state: UIMachineSnapshot) => {
   const log = state.context.currentGameState?.log;
   if (!log) return null;
@@ -29,10 +32,15 @@ const selectLatestMatch = (state: UIMachineSnapshot) => {
       entry.tags.includes("game-event") &&
       entry.message.includes(" matched a")
     ) {
+      const actorId = entry.actor?.id;
+      const actorHand = actorId
+        ? state.context.currentGameState?.players[actorId]?.hand.length
+        : undefined;
       return {
         id: entry.id,
         message: entry.message,
         isSpecial: /King|Queen|Jack/.test(entry.message),
+        emptiedHand: actorHand === 0,
       };
     }
   }
@@ -58,10 +66,13 @@ export function useMatchMoment(): MatchMomentInfo | null {
     }
     if (latest && latest.id !== prevIdRef.current) {
       prevIdRef.current = latest.id;
-      if (!latest.isSpecial) {
+      if (!latest.isSpecial && !latest.emptiedHand) {
+        // Land with the card, but never on top of another stamp (an
+        // empty-hand match raises CHECK. from the same broadcast).
+        const delay = claimStampSlot(MATCH_SLOT_MS, MATCH_FLIGHT_MS);
         const arm = setTimeout(
           () => setMoment({ key: latest.id, caption: latest.message }),
-          MATCH_FLIGHT_MS,
+          delay,
         );
         return () => clearTimeout(arm);
       }
@@ -72,7 +83,7 @@ export function useMatchMoment(): MatchMomentInfo | null {
 
   useEffect(() => {
     if (!moment) return;
-    const t = setTimeout(() => setMoment(null), 1100);
+    const t = setTimeout(() => setMoment(null), MATCH_HOLD_MS);
     return () => clearTimeout(t);
   }, [moment]);
 

@@ -6,18 +6,28 @@ import {
   useUISelector,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
+import { claimStampSlot } from "@/lib/stampQueue";
+
+// Visible hold + exit fade; also the stamp-slot claim so queued stamps
+// start as this one's fade completes.
+const CHECK_HOLD_MS = 1200;
+const CHECK_SLOT_MS = 1500;
 
 interface CheckMomentInfo {
   name: string;
+  caption: string;
   key: number;
 }
 
-// Just the caller's identity — shallow-compared so an unchanged checker across
-// broadcasts doesn't re-render this out of the whole game state.
+// Just the caller's identity — shallow-compared so an unchanged checker
+// across broadcasts doesn't re-render this out of the whole game state.
+// handCount distinguishes the button path from the matched-last-card path.
 const selectChecker = (state: UIMachineSnapshot) => {
   const players = state.context.currentGameState?.players ?? {};
   const checker = Object.values(players).find((p) => p.hasCalledCheck);
-  return checker ? { id: checker.id, name: checker.name } : null;
+  return checker
+    ? { id: checker.id, name: checker.name, handCount: checker.hand.length }
+    : null;
 };
 
 /**
@@ -25,6 +35,8 @@ const selectChecker = (state: UIMachineSnapshot) => {
  * (purely client-side, from the synced game state — no server change) and
  * returns a momentary token that drives the CHECK. stamp. Baselines on mount
  * so a client that joins *after* Check was already called doesn't replay it.
+ * An empty hand means the check came from matching the last card away — the
+ * caption tells that story, and the MATCH. stamp stands down for it.
  */
 export function useCheckMoment(): CheckMomentInfo | null {
   const checker = useUISelector(selectChecker);
@@ -41,15 +53,25 @@ export function useCheckMoment(): CheckMomentInfo | null {
       return;
     }
     if (checker && checker.id !== prevIdRef.current) {
-      setMoment({ name: checker.name, key: Date.now() });
+      prevIdRef.current = checker.id;
+      const caption =
+        checker.handCount === 0
+          ? `${checker.name} matched their last card.`
+          : `${checker.name} called it.`;
+      const delay = claimStampSlot(CHECK_SLOT_MS);
+      const t = setTimeout(
+        () => setMoment({ name: checker.name, caption, key: Date.now() }),
+        delay,
+      );
+      return () => clearTimeout(t);
     }
     prevIdRef.current = checker?.id ?? null;
   }, [checker]);
 
   useEffect(() => {
     if (!moment) return;
-    // Hold the beat (~0.9s), then clear so the stamp's exit fade plays out.
-    const t = setTimeout(() => setMoment(null), 1200);
+    // Hold the beat, then clear so the stamp's exit fade plays out.
+    const t = setTimeout(() => setMoment(null), CHECK_HOLD_MS);
     return () => clearTimeout(t);
   }, [moment]);
 
@@ -93,7 +115,7 @@ export function CheckStamp({ moment }: { moment: CheckMomentInfo | null }) {
               CHECK.
             </span>
             <span className="mt-3 font-game text-base text-ink-muted sm:text-lg">
-              {moment.name} called it.
+              {moment.caption}
             </span>
           </motion.div>
         </motion.div>

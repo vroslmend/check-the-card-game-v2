@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The brand mark: a tilted accent card back with the check glyph. -->
+  <g transform="rotate(-6 16 16)">
+    <rect x="6.5" y="2.5" width="19" height="27" rx="4.5" fill="#BF4342"/>
+    <path d="M11.5 16.5l3.2 3.2 6-7" stroke="#FFF7F2" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>
