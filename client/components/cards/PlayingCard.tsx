@@ -23,7 +23,7 @@ const PlayingCardRenderer = ({ card }: { card: Card }) => {
   return (
     <div
       className={cn(
-        "relative h-full w-full rounded-card border bg-surface border-hairline",
+        "relative h-full w-full overflow-hidden rounded-card border bg-surface border-hairline",
         "flex flex-col items-center justify-center font-game @container/card",
         isRed ? "text-accent" : "text-ink",
       )}

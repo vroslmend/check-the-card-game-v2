@@ -274,7 +274,7 @@ export const TableArea = ({
           <CardFlight
             key={drawnCard.id}
             layoutId={drawnCard.id}
-            className="absolute inset-0 z-10"
+            className="absolute inset-0 z-10 overflow-hidden rounded-card"
           >
             <PlayingCard
               card={"rank" in drawnCard ? (drawnCard as Card) : undefined}
