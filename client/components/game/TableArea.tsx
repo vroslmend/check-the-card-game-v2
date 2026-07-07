@@ -75,6 +75,54 @@ const useMatchPulse = (): string | null => {
   return pulse;
 };
 
+// Newest reshuffle announcement in the log, as a primitive id.
+const selectLatestShuffleLogId = (state: UIMachineSnapshot) => {
+  const log = state.context.currentGameState?.log;
+  if (!log) return null;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const entry = log[i]!;
+    if (
+      entry.type === "public" &&
+      entry.tags.includes("game-event") &&
+      entry.message.toLowerCase().includes("shuffl")
+    ) {
+      return entry.id;
+    }
+  }
+  return null;
+};
+
+const SHUFFLE_BEAT_MS = 450;
+
+/** Momentary token when the discard pile reshuffles into a fresh deck —
+ *  baselined on mount, same rule as the stamps. */
+const useReshuffleMoment = (): string | null => {
+  const latestId = useUISelector(selectLatestShuffleLogId);
+  const [beat, setBeat] = React.useState<string | null>(null);
+  const prevRef = React.useRef<string | null>(null);
+  const initializedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      prevRef.current = latestId;
+      return;
+    }
+    if (latestId && latestId !== prevRef.current) {
+      prevRef.current = latestId;
+      setBeat(latestId);
+    }
+  }, [latestId]);
+
+  React.useEffect(() => {
+    if (!beat) return;
+    const t = setTimeout(() => setBeat(null), SHUFFLE_BEAT_MS);
+    return () => clearTimeout(t);
+  }, [beat]);
+
+  return beat;
+};
+
 const selectTableAreaProps = (state: UIMachineSnapshot) => {
   const { currentGameState, localPlayerId } = state.context;
   const isMyTurn = currentGameState?.currentPlayerId === localPlayerId;
@@ -135,6 +183,7 @@ export const TableArea = ({
   } = useUISelector(selectTableAreaProps);
 
   const matchPulse = useMatchPulse();
+  const reshuffleBeat = useReshuffleMoment();
   const reduced = useReducedMotion();
 
   const handleDeckClick = () => {
@@ -154,7 +203,7 @@ export const TableArea = ({
   return (
     <div className="grid h-full w-full grid-cols-[1fr_auto_1fr] items-center gap-4">
       <div className="flex justify-end w-full justify-self-end">
-        <div className="relative">
+        <div className="relative z-0">
           <VisualCardStack
             title="Deck"
             count={deckSize}
@@ -181,6 +230,30 @@ export const TableArea = ({
               ))}
             </div>
           )}
+          {/* Reshuffle: two ghost backs fan out behind the pile and collapse
+              back in — the deck visibly re-forms. No layout projection. */}
+          <AnimatePresence>
+            {reshuffleBeat && !reduced && (
+              <React.Fragment key={reshuffleBeat}>
+                {[
+                  [-8, -10],
+                  [8, 10],
+                ].map(([rot, dx]) => (
+                  <motion.span
+                    key={rot}
+                    className="pointer-events-none absolute inset-0 -z-10 rounded-card bg-accent"
+                    initial={{ opacity: 0.7, rotate: rot, x: dx }}
+                    animate={{ opacity: 0, rotate: 0, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{
+                      duration: SHUFFLE_BEAT_MS / 1000,
+                      ease: "easeOut",
+                    }}
+                  />
+                ))}
+              </React.Fragment>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

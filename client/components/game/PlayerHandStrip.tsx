@@ -31,6 +31,9 @@ interface PlayerHandStripProps {
   player: Player;
   isLocalPlayer: boolean;
   isCurrentTurn: boolean;
+  /** Position around the table; staggers the end-of-round reveal and the
+   *  deal ripple. */
+  tableIndex: number;
 }
 
 const selectStripContext = (state: UIMachineSnapshot) => {
@@ -156,10 +159,34 @@ const PlayerInfoBadge = ({
   );
 };
 
+/** One quiet settle when a player is disqualified: the strip dips 3px and
+ *  returns while the locked dim lands. One register below PENALTY. */
+const useDisqualifiedBeat = (status: PlayerStatus): boolean => {
+  const [beat, setBeat] = React.useState(false);
+  const prevRef = React.useRef<PlayerStatus | null>(null);
+  const initializedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      prevRef.current = status;
+      return;
+    }
+    const wasDq = prevRef.current === PlayerStatus.DISQUALIFIED;
+    prevRef.current = status;
+    if (status === PlayerStatus.DISQUALIFIED && !wasDq) {
+      setBeat(true);
+      const t = setTimeout(() => setBeat(false), 350);
+      return () => clearTimeout(t);
+    }
+  }, [status]);
+  return beat;
+};
+
 export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
   player,
   isLocalPlayer,
   isCurrentTurn,
+  tableIndex,
 }) => {
   const {
     canSwap,
@@ -173,6 +200,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
 
   const { send } = useUIActorRef();
   const { setMatchAttempt, matchAttempt } = useActionController();
+  const dqBeat = useDisqualifiedBeat(player.status);
 
   const handleCardClick = (cardIndex: number) => {
     if (isLocalPlayer && canMatch) {
@@ -208,6 +236,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     <motion.div
       layout
       transition={{ type: "spring", stiffness: 500, damping: 40 }}
+      animate={dqBeat ? { y: [0, 3, 0] } : { y: 0 }}
       className="flex flex-col items-center gap-2"
     >
       <PlayerInfoBadge
@@ -225,6 +254,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         onCardClick={handleCardClick}
         canInteract={canInteract}
         isLocked={player.isLocked}
+        tableIndex={tableIndex}
         selectedCardIndex={
           isLocalPlayer && canMatch ? matchAttempt?.cardIndex : undefined
         }

@@ -12,12 +12,13 @@ import { GameStage, PlayerActionType, type PublicCard } from "shared-types";
 import { ActionController } from "./ActionController";
 import { ActionControllerView } from "./ActionControllerView";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { GameEndScreen } from "./GameEndScreen";
+import { RoundSummary } from "./RoundSummary";
 import { GameHeader } from "./GameHeader";
 import SidePanel from "@/components/layout/SidePanel";
 import { useCheckMoment, CheckStamp } from "./CheckMoment";
 import { usePenaltyMoment, PenaltyStamp } from "./PenaltyMoment";
 import { GameEventCaption } from "./GameEventCaption";
+import { useGameSounds } from "./useGameSounds";
 
 const selectIsDisconnected = (state: UIMachineSnapshot) =>
   state.matches({ inGame: "disconnected" });
@@ -132,6 +133,7 @@ export function GameBoard() {
   const { gameStage, players, winnerIds } = useUISelector(selectGameEndProps);
   const checkMoment = useCheckMoment();
   const penaltyMoment = usePenaltyMoment();
+  useGameSounds();
   const reducedMotion = useReducedMotion();
 
   // The round-ending broadcast both moves the last card and flips the stage:
@@ -181,23 +183,20 @@ export function GameBoard() {
       <GameHeader />
       <motion.div
         className="relative flex-1 grid grid-rows-[auto_auto_1fr_auto_auto]"
-        animate={{ scale: checkMoment && !reducedMotion ? 0.92 : 1 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        style={{ transformOrigin: "center" }}
+        animate={{
+          scale:
+            isEndStage && tableSettled && !reducedMotion
+              ? 0.85
+              : checkMoment && !reducedMotion
+                ? 0.92
+                : 1,
+        }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        style={{
+          transformOrigin:
+            isEndStage && tableSettled ? "50% 0%" : "center",
+        }}
       >
-        <AnimatePresence>
-          {isEndStage && tableSettled && (
-            <GameEndScreen
-              players={players}
-              winnerIds={winnerIds}
-              localPlayerId={localPlayerId}
-              onPlayAgain={handlePlayAgain}
-              onLeave={() => send({ type: "LEAVE_GAME" })}
-              onToggleChat={() => send({ type: "TOGGLE_SIDE_PANEL" })}
-            />
-          )}
-        </AnimatePresence>
-
         <ConnectionStatusBanner />
         {localPlayerForfeited && !isEndStage && (
           <ForfeitNotice onLeave={() => send({ type: "LEAVE_GAME" })} />
@@ -215,7 +214,7 @@ export function GameBoard() {
             <div className="flex justify-center items-center py-2">
               {opponentPlayers.length > 0 ? (
                 <div className="w-full flex flex-wrap justify-evenly gap-2">
-                  {opponentPlayers.map((op) => (
+                  {opponentPlayers.map((op, i) => (
                     <PlayerHandStrip
                       key={op.id}
                       player={{
@@ -224,6 +223,7 @@ export function GameBoard() {
                       }}
                       isLocalPlayer={false}
                       isCurrentTurn={gameState.currentPlayerId === op.id}
+                      tableIndex={i}
                     />
                   ))}
                 </div>
@@ -254,6 +254,7 @@ export function GameBoard() {
                   }}
                   isLocalPlayer={true}
                   isCurrentTurn={isMyTurn}
+                  tableIndex={opponentPlayers.length}
                 />
               ) : null}
             </div>
@@ -270,6 +271,19 @@ export function GameBoard() {
 
       <CheckStamp moment={checkMoment} />
       <PenaltyStamp moment={penaltyMoment} />
+
+      <AnimatePresence>
+        {isEndStage && tableSettled && (
+          <RoundSummary
+            players={players}
+            winnerIds={winnerIds}
+            localPlayerId={localPlayerId}
+            onPlayAgain={handlePlayAgain}
+            onLeave={() => send({ type: "LEAVE_GAME" })}
+            onToggleChat={() => send({ type: "TOGGLE_SIDE_PANEL" })}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

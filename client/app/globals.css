@@ -127,6 +127,10 @@ body {
   font-feature-settings:
     "rlig" 1,
     "calt" 1;
+  /* Paint the canvas itself: overscroll, rubber-banding and URL-bar
+     collapse expose the html/body background on mobile — unpainted, that
+     is a black (dark) or white (light) bar behind the page. */
+  background-color: hsl(var(--ground));
 }
 
 /* The identity's focus spec, systematized: 2px accent outline, offset 2,

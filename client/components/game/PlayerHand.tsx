@@ -7,7 +7,7 @@ import { type Player, type Card, GameStage } from "shared-types";
 import { cn } from "@/lib/utils";
 import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Eye, ArrowLeftRight, type LucideIcon } from "lucide-react";
 
 /** Corner badge on a ringed card slot: surface chip, ink glyph. The icon
@@ -27,6 +27,9 @@ interface PlayerHandProps {
   canInteract: boolean;
   isLocked?: boolean;
   selectedCardIndex?: number | null;
+  /** Position around the table; staggers the end-of-round reveal and the
+   *  deal ripple. */
+  tableIndex: number;
 }
 
 const selectContext = (state: UIMachineSnapshot) => {
@@ -52,6 +55,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   canInteract,
   isLocked = false,
   selectedCardIndex = null,
+  tableIndex,
 }) => {
   const {
     visibleCards,
@@ -90,9 +94,58 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   const swapIndicatorLive =
     !!publicSwap && expiredSwapAt !== publicSwap.occurredAt;
 
-  const handToDisplay = isLocalPlayer
-    ? player.hand.map((card) => ({ facedown: true as const, id: card.id }))
-    : player.hand;
+  // SCORING/GAMEOVER broadcasts reveal every hand; the reveal now happens ON
+  // the table — cards flip in place in a ripple (tableIndex*180 +
+  // cardIndex*60ms) after the 1.1s settle hold, replacing the old sheet's
+  // RevealCard cascade.
+  const isEndStage =
+    gameStage === GameStage.SCORING || gameStage === GameStage.GAMEOVER;
+  const reducedMotion = !!useReducedMotion();
+  const [revealed, setRevealed] = React.useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+  React.useEffect(() => {
+    if (!isEndStage) {
+      setRevealed(new Set());
+      return;
+    }
+    if (reducedMotion) {
+      setRevealed(new Set(player.hand.map((_, i) => i)));
+      return;
+    }
+    const timers = player.hand.map((_, i) =>
+      setTimeout(
+        () =>
+          setRevealed((prev) => {
+            const next = new Set(prev);
+            next.add(i);
+            return next;
+          }),
+        1100 + tableIndex * 180 + i * 60,
+      ),
+    );
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEndStage, reducedMotion, player.hand.length, tableIndex]);
+
+  // Deal ripple: only the commit that swaps DEALING -> INITIAL_PEEK mounts
+  // the hand cells, and only that commit gets per-card layout delays (a
+  // dealer's sweep: tableIndex*80 + cardIndex*40ms). Interrupted flights
+  // never carry a delay — the R11 projection-timing concern (findings §5.4)
+  // applied to delays on live flights, not on mount-time ones; the WAAPI
+  // class itself was closed by motion 12.42.2.
+  const prevStageRef = React.useRef(gameStage);
+  const dealtThisCommit =
+    prevStageRef.current === GameStage.DEALING &&
+    gameStage === GameStage.INITIAL_PEEK;
+  React.useEffect(() => {
+    prevStageRef.current = gameStage;
+  });
+
+  const handToDisplay =
+    isLocalPlayer && !isEndStage
+      ? player.hand.map((card) => ({ facedown: true as const, id: card.id }))
+      : player.hand;
 
   // Opponents sit across the table: rotate their grid 180° (row-major
   // reversal) so their bottom peek row reads at the top of your screen,
@@ -106,12 +159,6 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   const initialPeekActive =
     gameStage === GameStage.INITIAL_PEEK &&
     visibleCards.some((vc) => vc.source === "initial-peek");
-
-  // SCORING/GAMEOVER broadcasts reveal every hand; the board keeps its cards
-  // down so the reveal stays owned by the end screen's ripple (and Gecko
-  // isn't handed 8-16 extra concurrent flips beneath an opaque sheet).
-  const isEndStage =
-    gameStage === GameStage.SCORING || gameStage === GameStage.GAMEOVER;
 
   const combinedClass = cn(isLocked && "opacity-60");
 
@@ -133,7 +180,8 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
         if (isCardVisible) {
           cardToRender = visibleCardData || player.hand[index];
         }
-        const isFaceUp = "rank" in cardToRender && !isEndStage;
+        const isFaceUp =
+          "rank" in cardToRender && (!isEndStage || revealed.has(index));
 
         const isMatchSelected = selectedCardIndex === index;
         const isAbilityPeekSelected =
@@ -185,6 +233,18 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             <CardFlight
               key={card.id}
               layoutId={card.id}
+              transition={
+                dealtThisCommit && !reducedMotion
+                  ? {
+                      layout: {
+                        type: "tween",
+                        duration: 0.65,
+                        ease: [0.55, 0.06, 0.19, 0.98],
+                        delay: (tableIndex * 80 + index * 40) / 1000,
+                      },
+                    }
+                  : undefined
+              }
               className={cn(
                 "absolute inset-0 rounded-lg",
                 "data-[interactive=true]:cursor-pointer",

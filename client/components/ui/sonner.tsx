@@ -2,6 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { Toaster as Sonner, toast, ToasterProps } from "sonner";
+import { AlertTriangle, Check, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const Toaster = ({ ...props }: ToasterProps) => {
@@ -18,13 +19,18 @@ const Toaster = ({ ...props }: ToasterProps) => {
       gap={8}
       visibleToasts={3}
       className="toaster group"
+      icons={{
+        error: <AlertTriangle className="h-4 w-4 text-accent" />,
+        warning: <AlertTriangle className="h-4 w-4 text-accent" />,
+        info: <Info className="h-4 w-4 text-ink-muted" />,
+        success: <Check className="h-4 w-4 text-ink" />,
+      }}
       toastOptions={{
         classNames: {
-          // The table's own voice: surface card, hairline border, game
-          // type. No glass blur (a Gecko repaint sink) and no hue-coded
-          // borders — the identity reserves color for the one accent.
+          // The table's own voice: surface pill, hairline border, game type.
+          // The one hue is the accent on the error glyph; text stays ink.
           toast: cn(
-            "group rounded-card border border-hairline bg-surface shadow-lg",
+            "group rounded-2xl border border-hairline bg-surface shadow-lg",
             "px-4 py-3 font-game text-sm font-semibold text-ink",
           ),
           title: "text-ink font-semibold",

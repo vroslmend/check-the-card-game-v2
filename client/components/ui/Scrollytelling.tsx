@@ -26,7 +26,7 @@ const features = [
     icon: FaEye,
     title: "Call Their Bluff",
     description:
-      "Think you have the lowest score? Call 'Check' to end the round, but be careful—a wrong move could cost you the game.",
+      "Think you have the lowest score? Call 'Check' to end the round, but be careful: a wrong move could cost you the game.",
   },
 ];
 

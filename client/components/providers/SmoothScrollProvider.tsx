@@ -5,15 +5,16 @@ import { cancelFrame, frame, type FrameData } from "framer-motion"
 import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { usePathname } from "next/navigation"
+import { useDevice } from "@/context/DeviceContext"
 
 export function SmoothScrollProvider({ children }: { children: ReactNode }) {
   const lenisRef = useRef<LenisRef>(null)
-  // The game view is h-screen overflow-hidden — nothing scrolls, but Lenis'
-  // per-frame raf (frame.update with keepAlive) still ran on the shared
-  // framer-motion loop under every flight. Smooth scroll is landing-page
-  // furniture; skip it entirely on game routes.
+  // The game view is h-screen overflow-hidden — nothing scrolls. And on
+  // touch devices Lenis's wheel smoothing does nothing while its listeners
+  // and scroll-linked springs are pure risk — phones get native scroll.
   const pathname = usePathname()
-  const smoothScrollActive = !pathname.startsWith("/game")
+  const { isTouchDevice } = useDevice()
+  const smoothScrollActive = !pathname.startsWith("/game") && !isTouchDevice
 
   useEffect(() => {
     if (!smoothScrollActive) return
@@ -37,4 +38,4 @@ export function SmoothScrollProvider({ children }: { children: ReactNode }) {
       {children}
     </ReactLenis>
   )
-} 
+}

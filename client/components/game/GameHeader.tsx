@@ -1,28 +1,38 @@
 "use client";
 
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { PanelRightClose, PanelRightOpen, ChevronLeft, User } from 'lucide-react';
-import { useUIActorRef, useUISelector, type UIMachineSnapshot } from '@/context/GameUIContext';
-import Link from 'next/link';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { CopyToClipboardButton } from '../ui/CopyToClipboardButton';
+import React from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Check,
+  ChevronLeft,
+  Copy,
+  PanelRightClose,
+  PanelRightOpen,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import {
+  useUIActorRef,
+  useUISelector,
+  type UIMachineSnapshot,
+} from "@/context/GameUIContext";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { isMuted, setMuted } from "@/lib/sounds";
 
-const selectGameHeaderProps = (state: UIMachineSnapshot) => {
-  const localId = state.context.localPlayerId;
-  const playerName = localId ? state.context.currentGameState?.players[localId]?.name ?? 'Player' : 'Player';
-  return {
-    gameId: state.context.gameId,
-    isSidePanelOpen: state.context.isSidePanelOpen,
-    playerName,
-    chatCount: state.context.currentGameState?.chat?.length ?? 0,
-  };
-};
+const selectGameHeaderProps = (state: UIMachineSnapshot) => ({
+  gameId: state.context.gameId,
+  isSidePanelOpen: state.context.isSidePanelOpen,
+  chatCount: state.context.currentGameState?.chat?.length ?? 0,
+});
+
+const ICON_BUTTON =
+  "flex h-9 w-9 items-center justify-center rounded-full border border-hairline bg-surface text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink";
 
 export const GameHeader = () => {
   const { send } = useUIActorRef();
-  const { gameId, isSidePanelOpen, playerName, chatCount } = useUISelector(selectGameHeaderProps);
+  const { gameId, isSidePanelOpen, chatCount } =
+    useUISelector(selectGameHeaderProps);
 
   // Baseline on first sight: history isn't news (mount/rejoin shows no dot).
   const seenChatCountRef = React.useRef<number | null>(null);
@@ -33,70 +43,108 @@ export const GameHeader = () => {
   const hasUnread =
     !isSidePanelOpen && chatCount > (seenChatCountRef.current ?? 0);
 
-  const toggleSidePanel = () => {
-    send({ type: 'TOGGLE_SIDE_PANEL' });
+  const [copied, setCopied] = React.useState(false);
+  const copyCode = () => {
+    if (!gameId) return;
+    navigator.clipboard?.writeText(gameId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  // Default true matches the SSR value (no localStorage on the server); the
+  // effect syncs the real preference after mount — no hydration mismatch
+  // when the user has previously unmuted.
+  const [muted, setMutedState] = React.useState(true);
+  React.useEffect(() => {
+    setMutedState(isMuted());
+  }, []);
+  const toggleMute = () => {
+    setMuted(!muted);
+    setMutedState(!muted);
   };
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-hairline bg-ground px-4 md:px-6 relative top-0 z-20 font-game">
-      <div className="flex items-center gap-4">
-        <Link href="/" data-cursor-link>
-          <motion.div
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="flex items-center gap-2 group border border-hairline bg-surface px-3 py-1.5 rounded-full"
-          >
-            <ChevronLeft className="h-4 w-4 text-ink-muted group-hover:text-ink transition-colors" />
-            <span className="text-lg font-bold tracking-tight text-ink">Check</span>
-          </motion.div>
+    <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-hairline bg-ground px-4 font-game md:px-6">
+      <div className="flex min-w-0 items-center gap-3">
+        <Link
+          href="/"
+          className="group flex items-center gap-1 text-lg font-extrabold tracking-tight text-ink"
+        >
+          <ChevronLeft className="h-4 w-4 text-ink-muted transition-transform group-hover:-translate-x-0.5" />
+          Check
         </Link>
-
-        <div className="h-6 w-px bg-hairline" />
-        
-        <CopyToClipboardButton textToCopy={gameId} />
+        <span className="text-hairline" aria-hidden>
+          ·
+        </span>
+        {gameId && (
+          <button
+            onClick={copyCode}
+            className="flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-semibold tracking-widest text-ink-muted tabular-nums transition-colors hover:text-ink"
+            aria-label={copied ? "Code copied" : `Copy game code ${gameId}`}
+          >
+            {gameId}
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-accent" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
       </div>
 
-      <div className="flex items-center gap-2 h-10">
-        <div className="hidden sm:flex items-center gap-1.5 border border-hairline bg-surface rounded-full h-10 min-w-[40px] px-3">
-          <User className="w-4 h-4 text-ink-muted" />
-          <span className="text-[15px] font-semibold text-ink leading-none" style={{lineHeight:'1'}}>{playerName}</span>
-        </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={toggleMute}
+          className={ICON_BUTTON}
+          aria-label={muted ? "Turn sound on" : "Turn sound off"}
+        >
+          {muted ? (
+            <VolumeX className="h-4 w-4" />
+          ) : (
+            <Volume2 className="h-4 w-4" />
+          )}
+        </button>
 
-        <div className="flex items-center h-10">
-          <ThemeToggle />
-        </div>
+        <ThemeToggle />
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleSidePanel}
-          className="relative h-10 w-10 min-w-[40px] rounded-full border border-hairline bg-surface hover:bg-surface-2 flex items-center justify-center"
-          data-cursor-link
+        <button
+          onClick={() => send({ type: "TOGGLE_SIDE_PANEL" })}
+          className={`relative ${ICON_BUTTON}`}
+          aria-label={
+            hasUnread
+              ? "Toggle side panel (new messages)"
+              : "Toggle side panel"
+          }
         >
           <AnimatePresence initial={false} mode="wait">
-            <motion.div
-              key={isSidePanelOpen ? 'open' : 'closed'}
+            <motion.span
+              key={isSidePanelOpen ? "open" : "closed"}
               initial={{ opacity: 0, rotate: -90 }}
               animate={{ opacity: 1, rotate: 0 }}
               exit={{ opacity: 0, rotate: 90 }}
               transition={{ duration: 0.2 }}
               className="flex items-center justify-center"
             >
-              {isSidePanelOpen ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
-            </motion.div>
+              {isSidePanelOpen ? (
+                <PanelRightClose className="h-4 w-4" />
+              ) : (
+                <PanelRightOpen className="h-4 w-4" />
+              )}
+            </motion.span>
           </AnimatePresence>
           {hasUnread && (
             <span
-              className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent"
+              className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent"
               aria-hidden
             />
           )}
           <span className="sr-only">
             {hasUnread
-              ? 'Toggle side panel (new messages)'
-              : 'Toggle side panel'}
+              ? "Toggle side panel (new messages)"
+              : "Toggle side panel"}
           </span>
-        </Button>
+        </button>
       </div>
     </header>
   );

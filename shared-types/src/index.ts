@@ -164,6 +164,8 @@ export interface ClientCheckGameState {
   turnDeadline: number | null;
   /** Length of a full turn-timer window, for rendering countdowns. */
   turnTimerMs: number;
+  /** Seat capacity of this table (lobby renders empty seats up to this). */
+  maxPlayers: number;
   /**
    * Server wall-clock at redaction time. All absolute timestamps in this
    * state (turnDeadline, matchingOpportunity.startTimestamp,

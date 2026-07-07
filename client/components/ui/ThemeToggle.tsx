@@ -33,7 +33,7 @@ export function ThemeToggle() {
         variant="ghost"
         size="icon"
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="h-10 w-10 min-w-[40px] flex items-center justify-center rounded-full border border-hairline bg-surface hover:bg-surface-2 p-0"
+        className="h-9 w-9 min-w-[36px] flex items-center justify-center rounded-full border border-hairline bg-surface hover:bg-surface-2 p-0"
         style={{lineHeight: 1}}
       >
         <motion.div
