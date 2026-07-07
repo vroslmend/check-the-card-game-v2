@@ -24,7 +24,6 @@ import {
   Ban,
   Eye,
   Zap,
-  Minimize2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -78,9 +77,6 @@ const selectStripContext = (state: UIMachineSnapshot) => {
     matchingPlayerIds:
       currentGameState?.matchingOpportunity?.remainingPlayerIDs ?? null,
     publicPeekerId: currentGameState?.publicPeek?.peekerId ?? null,
-    noBlockingWindow:
-      !currentGameState?.matchingOpportunity &&
-      (currentGameState?.abilityStack?.length ?? 0) === 0,
   };
 };
 
@@ -261,14 +257,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
     gameStage,
     matchingPlayerIds,
     publicPeekerId,
-    noBlockingWindow,
   } = useUISelector(selectStripContext);
-
-  const canTidy =
-    isLocalPlayer &&
-    !player.isLocked &&
-    noBlockingWindow &&
-    player.hand.some((c) => c === null);
 
   const { send } = useUIActorRef();
   const { setMatchAttempt, matchAttempt } = useActionController();
@@ -333,17 +322,6 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         isInitialPeekWindow={initialPeekWindowActive}
         compact={compact}
       />
-      {canTidy && (
-        <button
-          type="button"
-          onClick={() => send({ type: PlayerActionType.TIDY_HAND })}
-          aria-label="Tidy your hand: close the gaps"
-          className="flex items-center gap-1 rounded-full border border-hairline bg-surface px-2 py-0.5 text-[11px] font-semibold text-ink-muted transition-colors hover:text-ink"
-        >
-          <Minimize2 className="h-3 w-3" />
-          Tidy
-        </button>
-      )}
       <PlayerHand
         player={player}
         isLocalPlayer={isLocalPlayer}

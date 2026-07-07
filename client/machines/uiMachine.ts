@@ -127,8 +127,7 @@ export type UIMachineEvents =
   | { type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }
   | { type: PlayerActionType.CALL_CHECK }
   | { type: PlayerActionType.DECLARE_READY_FOR_PEEK }
-  | { type: PlayerActionType.PLAY_AGAIN }
-  | { type: PlayerActionType.TIDY_HAND };
+  | { type: PlayerActionType.PLAY_AGAIN };
 
 /** Adopt a new server-clock offset sample only when it differs from the
  *  current one by more than transport jitter. Each sample is true skew +
@@ -849,7 +848,6 @@ export const uiMachine = setup({
           actions: ["markActionPending", "emitPlayerAction"],
         },
         PLAY_AGAIN: { actions: ["markActionPending", "emitPlayerAction"] },
-        TIDY_HAND: { actions: ["markActionPending", "emitPlayerAction"] },
         DISMISS_MODAL: { actions: "dismissModal" },
         SKIP_ABILITY_STAGE: {
           actions: ["markActionPending", "emitSkipAbilityStage"],

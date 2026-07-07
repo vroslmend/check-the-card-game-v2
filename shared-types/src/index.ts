@@ -336,7 +336,6 @@ export enum PlayerActionType {
   CALL_CHECK = "CALL_CHECK",
   DECLARE_READY_FOR_PEEK = "DECLARE_READY_FOR_PEEK",
   PLAY_AGAIN = "PLAY_AGAIN",
-  TIDY_HAND = "TIDY_HAND",
 
   // Ability Resolution
   USE_ABILITY = "USE_ABILITY",

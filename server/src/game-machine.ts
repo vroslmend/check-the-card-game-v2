@@ -118,7 +118,12 @@ const compactFullColumns = (hand: (Card | null)[]): (Card | null)[] => {
   if (kept.length === C) return hand;
   const tops = kept.map((c) => c[0]);
   const bottoms = kept.map((c) => c[1]);
-  while (bottoms.length && bottoms[bottoms.length - 1] === null) bottoms.pop();
+  // Trim at most one trailing empty bottom slot (the structural hole of an
+  // odd-sized hand). The result must stay at exactly kept.length columns so
+  // no surviving card changes rows; popping more than one shrinks the slot
+  // count past a column boundary and re-wraps the grid, which reads as a
+  // shuffle.
+  if (bottoms.length && bottoms[bottoms.length - 1] === null) bottoms.pop();
   return [...tops, ...bottoms];
 };
 
@@ -156,7 +161,6 @@ type PlayerActionEvents =
       type: PlayerActionType.SEND_CHAT_MESSAGE;
       payload: Omit<ChatMessage, "id" | "timestamp">;
     }
-  | { type: PlayerActionType.TIDY_HAND; playerId: PlayerId }
   | { type: PlayerActionType.LEAVE_GAME; playerId: PlayerId }
   | {
       type: PlayerActionType.REMOVE_PLAYER;
@@ -1953,37 +1957,6 @@ export const gameMachine = setup({
     // whose disconnect paused the game.
     PLAYER_RECONNECTED: {
       actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
-    },
-    [PlayerActionType.TIDY_HAND]: {
-      guard: ({ context, event }) => {
-        assertEvent(event, PlayerActionType.TIDY_HAND);
-        const player = context.players[event.playerId];
-        return (
-          !!player &&
-          !player.isLocked &&
-          (context.gameStage === GameStage.PLAYING ||
-            context.gameStage === GameStage.FINAL_TURNS) &&
-          !context.matchingOpportunity &&
-          context.abilityStack.length === 0
-        );
-      },
-      actions: [
-        assign(({ context, event }) => {
-          assertEvent(event, PlayerActionType.TIDY_HAND);
-          const player = context.players[event.playerId];
-          if (!player) return {};
-          return {
-            players: {
-              ...context.players,
-              [event.playerId]: {
-                ...player,
-                hand: player.hand.filter((c) => c !== null),
-              },
-            },
-          };
-        }),
-        "broadcastGameState",
-      ],
     },
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: enqueueActions(({ context, event, enqueue }) => {
