@@ -30,6 +30,8 @@ const SPRITES = {
 export type SpriteName = keyof typeof SPRITES;
 
 const MUTE_KEY = "check:muted";
+const VOLUME_KEY = "check:volume";
+const DEFAULT_VOLUME = 0.7;
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -41,9 +43,31 @@ export const isMuted = (): boolean => {
   return localStorage.getItem(MUTE_KEY) === "1";
 };
 
+/** Master loudness 0..1, independent of mute. Defaults to a comfortable level. */
+export const getVolume = (): number => {
+  if (typeof window === "undefined") return DEFAULT_VOLUME;
+  const raw = localStorage.getItem(VOLUME_KEY);
+  if (raw === null) return DEFAULT_VOLUME;
+  const v = Number(raw);
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : DEFAULT_VOLUME;
+};
+
+/** The gain the master node should hold given mute + volume state. */
+const effectiveGain = (): number => (isMuted() ? 0 : getVolume());
+
+const applyGain = () => {
+  if (master && ctx) master.gain.setValueAtTime(effectiveGain(), ctx.currentTime);
+};
+
 export const setMuted = (muted: boolean) => {
   localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
-  if (master && ctx) master.gain.setValueAtTime(muted ? 0 : 1, ctx.currentTime);
+  applyGain();
+};
+
+export const setVolume = (volume: number) => {
+  const v = Math.min(1, Math.max(0, volume));
+  localStorage.setItem(VOLUME_KEY, String(v));
+  applyGain();
 };
 
 export const initSounds = () => {
@@ -55,7 +79,7 @@ export const initSounds = () => {
   if (!AC) return;
   ctx = new AC();
   master = ctx.createGain();
-  master.gain.value = isMuted() ? 0 : 1;
+  master.gain.value = effectiveGain();
   master.connect(ctx.destination);
   // Autoplay policy: resume on the first gesture.
   const unlock = () => {

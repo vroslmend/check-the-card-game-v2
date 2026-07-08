@@ -9,6 +9,7 @@ import {
   Copy,
   PanelRightClose,
   PanelRightOpen,
+  Volume1,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -19,7 +20,13 @@ import {
 } from "@/context/GameUIContext";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { BrandMark } from "@/components/ui/BrandMark";
-import { isMuted, play, setMuted } from "@/lib/sounds";
+import {
+  getVolume,
+  isMuted,
+  play,
+  setMuted,
+  setVolume,
+} from "@/lib/sounds";
 
 const selectGameHeaderProps = (state: UIMachineSnapshot) => ({
   gameId: state.context.gameId,
@@ -57,8 +64,10 @@ export const GameHeader = () => {
   // effect syncs the real preference after mount — no hydration mismatch
   // when the user has previously unmuted.
   const [muted, setMutedState] = React.useState(true);
+  const [volume, setVolumeState] = React.useState(0.7);
   React.useEffect(() => {
     setMutedState(isMuted());
+    setVolumeState(getVolume());
   }, []);
   const toggleMute = () => {
     setMuted(!muted);
@@ -66,6 +75,17 @@ export const GameHeader = () => {
     // Audible confirmation exactly when turning sound ON (gain is already
     // open by the time this fires; muting stays silent).
     play("click");
+  };
+  // Dragging the slider is the finer control: 0 mutes, any positive value
+  // unmutes so raising the level always makes sound audible.
+  const changeVolume = (next: number) => {
+    setVolume(next);
+    setVolumeState(next);
+    const shouldMute = next === 0;
+    if (shouldMute !== muted) {
+      setMuted(shouldMute);
+      setMutedState(shouldMute);
+    }
   };
 
   return (
@@ -99,17 +119,37 @@ export const GameHeader = () => {
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          onClick={toggleMute}
-          className={ICON_BUTTON}
-          aria-label={muted ? "Turn sound on" : "Turn sound off"}
-        >
-          {muted ? (
-            <VolumeX className="h-4 w-4" />
-          ) : (
-            <Volume2 className="h-4 w-4" />
-          )}
-        </button>
+        <div className="group relative">
+          <button
+            onClick={toggleMute}
+            className={ICON_BUTTON}
+            aria-label={muted ? "Turn sound on" : "Turn sound off"}
+          >
+            {muted ? (
+              <VolumeX className="h-4 w-4" />
+            ) : volume < 0.5 ? (
+              <Volume1 className="h-4 w-4" />
+            ) : (
+              <Volume2 className="h-4 w-4" />
+            )}
+          </button>
+          {/* Volume slider reveals to the left of the button, inline in the
+              header bar, on hover/focus of the button group. */}
+          <div className="pointer-events-none absolute right-full top-1/2 z-30 -translate-y-1/2 pr-2 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+            <div className="flex items-center gap-2 rounded-full border border-hairline bg-surface px-3 py-2 shadow-lg">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={muted ? 0 : volume}
+                onChange={(e) => changeVolume(Number(e.target.value))}
+                aria-label="Sound volume"
+                className="h-1 w-24 cursor-pointer accent-accent"
+              />
+            </div>
+          </div>
+        </div>
 
         <ThemeToggle />
 
