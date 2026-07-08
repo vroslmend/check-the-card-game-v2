@@ -1360,11 +1360,26 @@ export const gameMachine = setup({
       let newCheckDetails = context.checkDetails;
       let gameStage = context.gameStage;
       if (handWillBeEmpty && !context.checkDetails) {
-        const callerIndex = context.turnOrder.indexOf(playerId);
+        // The final-turns order must continue from where play actually IS — the
+        // current seat — not from the checker's seat. A match can empty a hand
+        // OUT OF TURN (rules 7: anyone unlocked may match, including a player
+        // who is not the current one), so the auto-checker is not necessarily
+        // the current player. A self-called CALL_CHECK can anchor on the caller
+        // because its guard forces caller === currentPlayer; a match cannot.
+        // Anchoring on the checker would replay the current player immediately
+        // and bump the real next seat: e.g. seats [A, B, C], it is B's turn, and
+        // A matches to empty — caller-anchored yields [B, C] (B moves twice);
+        // seat-anchored correctly yields [C, B].
+        // Include the current seat at the END of the wrap (everyone but the
+        // checker gets one last turn; the player whose turn it was comes last).
+        // Drop the checker explicitly with `id !== playerId`: their isLocked was
+        // just set in the `newPlayers` draft above, not in `context.players`, so
+        // the isLocked filter alone would not yet exclude them.
+        const anchorIndex = context.turnOrder.indexOf(context.currentPlayerId!);
         const finalTurnOrder = [
-          ...context.turnOrder.slice(callerIndex + 1),
-          ...context.turnOrder.slice(0, callerIndex),
-        ].filter((id) => !context.players[id]!.isLocked);
+          ...context.turnOrder.slice(anchorIndex + 1),
+          ...context.turnOrder.slice(0, anchorIndex + 1),
+        ].filter((id) => id !== playerId && !context.players[id]!.isLocked);
         newCheckDetails = {
           callerId: playerId,
           finalTurnOrder,
