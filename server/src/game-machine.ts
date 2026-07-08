@@ -1292,6 +1292,11 @@ export const gameMachine = setup({
             (id) => !context.players[id]!.isLocked,
           ),
           startTimestamp: Date.now(),
+          // Ship the authoritative window length so the client bar animates
+          // over the same duration the server's matchingTimerActor fires on
+          // (which is env-configurable) instead of a hardcoded constant that
+          // silently diverges in prod and ends the bar early (~75%).
+          durationMs: MATCHING_STAGE_DURATION_MS,
         },
       };
     }),

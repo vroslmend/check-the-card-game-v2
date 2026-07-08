@@ -144,6 +144,9 @@ export interface ClientCheckGameState {
     originalPlayerID: PlayerId;
     remainingPlayerIDs: PlayerId[];
     startTimestamp?: number;
+    /** Server-authoritative window length; clients animate over this instead
+     *  of a hardcoded constant so the bar can't diverge from the server. */
+    durationMs?: number;
   } | null;
   checkDetails: {
     callerId: PlayerId | null;

@@ -50,6 +50,7 @@ export interface GameContext {
     originalPlayerID: PlayerId;
     remainingPlayerIDs: PlayerId[];
     startTimestamp: number;
+    durationMs: number;
   } | null;
   abilityStack: ServerActiveAbility[];
   checkDetails: {

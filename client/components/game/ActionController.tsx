@@ -260,11 +260,12 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       const serverNowEst = Date.now() + props.serverClockOffset;
       const elapsedMs =
         serverNowEst - (matchingOpportunity.startTimestamp ?? serverNowEst);
-      const remainingMs = Math.max(0, MATCHING_STAGE_DURATION_MS - elapsedMs);
-      const progressPercent = Math.min(
-        (elapsedMs / MATCHING_STAGE_DURATION_MS) * 100,
-        100,
-      );
+      // Prefer the server-shipped window length; fall back to the local
+      // constant only for older payloads. This is what keeps the bar from
+      // ending early when the server's env-configured duration differs.
+      const windowMs = matchingOpportunity.durationMs ?? MATCHING_STAGE_DURATION_MS;
+      const remainingMs = Math.max(0, windowMs - elapsedMs);
+      const progressPercent = Math.min((elapsedMs / windowMs) * 100, 100);
       actions.push(
         createPassMatchAction(
           () => sendEvent({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }),
@@ -391,7 +392,12 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         }
         break;
       case GameStage.INITIAL_PEEK:
-        if (!localPlayer.isReady) {
+        // Only offer "Ready" while the pre-peek window is still open. Once the
+        // peek has started (peekExpireAt set — all-ready or the auto-advance
+        // timer fired), the server ignores a late ready, so a lingering button
+        // just strands the action bar as pending. Mirrors the prompt at the
+        // GameStage.INITIAL_PEEK branch of getPromptText.
+        if (!localPlayer.isReady && !props.peekExpireAt) {
           actions.push(
             createReadyForPeekAction(() =>
               sendEvent({ type: PlayerActionType.DECLARE_READY_FOR_PEEK }),
