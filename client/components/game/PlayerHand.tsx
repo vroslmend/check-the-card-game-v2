@@ -9,7 +9,7 @@ import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
 import { CARD_RING_GEOMETRY } from "../cards/cardRing";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Eye, ArrowLeftRight, Equal, type LucideIcon } from "lucide-react";
+import { Eye, ArrowLeftRight, Equal, Plus, type LucideIcon } from "lucide-react";
 
 /** Corner badge on a ringed card slot: surface chip, ink glyph. The icon
  *  distinguishes the action (eye = peek, arrows = swap); the ring color says
@@ -45,6 +45,7 @@ const selectContext = (state: UIMachineSnapshot) => {
     selectedSwapTargets: ability?.selectedSwapTargets,
     publicPeek: state.context.currentGameState?.publicPeek ?? null,
     publicSwap: state.context.currentGameState?.publicSwap ?? null,
+    publicPenalty: state.context.currentGameState?.publicPenalty ?? null,
     serverClockOffset: state.context.serverClockOffset,
     localPlayerId: state.context.localPlayerId,
     gameStage: state.context.currentGameState?.gameStage ?? null,
@@ -69,6 +70,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     selectedSwapTargets,
     publicPeek,
     publicSwap,
+    publicPenalty,
     serverClockOffset,
     localPlayerId,
     gameStage,
@@ -98,6 +100,32 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   }, [publicSwap, serverClockOffset]);
   const swapIndicatorLive =
     !!publicSwap && expiredSwapAt !== publicSwap.occurredAt;
+
+  // Penalty highlight: same momentary-flash pattern as the swap ring — show
+  // WHERE a failed-match penalty card landed for a few seconds, on the server
+  // clock, then drop it.
+  const PENALTY_RING_VISIBLE_MS = 4000;
+  const [expiredPenaltyAt, setExpiredPenaltyAt] = React.useState<number | null>(
+    null,
+  );
+  React.useEffect(() => {
+    if (!publicPenalty) return;
+    const remaining =
+      publicPenalty.occurredAt +
+      PENALTY_RING_VISIBLE_MS -
+      (Date.now() + serverClockOffset);
+    if (remaining <= 0) {
+      setExpiredPenaltyAt(publicPenalty.occurredAt);
+      return;
+    }
+    const t = setTimeout(
+      () => setExpiredPenaltyAt(publicPenalty.occurredAt),
+      remaining,
+    );
+    return () => clearTimeout(t);
+  }, [publicPenalty, serverClockOffset]);
+  const penaltyIndicatorLive =
+    !!publicPenalty && expiredPenaltyAt !== publicPenalty.occurredAt;
 
   // SCORING/GAMEOVER broadcasts reveal every hand; the reveal now happens ON
   // the table — cards flip in place in a ripple (tableIndex*180 +
@@ -247,6 +275,14 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             (t) => t.playerId === player.id && t.cardIndex === index,
           );
 
+        // A failed-match penalty card just landed in this slot — everyone
+        // (including the penalized player) sees WHERE the new card went, never
+        // its face.
+        const showPenaltyIndicator =
+          penaltyIndicatorLive &&
+          publicPenalty!.playerId === player.id &&
+          publicPenalty!.cardIndex === index;
+
         return (
           <div
             key={card.id}
@@ -293,11 +329,20 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               <AnimatePresence>
                 {/* Your own selection — accent ring; the badge icon (eye =
                     peek, arrows = swap, equals = match) says which action,
-                    never the hue. */}
+                    never the hue. The near-white ring-offset casing keeps the
+                    accent ring legible on a red card back (bg-accent) — without
+                    it, red-on-red made the selection invisible. */}
                 {isSelected && (
                   <motion.div
                     key="sel-ring"
-                    className={cn(CARD_RING_GEOMETRY, "ring-[3px] ring-accent")}
+                    className={cn(
+                      CARD_RING_GEOMETRY,
+                      // Layered casing: a 2px near-white (accent-ink) band hugs
+                      // the card edge, then a 3px accent band beyond it. The
+                      // white separator is what makes the accent ring legible on
+                      // a red card back (plain ring-accent was red-on-red).
+                      "shadow-[0_0_0_2px_hsl(var(--accent-ink)),0_0_0_5px_hsl(var(--accent))]",
+                    )}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
@@ -332,6 +377,20 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
                     <SlotBadge icon={ArrowLeftRight} />
+                  </motion.div>
+                )}
+                {/* A penalty card just landed here — informational ink ring +
+                    plus badge, shown to everyone (a card was added). */}
+                {showPenaltyIndicator && (
+                  <motion.div
+                    key="penalty-indicator"
+                    className={cn(CARD_RING_GEOMETRY, "ring-[2px] ring-ink")}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
+                    <SlotBadge icon={Plus} />
                   </motion.div>
                 )}
               </AnimatePresence>
