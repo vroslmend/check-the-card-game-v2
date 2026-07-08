@@ -10,35 +10,49 @@
    the landing page via `hsl(var(--x))` — resolve from one source of truth.
    ============================================================================ */
 :root {
-  /* Semantic palette — light "Chalk" */
-  --ground: 38 11% 83%;
-  /* A hair off pure white: keeps cards reading white but drops the clinical
-     maximal step against the warm ground. */
-  --surface: 38 25% 97%;
-  --surface-2: 38 12% 88%;
-  --ink: 34 10% 14%;
-  /* 38 7% 37% clears WCAG AA for small text on ground/surface/surface-2
-     (the old 52% lightness measured 2.74:1 on ground — below even the
-     large-text floor — and carried the action prompt). */
-  --ink-muted: 38 7% 37%;
-  /* Darkened for parity with dark's hairline<->ground separation, so the 1px
-     border actually defines every card's rounded edge instead of vanishing
-     into the ground (the light-theme "straight edge"). */
-  --hairline: 36 10% 68%;
-  --accent: 0 49% 50%;
-  --accent-ink: 23 100% 97%;
+  /* ==========================================================================
+     LIGHT palette — "Warm Chalk". Eight semantic roles; every other color in
+     the app (the shadcn bridge below and the Tailwind --color-* utilities)
+     derives from these via var(), so THIS is the one place to reskin light.
+     Dark ("Slate") overrides only these same eight in .dark.
 
-  /* Card lift shadow (travel/place). Framer can't tween a var()-based
-     box-shadow, so the fade is a CSS transition driven by [data-inflight]
-     (see .card-lift). Theme-tokened because a fixed black shadow was
-     invisible on the dark ground yet harsh — and popped — on the light one. */
-  --card-rest-shadow: 0 0 0 0 hsl(34 10% 14% / 0);
-  --card-lift-shadow: 0 10px 22px -4px hsl(34 18% 18% / 0.28);
+     ROLE MAP — what each token is for (and what to reach for, not what to
+     avoid). Neutral ramp is monotonic: ground < surface-2 < surface.
+       --ground      table / page background — the felt under everything
+       --surface     things raised ON the ground: cards, panels, popovers, chips
+       --surface-2   secondary surface AND the neutral-interaction background —
+                     hover / selected / secondary buttons. ALWAYS paired w/ --ink
+       --ink         primary text & icons
+       --ink-muted   secondary text (verified AA on ground/surface/surface-2)
+       --hairline    borders & dividers; the 1px that defines a card's edge
+       --accent      the ONE brand hue — primary actions, destructive, focus
+                     ring, red suits, "yours to act". Neutral hovers do NOT use
+                     accent; they use surface-2 + ink.
+       --accent-ink  text & icons ON accent
+     Contrast verified WCAG AA for all text pairs (ink/ink-muted on every
+     surface; accent-ink on accent; red suit accent on surface).
+     ========================================================================== */
+  --ground: 40 26% 92%;
+  --surface: 40 40% 99%;
+  --surface-2: 40 22% 95%;
+  --ink: 30 12% 15%;
+  --ink-muted: 34 8% 39%;
+  --hairline: 36 15% 78%;
+  --accent: 4 60% 51%;
+  --accent-ink: 30 100% 98%;
 
-  /* shadcn vars re-pointed onto the palette. One accent only: the red is both
-     the design accent and shadcn's interactive / hover / destructive color
-     (so shadcn menu/select hover states tint accent until Phase C/D restyles
-     those primitives). */
+  /* Elevation — tokened so shadows adapt per theme (a fixed black shadow was
+     invisible on dark yet harsh on light). Framer can't tween a var()-based
+     box-shadow, so .card-lift CSS-transitions these on [data-inflight]. */
+  --card-rest-shadow: 0 0 0 0 hsl(30 12% 15% / 0);
+  --card-lift-shadow: 0 10px 24px -6px hsl(30 25% 22% / 0.20);
+
+  /* shadcn bridge — re-points shadcn's own vars onto the palette so its
+     primitives (button, select, dropdown, dialog…) resolve from one source.
+     App code should prefer the semantic utilities (bg-ground/surface/accent,
+     text-ink…); these exist for the primitives. NOTE: --accent here is the
+     brand red by design (this app has one hue), so neutral interaction on the
+     primitives is done with surface-2 + ink at the call site, never bg-accent. */
   --background: var(--ground);
   --foreground: var(--ink);
   --card: var(--surface);
@@ -81,7 +95,9 @@
   --accent-ink: 23 100% 97%;
 
   /* A black shadow reads as nothing on the near-black ground; deepen it so a
-     lifted card still separates from the table in dark. */
+     lifted card still separates from the table in dark. Rest shares the black
+     hue so the .card-lift transition interpolates cleanly from transparent. */
+  --card-rest-shadow: 0 0 0 0 hsl(0 0% 0% / 0);
   --card-lift-shadow: 0 14px 30px -6px hsl(0 0% 0% / 0.6);
 
   /* Custom cursor variables (landing) */
