@@ -24,7 +24,7 @@
     "doc": "docs"
   },
   "scripts": {
-    "build": "npm run build -w shared-types && npm run build -w server && npm run build -w client",
+    "build": "npm run build -w shared-types && concurrently -n server,client \"npm run build -w server\" \"npm run build -w client\"",
     "build:server-deps": "npm run build:shared && npm run build:server",
     "build:server": "npm run build -w server",
     "build:client": "npm run build -w client",
