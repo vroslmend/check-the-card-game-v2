@@ -144,6 +144,8 @@ export const generatePlayerView = (
     publicPeek: fullGameContext.publicPeek,
     // Positions only — card faces are never part of publicSwap.
     publicSwap: fullGameContext.publicSwap,
+    // Position only — the penalty card's face stays hidden from others.
+    publicPenalty: fullGameContext.publicPenalty,
     turnDeadline: fullGameContext.turnDeadline,
     turnTimerMs: fullGameContext.turnTimerMs,
     maxPlayers: fullGameContext.maxPlayers,

@@ -11,6 +11,7 @@ import {
   ChatMessage,
   PublicPeekInfo,
   PublicSwapInfo,
+  PublicPenaltyInfo,
 } from "shared-types";
 
 export interface ServerActiveAbility extends Omit<ActiveAbility, "stage"> {
@@ -83,6 +84,7 @@ export interface GameContext {
   winnerId: PlayerId | null;
   publicPeek: PublicPeekInfo | null;
   publicSwap: PublicSwapInfo | null;
+  publicPenalty: PublicPenaltyInfo | null;
   turnDeadline: number | null;
   turnTimerMs: number;
 }

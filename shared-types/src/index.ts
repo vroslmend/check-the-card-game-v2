@@ -119,6 +119,18 @@ export interface PublicSwapInfo {
 }
 
 /**
+ * The slot a failed-match PENALTY card just landed in, visible to ALL players
+ * (real-life table parity: everyone sees a card was dealt into a hand and
+ * where — never its face). Momentary: clients hide it a few seconds after
+ * occurredAt.
+ */
+export interface PublicPenaltyInfo {
+  playerId: PlayerId;
+  cardIndex: number;
+  occurredAt: number;
+}
+
+/**
  * The redacted, client-safe version of the game's state.
  * This is the primary data structure the client will use to render the game.
  */
@@ -170,6 +182,7 @@ export interface ClientCheckGameState {
   discardTopIsLocked: boolean;
   publicPeek: PublicPeekInfo | null;
   publicSwap: PublicSwapInfo | null;
+  publicPenalty: PublicPenaltyInfo | null;
   /** When the current timed decision window (draw/discard/ability) expires. */
   turnDeadline: number | null;
   /** Length of a full turn-timer window, for rendering countdowns. */
@@ -376,6 +389,13 @@ export interface ActiveAbility {
   stage: "peeking" | "swapping" | "done";
   playerId: PlayerId;
   sourceCard: Card;
+  /** Peeks still owed on this (possibly pooled) ability. When the SAME player
+   *  matches two peek-capable cards (e.g. 2× King), the abilities pool: peeks
+   *  sum (2+2 = 4) and are taken all at once before any swap. */
+  remainingPeeks?: number;
+  /** Swaps still owed. Undefined = a single swap. Pooled combos set it >1
+   *  (e.g. 2× King = 2 swaps taken after the peeks). */
+  remainingSwaps?: number;
 }
 
 export type PeekAbilityPayload = {
@@ -423,4 +443,7 @@ export interface ClientAbilityContext {
   validPeekTargets?: PeekTarget[];
   validSwapTargets?: SwapTarget[];
   playerId: PlayerId;
+  /** Swaps still owed on a pooled combo. The client keys a context rebuild on
+   *  this so the swap-selection UI re-enters for each swap of a 2× combo. */
+  remainingSwaps?: number;
 }

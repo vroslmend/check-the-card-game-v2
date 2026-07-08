@@ -471,19 +471,23 @@ export const uiMachine = setup({
           // the previous ability's selections.
           currentClientAbility.sourceCard.id !==
             topServerAbility.sourceCard.id ||
-          currentClientAbility.stage !== topServerAbility.stage
+          currentClientAbility.stage !== topServerAbility.stage ||
+          // Pooled combos take multiple swaps on ONE ability (same sourceCard,
+          // same "swapping" stage). Re-key on remainingSwaps so the swap-target
+          // selection resets between each swap of the combo.
+          currentClientAbility.remainingSwaps !== topServerAbility.remainingSwaps
         ) {
-          const { type, stage, playerId, sourceCard } = topServerAbility;
+          const { type, stage, playerId, sourceCard, remainingPeeks } =
+            topServerAbility;
           let maxPeekTargets = 0;
           let maxSwapTargets = 0;
 
           switch (type) {
             case "king":
-              maxPeekTargets = 2;
-              maxSwapTargets = 2;
-              break;
             case "peek":
-              maxPeekTargets = 1;
+              // Pooled peeks are taken all at once, so the cap is the pooled
+              // total the server ships (2 for a lone King, 4 for 2× King, etc.).
+              maxPeekTargets = remainingPeeks ?? 0;
               maxSwapTargets = 2;
               break;
             case "swap":
@@ -498,6 +502,7 @@ export const uiMachine = setup({
             sourceCard,
             maxPeekTargets,
             maxSwapTargets,
+            remainingSwaps: topServerAbility.remainingSwaps,
             selectedPeekTargets: [],
             selectedSwapTargets: [],
             peekedCards: [],

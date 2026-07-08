@@ -461,6 +461,22 @@ const baseTurnStateNode = {
             ],
           },
           {
+            // Pooled combo, NON-final swap: another swap still follows on the
+            // same ability (remainingSwaps > 1). Re-enter like the peek branch
+            // so the next swap gets a fresh decision window and re-armed timer,
+            // instead of inheriting the finishing swap's stale deadline. The
+            // ability stays on the stack (performAbilityAction only decrements).
+            guard: and([
+              "isValidAbilityAction",
+              ({ context, event }: { context: GameContext; event: any }) =>
+                event.payload?.action === "swap" &&
+                (context.abilityStack.at(-1)?.remainingSwaps ?? 1) > 1,
+            ]),
+            target: "ability",
+            reenter: true,
+            actions: ["performAbilityAction"],
+          },
+          {
             // Swap / skip-swap: pops the ability; stay targetless and let
             // the always-transition advance the turn exactly as before.
             guard: "isValidAbilityAction",
@@ -1000,7 +1016,13 @@ export const gameMachine = setup({
           }
           logAction(`${playerName} used Peek.`);
         } else if (payload.action === "swap" && ability.stage === "swapping") {
-          draft.pop();
+          // Pooled combo: consume one swap and stay in the swapping stage for
+          // the next one; only pop the ability when the last swap is done.
+          if (ability.remainingSwaps && ability.remainingSwaps > 1) {
+            ability.remainingSwaps -= 1;
+          } else {
+            draft.pop();
+          }
           logAction(`${playerName} used Swap.`);
         }
       });
@@ -1125,6 +1147,7 @@ export const gameMachine = setup({
         gameStage: GameStage.DEALING,
         publicPeek: null,
         publicSwap: null,
+        publicPenalty: null,
         turnDeadline: null,
       };
     }),
@@ -1370,7 +1393,35 @@ export const gameMachine = setup({
         };
         if (type === "king") matcherAbility.remainingPeeks = 2;
         else if (type === "peek") matcherAbility.remainingPeeks = 1;
-        newAbilityStack = [...context.abilityStack, matcherAbility];
+
+        // Same-player combo pooling: if this player matched a peek-capable card
+        // (King/Queen) onto their OWN peek-capable ability already on top of the
+        // stack, POOL them into one ability — all peeks first, then all swaps
+        // (real-life 2× King = 4 peeks then 2 swaps). When the top belongs to a
+        // DIFFERENT player, or either side is a plain swap (Jack), keep them as
+        // separate stack entries so they resolve linearly, one owner at a time.
+        const isPeekCapable = (t: AbilityType) => t === "king" || t === "peek";
+        const top = context.abilityStack.at(-1);
+        if (
+          top &&
+          top.playerId === playerId &&
+          isPeekCapable(top.type) &&
+          isPeekCapable(matcherAbility.type)
+        ) {
+          newAbilityStack = produce(context.abilityStack, (draft) => {
+            const merged = draft.at(-1)!;
+            merged.remainingPeeks =
+              (merged.remainingPeeks ?? 0) + (matcherAbility.remainingPeeks ?? 0);
+            // Each peek-capable ability owes one swap after its peeks; pool them.
+            merged.remainingSwaps = (merged.remainingSwaps ?? 1) + 1;
+            // Peeks come first for the whole pool; keep the discarder's stable
+            // sourceCard (already the top's) so the peek→swap timer and the
+            // client's context key stay correlated.
+            merged.stage = "peeking";
+          });
+        } else {
+          newAbilityStack = [...context.abilityStack, matcherAbility];
+        }
       }
 
       const matchedRankName = formatRankForLog(cardFromHand.rank);
@@ -1457,6 +1508,7 @@ export const gameMachine = setup({
         gameStage: GameStage.SCORING,
         publicPeek: null,
         publicSwap: null,
+        publicPenalty: null,
         turnDeadline: null,
       };
     }),
@@ -1646,12 +1698,19 @@ export const gameMachine = setup({
       const disqualified =
         context.players[playerId]!.hand.filter((c) => c !== null).length + 1 >=
         MAX_HAND_SIZE;
+      // Where the penalty card lands, so all clients can highlight the slot.
+      let penaltyIndex = 0;
       const updatedPlayers = produce(context.players, (draft) => {
         const player = draft[playerId]!;
         // Reuse the first empty gap if there is one, else grow the hand.
         const gap = player.hand.indexOf(null);
-        if (gap >= 0) player.hand[gap] = penaltyCard;
-        else player.hand.push(penaltyCard);
+        if (gap >= 0) {
+          player.hand[gap] = penaltyCard;
+          penaltyIndex = gap;
+        } else {
+          penaltyIndex = player.hand.length;
+          player.hand.push(penaltyCard);
+        }
         if (disqualified) {
           player.isLocked = true;
           player.status = PlayerStatus.DISQUALIFIED;
@@ -1686,6 +1745,14 @@ export const gameMachine = setup({
         deck: tempDeck,
         discardPile: tempDiscard,
         players: updatedPlayers,
+        // Highlight the slot the penalty card landed in for ALL players
+        // (position only — the face stays hidden, like swaps/peeks). Clients
+        // self-expire the ring after a few seconds.
+        publicPenalty: {
+          playerId,
+          cardIndex: penaltyIndex,
+          occurredAt: Date.now(),
+        },
         // A disqualified player is out of the current matching window too.
         matchingOpportunity:
           disqualified && context.matchingOpportunity
@@ -1988,6 +2055,7 @@ export const gameMachine = setup({
     errorState: null,
     publicPeek: null,
     publicSwap: null,
+    publicPenalty: null,
     turnDeadline: null,
     turnTimerMs: TURN_TIMER_MS,
   }),
