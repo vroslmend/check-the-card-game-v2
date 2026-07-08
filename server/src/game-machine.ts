@@ -42,7 +42,6 @@ const PEEK_TOTAL_DURATION_MS = parseInt(
   process.env.PEEK_DURATION_MS || "10000",
   10,
 );
-const PEEK_VIEW_DURATION_MS = 2000;
 const MATCHING_STAGE_DURATION_MS = parseInt(
   process.env.MATCHING_STAGE_DURATION_MS || "5000",
   10,
