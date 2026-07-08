@@ -76,11 +76,22 @@ export const VisualCardStack = ({
         className={cn(
           "relative w-[min(8vh,15vw)] aspect-[5/7] rounded-card",
           canInteract
-            ? "cursor-pointer ring-[1.5px] ring-accent transition-[filter] hover:brightness-110"
+            ? "cursor-pointer transition-[filter] hover:brightness-110"
             : "cursor-default",
           className,
         )}
       >
+        {/* Highlight as an inset accent border drawn OVER the stacked cards
+            rather than an outer ring: an outer ring left the card's own
+            hairline border visible as a gray seam between the ring and the
+            white face in light mode. Coplanar with (and above) that border,
+            this hugs the face cleanly and renders crisp at the corners. */}
+        {canInteract && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-[15] rounded-card border-2 border-accent"
+          />
+        )}
         {/* A static card under the animated top card keeps the pile visually
             stable while the top card flies away or a new one lands. */}
         {count > 1 && (
