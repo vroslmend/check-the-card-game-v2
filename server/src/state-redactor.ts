@@ -40,13 +40,21 @@ export const generatePlayerView = (
     const clientHand: (PublicCard | null)[] = serverPlayer.hand.map((card) => {
       // An empty gap stays an empty gap for everyone.
       if (card === null) return null;
-      // During scoring/gameover everyone can see all cards
+      // During scoring/gameover every hand is revealed for the final tally.
       if (revealAll) return card;
 
-      // Otherwise, only the owner sees their cards.
-      if (isViewingPlayer) return card;
-
-      // Opponents' cards remain hidden.
+      // A face-down card is hidden from EVERYONE, including its owner.
+      // "Check!" is a memory game: a player only ever learns their own cards
+      // through the initial peek and King/Queen ability peeks. Those are
+      // delivered out-of-band via the private INITIAL_PEEK_INFO /
+      // ABILITY_PEEK_RESULT socket events (the client tracks them in its own
+      // `visibleCards` state and re-hides the slot when they expire). Sending
+      // the owner their full hand here would let a cheating player read it
+      // straight off the websocket and nullify the memory challenge — the
+      // one piece of information the whole game is built on. Only the id
+      // travels, so the client can still key and animate the slot; the card a
+      // player is actively holding after a draw rides in pendingDrawnCard
+      // (below), not here.
       return { facedown: true as const, id: card.id };
     });
 
