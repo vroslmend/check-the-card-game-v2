@@ -80,6 +80,11 @@ export interface UIMachineContext {
   /** serverNow − client Date.now(), from the latest broadcast. Server
    *  timestamps convert to client-clock via `ts - serverClockOffset`. */
   serverClockOffset: number;
+  /** client Date.now() when the latest broadcast was applied. Paired with the
+   *  broadcast's serverNow, this anchors short countdowns (the 5s match window)
+   *  to receipt time — immune to device-clock skew AND the serverClockOffset
+   *  jitter gate, which together drifted the match ring to ~75% on prod. */
+  lastStateReceivedAt: number;
   modal: { type: "rejoin" | "error"; title: string; message: string } | null;
   /** Date.now() when the last game action was emitted; null once any state
    *  update lands. Drives the action bar's in-flight disable. */
@@ -224,6 +229,9 @@ export const uiMachine = setup({
           nextState?.serverNow,
         );
       },
+      // Stamp receipt time alongside the state it belongs to, so consumers can
+      // pair it with this broadcast's serverNow for skew/gate-free countdowns.
+      lastStateReceivedAt: () => Date.now(),
       localPlayerId: ({ context, event }) => {
         if (context.localPlayerId) return context.localPlayerId;
         if (event.type === "CLIENT_GAME_STATE_UPDATED") {
@@ -691,6 +699,7 @@ export const uiMachine = setup({
     reconnectionAttempts: 0,
     hasPassedMatch: false,
     serverClockOffset: 0,
+    lastStateReceivedAt: 0,
     modal: null,
     pendingActionSince: null,
   }),

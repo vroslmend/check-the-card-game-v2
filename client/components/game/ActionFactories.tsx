@@ -72,6 +72,8 @@ export const createPassMatchAction = (
   remainingMs: number = 0,
   disabled?: boolean,
   isPassed: boolean = false,
+  expireAt?: number,
+  durationMs?: number,
 ): Action => ({
   label: isPassed ? "Passed" : "Pass Match",
   onClick,
@@ -81,6 +83,8 @@ export const createPassMatchAction = (
   isProgressButton: true,
   progressPercent,
   remainingMs,
+  expireAt,
+  durationMs,
 });
 
 export const createAttemptMatchAction = (
