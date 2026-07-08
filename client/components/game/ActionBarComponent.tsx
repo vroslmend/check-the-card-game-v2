@@ -30,6 +30,14 @@ export interface Action {
   isProgressButton?: boolean;
   progressPercent?: number;
   remainingMs?: number;
+  /** Absolute deadline on THIS client's clock (server timestamp already
+   *  converted through serverClockOffset). When set, a circular progress ring
+   *  drives itself from the wall clock every frame, so it stays locked to the
+   *  server's window regardless of latency, re-renders, or tab backgrounding —
+   *  the fixed-duration tween drifted (ended ~75%) and flashed full on mount. */
+  expireAt?: number;
+  /** Full window length in ms, for the ring's fill fraction. */
+  durationMs?: number;
   progressFillClassName?: string;
   isCircularProgress?: boolean;
   progressLabelClassName?: string;

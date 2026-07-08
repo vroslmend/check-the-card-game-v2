@@ -93,6 +93,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       turnDeadline: null as number | null,
       turnTimerMs: 0,
       serverClockOffset: 0,
+      serverNow: 0,
+      lastStateReceivedAt: 0,
       isSidePanelOpen: false,
       hasModal: false,
     };
@@ -152,6 +154,8 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
     turnDeadline: currentGameState.turnDeadline,
     turnTimerMs: currentGameState.turnTimerMs,
     serverClockOffset: state.context.serverClockOffset,
+    serverNow: currentGameState.serverNow,
+    lastStateReceivedAt: state.context.lastStateReceivedAt,
     isSidePanelOpen: state.context.isSidePanelOpen,
     hasModal: !!state.context.modal,
   };
@@ -257,15 +261,28 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       // the starting point and remaining duration. startTimestamp is on the
       // SERVER's clock — convert through the tracked offset so every client
       // counts down from the same instant regardless of device clock skew.
-      const serverNowEst = Date.now() + props.serverClockOffset;
-      const elapsedMs =
-        serverNowEst - (matchingOpportunity.startTimestamp ?? serverNowEst);
       // Prefer the server-shipped window length; fall back to the local
       // constant only for older payloads. This is what keeps the bar from
       // ending early when the server's env-configured duration differs.
       const windowMs = matchingOpportunity.durationMs ?? MATCHING_STAGE_DURATION_MS;
-      const remainingMs = Math.max(0, windowMs - elapsedMs);
-      const progressPercent = Math.min((elapsedMs / windowMs) * 100, 100);
+      const startTs = matchingOpportunity.startTimestamp ?? props.serverNow;
+      // Receipt-anchored deadline. (serverNow − startTs) is how far the server
+      // was INTO the window when it sent this broadcast — both are the server's
+      // OWN clock, so their difference is exact regardless of device-clock skew.
+      // Count the rest of the window down from when THIS client received the
+      // broadcast (lastStateReceivedAt). This sidesteps serverClockOffset
+      // entirely — and its 1500ms jitter gate — which is what let the short 5s
+      // ring drift to ~75% while long turn timers looked fine. Only the one-way
+      // network latency (small) is unaccounted for.
+      const serverElapsedAtBroadcast = Math.max(0, props.serverNow - startTs);
+      const remainingAtBroadcast = Math.max(0, windowMs - serverElapsedAtBroadcast);
+      const expireAt =
+        (props.lastStateReceivedAt || Date.now()) + remainingAtBroadcast;
+      const remainingMs = Math.max(0, expireAt - Date.now());
+      const progressPercent = Math.min(
+        ((windowMs - remainingMs) / windowMs) * 100,
+        100,
+      );
       actions.push(
         createPassMatchAction(
           () => sendEvent({ type: PlayerActionType.PASS_ON_MATCH_ATTEMPT }),
@@ -273,6 +290,8 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
           remainingMs,
           false,
           hasPassedMatch,
+          expireAt,
+          windowMs,
         ),
       );
       return actions;
