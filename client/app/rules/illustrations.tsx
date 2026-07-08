@@ -3,6 +3,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { PlayingCard } from "@/components/cards/PlayingCard";
+import { CARD_RING_GEOMETRY } from "@/components/cards/cardRing";
 import { CardRank, Suit, type Card } from "shared-types";
 import { ArrowLeftRight, Eye, Lock, type LucideIcon } from "lucide-react";
 
@@ -48,7 +49,7 @@ const CornerChip = ({
 /** The informational ring — ink, never accent (accent means "yours to act
  *  on" at the table; these figures only inform). */
 const InkRing = ({ children }: { children?: ReactNode }) => (
-  <div className="pointer-events-none absolute inset-0.5 z-20 rounded-md ring-[2px] ring-ink">
+  <div className={cn(CARD_RING_GEOMETRY, "ring-[2px] ring-ink")}>
     {children}
   </div>
 );

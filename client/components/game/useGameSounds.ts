@@ -54,6 +54,7 @@ const selectSoundSignals = (state: UIMachineSnapshot) => {
     readyCount: playerList.filter((p) => p.isReady).length,
     abilityStackLen: gs?.abilityStack?.length ?? 0,
     publicSwapAt: gs?.publicSwap?.occurredAt ?? null,
+    publicPeekAt: gs?.publicPeek?.startedAt ?? null,
   };
 };
 
@@ -121,6 +122,14 @@ export function useGameSounds() {
     if (next) play("swap");
   });
 
+  // Ability peek (Queen / King) is announced room-wide: publicPeek is broadcast
+  // to every client, so all players hear the cue when anyone peeks — not just
+  // the peeker. Mirrors the swap trigger above. Initial-peek does NOT set
+  // publicPeek; that sound is handled locally by visibleCount below.
+  useDelta(s.publicPeekAt, (_prev, next) => {
+    if (next) play("peek");
+  });
+
   useDelta(s.hasPendingDraw, (prev, next) => {
     if (!prev && next) play("draw");
   });
@@ -130,7 +139,10 @@ export function useGameSounds() {
   });
 
   useDelta(s.visibleCount, (prev, next) => {
-    if (next > prev) play("peek");
+    // Initial-peek only: this is the LOCAL player viewing their own bottom two
+    // at round start. Ability peeks are announced room-wide via publicPeekAt
+    // above; gating here stops the peeker hearing "peek" twice during one.
+    if (next > prev && s.gameStage === GameStage.INITIAL_PEEK) play("peek");
   });
 
   useDelta(s.latestMatchId, (_prev, next) => {

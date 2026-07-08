@@ -55,8 +55,15 @@ const RECONNECT_TIMEOUT_MS = parseInt(
   process.env.RECONNECT_TIMEOUT_MS || "120000",
   10,
 );
+// Match the in-game reconnect grace (and the socket recovery window): a lobby
+// should survive a brief blip — a phone screen-lock or network hiccup routinely
+// exceeds a few seconds — and only evict a waiting player after the same 2min
+// forfeit window. The old 5s made an idle lobby *look* like it dropped you.
+// (Note: this only governs eviction of a DISCONNECTED player; a still-connected
+// idle lobby never tears down. Platform-level spindown is a separate, infra
+// concern — see the /health endpoint and hosting tier.)
 const LOBBY_DISCONNECT_TIMEOUT_MS = parseInt(
-  process.env.LOBBY_DISCONNECT_TIMEOUT_MS || "5000",
+  process.env.LOBBY_DISCONNECT_TIMEOUT_MS || "120000",
   10,
 );
 const ABILITY_PEEK_VIEW_DURATION_MS = 5000;
@@ -152,6 +159,7 @@ type PlayerActionEvents =
   | { type: PlayerActionType.CALL_CHECK; playerId: PlayerId }
   | { type: PlayerActionType.DECLARE_READY_FOR_PEEK; playerId: PlayerId }
   | { type: PlayerActionType.PLAY_AGAIN; playerId: PlayerId }
+  | { type: PlayerActionType.REQUEST_PLAY_AGAIN; playerId: PlayerId }
   | {
       type: PlayerActionType.USE_ABILITY;
       playerId: PlayerId;
@@ -1482,7 +1490,12 @@ export const gameMachine = setup({
         currentPlayerId: newDealerId,
         currentTurnSegment: null,
         lastRoundLoserId: context.gameover?.loserId || null,
-        gameMasterId: newDealerId,
+        rematchVotes: [],
+        // gameMasterId (the lobby host) is deliberately NOT reassigned here:
+        // the host is stable for the lobby's lifetime and only changes when
+        // the host actually leaves (removePlayerAndHandleGM). It used to be
+        // overwritten with the rotated dealer, which handed the "Play Again"
+        // control to the wrong player after round one.
         gameStage: GameStage.WAITING_FOR_PLAYERS,
       };
     }),
@@ -1571,11 +1584,35 @@ export const gameMachine = setup({
       };
     }),
     broadcastGameState: emit({ type: "BROADCAST_GAME_STATE" }),
-    setInitialPlayer: assign(({ context }) => ({
-      currentPlayerId: context.turnOrder[0]!,
-      gameStage: GameStage.PLAYING,
-      currentTurnSegment: TurnPhase.DRAW,
-    })),
+    // A non-host toggling "I want to play again" at GAMEOVER. Add/remove them
+    // from the advisory tally; the host's PLAY_AGAIN is what actually restarts.
+    toggleRematchVote: assign(({ context, event }) => {
+      assertEvent(event, PlayerActionType.REQUEST_PLAY_AGAIN);
+      const { playerId } = event;
+      if (!context.players[playerId]) return {};
+      const has = context.rematchVotes.includes(playerId);
+      return {
+        rematchVotes: has
+          ? context.rematchVotes.filter((id) => id !== playerId)
+          : [...context.rematchVotes, playerId],
+      };
+    }),
+    setInitialPlayer: assign(({ context }) => {
+      // Real-life rule: the winner of the previous round leads the next one.
+      // context.winnerId carries across resetForNewRound; fall back to seating
+      // order for the first-ever game (winnerId null) or if the prior winner
+      // has since left the table.
+      const winnerStillHere =
+        !!context.winnerId && !!context.players[context.winnerId];
+      const firstPlayerId = winnerStillHere
+        ? context.winnerId!
+        : context.turnOrder[0]!;
+      return {
+        currentPlayerId: firstPlayerId,
+        gameStage: GameStage.PLAYING,
+        currentTurnSegment: TurnPhase.DRAW,
+      };
+    }),
     applyMatchPenalty: assign(({ context, event }) => {
       assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
       const { playerId } = event;
@@ -1943,6 +1980,7 @@ export const gameMachine = setup({
     winnerId: null,
     gameover: null,
     lastRoundLoserId: null,
+    rematchVotes: [],
     log: [],
     chat: [],
     discardPileIsSealed: false,
@@ -2299,6 +2337,9 @@ export const gameMachine = setup({
           target: GameStage.DEALING,
           guard: "isGameMaster",
           actions: "resetForNewRound",
+        },
+        [PlayerActionType.REQUEST_PLAY_AGAIN]: {
+          actions: ["toggleRematchVote", "broadcastGameState"] as const,
         },
         [PlayerActionType.LEAVE_GAME]: {
           actions: [

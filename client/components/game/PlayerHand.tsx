@@ -7,8 +7,9 @@ import { type Player, type Card, GameStage } from "shared-types";
 import { cn } from "@/lib/utils";
 import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
+import { CARD_RING_GEOMETRY } from "../cards/cardRing";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Eye, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { Eye, ArrowLeftRight, Equal, type LucideIcon } from "lucide-react";
 
 /** Corner badge on a ringed card slot: surface chip, ink glyph. The icon
  *  distinguishes the action (eye = peek, arrows = swap); the ring color says
@@ -290,17 +291,19 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               onClick={() => canInteract && !isLocked && onCardClick?.(index)}
             >
               <AnimatePresence>
-                {/* Your own selection — accent ring; the badge icon (eye vs
-                    arrows) says which action, never the hue. */}
+                {/* Your own selection — accent ring; the badge icon (eye =
+                    peek, arrows = swap, equals = match) says which action,
+                    never the hue. */}
                 {isSelected && (
                   <motion.div
                     key="sel-ring"
-                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[3px] ring-accent"
+                    className={cn(CARD_RING_GEOMETRY, "ring-[3px] ring-accent")}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ duration: 0.15, ease: "easeOut" }}
                   >
+                    {isMatchSelected && <SlotBadge icon={Equal} />}
                     {isAbilityPeekSelected && <SlotBadge icon={Eye} />}
                     {isAbilitySwapSelected && <SlotBadge icon={ArrowLeftRight} />}
                   </motion.div>
@@ -309,7 +312,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                 {showPeekIndicator && (
                   <motion.div
                     key="peek-indicator"
-                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[2px] ring-ink"
+                    className={cn(CARD_RING_GEOMETRY, "ring-[2px] ring-ink")}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
@@ -322,7 +325,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                 {showSwapIndicator && (
                   <motion.div
                     key="swap-indicator"
-                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[2px] ring-ink"
+                    className={cn(CARD_RING_GEOMETRY, "ring-[2px] ring-ink")}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}

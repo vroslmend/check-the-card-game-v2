@@ -12,13 +12,19 @@ interface RoundSummaryProps {
   players: Player[];
   winnerIds: string[];
   localPlayerId: string;
+  /** Non-host players who have signalled they want a rematch (advisory tally). */
+  rematchVotes: string[];
   onPlayAgain: () => void;
+  onRequestPlayAgain: () => void;
   onLeave: () => void;
   onToggleChat: () => void;
 }
 
 const selectIsGameMaster = (state: any) =>
   state.context.currentGameState?.gameMasterId === state.context.localPlayerId;
+
+const selectGameMasterId = (state: any) =>
+  state.context.currentGameState?.gameMasterId ?? null;
 
 const selectCheckCallerId = (state: any) =>
   state.context.currentGameState?.checkDetails?.callerId ?? null;
@@ -55,13 +61,23 @@ export const RoundSummary = ({
   players,
   winnerIds,
   localPlayerId,
+  rematchVotes,
   onPlayAgain,
+  onRequestPlayAgain,
   onLeave,
   onToggleChat,
 }: RoundSummaryProps) => {
   const isGameMaster = useUISelector(selectIsGameMaster);
+  const gameMasterId = useUISelector(selectGameMasterId);
   const callerId = useUISelector(selectCheckCallerId);
   const reduced = !!useReducedMotion();
+
+  // Rematch tally: how many of the non-host players want to play again. The
+  // host isn't counted (they start the round outright); the count drives both
+  // the host's "N waiting" hint and each non-host's toggle.
+  const nonHostCount = players.filter((p) => p.id !== gameMasterId).length;
+  const rematchCount = rematchVotes.filter((id) => id !== gameMasterId).length;
+  const localWantsRematch = rematchVotes.includes(localPlayerId);
 
   const winners = players.filter((p) => winnerIds.includes(p.id));
   const sorted = [...players].sort((a, b) => a.score - b.score);
@@ -193,16 +209,45 @@ export const RoundSummary = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3 pt-1">
-          {isGameMaster && (
-            <button
-              onClick={() => {
-                play("click");
-                onPlayAgain();
-              }}
-              className="flex h-11 items-center rounded-full bg-accent px-6 text-sm font-bold text-accent-ink transition-colors hover:bg-accent/90"
-            >
-              Play again
-            </button>
+          {isGameMaster ? (
+            <>
+              <button
+                onClick={() => {
+                  play("click");
+                  onPlayAgain();
+                }}
+                className="flex h-11 items-center rounded-full bg-accent px-6 text-sm font-bold text-accent-ink transition-colors hover:bg-accent/90"
+              >
+                Play again
+              </button>
+              {nonHostCount > 0 && (
+                <span className="text-sm font-semibold text-ink-muted">
+                  {rematchCount}/{nonHostCount} want a rematch
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  play("click");
+                  onRequestPlayAgain();
+                }}
+                aria-pressed={localWantsRematch}
+                className={cn(
+                  "flex h-11 items-center rounded-full px-6 text-sm font-bold transition-colors",
+                  localWantsRematch
+                    ? "bg-accent text-accent-ink hover:bg-accent/90"
+                    : "border border-hairline bg-surface text-ink hover:border-ink-muted",
+                )}
+              >
+                {localWantsRematch ? "Ready for a rematch" : "I want to play again"}
+              </button>
+              <span className="text-sm font-semibold text-ink-muted">
+                {rematchCount > 0 && `${rematchCount}/${nonHostCount} in · `}
+                Waiting for the host to start
+              </span>
+            </>
           )}
           <button
             onClick={() => {
