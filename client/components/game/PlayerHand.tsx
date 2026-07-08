@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Eye, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { Eye, ArrowLeftRight, Equal, type LucideIcon } from "lucide-react";
 
 /** Corner badge on a ringed card slot: surface chip, ink glyph. The icon
  *  distinguishes the action (eye = peek, arrows = swap); the ring color says
@@ -290,8 +290,9 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               onClick={() => canInteract && !isLocked && onCardClick?.(index)}
             >
               <AnimatePresence>
-                {/* Your own selection — accent ring; the badge icon (eye vs
-                    arrows) says which action, never the hue. */}
+                {/* Your own selection — accent ring; the badge icon (eye =
+                    peek, arrows = swap, equals = match) says which action,
+                    never the hue. */}
                 {isSelected && (
                   <motion.div
                     key="sel-ring"
@@ -301,6 +302,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ duration: 0.15, ease: "easeOut" }}
                   >
+                    {isMatchSelected && <SlotBadge icon={Equal} />}
                     {isAbilityPeekSelected && <SlotBadge icon={Eye} />}
                     {isAbilitySwapSelected && <SlotBadge icon={ArrowLeftRight} />}
                   </motion.div>
