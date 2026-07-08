@@ -209,6 +209,10 @@ export function GameBoard() {
     send({ type: PlayerActionType.PLAY_AGAIN });
   };
 
+  const handleRequestPlayAgain = () => {
+    send({ type: PlayerActionType.REQUEST_PLAY_AGAIN });
+  };
+
   return (
     <div className="relative h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
       <GameHeader />
@@ -292,11 +296,15 @@ export function GameBoard() {
               )}
             </div>
 
-            {/* Table Area - takes up remaining space */}
+            {/* Table Area - takes up remaining space. Extra vertical padding
+                gives the center decks breathing room from the opponent band
+                above and the local hand below (they read cramped without it);
+                the 1fr row absorbs it, and the @md guard keeps it modest on
+                dense phone layouts. */}
             <div
               className={cn(
                 "flex items-center justify-center @container",
-                endScene && "order-3",
+                endScene ? "order-3" : "py-4 @md:py-8",
               )}
             >
               <TableArea
@@ -353,7 +361,9 @@ export function GameBoard() {
             players={players}
             winnerIds={winnerIds}
             localPlayerId={localPlayerId}
+            rematchVotes={gameState.rematchVotes ?? []}
             onPlayAgain={handlePlayAgain}
+            onRequestPlayAgain={handleRequestPlayAgain}
             onLeave={() => send({ type: "LEAVE_GAME" })}
             onToggleChat={() => send({ type: "TOGGLE_SIDE_PANEL" })}
           />

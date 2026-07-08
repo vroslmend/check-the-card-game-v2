@@ -7,6 +7,7 @@ import { type Player, type Card, GameStage } from "shared-types";
 import { cn } from "@/lib/utils";
 import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
+import { CARD_RING_GEOMETRY } from "../cards/cardRing";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Eye, ArrowLeftRight, Equal, type LucideIcon } from "lucide-react";
 
@@ -296,7 +297,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                 {isSelected && (
                   <motion.div
                     key="sel-ring"
-                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[3px] ring-accent"
+                    className={cn(CARD_RING_GEOMETRY, "ring-[3px] ring-accent")}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
@@ -311,7 +312,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                 {showPeekIndicator && (
                   <motion.div
                     key="peek-indicator"
-                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[2px] ring-ink"
+                    className={cn(CARD_RING_GEOMETRY, "ring-[2px] ring-ink")}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
@@ -324,7 +325,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                 {showSwapIndicator && (
                   <motion.div
                     key="swap-indicator"
-                    className="absolute inset-0.5 rounded-md pointer-events-none z-20 ring-[2px] ring-ink"
+                    className={cn(CARD_RING_GEOMETRY, "ring-[2px] ring-ink")}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}

@@ -158,6 +158,10 @@ export interface ClientCheckGameState {
     playerScores: Record<PlayerId, number>;
   } | null;
   lastRoundLoserId: PlayerId | null;
+  /** Players (at GAMEOVER) who signalled they want to play again — a live
+   *  rematch tally shown to everyone. The host still starts the next round
+   *  via PLAY_AGAIN; this is advisory. Reset on each new round. */
+  rematchVotes: PlayerId[];
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
@@ -339,6 +343,10 @@ export enum PlayerActionType {
   CALL_CHECK = "CALL_CHECK",
   DECLARE_READY_FOR_PEEK = "DECLARE_READY_FOR_PEEK",
   PLAY_AGAIN = "PLAY_AGAIN",
+  /** Non-host "I want a rematch" toggle. Advisory only — it adds/removes the
+   *  player from rematchVotes so everyone sees demand; the host's PLAY_AGAIN
+   *  is what actually starts the next round. */
+  REQUEST_PLAY_AGAIN = "REQUEST_PLAY_AGAIN",
 
   // Ability Resolution
   USE_ABILITY = "USE_ABILITY",

@@ -64,6 +64,9 @@ export interface GameContext {
     playerScores: Record<PlayerId, number>;
   } | null;
   lastRoundLoserId: PlayerId | null;
+  /** Players who signalled "play again" at GAMEOVER (advisory rematch tally;
+   *  the host still starts the round). Reset each new round. */
+  rematchVotes: PlayerId[];
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
