@@ -144,6 +144,7 @@ If a player successfully makes a match that causes their hand to become empty, t
 #### **C. The Final Turns Phase**
 Once "Check" has been called, every other eligible player gets to take **one last turn.**
 *   The Check-caller is locked and does not get a final turn.
+*   **Turn order in this phase** follows the normal clockwise seating, continuing from the seat that would have played next — the player *after* whoever's turn was in progress when Check was called — and wraps around the table until every eligible player has taken exactly one final turn. When Check is triggered automatically by an out-of-turn match (§9.B), this means play continues from where it actually was at the table, **not** from the checker's seat.
 *   During a final turn, all standard gameplay rules apply, including the **Matching Stage** (Section 7) and **Special Card Abilities** (Section 8).
 *   Players cannot manually "Call Check" during this phase.
 
