@@ -719,7 +719,7 @@ function HomePage() {
             <BrandMark className="h-6 rounded-[4px]" />
             <span className="text-lg font-bold text-ink">Check</span>
           </div>
-          <div className="flex flex-col items-center justify-center gap-y-1 text-sm font-normal text-ink-muted">
+          <div className="flex items-center justify-center text-sm font-normal text-ink-muted">
             <div className="flex flex-row items-center gap-x-2">
               <span>© {new Date().getFullYear()} Check Card Game.</span>
               <div className="hidden sm:block">|</div>
@@ -768,33 +768,20 @@ function HomePage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2" data-cursor-icon>
-              <span>Made by</span>
+          </div>
+          <div className="flex items-center justify-center gap-2 text-sm font-normal text-ink-muted sm:justify-self-end">
+            <span>Made by</span>
+            <a
+              href="https://github.com/vroslmend/check-the-card-game-v2"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center transition-colors hover:text-accent"
+              data-cursor-icon
+            >
               <SignatureInView />
-            </div>
-          </div>
-          <div className="flex items-center justify-center gap-6 sm:justify-self-end">
-            <a
-              href="https://github.com/vroslmend"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ink-muted transition-colors duration-300 hover:text-ink"
-              data-cursor-icon
-            >
-              <span className="sr-only">GitHub</span>
-              <FaGithub className="h-5 w-5" />
-            </a>
-            <a
-              href="https://open.spotify.com/user/6tf81fs0qm2akdo4yt1wp1akw"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ink-muted transition-colors duration-300 hover:text-ink"
-              data-cursor-icon
-            >
-              <span className="sr-only">Spotify</span>
-              <FaSpotify className="h-5 w-5" />
             </a>
           </div>
+
         </div>
       </footer>
     </div>
