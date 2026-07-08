@@ -28,6 +28,13 @@
   --accent: 0 49% 50%;
   --accent-ink: 23 100% 97%;
 
+  /* Card lift shadow (travel/place). Framer can't tween a var()-based
+     box-shadow, so the fade is a CSS transition driven by [data-inflight]
+     (see .card-lift). Theme-tokened because a fixed black shadow was
+     invisible on the dark ground yet harsh — and popped — on the light one. */
+  --card-rest-shadow: 0 0 0 0 hsl(34 10% 14% / 0);
+  --card-lift-shadow: 0 10px 22px -4px hsl(34 18% 18% / 0.28);
+
   /* shadcn vars re-pointed onto the palette. One accent only: the red is both
      the design accent and shadcn's interactive / hover / destructive color
      (so shadcn menu/select hover states tint accent until Phase C/D restyles
@@ -72,6 +79,10 @@
   --hairline: 0 0% 23%;
   --accent: 2 52% 48%;
   --accent-ink: 23 100% 97%;
+
+  /* A black shadow reads as nothing on the near-black ground; deepen it so a
+     lifted card still separates from the table in dark. */
+  --card-lift-shadow: 0 14px 30px -6px hsl(0 0% 0% / 0.6);
 
   /* Custom cursor variables (landing) */
   --cursor-bg: hsl(60 9% 98% / 0.1);
@@ -208,6 +219,18 @@ html {
   .min-h-screen {
     min-height: 100dvh;
   }
+}
+
+/* Card lift shadow: a CSS transition (not Framer) so it interpolates the
+   theme-tokened box-shadow smoothly. CardFlight toggles [data-inflight] while
+   a card travels, so the shadow fades in on lift and out on place instead of
+   popping. The prefers-reduced-motion block below zeroes the duration. */
+.card-lift {
+  box-shadow: var(--card-rest-shadow);
+  transition: box-shadow 0.32s cubic-bezier(0.55, 0.06, 0.19, 0.98);
+}
+.card-lift[data-inflight="true"] {
+  box-shadow: var(--card-lift-shadow);
 }
 
 /* Card face typography scales with the card via container-query units, with a

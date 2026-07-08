@@ -2,12 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState, type ComponentProps } from "react";
-import {
-  cardTravelTransition,
-  CARD_LIFT_SCALE,
-  CARD_LIFT_SHADOW,
-  CARD_REST_SHADOW,
-} from "@/lib/card-motion";
+import { cardTravelTransition, CARD_LIFT_SCALE } from "@/lib/card-motion";
 
 type CardFlightProps = ComponentProps<typeof motion.div>;
 
@@ -59,13 +54,15 @@ export function CardFlight({
           pose on that same element is the pose/projection conflict class
           (R7.4) — this was the one instance of it left after Round 7. The
           child composes cleanly with the parent's flight on every engine.
-          rounded-[inherit] keeps the shadow hugging rounded consumers. */}
+          rounded-[inherit] keeps the shadow hugging rounded consumers.
+          The lift shadow is a CSS transition (.card-lift + data-inflight),
+          not a Framer boxShadow: Framer popped it on/off (and a fixed black
+          value was invisible in dark, harsh in light) — CSS tweens the
+          theme-tokened shadow so it fades in on lift and out on place. */}
       <motion.div
-        className="relative h-full w-full rounded-[inherit]"
-        animate={{
-          scale: inFlight ? CARD_LIFT_SCALE : 1,
-          boxShadow: inFlight ? CARD_LIFT_SHADOW : CARD_REST_SHADOW,
-        }}
+        className="card-lift relative h-full w-full rounded-[inherit]"
+        data-inflight={inFlight ? "true" : undefined}
+        animate={{ scale: inFlight ? CARD_LIFT_SCALE : 1 }}
       >
         {children}
       </motion.div>

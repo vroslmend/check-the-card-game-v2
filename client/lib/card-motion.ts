@@ -14,5 +14,6 @@ export const cardTravelTransition: { layout: Transition } = {
 };
 
 export const CARD_LIFT_SCALE = 1.06;
-export const CARD_LIFT_SHADOW = "0 16px 32px rgba(0, 0, 0, 0.28)";
-export const CARD_REST_SHADOW = "0 0 0 rgba(0, 0, 0, 0)";
+// The lift shadow moved to a theme-tokened CSS transition (.card-lift in
+// globals.css, toggled by CardFlight's data-inflight) so it fades smoothly
+// and adapts to light/dark, instead of a fixed value Framer popped on/off.
