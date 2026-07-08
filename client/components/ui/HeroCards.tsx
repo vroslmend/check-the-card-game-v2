@@ -30,6 +30,10 @@ export function HeroCards({ checkHovered }: { checkHovered: boolean }) {
   const reduced = useReducedMotion();
   const [dealt, setDealt] = useState(false);
   const [autoPeek, setAutoPeek] = useState(false);
+  const [cardsHovered, setCardsHovered] = useState(false);
+
+  // Hovering "Check" in the headline OR the cards themselves spreads the fan.
+  const hovered = checkHovered || cardsHovered;
 
   // Entrance: the fan deals itself in once, card by card.
   useEffect(() => {
@@ -39,7 +43,7 @@ export function HeroCards({ checkHovered }: { checkHovered: boolean }) {
 
   // Idle life: a periodic peek at the bottom two, paused while hovered.
   useEffect(() => {
-    if (reduced || checkHovered) {
+    if (reduced || hovered) {
       setAutoPeek(false);
       return;
     }
@@ -52,15 +56,17 @@ export function HeroCards({ checkHovered }: { checkHovered: boolean }) {
       clearInterval(interval);
       if (hold) clearTimeout(hold);
     };
-  }, [reduced, checkHovered]);
+  }, [reduced, hovered]);
 
   // Reduced motion: rest in the spread pose with the two faces showing.
-  const spread = checkHovered || !!reduced;
+  const spread = hovered || !!reduced;
   const peeking = spread || autoPeek;
 
   return (
     <div
       className="relative flex h-96 w-96 items-center justify-center"
+      onMouseEnter={() => setCardsHovered(true)}
+      onMouseLeave={() => setCardsHovered(false)}
       aria-hidden
     >
       {HAND.map((card, i) => {
