@@ -16,7 +16,7 @@
     "type": "git",
     "url": "git+https://github.com/vroslmend/check-the-card-game-v2.git"
   },
-  "license": "ISC",
+  "license": "SEE LICENSE IN LICENSE.md",
   "author": "Vroslmend",
   "type": "commonjs",
   "main": "index.js",
