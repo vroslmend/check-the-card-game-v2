@@ -40,7 +40,7 @@ const CornerChip = ({
 }) => (
   <span
     aria-label={label}
-    className="absolute -top-2 -right-2 z-20 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
+    className="absolute -top-2 -right-2 z-10 rounded-full border border-hairline bg-surface p-1 text-ink shadow-sm"
   >
     <Icon className="h-3 w-3" strokeWidth={strokeWidth} />
   </span>
