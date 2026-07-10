@@ -191,10 +191,20 @@ export const uiMachine = setup({
               ? event.response.gameState
               : undefined;
         if (!incoming) return undefined;
+        // A bumped roundEpoch means the server reset its log/chat for a new
+        // round (Play Again). Merging would resurrect the old history from
+        // our accumulated copy — start fresh from the incoming arrays.
+        const prevState = context.currentGameState;
+        const sameEpoch =
+          (prevState?.roundEpoch ?? 0) === (incoming.roundEpoch ?? 0);
         return {
           ...incoming,
-          log: mergeAppendOnly(context.currentGameState?.log, incoming.log),
-          chat: mergeAppendOnly(context.currentGameState?.chat, incoming.chat),
+          log: sameEpoch
+            ? mergeAppendOnly(prevState?.log, incoming.log)
+            : incoming.log,
+          chat: sameEpoch
+            ? mergeAppendOnly(prevState?.chat, incoming.chat)
+            : incoming.chat,
         };
       },
       // "Pass" is final per matching opportunity, so only reset the flag when

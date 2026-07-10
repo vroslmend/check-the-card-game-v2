@@ -65,9 +65,17 @@ export interface GameContext {
     playerScores: Record<PlayerId, number>;
   } | null;
   lastRoundLoserId: PlayerId | null;
+  /** Cumulative round wins per player, for the lobby's lifetime. Unlike
+   *  scores this survives resetForNewRound; the redactor drops entries for
+   *  players who have left. */
+  playerWins: Record<PlayerId, number>;
   /** Players who signalled "play again" at GAMEOVER (advisory rematch tally;
    *  the host still starts the round). Reset each new round. */
   rematchVotes: PlayerId[];
+  /** Bumped by resetForNewRound on each Play Again. Clients key their
+   *  accumulated log/chat on this: same epoch = append-only merge, new
+   *  epoch = drop history and start from the incoming arrays. */
+  roundEpoch: number;
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;

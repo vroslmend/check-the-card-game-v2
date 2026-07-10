@@ -984,6 +984,7 @@ export const gameMachine = setup({
             message,
             type: "public",
             tags: ["player-action", "ability"],
+            actor: { id: playerId, name: playerName },
           }),
         );
 
@@ -1515,9 +1516,15 @@ export const gameMachine = setup({
         Object.keys(playerScores).find((id) => playerScores[id] === maxScore) ??
         null;
 
+      const nextPlayerWins = { ...context.playerWins };
+      for (const id of winnerIds) {
+        nextPlayerWins[id] = (nextPlayerWins[id] ?? 0) + 1;
+      }
+
       return {
         players: updatedPlayers,
         winnerId: winnerIds[0] ?? null,
+        playerWins: nextPlayerWins,
         gameover: { winnerIds, loserId, playerScores },
         gameStage: GameStage.SCORING,
         publicPeek: null,
@@ -1557,6 +1564,12 @@ export const gameMachine = setup({
         currentTurnSegment: null,
         lastRoundLoserId: context.gameover?.loserId || null,
         rematchVotes: [],
+        // Clearing log/chat here only resets the SERVER copy — connected
+        // clients keep an accumulated history and merge broadcasts by id.
+        // The epoch bump is what tells them to drop that history too.
+        roundEpoch: context.roundEpoch + 1,
+        log: [],
+        chat: [],
         // gameMasterId (the lobby host) is deliberately NOT reassigned here:
         // the host is stable for the lobby's lifetime and only changes when
         // the host actually leaves (removePlayerAndHandleGM). It used to be
@@ -1837,6 +1850,10 @@ export const gameMachine = setup({
           newPlayers[p.id] = { ...p, score };
           playerScores[p.id] = score;
         }
+        const nextPlayerWins = { ...context.playerWins };
+        if (winnerId) {
+          nextPlayerWins[winnerId] = (nextPlayerWins[winnerId] ?? 0) + 1;
+        }
         return {
           players: newPlayers,
           turnOrder: newTurnOrder,
@@ -1846,6 +1863,7 @@ export const gameMachine = setup({
               : context.gameMasterId,
           gameStage: GameStage.GAMEOVER,
           winnerId,
+          playerWins: nextPlayerWins,
           gameover: {
             winnerIds: winnerId ? [winnerId] : [],
             loserId: affectedPlayerId,
@@ -2061,7 +2079,9 @@ export const gameMachine = setup({
     winnerId: null,
     gameover: null,
     lastRoundLoserId: null,
+    playerWins: {},
     rematchVotes: [],
+    roundEpoch: 0,
     log: [],
     chat: [],
     discardPileIsSealed: false,

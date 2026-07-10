@@ -136,11 +136,19 @@ export const generatePlayerView = (
     winnerId: fullGameContext.winnerId,
     gameover: fullGameContext.gameover,
     lastRoundLoserId: fullGameContext.lastRoundLoserId,
+    // Only include wins for players still at the table to avoid stale entries
+    // when someone leaves mid-session.
+    playerWins: Object.fromEntries(
+      Object.entries(fullGameContext.playerWins ?? {}).filter(([id]) =>
+        !!fullGameContext.players[id],
+      ),
+    ),
     // Filter to players still at the table so a voter who left doesn't inflate
     // the tally (votes are also reset each new round).
     rematchVotes: fullGameContext.rematchVotes.filter(
       (id) => !!fullGameContext.players[id],
     ),
+    roundEpoch: fullGameContext.roundEpoch ?? 0,
     log: clientLog.slice(-BROADCAST_LOG_TAIL),
     chat: (fullGameContext.chat ?? []).slice(-BROADCAST_CHAT_TAIL),
     discardPileIsSealed: fullGameContext.discardPileIsSealed,
