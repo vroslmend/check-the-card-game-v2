@@ -12,6 +12,8 @@ interface RoundSummaryProps {
   players: Player[];
   winnerIds: string[];
   localPlayerId: string;
+  /** Cumulative wins per player across rounds in this lobby. */
+  playerWins: Record<string, number>;
   /** Non-host players who have signalled they want a rematch (advisory tally). */
   rematchVotes: string[];
   onPlayAgain: () => void;
@@ -28,6 +30,9 @@ const selectGameMasterId = (state: any) =>
 
 const selectCheckCallerId = (state: any) =>
   state.context.currentGameState?.checkDetails?.callerId ?? null;
+
+const selectRoundEpoch = (state: any) =>
+  state.context.currentGameState?.roundEpoch ?? 0;
 
 // The table ripple upstairs runs ~1.5s after the panel mounts (PlayerHand's
 // stagger); scores stamp in as it finishes.
@@ -61,6 +66,7 @@ export const RoundSummary = ({
   players,
   winnerIds,
   localPlayerId,
+  playerWins,
   rematchVotes,
   onPlayAgain,
   onRequestPlayAgain,
@@ -70,6 +76,7 @@ export const RoundSummary = ({
   const isGameMaster = useUISelector(selectIsGameMaster);
   const gameMasterId = useUISelector(selectGameMasterId);
   const callerId = useUISelector(selectCheckCallerId);
+  const roundEpoch = useUISelector(selectRoundEpoch);
   const reduced = !!useReducedMotion();
 
   // Rematch tally: how many of the non-host players want to play again. The
@@ -97,6 +104,27 @@ export const RoundSummary = ({
     ? `${caller.name} called Check.`
     : "The round ended without a Check.";
 
+  // Series standing across Play Agains — the kicker reads as a scoreboard.
+  // playerWins accumulates for the lobby's lifetime and roundEpoch counts
+  // the Play Agains, so this round is epoch + 1. By the time the sheet is
+  // up, calculateScores has already credited this round's winner.
+  const roundNumber = roundEpoch + 1;
+  const standings = players
+    .map((p) => ({ name: p.name, wins: playerWins[p.id] ?? 0 }))
+    .sort((a, b) => b.wins - a.wins);
+  const leader = standings[0];
+  const coLeaders = leader
+    ? standings.filter((s) => s.wins === leader.wins)
+    : [];
+  const series =
+    !leader || leader.wins === 0
+      ? null
+      : coLeaders.length === 1
+        ? `${leader.name} leads ${leader.wins}–${standings[1]?.wins ?? 0}`
+        : coLeaders.length === 2
+          ? `${coLeaders[0]!.name} and ${coLeaders[1]!.name} tied at ${leader.wins}`
+          : `Tied at ${leader.wins}`;
+
   // One-shot recap from the accumulated log (append-only; merged in the
   // machine). Counted once on mount. Late joiners hold only a log tail, so
   // counts can undercount for them.
@@ -105,6 +133,7 @@ export const RoundSummary = ({
     const log = actorRef.getSnapshot().context.currentGameState?.log ?? [];
     const matches: Record<string, number> = {};
     const penalties: Record<string, number> = {};
+    const abilities: Record<string, number> = {};
     for (const entry of log) {
       const aId = entry.actor?.id;
       if (!aId) continue;
@@ -112,9 +141,11 @@ export const RoundSummary = ({
         penalties[aId] = (penalties[aId] ?? 0) + 1;
       } else if (entry.message.includes(" matched a")) {
         matches[aId] = (matches[aId] ?? 0) + 1;
+      } else if (entry.tags.includes("ability") && entry.message.includes(" used")) {
+        abilities[aId] = (abilities[aId] ?? 0) + 1;
       }
     }
-    return { matches, penalties };
+    return { matches, penalties, abilities };
   }, [actorRef]);
 
   return (
@@ -131,8 +162,9 @@ export const RoundSummary = ({
     >
       <div className="mx-auto flex max-h-[50vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto px-5 py-5 sm:px-8 lg:max-h-[34vh]">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
-            Round over
+          <p className="truncate text-xs font-semibold uppercase tracking-widest text-ink-muted">
+            Round {roundNumber}
+            {series && ` · ${series}`}
           </p>
           <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {title}
@@ -159,44 +191,46 @@ export const RoundSummary = ({
             const dq = player.status === PlayerStatus.DISQUALIFIED;
             const m = recap.matches[player.id] ?? 0;
             const pen = recap.penalties[player.id] ?? 0;
+            const abil = recap.abilities[player.id] ?? 0;
+            const attempts = m + pen;
+            const accuracy =
+              attempts > 0 ? Math.round((m / attempts) * 100) : null;
+            // One muted line under the name (all breakpoints; chips were
+            // hidden on phones). Same dot idiom as the rematch tally below.
+            const statLine = [
+              dq && "disqualified",
+              m > 0 && `${m} match${m > 1 ? "es" : ""}`,
+              pen > 0 && `${pen} penalt${pen > 1 ? "ies" : "y"}`,
+              accuracy !== null && `${accuracy}% accuracy`,
+              abil > 0 && `${abil} abilit${abil > 1 ? "ies" : "y"}`,
+            ]
+              .filter(Boolean)
+              .join(" · ");
             return (
               <div key={player.id} className="flex items-center gap-3 py-2">
                 <span className="w-5 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
                   {i + 1}
                 </span>
                 {isWinner && <Crown className="h-4 w-4 shrink-0 text-accent" />}
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate text-base font-bold text-ink",
-                    dq && "text-ink-muted line-through",
-                  )}
-                >
-                  {player.name}
-                  {player.id === localPlayerId && (
-                    <span className="ml-1.5 text-xs font-normal text-ink-muted">
-                      (you)
-                    </span>
-                  )}
-                </span>
-                <span className="hidden items-center gap-1.5 sm:flex">
-                  {dq && (
-                    <span className="rounded-full border border-hairline bg-surface px-2 py-0.5 text-[10px] font-semibold text-ink-muted">
-                      disqualified
-                    </span>
-                  )}
-                  {m > 0 && (
-                    <span className="rounded-full border border-hairline bg-surface px-2 py-0.5 text-[10px] font-semibold text-ink-muted">
-                      {m} match{m > 1 ? "es" : ""}
-                    </span>
-                  )}
-                  {pen > 0 && (
-                    <span className="rounded-full border border-hairline bg-surface px-2 py-0.5 text-[10px] font-semibold text-ink-muted">
-                      {pen} penalt{pen > 1 ? "ies" : "y"}
-                    </span>
-                  )}
-                  <span className="rounded-full border border-hairline bg-surface px-2 py-0.5 text-[10px] font-semibold text-ink-muted">
-                    {player.hand.length} cards
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={cn(
+                      "block truncate text-base font-bold text-ink",
+                      dq && "text-ink-muted line-through",
+                    )}
+                  >
+                    {player.name}
+                    {player.id === localPlayerId && (
+                      <span className="ml-1.5 text-xs font-normal text-ink-muted">
+                        (you)
+                      </span>
+                    )}
                   </span>
+                  {statLine && (
+                    <span className="block truncate text-[11px] font-medium text-ink-muted">
+                      {statLine}
+                    </span>
+                  )}
                 </span>
                 <ScoreStamp
                   value={player.score}
