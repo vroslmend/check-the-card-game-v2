@@ -184,7 +184,10 @@ const PlayerInfoBadge = ({
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 font-game">
+    // Height-starved viewports flatten the stacked name/chip header into one
+    // row: the two-line header costs ~60px per seat, and with a hand above
+    // AND below the table that is exactly the overflow budget.
+    <div className="flex flex-col items-center gap-1.5 font-game short:flex-row">
       <h3 className="flex items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] font-bold text-ink">
         {/* The one "whose turn" color on screen: an accent dot before the name. */}
         {isCurrentTurn && (
@@ -308,8 +311,10 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
       }}
       animate={dqBeat ? { y: [0, 3, 0] } : { y: 0 }}
       className={cn(
-        "flex flex-col items-center",
-        compact ? "gap-1" : "gap-2",
+        // vshort: the seat header moves beside the hand — above it, its
+        // ~30px is the difference between the board fitting and scrolling.
+        "flex flex-col items-center vshort:flex-row",
+        compact ? "gap-1" : "gap-1.5 short:gap-1 vshort:gap-2",
       )}
     >
       <PlayerInfoBadge

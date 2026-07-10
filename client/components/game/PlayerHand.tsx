@@ -195,7 +195,12 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     gameStage === GameStage.INITIAL_PEEK &&
     visibleCards.some((vc) => vc.source === "initial-peek");
 
-  const combinedClass = cn(isLocked && "opacity-60", dense && "gap-1");
+  const combinedClass = cn(
+    isLocked && "opacity-60",
+    // Regular grids give their row gap back first on short viewports; dense
+    // grids already sit at gap-1.
+    dense ? "gap-1" : "short:gap-1.5",
+  );
 
   return (
     <HandGrid numItems={handToDisplay.length} className={combinedClass}>
@@ -211,7 +216,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                 "relative aspect-[5/7]",
                 dense
                   ? "w-[min(8svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
-                  : "w-[min(8svh,15vw)]",
+                  : "w-(--card-w)",
               )}
             >
               <div className="absolute inset-0 rounded-card border border-hairline" />
@@ -288,15 +293,17 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
             key={card.id}
             className={cn(
               "relative aspect-[5/7]",
-              // svh, not vh: stable while mobile browser chrome collapses.
-              // Dense cells trade size for fitting six seats on a phone —
-              // their taps are occasional (ability targeting), not constant.
-              // The 3.5rem cap is for mid-width portrait tablets; at @4xl a
-              // full row fits anyway and the cap lifts, so desktop and
-              // half-screen sizes are unchanged.
+              // Regular cells share the table-wide --card-w token (globals.css)
+              // with the center piles, so the whole table scales as one unit
+              // on height-starved viewports. Dense cells trade size for
+              // fitting six seats on a phone — their taps are occasional
+              // (ability targeting), not constant. The 3.5rem cap is for
+              // mid-width portrait tablets; at @4xl a full row fits anyway
+              // and the cap lifts, so desktop and half-screen sizes are
+              // unchanged.
               dense
                 ? "w-[min(8svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
-                : "w-[min(8svh,15vw)]",
+                : "w-(--card-w)",
             )}
           >
             {/* No whileHover here: this is the layoutId projection node, and
