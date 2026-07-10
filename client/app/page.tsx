@@ -87,13 +87,13 @@ const Reveal = ({
 /** Editorial section in the rules page's grammar: numbered kicker, title,
  *  copy on one side, one of the game's own figures on the other. */
 const StorySection = ({
-  num,
+  kicker,
   title,
   figure,
   flip = false,
   children,
 }: {
-  num: string;
+  kicker: string;
   title: string;
   figure: ReactNode;
   flip?: boolean;
@@ -104,7 +104,7 @@ const StorySection = ({
       <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
         <div className={flip ? "lg:order-2" : undefined}>
           <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
-            {num}
+            {kicker}
           </p>
           <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {title}
@@ -521,7 +521,7 @@ function HomePage() {
 
         <div id="how" className="mx-auto w-full max-w-4xl scroll-mt-20 px-5 sm:px-8">
           <StorySection
-            num="01"
+            kicker="The deal"
             title="A hand you barely know"
             figure={<PileDiagram showHand />}
           >
@@ -534,7 +534,7 @@ function HomePage() {
           </StorySection>
 
           <StorySection
-            num="02"
+            kicker="The specials"
             title="Specials earn their keep"
             figure={<AbilityTriptych />}
             flip
@@ -547,7 +547,7 @@ function HomePage() {
           </StorySection>
 
           <StorySection
-            num="03"
+            kicker="The call"
             title="One call ends it"
             figure={
               <div className="rounded-card border border-hairline p-10 sm:p-14">
@@ -574,11 +574,10 @@ function HomePage() {
           <div className="mx-auto w-full max-w-4xl px-5 sm:px-8">
             <Reveal className="text-center">
               <h2 className="text-4xl font-extrabold tracking-tight text-ink sm:text-6xl">
-                Your turn to play
+                Play a round
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-lg font-normal text-ink-muted">
-                The table is set, the cards are shuffled. All that's missing is
-                you.
+                Free. No accounts. A lobby link is all your friends need.
               </p>
 
               <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
@@ -588,7 +587,7 @@ function HomePage() {
                   className="rounded-full bg-accent px-12 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
                   data-cursor-link
                 >
-                  Create a Lobby
+                  Create a lobby
                 </Button>
                 <Button
                   variant="outline"
@@ -597,7 +596,7 @@ function HomePage() {
                   className="rounded-full border border-hairline bg-surface px-12 py-4 text-lg font-bold text-ink hover:bg-surface-2"
                   data-cursor-link
                 >
-                  Join a Lobby
+                  Join a lobby
                 </Button>
               </div>
             </Reveal>
