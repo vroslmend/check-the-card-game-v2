@@ -85,7 +85,7 @@ const GameStateError = ({
 };
 
 const LoadingIndicator = () => (
-  <div className="flex items-center justify-center h-screen w-full bg-ground">
+  <div className="flex items-center justify-center h-full w-full bg-ground">
     <p className="font-game text-ink-muted">Loading Game...</p>
   </div>
 );
@@ -214,15 +214,20 @@ export function GameBoard() {
   };
 
   return (
-    <div className="relative h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
+    <div className="relative h-full w-full bg-ground flex flex-col overflow-hidden @container font-game">
       <GameHeader />
       {/* CHECK's recede is momentary and returns to identity. A HELD scale
           here (the R12 end-of-round recede) made every layout-projected card
           under it fight the projection system on Gecko — the board bounced
           up and down indefinitely. The end scene now makes room with real
           layout (row order + hidden rows) instead of a transform. */}
+      {/* min-h-0 + overflow-y-auto: when a viewport is shorter than even the
+          compressed board (extreme zoom, tiny windows), the grid scrolls
+          instead of silently clipping the action bar — a button that exists
+          but can't be reached is the one unacceptable failure mode. At every
+          size the short/svh trims are tuned for, no scrollbar appears. */}
       <motion.div
-        className="relative flex-1 grid grid-rows-[auto_auto_1fr_auto_auto]"
+        className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden grid grid-rows-[auto_auto_1fr_auto_auto]"
         animate={{ scale: checkMoment && !reducedMotion ? 0.92 : 1 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
         style={{ transformOrigin: "center" }}
@@ -246,7 +251,7 @@ export function GameBoard() {
             {/* Opponents area */}
             <div
               className={cn(
-                "flex justify-center items-center py-2",
+                "flex justify-center items-center py-[clamp(0.125rem,0.75svh,0.5rem)]",
                 endScene && "order-1",
               )}
             >
@@ -299,12 +304,12 @@ export function GameBoard() {
             {/* Table Area - takes up remaining space. Extra vertical padding
                 gives the center decks breathing room from the opponent band
                 above and the local hand below (they read cramped without it);
-                the 1fr row absorbs it, and the @md guard keeps it modest on
-                dense phone layouts. */}
+                the 1fr row absorbs it, and the svh clamp scales it away
+                first on height-starved viewports. */}
             <div
               className={cn(
                 "flex items-center justify-center @container",
-                endScene ? "order-3" : "py-4 @md:py-8",
+                endScene ? "order-3" : "py-[clamp(0.25rem,3svh,1.25rem)]",
               )}
             >
               <TableArea
@@ -318,7 +323,7 @@ export function GameBoard() {
                 collapses) rather than duplicating the hand. */}
             <div
               className={cn(
-                "flex flex-col items-center justify-center py-2",
+                "flex flex-col items-center justify-center py-[clamp(0.125rem,0.75svh,0.5rem)]",
                 endScene && "order-2",
               )}
             >
@@ -342,7 +347,7 @@ export function GameBoard() {
                 every phase change. Retired for the end scene (it would be an
                 empty pill floating under the results panel). */}
             {!endScene && (
-              <div className="h-28 @md:h-32 flex items-start justify-center pb-2">
+              <div className="h-[clamp(6rem,15svh,7rem)] flex items-start justify-center">
                 <ActionControllerView />
               </div>
             )}

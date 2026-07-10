@@ -89,7 +89,7 @@ const ActionBarComponent: React.FC = () => {
 
   return (
     <motion.div
-      className="flex flex-col items-center w-full"
+      className="flex h-full w-full flex-col items-center"
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{
@@ -100,7 +100,7 @@ const ActionBarComponent: React.FC = () => {
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 400, damping: 35 }}
-        className="flex flex-row flex-wrap items-center justify-center gap-2 rounded-full border border-hairline bg-surface p-2 shadow-lg"
+        className="flex shrink-0 flex-row flex-wrap items-center justify-center gap-2 rounded-full border border-hairline bg-surface p-2 shadow-lg"
       >
         {actions.map((action, i) => (
           <ActionButton
@@ -110,11 +110,14 @@ const ActionBarComponent: React.FC = () => {
         ))}
       </motion.div>
 
-      {/* Fixed-height slot: the prompt fades in place and can wrap to two
-          lines without ever changing the bar's height (which would reflow
-          the whole board). */}
+      {/* Flexible slot: the bar fills its fixed grid row (h-full) and the
+          prompt takes whatever is left between the pill and the timer rail,
+          so the bar can NEVER outgrow the row — the old fixed slot height
+          plus svh margins drifted a few px past the row's own clamp on
+          short viewports, which surfaced as a phantom board scrollbar. The
+          prompt still fades in place without changing the bar's height. */}
       <div
-        className="mt-2 flex h-10 items-start justify-center"
+        className="mt-[clamp(0.25rem,1svh,0.5rem)] flex min-h-0 flex-1 items-start justify-center overflow-hidden"
         aria-live="polite"
       >
         <AnimatePresence>
@@ -140,7 +143,7 @@ const ActionBarComponent: React.FC = () => {
           in one cell. As flex siblings they sat side by side during the
           crossfade — the new bar mounted half a bar-width off-center and
           snapped back when the exit finished (the "teleporting" bar). */}
-      <div className="mt-1 grid h-1 w-full items-center justify-items-center">
+      <div className="mt-1 grid h-1 w-full shrink-0 items-center justify-items-center">
         <AnimatePresence>
           {timedIndicator && remainingMs > 0 && countdownRevealed && (
             <motion.div
