@@ -97,7 +97,7 @@ export const GameEventCaption = () => {
 
   return (
     <div
-      className="flex h-8 items-center justify-center font-game"
+      className="flex h-[clamp(1.5rem,4svh,1.75rem)] items-center justify-center font-game"
       aria-live="polite"
     >
       <AnimatePresence mode="wait">

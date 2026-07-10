@@ -74,7 +74,7 @@ export const VisualCardStack = ({
         transition={cardTravelTransition}
         onClick={onClick}
         className={cn(
-          "relative w-[min(8vh,15vw)] aspect-[5/7] rounded-card",
+          "relative w-(--card-w) aspect-[5/7] rounded-card",
           canInteract
             ? "cursor-pointer transition-[filter] hover:brightness-110"
             : "cursor-default",

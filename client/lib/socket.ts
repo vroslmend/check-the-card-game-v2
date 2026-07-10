@@ -6,7 +6,9 @@ import {
 } from "shared-types";
 import logger from "./logger";
 
-const URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "http://localhost:8000";
+export const SERVER_URL =
+  process.env.NEXT_PUBLIC_WEBSOCKET_URL || "http://localhost:8000";
+const URL = SERVER_URL;
 
 logger.info({ socketUrl: URL }, "Initializing Socket.IO client");
 

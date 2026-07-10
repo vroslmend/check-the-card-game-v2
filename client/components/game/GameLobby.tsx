@@ -260,7 +260,7 @@ export const GameLobby = () => {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-dvh w-full flex-col items-center justify-center gap-4 bg-ground font-game">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-ground font-game">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-hairline border-t-ink" />
         <p className="text-ink-muted">
           {reconnectionTimeout
@@ -335,8 +335,15 @@ export const GameLobby = () => {
   const emptySeats = Math.max(0, maxPlayers - players.length);
 
   return (
-    <div className="flex min-h-dvh w-full flex-col bg-ground font-game">
-      <div className="flex h-14 shrink-0 items-center justify-between px-4 md:px-6">
+    // h-full + overflow-y-auto (not min-h-dvh): this sits inside GameUI's
+    // overflow-hidden app frame, where a taller-than-viewport lobby was
+    // CLIPPED — on short viewports (150% OS zoom, half-tiled windows) the
+    // Ready/Start button rendered below the fold and could never be
+    // clicked. Scrolling the lobby itself makes every control reachable at
+    // any height; the svh-clamped rhythm below keeps common sizes from
+    // needing to scroll at all.
+    <div className="flex h-full w-full flex-col overflow-y-auto bg-ground font-game">
+      <div className="flex h-14 shrink-0 items-center justify-between px-4 md:px-6 short:h-12">
         <Link
           href="/"
           className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-ink"
@@ -366,14 +373,18 @@ export const GameLobby = () => {
         </div>
       </div>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 pb-14 text-center">
+      {/* my-auto, not flex-1 justify-center: auto margins center the content
+          when there's room but degrade to normal flow when there isn't —
+          justify-center inside a scroller pushes the overflow off BOTH ends,
+          leaving the top unreachable. */}
+      <main className="mx-auto my-auto flex w-full max-w-3xl flex-col items-center px-4 pb-[clamp(1.5rem,5svh,3.5rem)] text-center">
         <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
           Private table
         </p>
 
         <button
           onClick={copyInvite}
-          className="mt-3 rounded-card px-4 py-1 text-6xl font-extrabold tracking-[0.25em] text-ink tabular-nums transition-colors hover:text-ink/80 sm:text-7xl"
+          className="mt-3 rounded-card px-4 py-1 text-6xl font-extrabold tracking-[0.25em] text-ink tabular-nums transition-colors hover:text-ink/80 sm:text-7xl short:mt-2 short:text-5xl"
           aria-label="Copy invite link"
         >
           {gameId}
@@ -384,7 +395,7 @@ export const GameLobby = () => {
             : "Tap the code to copy an invite link"}
         </p>
 
-        <div className="mt-10 flex flex-wrap items-start justify-center gap-4 sm:gap-6">
+        <div className="mt-[clamp(1rem,4svh,2.5rem)] flex flex-wrap items-start justify-center gap-4 sm:gap-6">
           {players.map((p) => (
             <div
               key={p.id}
@@ -430,7 +441,7 @@ export const GameLobby = () => {
           ))}
         </div>
 
-        <p className="mt-8 text-sm font-semibold text-ink-muted">
+        <p className="mt-[clamp(0.75rem,3svh,2rem)] text-sm font-semibold text-ink-muted">
           {players.length} of {maxPlayers} seats filled
         </p>
         <p className="mt-1 h-5 text-sm text-ink-muted">{statusLine}</p>
@@ -438,7 +449,7 @@ export const GameLobby = () => {
         <button
           onClick={action.onClick}
           className={cn(
-            "mt-6 flex h-14 min-w-[12rem] items-center justify-center rounded-full px-8 text-base font-bold transition-colors sm:min-w-[16rem]",
+            "mt-[clamp(0.75rem,2.5svh,1.5rem)] flex h-14 min-w-[12rem] items-center justify-center rounded-full px-8 text-base font-bold transition-colors sm:min-w-[16rem] short:h-12",
             action.accent
               ? "bg-accent text-accent-ink hover:bg-accent/90"
               : "border border-hairline bg-surface-2 text-ink-muted hover:text-ink",
@@ -447,7 +458,7 @@ export const GameLobby = () => {
           {action.label}
         </button>
 
-        <p className="mt-10 text-sm text-ink-muted">
+        <p className="mt-[clamp(1rem,3.5svh,2.5rem)] text-sm text-ink-muted">
           New here?{" "}
           <button
             onClick={() => setLearnOpen(true)}

@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import CardAnimationRoot from "@/components/cards/CardAnimationRoot";
 import { GameStage } from "shared-types";
 import { useGameSounds } from "@/components/game/useGameSounds";
+import { useServerKeepalive } from "@/hooks/use-server-keepalive";
 
 type GameView = "prompting" | "lobby" | "game" | "connecting";
 
@@ -34,6 +35,9 @@ export default function GameUI() {
   // Mounted here so the table's voice covers the lobby (joins, readies,
   // start) as well as the board.
   useGameSounds();
+  // Any open game page keeps the free-tier host from idling out under a
+  // waiting lobby (details in the hook).
+  useServerKeepalive();
 
   const renderContent = () => {
     switch (view) {

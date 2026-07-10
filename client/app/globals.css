@@ -2,6 +2,31 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Height-constrained viewports (fullscreen AND half-tiled 1080p windows,
+   1366x768 laptops, 150% OS zoom): the board's fixed chrome (header, badges,
+   action bar) is what overflows — cards already scale via svh. `short:`
+   compresses that chrome. 60rem (960px) deliberately covers a maximized
+   browser on a 1080p screen (~905-945px of viewport): the stacked seat
+   header only truly fits ~1000px+, and a threshold below that gave 850-960px
+   viewports a WORSE fit than 750px ones. Discrete layout changes (flattening
+   a stacked badge) need the variant; prefer continuous clamp(...svh...)
+   values where they suffice. */
+@custom-variant short {
+  @media (max-height: 60rem) {
+    @slot;
+  }
+}
+
+/* Very short (≤680px): 150%-zoom laptops and 1366x768 screens. The seat
+   header moves BESIDE the hand (see PlayerHandStrip) — at these heights the
+   ~30px it costs above each hand is exactly the difference between fitting
+   and scrolling, while width is abundant. Matches the --card-w step below. */
+@custom-variant vshort {
+  @media (max-height: 42.5rem) {
+    @slot;
+  }
+}
+
 /* ============================================================================
    Design tokens — "The Clean One, multiplayer" (Round 4 visual identity)
    Four roles per theme: ground / surface / ink / accent (+ surface-2,
@@ -148,6 +173,22 @@
 
   --radius-card: 0.625rem;
   --radius-pill: 9999px;
+}
+
+/* One card size for the whole table — hands (regular cells), the deck, the
+   discard pile and the drawn-card slot all read this var (w-(--card-w)), so
+   the table scales as a unit. svh (not vh): stable while mobile browser
+   chrome collapses; 15vw keeps portrait phones width-bound. Below ~680px of
+   height even 8svh cards can't fit next to the board chrome, so the whole
+   table steps down together. (Dense opponent cells keep their own formula —
+   they are width-bound and capped, not height-bound.) */
+:root {
+  --card-w: min(8svh, 15vw);
+}
+@media (max-height: 42.5rem) {
+  :root {
+    --card-w: min(7.5svh, 15vw);
+  }
 }
 
 .no-native-cursor * {
