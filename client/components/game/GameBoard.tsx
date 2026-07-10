@@ -361,6 +361,7 @@ export function GameBoard() {
             players={players}
             winnerIds={winnerIds}
             localPlayerId={localPlayerId}
+            playerWins={gameState.playerWins ?? {}}
             rematchVotes={gameState.rematchVotes ?? []}
             onPlayAgain={handlePlayAgain}
             onRequestPlayAgain={handleRequestPlayAgain}

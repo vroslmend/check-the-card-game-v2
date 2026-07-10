@@ -170,10 +170,16 @@ export interface ClientCheckGameState {
     playerScores: Record<PlayerId, number>;
   } | null;
   lastRoundLoserId: PlayerId | null;
+  /** Cumulative round wins per player for this lobby's lifetime. Survives
+   *  Play Again (unlike scores); only players still at the table appear. */
+  playerWins: Record<PlayerId, number>;
   /** Players (at GAMEOVER) who signalled they want to play again — a live
    *  rematch tally shown to everyone. The host still starts the next round
    *  via PLAY_AGAIN; this is advisory. Reset on each new round. */
   rematchVotes: PlayerId[];
+  /** Bumped on each Play Again. A client seeing a new epoch drops its
+   *  accumulated log/chat instead of merging, so the panels start fresh. */
+  roundEpoch: number;
   log: RichGameLogMessage[];
   chat: ChatMessage[];
   discardPileIsSealed: boolean;
