@@ -10,19 +10,15 @@ import {
 } from "react";
 import {
   motion,
-  useScroll,
-  useTransform,
-  useSpring,
   useInView,
   AnimatePresence,
-  useMotionValueEvent,
   useReducedMotion,
   type Variants,
 } from "framer-motion";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ChevronDown, Users, ArrowRight, Menu, X } from "lucide-react";
+import { Users, ArrowRight, Menu, X } from "lucide-react";
 import { FaGithub, FaSpotify } from "react-icons/fa";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { HeroCards } from "@/components/ui/HeroCards";
@@ -86,22 +82,17 @@ const Reveal = ({
   </motion.div>
 );
 
-const MetaChip = ({ children }: { children: ReactNode }) => (
-  <span className="rounded-full border border-hairline bg-surface px-2.5 py-1 text-xs font-semibold text-ink">
-    {children}
-  </span>
-);
-
-/** Editorial section in the rules page's grammar: numbered kicker, title,
- *  copy on one side, one of the game's own figures on the other. */
+/** Editorial section in the rules page's grammar: a kicker in the game's own
+ *  vocabulary, title, copy on one side, one of the game's figures on the
+ *  other. */
 const StorySection = ({
-  num,
+  kicker,
   title,
   figure,
   flip = false,
   children,
 }: {
-  num: string;
+  kicker: string;
   title: string;
   figure: ReactNode;
   flip?: boolean;
@@ -112,7 +103,7 @@ const StorySection = ({
       <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
         <div className={flip ? "lg:order-2" : undefined}>
           <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
-            {num}
+            {kicker}
           </p>
           <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {title}
@@ -144,8 +135,6 @@ function HomePage() {
   const [showNewGame, setShowNewGame] = useState(false);
   const [showJoinGame, setShowJoinGame] = useState(false);
   const [isCheckHovered, setIsCheckHovered] = useState(false);
-  const [isAtTop, setIsAtTop] = useState(true);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPrecisionHovered, setIsPrecisionHovered] = useState(false);
   const { isMobile } = useDevice();
@@ -153,7 +142,6 @@ function HomePage() {
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const precisionHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const heroRef = useRef<HTMLDivElement>(null);
   const shouldReduceMotion = useReducedMotion();
 
   const getRandomCard = useCallback((): Card => {
@@ -213,29 +201,6 @@ function HomePage() {
   };
 
   const checkText = (isCheckHovered ? "Check!" : "Check").split("");
-
-  const { scrollY, scrollYProgress } = useScroll();
-  const smoothProgress = useSpring(scrollYProgress, {
-    stiffness: 100,
-    damping: 30,
-    restDelta: 0.001,
-  });
-
-  useMotionValueEvent(scrollY, "change", (latest) => {
-    const atTop = latest < 50;
-    if (atTop !== isAtTop) {
-      setIsAtTop(atTop);
-    }
-    if (!atTop && isInitialLoad) {
-      setIsInitialLoad(false);
-    }
-  });
-
-  const heroY = useTransform(
-    smoothProgress,
-    [0, 1],
-    shouldReduceMotion ? ["0%", "0%"] : ["0%", "-30%"],
-  );
 
   useEffect(() => {
     if ("scrollRestoration" in history) {
@@ -356,280 +321,204 @@ function HomePage() {
       </AnimatePresence>
 
       <main className="flex-1">
-        <section
-          ref={heroRef}
-          className="relative flex min-h-[100svh] items-center justify-center"
-        >
-          <motion.div
-            style={{ y: heroY }}
-            className="mx-auto w-full max-w-6xl px-5 sm:px-8"
-          >
-            <div className="grid min-h-[100svh] items-center text-center lg:grid-cols-2 lg:text-left">
-              <div className="flex flex-col items-center justify-center space-y-10 lg:items-start">
-                <motion.div
-                  initial={{ opacity: 0, y: 60 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 1.2,
-                    delay: 0.6,
-                    ease: [0.6, 0.01, 0.05, 0.95],
-                  }}
-                  className="space-y-7"
-                >
-                  <div className="inline-flex items-center gap-3 rounded-full border border-hairline bg-surface px-5 py-2.5">
-                    <div className="h-2 w-2 rounded-full bg-accent" />
-                    <span className="text-sm font-semibold tracking-wide text-ink-muted">
-                      Multiplayer card game
-                    </span>
-                  </div>
-
-                  <div className="space-y-8 text-center lg:text-left">
-                    <h1 className="inline-block text-left text-6xl font-extrabold leading-none tracking-tight text-ink sm:text-7xl md:text-8xl xl:text-9xl">
-                      <motion.span
-                        className="block"
-                        initial={{ opacity: 0, y: 40 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 1, delay: 0.8 }}
-                      >
-                        The
-                      </motion.span>
-                      <motion.span
-                        className="relative ml-8 inline-block"
-                        initial={{ opacity: 0, x: -60 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{
-                          duration: 1.2,
-                          delay: 1,
-                          ease: [0.6, 0.01, 0.05, 0.95],
-                        }}
-                      >
+        <section className="relative flex min-h-[100svh] items-center justify-center">
+          <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-5 pb-16 pt-24 text-center sm:px-8">
+            <motion.h1
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: REVEAL_EASE, delay: 0.1 }}
+              className="relative inline-block text-7xl font-extrabold leading-none tracking-tight text-ink sm:text-8xl md:text-9xl"
+            >
+              <motion.span
+                variants={textContainerVariants}
+                initial="initial"
+                whileHover="hover"
+                onMouseEnter={() => {
+                  if (hoverTimeoutRef.current) {
+                    clearTimeout(hoverTimeoutRef.current);
+                  }
+                  hoverTimeoutRef.current = setTimeout(() => {
+                    setIsCheckHovered(true);
+                  }, 300);
+                }}
+                onMouseLeave={() => {
+                  if (hoverTimeoutRef.current) {
+                    clearTimeout(hoverTimeoutRef.current);
+                  }
+                  setIsCheckHovered(false);
+                }}
+                className="flex"
+                aria-label="Check"
+                data-cursor-icon
+              >
+                <AnimatePresence initial={false}>
+                  {checkText.map((char, index) => {
+                    if (char === "!") {
+                      return (
                         <motion.span
-                          variants={textContainerVariants}
-                          initial="initial"
-                          whileHover="hover"
-                          onMouseEnter={() => {
-                            if (hoverTimeoutRef.current) {
-                              clearTimeout(hoverTimeoutRef.current);
-                            }
-                            hoverTimeoutRef.current = setTimeout(() => {
-                              setIsCheckHovered(true);
-                            }, 300);
+                          key={index}
+                          className="inline-block"
+                          initial={{ opacity: 0, width: 0, x: -10 }}
+                          animate={{
+                            opacity: 1,
+                            width: "auto",
+                            x: 0,
                           }}
-                          onMouseLeave={() => {
-                            if (hoverTimeoutRef.current) {
-                              clearTimeout(hoverTimeoutRef.current);
-                            }
-                            setIsCheckHovered(false);
-                          }}
-                          className="flex"
-                          aria-label="Check"
-                          data-cursor-icon
-                        >
-                          <AnimatePresence initial={false}>
-                            {checkText.map((char, index) => {
-                              if (char === "!") {
-                                return (
-                                  <motion.span
-                                    key={index}
-                                    className="inline-block"
-                                    initial={{ opacity: 0, width: 0, x: -10 }}
-                                    animate={{
-                                      opacity: 1,
-                                      width: "auto",
-                                      x: 0,
-                                    }}
-                                    exit={{ opacity: 0, width: 0, x: 10 }}
-                                    transition={{
-                                      duration: 0.3,
-                                      ease: "easeInOut",
-                                    }}
-                                  >
-                                    {char}
-                                  </motion.span>
-                                );
-                              }
-                              return (
-                                <motion.span
-                                  key={index}
-                                  variants={letterVariants}
-                                  className="inline-block"
-                                >
-                                  {char}
-                                </motion.span>
-                              );
-                            })}
-                          </AnimatePresence>
-                        </motion.span>
-                        <motion.div
-                          initial={{ scaleX: 0, originX: 0.5 }}
-                          animate={{ scaleX: 1 }}
+                          exit={{ opacity: 0, width: 0, x: 10 }}
                           transition={{
-                            duration: 1.5,
-                            delay: 1.6,
-                            ease: [0.6, 0.01, 0.05, 0.95],
+                            duration: 0.3,
+                            ease: "easeInOut",
                           }}
-                          className="absolute -bottom-3 left-[52%] h-1 w-[96%] -translate-x-1/2 rounded-full bg-accent"
-                        />
+                        >
+                          {char}
+                        </motion.span>
+                      );
+                    }
+                    return (
+                      <motion.span
+                        key={index}
+                        variants={letterVariants}
+                        className="inline-block"
+                      >
+                        {char}
                       </motion.span>
-                    </h1>
+                    );
+                  })}
+                </AnimatePresence>
+              </motion.span>
+              <motion.div
+                initial={
+                  shouldReduceMotion ? false : { scaleX: 0, originX: 0.5 }
+                }
+                animate={{ scaleX: 1 }}
+                transition={{ duration: 0.7, delay: 0.5, ease: REVEAL_EASE }}
+                className="absolute -bottom-3 left-1/2 h-1 w-[96%] -translate-x-1/2 rounded-full bg-accent"
+              />
+            </motion.h1>
 
-                    <motion.p
-                      initial={{ opacity: 0, y: 30 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 1, delay: 0.5 }}
-                      className="max-w-lg text-xl font-normal leading-relaxed text-ink-muted"
-                    >
-                      Outwit your friends in a tense game of memory, strategy,
-                      and pure luck. Keep your cards close, your score low, and
-                      call "Check" at the perfect moment to snatch victory.
-                    </motion.p>
-
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 1, delay: 0.7 }}
-                      className="flex flex-wrap justify-center gap-2 lg:justify-start"
-                    >
-                      <MetaChip>2–6 players</MetaChip>
-                      <MetaChip>52 cards</MetaChip>
-                      <MetaChip>one round</MetaChip>
-                      <MetaChip>free</MetaChip>
-                    </motion.div>
-                  </div>
-
-                  <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 1, delay: 0.8 }}
-                    className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start"
-                  >
-                    {isMobile ? (
-                      <>
-                        <Button
-                          size="lg"
-                          onClick={handleCreateGame}
-                          className="rounded-full bg-accent px-8 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
-                        >
-                          Create a Lobby
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="lg"
-                          onClick={handleJoinGame}
-                          className="rounded-full border border-hairline bg-surface px-8 py-4 text-lg font-bold text-ink hover:bg-surface-2"
-                        >
-                          <Users className="mr-2 h-4 w-4" />
-                          Join a Lobby
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <motion.div
-                          variants={buttonWithCardVariants}
-                          className="relative"
-                          initial="initial"
-                          whileHover="hover"
-                          onHoverStart={() => setLobbyCard(getRandomCard())}
-                        >
-                          <Button
-                            size="lg"
-                            onClick={handleCreateGame}
-                            data-cursor-link
-                            className="relative z-10 rounded-full bg-accent px-8 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
-                          >
-                            <span className="pointer-events-none relative z-10 flex items-center gap-2">
-                              Create a Lobby
-                              <ArrowRight className="h-4 w-4" />
-                            </span>
-                          </Button>
-                          <motion.div
-                            variants={dealtCardVariants}
-                            className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
-                          >
-                            {lobbyCard && (
-                              <PlayingCard
-                                card={lobbyCard}
-                                className="h-full w-full"
-                              />
-                            )}
-                          </motion.div>
-                        </motion.div>
-                        <motion.div
-                          variants={buttonWithCardVariants}
-                          className="relative"
-                          initial="initial"
-                          whileHover="hover"
-                          onHoverStart={() => setJoinCard(getRandomCard())}
-                        >
-                          <Button
-                            variant="outline"
-                            size="lg"
-                            onClick={handleJoinGame}
-                            data-cursor-link
-                            className="relative z-10 rounded-full border border-hairline bg-surface px-8 py-4 text-lg font-bold text-ink hover:bg-surface-2"
-                          >
-                            <Users className="mr-2 h-4 w-4" />
-                            Join a Lobby
-                          </Button>
-                          <motion.div
-                            variants={dealtCardVariants}
-                            className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
-                          >
-                            {joinCard && (
-                              <PlayingCard
-                                card={joinCard}
-                                className="h-full w-full"
-                              />
-                            )}
-                          </motion.div>
-                        </motion.div>
-                      </>
-                    )}
-                  </motion.div>
-                </motion.div>
-              </div>
-
-              <div className="relative hidden h-full items-center justify-center lg:flex">
-                <HeroCards checkHovered={isCheckHovered} />
-              </div>
-            </div>
+            <motion.p
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: REVEAL_EASE, delay: 0.25 }}
+              className="mt-8 max-w-md text-lg leading-relaxed text-ink-muted sm:text-xl"
+            >
+              The call you make when you think your hand is the lowest at the
+              table.
+            </motion.p>
 
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: isAtTop ? 1 : 0 }}
-              transition={
-                isInitialLoad
-                  ? { delay: 3, duration: 1.5 }
-                  : { duration: 0.5, ease: "easeOut" }
-              }
-              className="absolute bottom-10 left-1/2 -translate-x-1/2"
+              initial={shouldReduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.35 }}
+              className="mt-6"
             >
-              <motion.div
-                animate={!shouldReduceMotion ? { y: [0, 8, 0] } : {}}
-                transition={{
-                  repeat: Number.POSITIVE_INFINITY,
-                  duration: 3,
-                  ease: "easeInOut",
-                }}
-                className="flex cursor-pointer flex-col items-center gap-2 text-ink-muted transition-colors duration-300 hover:text-ink"
-                onClick={() => {
-                  document
-                    .getElementById("how")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-              >
-                <span className="text-sm font-semibold tracking-wide">
-                  How it plays
-                </span>
-                <ChevronDown className="h-4 w-4" />
-              </motion.div>
+              <HeroCards checkHovered={isCheckHovered} />
             </motion.div>
-          </motion.div>
+
+            <motion.div
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: REVEAL_EASE, delay: 0.5 }}
+              className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
+            >
+              {isMobile ? (
+                <>
+                  <Button
+                    size="lg"
+                    onClick={handleCreateGame}
+                    className="rounded-full bg-accent px-8 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
+                  >
+                    Create a lobby
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={handleJoinGame}
+                    className="rounded-full border border-hairline bg-surface px-8 py-4 text-lg font-bold text-ink hover:bg-surface-2"
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    Join a lobby
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <motion.div
+                    variants={buttonWithCardVariants}
+                    className="relative"
+                    initial="initial"
+                    whileHover="hover"
+                    onHoverStart={() => setLobbyCard(getRandomCard())}
+                  >
+                    <Button
+                      size="lg"
+                      onClick={handleCreateGame}
+                      data-cursor-link
+                      className="relative z-10 rounded-full bg-accent px-8 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
+                    >
+                      <span className="pointer-events-none relative z-10 flex items-center gap-2">
+                        Create a lobby
+                        <ArrowRight className="h-4 w-4" />
+                      </span>
+                    </Button>
+                    <motion.div
+                      variants={dealtCardVariants}
+                      className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
+                    >
+                      {lobbyCard && (
+                        <PlayingCard
+                          card={lobbyCard}
+                          className="h-full w-full"
+                        />
+                      )}
+                    </motion.div>
+                  </motion.div>
+                  <motion.div
+                    variants={buttonWithCardVariants}
+                    className="relative"
+                    initial="initial"
+                    whileHover="hover"
+                    onHoverStart={() => setJoinCard(getRandomCard())}
+                  >
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={handleJoinGame}
+                      data-cursor-link
+                      className="relative z-10 rounded-full border border-hairline bg-surface px-8 py-4 text-lg font-bold text-ink hover:bg-surface-2"
+                    >
+                      <Users className="mr-2 h-4 w-4" />
+                      Join a lobby
+                    </Button>
+                    <motion.div
+                      variants={dealtCardVariants}
+                      className="pointer-events-none absolute left-1/2 top-0 h-32 w-24"
+                    >
+                      {joinCard && (
+                        <PlayingCard
+                          card={joinCard}
+                          className="h-full w-full"
+                        />
+                      )}
+                    </motion.div>
+                  </motion.div>
+                </>
+              )}
+            </motion.div>
+
+            <motion.p
+              initial={shouldReduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.65 }}
+              className="mt-6 text-sm font-semibold text-ink-muted"
+            >
+              Free to play with 2–6 players in the browser.
+            </motion.p>
+          </div>
         </section>
 
         <div id="how" className="mx-auto w-full max-w-4xl scroll-mt-20 px-5 sm:px-8">
           <StorySection
-            num="01"
+            kicker="The deal"
             title="A hand you barely know"
             figure={<PileDiagram showHand />}
           >
@@ -642,7 +531,7 @@ function HomePage() {
           </StorySection>
 
           <StorySection
-            num="02"
+            kicker="The specials"
             title="Specials earn their keep"
             figure={<AbilityTriptych />}
             flip
@@ -655,7 +544,7 @@ function HomePage() {
           </StorySection>
 
           <StorySection
-            num="03"
+            kicker="The call"
             title="One call ends it"
             figure={
               <div className="rounded-card border border-hairline p-10 sm:p-14">
@@ -682,11 +571,11 @@ function HomePage() {
           <div className="mx-auto w-full max-w-4xl px-5 sm:px-8">
             <Reveal className="text-center">
               <h2 className="text-4xl font-extrabold tracking-tight text-ink sm:text-6xl">
-                Your turn to play
+                Play a round
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-lg font-normal text-ink-muted">
-                The table is set, the cards are shuffled. All that's missing is
-                you.
+                Create a lobby and send the link to your friends. No account
+                needed.
               </p>
 
               <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
@@ -696,7 +585,7 @@ function HomePage() {
                   className="rounded-full bg-accent px-12 py-4 text-lg font-bold text-accent-ink hover:bg-accent/90"
                   data-cursor-link
                 >
-                  Create a Lobby
+                  Create a lobby
                 </Button>
                 <Button
                   variant="outline"
@@ -705,7 +594,7 @@ function HomePage() {
                   className="rounded-full border border-hairline bg-surface px-12 py-4 text-lg font-bold text-ink hover:bg-surface-2"
                   data-cursor-link
                 >
-                  Join a Lobby
+                  Join a lobby
                 </Button>
               </div>
             </Reveal>

@@ -64,7 +64,9 @@ export function HeroCards({ checkHovered }: { checkHovered: boolean }) {
 
   return (
     <div
-      className="relative flex h-96 w-96 items-center justify-center"
+      // Compact on phones: the fan used to be desktop-only decoration; now it
+      // is the hero image everywhere. Scaling the box keeps the pixel poses.
+      className="relative flex h-64 w-72 scale-[0.68] items-center justify-center sm:h-96 sm:w-96 sm:scale-100"
       onMouseEnter={() => setCardsHovered(true)}
       onMouseLeave={() => setCardsHovered(false)}
       aria-hidden
