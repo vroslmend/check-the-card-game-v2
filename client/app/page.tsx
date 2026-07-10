@@ -82,10 +82,9 @@ const Reveal = ({
   </motion.div>
 );
 
-
-
-/** Editorial section in the rules page's grammar: numbered kicker, title,
- *  copy on one side, one of the game's own figures on the other. */
+/** Editorial section in the rules page's grammar: a kicker in the game's own
+ *  vocabulary, title, copy on one side, one of the game's figures on the
+ *  other. */
 const StorySection = ({
   kicker,
   title,
@@ -202,8 +201,6 @@ function HomePage() {
   };
 
   const checkText = (isCheckHovered ? "Check!" : "Check").split("");
-
-
 
   useEffect(() => {
     if ("scrollRestoration" in history) {
@@ -405,8 +402,8 @@ function HomePage() {
               transition={{ duration: 0.6, ease: REVEAL_EASE, delay: 0.25 }}
               className="mt-8 max-w-md text-lg leading-relaxed text-ink-muted sm:text-xl"
             >
-              — the call you make when you think your hand is the lowest at
-              the table.
+              The call you make when you think your hand is the lowest at the
+              table.
             </motion.p>
 
             <motion.div
@@ -514,7 +511,7 @@ function HomePage() {
               transition={{ duration: 0.6, delay: 0.65 }}
               className="mt-6 text-sm font-semibold text-ink-muted"
             >
-              Free, for 2–6 players, in the browser.
+              Free to play with 2–6 players in the browser.
             </motion.p>
           </div>
         </section>
@@ -577,7 +574,8 @@ function HomePage() {
                 Play a round
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-lg font-normal text-ink-muted">
-                Free. No accounts. A lobby link is all your friends need.
+                Create a lobby and send the link to your friends. No account
+                needed.
               </p>
 
               <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
