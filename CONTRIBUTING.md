@@ -1,0 +1,134 @@
+# Contributing to Check!
+
+Thanks for taking an interest. Check! is a personal project and the source is public so people can read it, learn from it and help make it better. Bug reports and ideas are as useful to me as code.
+
+Before you send code, read the [Contributor License Agreement](#contributor-license-agreement) at the end of this file. This project is not open source in the usual sense, and submitting a contribution places it under that agreement.
+
+Be decent to people in issues and pull requests. That is the whole code of conduct.
+
+## Ways to contribute
+
+- **Play it and report what breaks.** Open an issue with what you did and what happened. For multiplayer problems, include the number of players and the game code if you still have it.
+- **Suggest a change.** Describe the problem you ran into rather than the solution you have in mind. It usually leads somewhere better.
+- **Improve the docs.** `docs/` holds the rules, architecture and setup notes.
+- **Write code.** Read the rest of this file first.
+
+## How work is tracked
+
+Anything larger than a quick fix gets an issue, so the reason for a change exists in writing before the code does.
+
+- Every issue ends with a **Current state** line recording what was verified and when. Check that it still holds before you start, because the problem may already be gone.
+- Issues labelled **needs decision** are not ready to build. They are waiting on a call from me about how the feature should work, and code sent against one will sit unmerged until that is settled.
+- Comment on an issue before you start, so two people do not build the same thing.
+- If there is no issue for what you want to do, open one and wait for a reply before writing code. It is a short wait and it saves work being thrown away.
+
+## Setting up
+
+Requirements, install steps and environment variables are in the [README](README.md). The short version:
+
+```
+npm ci
+npm run build:shared
+npm run dev
+```
+
+That runs the Next.js client and the Socket.IO server together. You need both, because the server is authoritative for every rule in the game.
+
+## Making a change
+
+- Branch off `main`. Main is protected, so a pull request is the only way in: one approving review, no direct commits, no force pushes.
+- One issue, one pull request. If you find a second problem along the way, open a second issue for it. A small fix bundled with a large rewrite cannot be reviewed or reverted cleanly and will be sent back.
+- Stay inside the scope the issue describes. Where scope matters, the issue says what is out of bounds.
+- Match the style of the code around you.
+- Write plain commit messages that say what changed and why.
+
+## Verifying your change
+
+There is no automated test suite yet, tracked in #36. Until there is, verification is manual and the burden sits with the pull request.
+
+Type checks and the client build must pass:
+
+```
+npx tsc --noEmit -p shared-types/tsconfig.json
+npx tsc --noEmit -p server/tsconfig.json
+npx tsc --noEmit -p client/tsconfig.json
+npm run build:client
+```
+
+Game behaviour is specified in [docs/GAME_RULES.md](docs/GAME_RULES.md). If you touched the rules, play a real round with a second browser window and follow the affected rule end to end.
+
+## Opening a pull request
+
+Include:
+
+- `Fixes #12` in the body, so the issue closes when the pull request merges.
+- What you ran and what you checked. "Should work" is not verification.
+- Before and after screenshots for anything visual, along with the viewport you looked at.
+
+I review and merge everything myself, including work from collaborators with write access. Expect questions rather than silent rejection.
+
+## Reporting a security problem
+
+Do not open a public issue for anything exploitable. Use [private vulnerability reporting](https://github.com/vroslmend/check-the-card-game-v2/security/advisories/new), which reaches me privately.
+
+The server is authoritative and redacts hidden cards before broadcasting state, so anything that lets a player learn information they should not have counts as a security problem, not a bug.
+
+## Contributor License Agreement
+
+**In short, and not as a substitute for the terms below:** Check! is all rights reserved. If you contribute, you keep the copyright in what you wrote and you keep your credit in the git history, but you give me an unrestricted, permanent right to use, change, ship and sell it as part of this project, including under a commercial license. If you are not comfortable with that, please contribute bug reports and ideas instead of code.
+
+The following terms are adapted from the Apache Software Foundation Individual Contributor License Agreement, V2.2.
+
+**1. Definitions.**
+
+"Owner" means Ammar Hassan, the copyright holder of the Project.
+
+"Project" means the software and documentation published in the repository at https://github.com/vroslmend/check-the-card-game-v2 and any successor to it.
+
+"You" means the individual, or the legal entity on whose behalf the individual is acting, who Submits a Contribution.
+
+"Contribution" means any original work of authorship, including any modifications or additions to an existing work, that is intentionally Submitted by You to the Owner for inclusion in, or documentation of, the Project. For the purposes of this definition, a work conspicuously marked or otherwise designated in writing by You as "Not a Contribution" is excluded.
+
+"Submit" means any form of electronic, verbal or written communication sent to the Owner or the Owner's representatives, including but not limited to pull requests, issues, comments and electronic mail sent in connection with the Project.
+
+**2. Grant of Copyright License.**
+
+Subject to the terms and conditions of this Agreement, You hereby grant to the Owner and to recipients of software distributed by the Owner a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare derivative works of, publicly display, publicly perform, sublicense and distribute Your Contributions and such derivative works, in source or object form, under any license terms the Owner selects, including proprietary and commercial terms, and with no obligation of accounting or payment to You.
+
+**3. Grant of Patent License.**
+
+Subject to the terms and conditions of this Agreement, You hereby grant to the Owner and to recipients of software distributed by the Owner a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable, except as stated in this section, patent license to make, have made, use, offer to sell, sell, import and otherwise transfer the Project, where such license applies only to those patent claims licensable by You that are necessarily infringed by Your Contribution alone or by combination of Your Contribution with the Project to which such Contribution was Submitted. If any entity institutes patent litigation against You or any other entity, including a cross-claim or counterclaim in a lawsuit, alleging that Your Contribution, or the Project to which You have contributed, constitutes direct or contributory patent infringement, then any patent licenses granted to that entity under this Agreement for that Contribution or Project shall terminate as of the date such litigation is filed.
+
+**4. Representations.**
+
+You represent that You are legally entitled to grant the above licenses. If Your employer or any other party has rights to intellectual property that You create, You represent that You have received permission to make the Contribution on behalf of that party, that that party has waived such rights for the Contribution, or that that party has executed a separate agreement with the Owner.
+
+You represent that each of Your Contributions is Your original creation. You represent that Your Contribution submissions include complete details of any third party license or other restriction, including but not limited to related patents, trademarks and license agreements, of which You are personally aware and which are associated with any part of Your Contributions.
+
+**5. Third Party Works.**
+
+Should You wish to Submit work that is not Your original creation, You may Submit it to the Owner separately from any Contribution, identifying the complete details of its source and of any license or other restriction of which You are personally aware, and conspicuously marking the work as "Submitted on behalf of a third party: [named here]".
+
+**6. No Warranty.**
+
+Unless required by applicable law or agreed to in writing, You provide Your Contributions on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. You are not expected to provide support for Your Contributions, except to the extent You desire to provide support.
+
+**7. No Obligation.**
+
+You acknowledge that the Owner is under no obligation to accept, merge, use, distribute or maintain any Contribution, and that the decision to include a Contribution in the Project rests entirely with the Owner.
+
+**8. Moral Rights and Attribution.**
+
+Authorship of Your Contribution is recorded in the version control history of the Project and the Owner will not misrepresent it. To the extent permitted by applicable law, You waive, and agree not to assert, any moral rights in Your Contribution that would restrict the Owner's exercise of the rights granted in sections 2 and 3, including rights of integrity in relation to modification of Your Contribution.
+
+**9. Notification.**
+
+You agree to notify the Owner of any facts or circumstances of which You become aware that would make the representations in this Agreement inaccurate in any respect.
+
+**10. Acceptance.**
+
+By Submitting a Contribution to the Project, You accept and agree to this Agreement for Your present and future Contributions. This Agreement is a separate written agreement for the purposes of the GitHub Terms of Service and governs Your Contributions in place of the default inbound licensing that would otherwise apply.
+
+**11. Governing Law.**
+
+This Agreement is governed by the laws of the Islamic Republic of Pakistan, without regard to its conflict of law provisions, and You agree to the exclusive jurisdiction of the courts of Pakistan for any dispute arising out of it.
