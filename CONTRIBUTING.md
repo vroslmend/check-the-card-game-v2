@@ -18,6 +18,7 @@ Be decent to people in issues and pull requests. That is the whole code of condu
 Anything larger than a quick fix gets an issue, so the reason for a change exists in writing before the code does.
 
 - Every issue ends with a **Current state** line recording what was verified and when. Check that it still holds before you start, because the problem may already be gone.
+- When you file one, end it the same way: a command anyone can run to see whether the problem still exists, what it returns today, and the date. A `grep` beats a sentence, and it beats a line number, because line numbers rot within weeks and a search only breaks when the code it describes actually changes. The Task template has the shape.
 - Issues labelled **needs decision** are not ready to build. They are waiting on a call from me about how the feature should work, and code sent against one will sit unmerged until that is settled.
 - Comment on an issue before you start, so two people do not build the same thing.
 - If there is no issue for what you want to do, open one and wait for a reply before writing code. It is a short wait and it saves work being thrown away.
@@ -56,6 +57,14 @@ npm run build:client
 ```
 
 Game behaviour is specified in [docs/GAME_RULES.md](docs/GAME_RULES.md). If you touched the rules, play a real round with a second browser window and follow the affected rule end to end.
+
+## Things that will bite you
+
+- **Do not run `prettier --write .`.** Prettier is configured but deliberately not enforced, and most of the repo predates it. A blanket format touches over a hundred files and destroys `git blame`. Format what you actually edited, if anything.
+- **Do not add an `engines` field or an `.nvmrc`.** Vercel and Render both read them, so adding one silently changes the Node version the live deployment builds with.
+- **Do not add `paths-ignore` to `.github/workflows/ci.yml`.** CI is a required check, and a workflow skipped by path filtering leaves that check pending forever, which blocks the pull request from merging with no obvious cause. Use a job level `if:` instead, since a skipped job reports success.
+- **`main` is protected by a repository ruleset, not classic branch protection.** `gh api repos/OWNER/REPO/branches/main/protection` returns 404 even though main is fully protected. Use `gh api repos/OWNER/REPO/rulesets`.
+- **If you touch `server/src/state-redactor.ts`, be careful.** That function is the boundary that keeps hidden cards hidden, and it has leaked a player's own hand once before. No face-down card's rank or suit should reach any client outside SCORING and GAMEOVER, including the card's owner. `docs/GAME_RULES.md` defines what each player is allowed to know.
 
 ## Opening a pull request
 

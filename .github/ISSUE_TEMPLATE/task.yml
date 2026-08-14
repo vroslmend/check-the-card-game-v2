@@ -1,0 +1,38 @@
+name: Task
+description: A piece of work to be done, written so someone can pick it up cold
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for work you intend to be done, rather than a report or a suggestion. The aim is that someone reading it in three months can tell what to do, what not to do, and whether it is still worth doing.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is wrong or missing, and why it matters. Name the files involved. Two or three sentences is usually enough.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Out of scope
+      description: What this change should not touch. Worth filling in whenever the work sits next to something tempting to fix at the same time.
+    validations:
+      required: false
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: How someone can tell it is finished. End with something checkable rather than a feeling.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current state
+      description: A command that shows whether this is still live, what it returns today, and the date you checked. Prefer a grep or an ls over a line number, because line numbers rot and commands do not.
+      placeholder: |
+        Open as of YYYY-MM-DD. `grep -n "some distinctive string" path/to/file.ts` returns a hit while this is live. Empty output means the code changed and this may already be fixed.
+    validations:
+      required: true
