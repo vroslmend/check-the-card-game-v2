@@ -158,7 +158,7 @@ Once any player is locked (either by calling "Check" or emptying their hand), th
 1.  After the Final Turns Phase is complete, the round ends and all players reveal their hands.
 2.  Scores are calculated based on the card values in Section 4.
 3.  The player or players with the **lowest total score** win(s) the round. In the event of a tie, all tied players are considered winners.
-4.  The game consists of a single round.
+4.  Scores do not carry between rounds. The host can start another round in the same lobby, and other players can signal that they want one. The lobby keeps a running count of rounds won for as long as it lasts, with no fixed number of rounds and no target score.
 
 ## 11. Appendix: Edge Cases & Special Rulings
 
