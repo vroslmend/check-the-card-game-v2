@@ -4,15 +4,26 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+
+# Least privilege: this workflow only reads the code. Nothing it runs needs
+# write access to the repository.
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# No paths-ignore here on purpose. This is a required check, and a workflow
+# skipped by path filtering leaves the check pending forever, which blocks the
+# pull request from merging. Running it on documentation changes costs a couple
+# of minutes and keeps the gate honest.
 jobs:
   build:
     name: Typecheck and build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
