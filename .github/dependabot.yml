@@ -10,6 +10,15 @@ updates:
         update-types:
           - minor
           - patch
+    # Majors are excluded on purpose. With no automated test suite (#36), a
+    # green typecheck and build is not enough evidence to take a breaking
+    # release: an icon library can drop an icon and a state library can change
+    # behaviour while the build still compiles. Majors are picked up by hand,
+    # one at a time, when there is time to test one properly.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
