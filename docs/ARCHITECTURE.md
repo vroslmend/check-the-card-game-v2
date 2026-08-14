@@ -1,15 +1,13 @@
-# ARCHITECTURE.md (v2.1 - Final, Comprehensive)
+# Architecture
 
-## Architecture Overview
-
-This document describes the high-level architecture of the Check! card game project. It covers the main components, their responsibilities, and how they interact, reflecting the final, refactored state of the application.
+This document describes the high-level architecture of the Check! card game: the main components, what each is responsible for, and how they interact. The rules the server enforces are specified separately in [GAME_RULES.md](./GAME_RULES.md).
 
 ## 1. Core Philosophy
 
 The core architectural philosophy for "Check!" centers around creating a seamless and robust multiplayer card game experience. Key goals include:
 
 - **Real-time Multiplayer Interaction**: Ensuring that all players experience game events and state changes simultaneously and smoothly.
-- **Authoritative Server**: Maintaining a single source of truth for game state and rules on the server using XState. This prevents inconsistencies, validates all actions, and makes cheating impossible from the client-side.
+- **Authoritative Server**: Maintaining a single source of truth for game state and rules on the server using XState. Every action is validated server side, and hidden information is redacted before state is broadcast, so a modified client cannot change the outcome of a game or read what it should not see.
 - **Global & Persistent Client State**: Utilizing a single, global XState machine on the client, provided at the root of the application. This ensures a persistent state across the entire user session, seamlessly managing everything from pre-game modals to in-game interactions, disconnections, and reconnections.
 - **Engaging User Experience**: Leveraging Next.js (App Router), TypeScript, and Tailwind CSS to create an intuitive and visually appealing interface, with Framer Motion used for fluid, state-driven animations.
 
@@ -25,8 +23,9 @@ The project is structured as a monorepo using npm workspaces, comprising three m
 
 **Key Directories/Modules**:
 
-- `client/app/layout.tsx`: **Root Application Layout**. This is a Client Component ('use client') that houses all global providers. It uses the usePathname hook to calculate the initial input for the state machine and provides the GameUIContext.Provider to the entire application.
-- `client/context/GameUIContext.ts`: **The Context Hub**. This file uses the createActorContext utility from @xstate/react to generate a strongly-typed Provider and a set of hooks (useSelector, useActorRef) for interacting with the uiMachine. This is the standard, modern way to integrate XState with React.
+- `client/app/layout.tsx`: **Root Application Layout**. A Server Component that sets metadata and fonts and renders the providers tree.
+- `client/app/providers.tsx`: **The Client Boundary**. A Client Component that creates the global uiMachine actor with createActor and provides it, alongside theme, cursor, scroll and device providers.
+- `client/context/GameUIContext.ts`: **The Context Hub**. Exposes the strongly typed hooks used everywhere in the app, useUIActorRef for sending events and useUISelector for subscribing to slices of machine state.
 - `client/machines/uiMachine.ts`: **The Brain of the Client**. Defines the global uiMachine. This machine manages the entire client application lifecycle, from outOfGame (on the landing page), to inGame (with sub-states like lobby, playing, ability), and the critical promptToJoin and reconnecting states.
 - `client/app/page.tsx`: **Main Landing Page**. A presentational component whose "Create Game" and "Join Game" buttons use local React state (useState) to toggle the visibility of the modals. It consumes the global GameUIContext to interact with the state machine.
 - `client/components/modals/`: Contains NewGameModal.tsx, JoinGameModal.tsx, and RejoinModal.tsx. These components use the GameUIContext.useActorRef() hook to send events to the global machine. The RejoinModal is now a generic prompt used for the "Join via Link" flow.
@@ -96,9 +95,6 @@ The integrity of the game relies on the well-defined structures in `shared-types
 
 ## 7. Testing Strategy
 
-The project employs a multi-layered testing strategy:
+There is no automated test suite at present. An earlier Vitest suite covering the game machine, the state redactor and the deck utilities was removed and has not been replaced, so verification is manual against `GAME_RULES.md`. Restoring it is tracked in issue #36.
 
-- **Server Logic (game-machine.test.ts)**: Uses Vitest for behavior-driven testing. Tests interact with a running actor instance, send events, and assert the resulting state and context against the GAME_RULES.md. The suite covers game flow, special abilities, and edge cases like player disconnection and configuration options.
-- **Server Network Layer (index.test.ts)**: Uses Vitest and mocks to test the Socket.IO event handlers in index.ts, ensuring requests are routed correctly and ack callbacks are handled.
-- **Server Data Transformation (state-redactor.test.ts)**: Uses Vitest to unit test the pure generatePlayerView function.
-- **(Future) E2E Testing**: The architecture is well-suited for end-to-end testing with frameworks like Cypress or Playwright to simulate full user flows in a browser.
+The architecture supports testing well: the game machine is pure and configured by input, and `generatePlayerView` is a pure function, so both can be exercised without a socket or a browser.
