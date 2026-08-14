@@ -2,13 +2,11 @@
 
 [![CI](https://github.com/vroslmend/check-the-card-game-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/vroslmend/check-the-card-game-v2/actions/workflows/ci.yml)
 
-[![Check!](docs/social-card.png)](https://check-the-game.vercel.app)
-
 A browser card game for two to six players, built with Next.js, Socket.IO and XState.
 
-**[Play it at check-the-game.vercel.app](https://check-the-game.vercel.app)**. Free, no account, no install: create a table and send your friends the invite link.
+_[Play](https://check-the-game.vercel.app)_ · _[Rules](https://check-the-game.vercel.app/rules)_ · _[Architecture](docs/ARCHITECTURE.md)_ · _[Contributing](CONTRIBUTING.md)_
 
-_[Rules](https://check-the-game.vercel.app/rules)_ · _[Architecture](docs/ARCHITECTURE.md)_ · _[Contributing](CONTRIBUTING.md)_
+![Check!](docs/social-card.png)
 
 ## The game
 
@@ -19,6 +17,8 @@ On your turn you draw, then either swap the card into a hand you half remember o
 Kings, Queens and Jacks do something extra when discarded, letting you look at a card or swap one with another player.
 
 Call Check when you think you are lowest. Everyone else gets one more turn, then hands are revealed.
+
+Play at [check-the-game.vercel.app](https://check-the-game.vercel.app).
 
 ## Running locally
 
