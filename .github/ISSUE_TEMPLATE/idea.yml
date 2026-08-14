@@ -1,0 +1,25 @@
+name: Idea or change request
+description: Suggest something the game should do differently
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describing the problem you ran into usually leads somewhere better than describing the solution you had in mind. Both are welcome.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What made you want this. What were you doing when it came up.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like instead
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        Please wait for a reply before writing code against this. Anything that changes how the game plays needs a decision first, and unagreed work tends to sit unmerged.

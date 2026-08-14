@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in the game behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If the bug lets a player see information they should not have, do not file it here. Use [private vulnerability reporting](https://github.com/vroslmend/check-the-card-game-v2/security/advisories/new) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what the game did in response.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: If it is a rules question, GAME_RULES.md is the specification.
+    validations:
+      required: true
+  - type: input
+    id: players
+    attributes:
+      label: Players in the game
+      placeholder: "3"
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, device and window size
+      placeholder: "Chrome on a Pixel 5, portrait"
+    validations:
+      required: false
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: Game code if you still have it, screenshots, a recording, console errors.
+    validations:
+      required: false
