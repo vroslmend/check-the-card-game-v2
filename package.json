@@ -19,7 +19,6 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "author": "Vroslmend",
   "type": "commonjs",
-  "main": "index.js",
   "directories": {
     "doc": "docs"
   },
