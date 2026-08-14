@@ -2,13 +2,11 @@
 
 [![CI](https://github.com/vroslmend/check-the-card-game-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/vroslmend/check-the-card-game-v2/actions/workflows/ci.yml)
 
+[![Check!](docs/social-card.png)](https://check-the-game.vercel.app)
+
 A browser card game for two to six players, built with Next.js, Socket.IO and XState.
 
-### [Play it at check-the-game.vercel.app](https://check-the-game.vercel.app)
-
-Free, no account, no install. Create a table and send your friends the invite link.
-
-[![Check!](docs/social-card.png)](https://check-the-game.vercel.app)
+**[Play it at check-the-game.vercel.app](https://check-the-game.vercel.app)**. Free, no account, no install: create a table and send your friends the invite link.
 
 _[Rules](https://check-the-game.vercel.app/rules)_ · _[Architecture](docs/ARCHITECTURE.md)_ · _[Contributing](CONTRIBUTING.md)_
 
