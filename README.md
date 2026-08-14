@@ -6,7 +6,7 @@ A browser card game for two to six players, built with Next.js, Socket.IO and XS
 
 _[Play](https://check-the-game.vercel.app)_ · _[Rules](https://check-the-game.vercel.app/rules)_ · _[Architecture](docs/ARCHITECTURE.md)_ · _[Contributing](CONTRIBUTING.md)_
 
-![Check!](https://check-the-game.vercel.app/opengraph-image)
+![Check!](docs/social-card.png)
 
 ## The game
 
