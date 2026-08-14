@@ -4,9 +4,13 @@
 
 A browser card game for two to six players, built with Next.js, Socket.IO and XState.
 
-_[Play](https://check-the-game.vercel.app)_ · _[Rules](https://check-the-game.vercel.app/rules)_ · _[Architecture](docs/ARCHITECTURE.md)_ · _[Contributing](CONTRIBUTING.md)_
+### [Play it at check-the-game.vercel.app](https://check-the-game.vercel.app)
 
-![Check!](docs/social-card.png)
+Free, no account, no install. Create a table and send your friends the invite link.
+
+[![Check!](docs/social-card.png)](https://check-the-game.vercel.app)
+
+_[Rules](https://check-the-game.vercel.app/rules)_ · _[Architecture](docs/ARCHITECTURE.md)_ · _[Contributing](CONTRIBUTING.md)_
 
 ## The game
 
