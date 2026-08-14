@@ -18,7 +18,7 @@ Kings, Queens and Jacks do something extra when discarded, letting you look at a
 
 Call Check when you think you are lowest. Everyone else gets one more turn, then hands are revealed.
 
-Play at [check-the-game.vercel.app](https://check-the-game.vercel.app).
+Play at [check-the-game.vercel.app](https://check-the-game.vercel.app)
 
 ## Running locally
 
