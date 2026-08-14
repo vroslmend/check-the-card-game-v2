@@ -41,6 +41,7 @@ That runs the Next.js client and the Socket.IO server together. You need both, b
 - One issue, one pull request. If you find a second problem along the way, open a second issue for it. A small fix bundled with a large rewrite cannot be reviewed or reverted cleanly and will be sent back.
 - Stay inside the scope the issue describes. Where scope matters, the issue says what is out of bounds.
 - Match the style of the code around you.
+- The docs follow the same rule. Match what is already there: short sentences, plain words, no decoration.
 - Write plain commit messages that say what changed and why.
 
 ## Verifying your change
