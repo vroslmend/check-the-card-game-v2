@@ -66,16 +66,12 @@ There is no automated test suite yet, tracked in #36. Until there is, verificati
 Everything CI runs has to pass, and you can run all of it locally first:
 
 ```
-npm run check:majors
-npx tsc --noEmit -p shared-types/tsconfig.json
-npx tsc --noEmit -p server/tsconfig.json
-npx tsc --noEmit -p client/tsconfig.json
-npm run lint
-npm run format:check
-npm run build:client
+npm run verify
 ```
 
-`check:majors` fails if a guarded package changed major version. If that is deliberate, do the migration and update the expectation in `scripts/check-dependency-majors.mjs` in the same pull request.
+That is the same command CI runs, so if it passes locally it passes there. It checks guarded dependency majors, builds the shared types, type checks all three packages, lints, checks formatting, and builds the server and the client.
+
+Two notes on what it can tell you. If `check:majors` fails, a guarded package changed major version: do the migration deliberately and update the expectation in `scripts/check-dependency-majors.mjs` in the same pull request. And CI does one thing `verify` does not, starting the built server and waiting for it to answer `/health`, which catches a throw on startup that type checking cannot.
 
 CI also starts the built server and waits for it to answer `/health`, which catches a throw on startup that type checking cannot.
 
