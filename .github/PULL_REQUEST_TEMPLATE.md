@@ -11,13 +11,7 @@ Fixes #
 <!-- What you actually ran and looked at. There is no automated test suite yet, so this section is the verification.
 
 What CI will run, so you can fail it locally first:
-  npm run check:majors
-  npx tsc --noEmit -p shared-types/tsconfig.json
-  npx tsc --noEmit -p server/tsconfig.json
-  npx tsc --noEmit -p client/tsconfig.json
-  npm run lint
-  npm run format:check
-  npm run build:client
+  npm run verify
 
 If you touched game rules, say which rule you played through and with how many players. -->
 

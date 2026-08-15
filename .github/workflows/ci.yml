@@ -36,27 +36,10 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Build shared types
-        run: npm run build:shared
-
-      - name: Typecheck shared types
-        run: npx tsc --noEmit -p shared-types/tsconfig.json
-
-      - name: Typecheck server
-        run: npx tsc --noEmit -p server/tsconfig.json
-
-      - name: Typecheck client
-        run: npx tsc --noEmit -p client/tsconfig.json
-
-      # Its own step: the client build runs with --no-lint.
-      - name: Lint client
-        run: npm run lint
-
-      - name: Check formatting
-        run: npm run format:check
-
-      - name: Build server
-        run: npm run build:server
+      # One command, so this and what contributors are told to run cannot
+      # drift apart. Add a check to the verify script, not to this file.
+      - name: Verify
+        run: npm run verify
 
       # Typechecking proves the server compiles, not that it runs. This catches
       # a throw on startup or a broken module-alias mapping.
@@ -79,6 +62,3 @@ jobs:
           EOF
           kill $pid 2>/dev/null || true
           exit 1
-
-      - name: Build client
-        run: npm run build:client
