@@ -26,6 +26,7 @@ import {
   PlayerStatus,
 } from "shared-types";
 import { createDeck, shuffleDeck } from "./lib/deck-utils.js";
+import { createSeededRng, systemRng } from "./lib/rng.js";
 import logger from "./lib/logger.js";
 // Side-effect import required so TS can name the machine's inferred guard
 // types when emitting declarations (avoids TS2742).
@@ -1117,7 +1118,7 @@ export const gameMachine = setup({
         : {};
     }),
     dealCards: assign(({ context }) => {
-      const deck = shuffleDeck(createDeck());
+      const deck = shuffleDeck(createDeck(context.rng), context.rng);
       const playersAfterDeal = produce(context.players, (draft) => {
         Object.values(draft).forEach((p) => {
           p.hand = [];
@@ -1648,7 +1649,7 @@ export const gameMachine = setup({
       const newDiscard = [...context.discardPile];
       const topCard = newDiscard.pop();
       return {
-        deck: shuffleDeck(newDiscard),
+        deck: shuffleDeck(newDiscard, context.rng),
         discardPile: topCard ? [topCard] : [],
         errorState: null,
         log: [
@@ -1702,7 +1703,7 @@ export const gameMachine = setup({
 
       if (tempDeck.length === 0) {
         const topCard = tempDiscard.pop();
-        tempDeck = shuffleDeck(tempDiscard);
+        tempDeck = shuffleDeck(tempDiscard, context.rng);
         tempDiscard = topCard ? [topCard] : [];
         logMessageText = `The discard pile was reshuffled. `;
       }
@@ -2063,6 +2064,7 @@ export const gameMachine = setup({
   id: "game",
   context: ({ input }) => ({
     gameId: input.gameId,
+    rng: input.seed === undefined ? systemRng : createSeededRng(input.seed),
     maxPlayers: input.maxPlayers ?? MAX_PLAYERS,
     cardsPerPlayer: input.cardsPerPlayer ?? CARDS_PER_PLAYER,
     deck: [],

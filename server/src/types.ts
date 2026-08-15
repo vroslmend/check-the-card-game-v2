@@ -13,6 +13,7 @@ import {
   PublicSwapInfo,
   PublicPenaltyInfo,
 } from "shared-types";
+import type { Rng } from "./lib/rng.js";
 
 export interface ServerActiveAbility extends Omit<ActiveAbility, "stage"> {
   stage: "peeking" | "swapping";
@@ -38,6 +39,7 @@ export interface ServerPlayer {
 
 export interface GameContext {
   gameId: string;
+  rng: Rng;
   deck: Card[];
   players: Record<PlayerId, ServerPlayer>;
   discardPile: Card[];
@@ -101,4 +103,7 @@ export type GameInput = {
   gameId: string;
   maxPlayers?: number;
   cardsPerPlayer?: number;
+  /** Omitted in production, which uses the system source. Supplying one makes
+   *  the shuffle and the card ids reproducible, so a game can be replayed. */
+  seed?: number;
 };
