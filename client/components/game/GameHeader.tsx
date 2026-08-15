@@ -20,13 +20,7 @@ import {
 } from "@/context/GameUIContext";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { BrandMark } from "@/components/ui/BrandMark";
-import {
-  getVolume,
-  isMuted,
-  play,
-  setMuted,
-  setVolume,
-} from "@/lib/sounds";
+import { getVolume, isMuted, play, setMuted, setVolume } from "@/lib/sounds";
 
 const selectGameHeaderProps = (state: UIMachineSnapshot) => ({
   gameId: state.context.gameId,
@@ -39,8 +33,9 @@ const ICON_BUTTON =
 
 export const GameHeader = () => {
   const { send } = useUIActorRef();
-  const { gameId, isSidePanelOpen, chatCount } =
-    useUISelector(selectGameHeaderProps);
+  const { gameId, isSidePanelOpen, chatCount } = useUISelector(
+    selectGameHeaderProps,
+  );
 
   // Baseline on first sight: history isn't news (mount/rejoin shows no dot).
   const seenChatCountRef = React.useRef<number | null>(null);
@@ -160,9 +155,7 @@ export const GameHeader = () => {
           }}
           className={`relative ${ICON_BUTTON}`}
           aria-label={
-            hasUnread
-              ? "Toggle side panel (new messages)"
-              : "Toggle side panel"
+            hasUnread ? "Toggle side panel (new messages)" : "Toggle side panel"
           }
         >
           <AnimatePresence initial={false} mode="wait">

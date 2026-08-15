@@ -328,8 +328,8 @@ export const uiMachine = setup({
           playerId: event.response.playerId,
         };
         const sessionJSON = JSON.stringify(sessionData);
-    localStorage.setItem("playerSession", sessionJSON);
-    sessionStorage.setItem("playerSession", sessionJSON); // store in sessionStorage too
+        localStorage.setItem("playerSession", sessionJSON);
+        sessionStorage.setItem("playerSession", sessionJSON); // store in sessionStorage too
       }
     },
     clearSession: () => {
@@ -493,7 +493,8 @@ export const uiMachine = setup({
           // Pooled combos take multiple swaps on ONE ability (same sourceCard,
           // same "swapping" stage). Re-key on remainingSwaps so the swap-target
           // selection resets between each swap of the combo.
-          currentClientAbility.remainingSwaps !== topServerAbility.remainingSwaps
+          currentClientAbility.remainingSwaps !==
+            topServerAbility.remainingSwaps
         ) {
           const { type, stage, playerId, sourceCard, remainingPeeks } =
             topServerAbility;

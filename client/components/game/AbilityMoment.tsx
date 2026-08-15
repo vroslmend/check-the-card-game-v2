@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  useUISelector,
-  type UIMachineSnapshot,
-} from "@/context/GameUIContext";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
 import { CardRank } from "shared-types";
 import { claimStampSlot } from "@/lib/stampQueue";
 
@@ -101,11 +98,7 @@ export function useAbilityMoment(): AbilityMomentInfo | null {
 
 /** The ability stamp: CHECK.'s visual language, sized between the pile chips
  *  and PENALTY. pointer-events-none, so target selection continues under it. */
-export function AbilityStamp({
-  moment,
-}: {
-  moment: AbilityMomentInfo | null;
-}) {
+export function AbilityStamp({ moment }: { moment: AbilityMomentInfo | null }) {
   const reduced = useReducedMotion();
   return (
     <AnimatePresence>

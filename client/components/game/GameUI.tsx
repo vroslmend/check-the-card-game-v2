@@ -1,10 +1,7 @@
 "use client";
 
 import React from "react";
-import {
-  useUISelector,
-  type UIMachineSnapshot,
-} from "@/context/GameUIContext";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
 import { GameBoard } from "@/components/game/GameBoard";
 import { GameLobby } from "@/components/game/GameLobby";
 import LoadingOrError from "@/components/layout/LoadingOrError";

@@ -1426,7 +1426,8 @@ export const gameMachine = setup({
           newAbilityStack = produce(context.abilityStack, (draft) => {
             const merged = draft.at(-1)!;
             merged.remainingPeeks =
-              (merged.remainingPeeks ?? 0) + (matcherAbility.remainingPeeks ?? 0);
+              (merged.remainingPeeks ?? 0) +
+              (matcherAbility.remainingPeeks ?? 0);
             // Each peek-capable ability owes one swap after its peeks; pool them.
             merged.remainingSwaps = (merged.remainingSwaps ?? 1) + 1;
             // Peeks come first for the whole pool; keep the discarder's stable
@@ -1508,8 +1509,7 @@ export const gameMachine = setup({
       const maxScore = Math.max(...Object.values(playerScores));
       const winnerIds = Object.values(updatedPlayers)
         .filter(
-          (p) =>
-            p.status !== PlayerStatus.DISQUALIFIED && p.score === minScore,
+          (p) => p.status !== PlayerStatus.DISQUALIFIED && p.score === minScore,
         )
         .map((p) => p.id);
       const loserId =
@@ -1921,9 +1921,9 @@ export const gameMachine = setup({
         const playerHand = context.players[playerId]!.hand;
         // The initial-peek hand is always dense (freshly dealt, no gaps); the
         // filter only satisfies the Card[] wire type.
-        const peekableCards: Card[] = playerHand.slice(-2).filter(
-          (c: Card | null): c is Card => c !== null,
-        );
+        const peekableCards: Card[] = playerHand
+          .slice(-2)
+          .filter((c: Card | null): c is Card => c !== null);
         enqueue(
           emit({
             type: "SEND_EVENT_TO_PLAYER",
@@ -2325,9 +2325,8 @@ export const gameMachine = setup({
             // is the only player still eligible to win).
             guard: ({ context }: { context: GameContext }) =>
               !context.checkDetails &&
-              context.turnOrder.filter(
-                (id) => !context.players[id]!.isLocked,
-              ).length < 2,
+              context.turnOrder.filter((id) => !context.players[id]!.isLocked)
+                .length < 2,
             target: `#game.${GameStage.SCORING}`,
           },
           {

@@ -2,10 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { GameStage } from "shared-types";
-import {
-  useUISelector,
-  type UIMachineSnapshot,
-} from "@/context/GameUIContext";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
 import { initSounds, play } from "@/lib/sounds";
 
 // The match pulse fires when the card lands (cardTravelTransition = 0.65s);
@@ -95,10 +92,8 @@ export function useGameSounds() {
       play("start");
     if (prev === GameStage.DEALING && next === GameStage.INITIAL_PEEK)
       play("deal");
-    const wasEnd =
-      prev === GameStage.SCORING || prev === GameStage.GAMEOVER;
-    const isEnd =
-      next === GameStage.SCORING || next === GameStage.GAMEOVER;
+    const wasEnd = prev === GameStage.SCORING || prev === GameStage.GAMEOVER;
+    const isEnd = next === GameStage.SCORING || next === GameStage.GAMEOVER;
     if (isEnd && !wasEnd) play("roundOver");
   });
 

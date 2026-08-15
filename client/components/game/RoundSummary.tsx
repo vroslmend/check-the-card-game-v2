@@ -145,7 +145,10 @@ export const RoundSummary = ({
         penalties[aId] = (penalties[aId] ?? 0) + 1;
       } else if (entry.message.includes(" matched a")) {
         matches[aId] = (matches[aId] ?? 0) + 1;
-      } else if (entry.tags.includes("ability") && entry.message.includes(" used")) {
+      } else if (
+        entry.tags.includes("ability") &&
+        entry.message.includes(" used")
+      ) {
         abilities[aId] = (abilities[aId] ?? 0) + 1;
       }
     }
@@ -279,7 +282,9 @@ export const RoundSummary = ({
                     : "border border-hairline bg-surface text-ink hover:border-ink-muted",
                 )}
               >
-                {localWantsRematch ? "Ready for a rematch" : "I want to play again"}
+                {localWantsRematch
+                  ? "Ready for a rematch"
+                  : "I want to play again"}
               </button>
               <span className="text-sm font-semibold text-ink-muted">
                 {rematchCount > 0 && `${rematchCount}/${nonHostCount} in · `}

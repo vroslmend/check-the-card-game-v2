@@ -153,9 +153,9 @@ export default function RulesContent() {
               Rules
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-muted sm:text-lg">
-              Check! is a fast-paced card game of strategy, memory, and a
-              little luck. Keep your hand’s total low, watch everything, and
-              call it when you’re sure.
+              Check! is a fast-paced card game of strategy, memory, and a little
+              luck. Keep your hand’s total low, watch everything, and call it
+              when you’re sure.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               <MetaChip>2–6 players</MetaChip>
@@ -185,15 +185,15 @@ export default function RulesContent() {
 
           <RuleSection meta={sec("goal")}>
             <p>
-              Every player tends a small grid of face-down cards. When the
-              round ends, all hands are revealed. The player holding the{" "}
+              Every player tends a small grid of face-down cards. When the round
+              ends, all hands are revealed. The player holding the{" "}
               <Term>lowest total value</Term> wins.
             </p>
             <p>
               You’ll get there by swapping unknown cards for better ones,
               discarding the heavy ones, and matching your way to a smaller
-              hand. End the round with a confident <Term>“Check”</Term>{" "}
-              before anyone can slim down further.
+              hand. End the round with a confident <Term>“Check”</Term> before
+              anyone can slim down further.
             </p>
           </RuleSection>
 
@@ -202,25 +202,28 @@ export default function RulesContent() {
               Check! uses a standard 52-card deck, no jokers.{" "}
               <Term>Aces are worth −1</Term>, the only cards that subtract.
               Number cards score their face value, so a 7 is 7 points.{" "}
-              <Term>Jack 11, Queen 12, King 13</Term>: the heaviest cards in
-              the deck. Each carries an ability (section 07).
+              <Term>Jack 11, Queen 12, King 13</Term>: the heaviest cards in the
+              deck. Each carries an ability (section 07).
             </p>
           </RuleSection>
 
-          <RuleSection meta={sec("the-table")} figure={<PileDiagram showHand />}>
+          <RuleSection
+            meta={sec("the-table")}
+            figure={<PileDiagram showHand />}
+          >
             <p>Three things live on the table:</p>
             <ul className="list-disc space-y-1.5 pl-5">
               <li>
-                <Term>The draw pile</Term>: face down. The remaining count
-                sits right on the top card’s back.
+                <Term>The draw pile</Term>: face down. The remaining count sits
+                right on the top card’s back.
               </li>
               <li>
                 <Term>The discard pile</Term>: face up. Only the top card
                 matters, and everyone can see it.
               </li>
               <li>
-                <Term>Your hand</Term>: four cards dealt face down in a 2×2
-                grid in front of you. You don’t get to look at them, with one
+                <Term>Your hand</Term>: four cards dealt face down in a 2×2 grid
+                in front of you. You don’t get to look at them, with one
                 exception (next section).
               </li>
             </ul>
@@ -233,19 +236,18 @@ export default function RulesContent() {
               can join.
             </p>
             <p>
-              Everyone receives four cards, face down, in a 2×2 grid. Then
-              comes the one free look of the game, the{" "}
-              <Term>initial peek</Term>: you may secretly look at your{" "}
-              <Term>bottom two cards</Term>, just those, just once. Memorize
-              them; they go back face down.
+              Everyone receives four cards, face down, in a 2×2 grid. Then comes
+              the one free look of the game, the <Term>initial peek</Term>: you
+              may secretly look at your <Term>bottom two cards</Term>, just
+              those, just once. Memorize them; they go back face down.
             </p>
           </RuleSection>
 
           <RuleSection meta={sec("your-turn")}>
             <p>
               Turns move around the table. On yours, you <Term>must draw</Term>,
-              one of two ways, and every turn ends with a card landing face
-              up on the discard pile.
+              one of two ways, and every turn ends with a card landing face up
+              on the discard pile.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <OptionPanel title="Draw from the draw pile">
@@ -256,17 +258,19 @@ export default function RulesContent() {
               </OptionPanel>
               <OptionPanel title="Take the top discard">
                 Only if the pile isn’t sealed (section 06), and{" "}
-                <Term>never a King, Queen, or Jack</Term>. You must swap it
-                into your grid. Everyone already knows the card, so they will
-                watch where it lands.
+                <Term>never a King, Queen, or Jack</Term>. You must swap it into
+                your grid. Everyone already knows the card, so they will watch
+                where it lands.
               </OptionPanel>
             </div>
             <p>
               A drawn King, Queen, or Jack does nothing by itself.{" "}
-              <Term>Abilities trigger only when a special card is discarded</Term>{" "}
+              <Term>
+                Abilities trigger only when a special card is discarded
+              </Term>{" "}
               from your hand, never when you tuck one in. Every discard
-              immediately opens the matching window (section 06); once it
-              closes and any abilities resolve, the turn passes on.
+              immediately opens the matching window (section 06); once it closes
+              and any abilities resolve, the turn passes on.
             </p>
             <div>
               <h3 className="text-sm font-bold text-ink">
@@ -277,11 +281,13 @@ export default function RulesContent() {
                 nobody can stall the table:
               </p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                <li>Haven’t drawn? You draw from the draw pile automatically.</li>
+                <li>
+                  Haven’t drawn? You draw from the draw pile automatically.
+                </li>
                 <li>Still holding a deck draw? It’s discarded for you.</li>
                 <li>
-                  Still holding a discard-pile draw? It’s swapped with the
-                  first card in your grid.
+                  Still holding a discard-pile draw? It’s swapped with the first
+                  card in your grid.
                 </li>
                 <li>An unresolved ability fizzles (section 10).</li>
                 <li>
@@ -295,37 +301,36 @@ export default function RulesContent() {
           <RuleSection meta={sec("matching")} figure={<PileDiagram sealed />}>
             <p>
               The instant <Term>any</Term> card lands face up on the discard
-              pile, a short real-time window opens, about{" "}
-              <Term>5 seconds</Term>, and every unlocked player,{" "}
-              <Term>including whoever just discarded</Term>, may race to throw
-              a card of the <Term>exact same rank</Term> from their hand onto
-              it.
+              pile, a short real-time window opens, about <Term>5 seconds</Term>
+              , and every unlocked player,{" "}
+              <Term>including whoever just discarded</Term>, may race to throw a
+              card of the <Term>exact same rank</Term> from their hand onto it.
             </p>
             <p>
-              <Term>Hit it</Term> and your card leaves your hand. The pile
-              also <Term>seals</Term>: nobody may draw from
-              it until the start of the next turn. Match a special card onto a
-              special card and both abilities trigger (section 07).
+              <Term>Hit it</Term> and your card leaves your hand. The pile also{" "}
+              <Term>seals</Term>: nobody may draw from it until the start of the
+              next turn. Match a special card onto a special card and both
+              abilities trigger (section 07).
             </p>
             <p>
               <Term>Miss</Term> with a wrong-rank card and it comes straight
-              back, and you immediately{" "}
-              <Term>draw a penalty card</Term>. The window stays open for
-              everyone, and you may even try again with a different card.
+              back, and you immediately <Term>draw a penalty card</Term>. The
+              window stays open for everyone, and you may even try again with a
+              different card.
             </p>
             <p>
-              <Term>Pass</Term> and it’s final for that window; no changing
-              your mind. The window closes when someone hits, everyone has
-              passed, or time runs out.
+              <Term>Pass</Term> and it’s final for that window; no changing your
+              mind. The window closes when someone hits, everyone has passed, or
+              time runs out.
             </p>
             <p>
               Two edges worth knowing: match away your <Term>last card</Term>{" "}
               and you’ve automatically called Check (section 08). Balloon to{" "}
               <Term>eight cards</Term> through penalties and you’re{" "}
               <Term>disqualified</Term>: locked out of the round, your hand
-              still scored, no way to win. If disqualifications ever leave
-              fewer than two active players with no Check in progress, the
-              round simply ends.
+              still scored, no way to win. If disqualifications ever leave fewer
+              than two active players with no Check in progress, the round
+              simply ends.
             </p>
           </RuleSection>
 
@@ -344,20 +349,20 @@ export default function RulesContent() {
             </p>
             <ul className="list-disc space-y-1.5 pl-5">
               <li>
-                <Term>King</Term>: peek at any two cards on the table, then
-                swap any one card with any other.
+                <Term>King</Term>: peek at any two cards on the table, then swap
+                any one card with any other.
               </li>
               <li>
-                <Term>Queen</Term>: peek at any one card, then swap any one
-                card with any other.
+                <Term>Queen</Term>: peek at any one card, then swap any one card
+                with any other.
               </li>
               <li>
                 <Term>Jack</Term>: no peek, straight to the swap.
               </li>
             </ul>
             <p>
-              Both stages are optional: skip the peek, skip the swap, or let
-              the whole thing go. Peeking isn’t invisible:{" "}
+              Both stages are optional: skip the peek, skip the swap, or let the
+              whole thing go. Peeking isn’t invisible:{" "}
               <Term>everyone sees which positions you peek at</Term>; only you
               see the faces.
             </p>
@@ -416,9 +421,9 @@ export default function RulesContent() {
                   Nothing left to draw anywhere
                 </dt>
                 <dd className="mt-1 text-sm leading-relaxed">
-                  If a draw is required, a penalty for example, and neither
-                  pile can provide even after reshuffling, the game ends on
-                  the spot and hands are scored as they lie.
+                  If a draw is required, a penalty for example, and neither pile
+                  can provide even after reshuffling, the game ends on the spot
+                  and hands are scored as they lie.
                 </dd>
               </div>
               <div className="py-4 first:pt-0 last:pb-0">
@@ -438,9 +443,7 @@ export default function RulesContent() {
               <p className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
                 Ready?
               </p>
-              <p className="mt-2 text-ink-muted">
-                Lowest hand wins.
-              </p>
+              <p className="mt-2 text-ink-muted">Lowest hand wins.</p>
               <div className="mt-8 flex justify-center">
                 <Link
                   href="/"

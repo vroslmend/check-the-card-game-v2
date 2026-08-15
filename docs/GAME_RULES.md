@@ -12,23 +12,24 @@ Be the player with the **lowest total card value** in your hand at the end of th
 
 ## 3. Game Components
 
-*   **The Draw Pile:** A face-down pile of cards from which players draw.
-*   **The Discard Pile:** A face-up pile where cards are discarded. The top card is always visible.
-*   **Player Hand (Grid):** Each player has a personal set of cards, initially four, arranged face-down in a 2x2 grid.
+- **The Draw Pile:** A face-down pile of cards from which players draw.
+- **The Discard Pile:** A face-up pile where cards are discarded. The top card is always visible.
+- **Player Hand (Grid):** Each player has a personal set of cards, initially four, arranged face-down in a 2x2 grid.
 
 ## 4. The Deck & Card Values
 
 A standard 52-card deck (no Jokers) is used. Cards are scored as follows:
-*   **Ace (A):** -1 point
-*   **Number Cards (2-10):** Face value (e.g., '7' is 7 points)
-*   **Jack (J):** 11 points
-*   **Queen (Q):** 12 points
-*   **King (K):** 13 points
+
+- **Ace (A):** -1 point
+- **Number Cards (2-10):** Face value (e.g., '7' is 7 points)
+- **Jack (J):** 11 points
+- **Queen (Q):** 12 points
+- **King (K):** 13 points
 
 ## 5. Game Setup
 
 1.  **Joining a Game:** Players join a game lobby before it begins.
-2.  **Starting the Game:** The Game Master initiates the start of the game. *The moment the game starts, the lobby is locked, and no new players may join.*
+2.  **Starting the Game:** The Game Master initiates the start of the game. _The moment the game starts, the lobby is locked, and no new players may join._
 3.  **Dealing:** The deck is shuffled. Each player is dealt four cards, placed face-down in a 2x2 grid. These cards form the player's starting hand.
 4.  **Initial Peek Phase:** After cards are dealt, each player is allowed to secretly look at their **bottom two cards** only (the cards in the second row of their 2x2 grid). After this phase, all cards are turned face-down again.
 
@@ -37,15 +38,18 @@ A standard 52-card deck (no Jokers) is used. Cards are scored as follows:
 Turns proceed sequentially around the table. A player's turn consists of one mandatory **Draw Action**, which is then followed by a discard. This discard triggers the **Matching Stage**.
 
 #### A. The Draw Action
+
 The current player **must** perform one of the following two actions:
 
 **Action 1: Draw from the Draw Pile**
+
 1.  Take the top card from the face-down Draw Pile. This card is visible only to the drawing player.
 2.  The player now has two choices:
-    *   **Option A: Swap & Discard.** The player selects one card from their hand and places the newly drawn card face-down in its position. The card that was originally in that position is then placed face-up on top of the Discard Pile.
-    *   **Option B: Discard Drawn Card.** The player immediately places the newly drawn card face-up on top of the Discard Pile. This does not alter the player's hand.
-    
+    - **Option A: Swap & Discard.** The player selects one card from their hand and places the newly drawn card face-down in its position. The card that was originally in that position is then placed face-up on top of the Discard Pile.
+    - **Option B: Discard Drawn Card.** The player immediately places the newly drawn card face-up on top of the Discard Pile. This does not alter the player's hand.
+
 **Action 2: Draw from the Discard Pile**
+
 1.  This action is only possible if the Discard Pile is **not sealed** (see Section 7) and the top card is **not a locked (matched) card** (see Section 7, Successful Match).
 2.  A player **cannot** draw a special card (King, Queen, or Jack) from the Discard Pile.
 3.  If the top card is drawable, the player takes it. They **must** then swap this card with one card from their hand, placing the discard pile card face-down in their grid. The card from their hand is then placed face-up on the Discard Pile.
@@ -53,50 +57,56 @@ The current player **must** perform one of the following two actions:
 **Note on special cards.** If a King, Queen, or Jack is drawn from the deck and swapped into a player's hand, its ability does not trigger at that moment. An ability only triggers when a special card is **discarded** from a player's hand onto the Discard Pile.
 
 #### B. End of Turn
+
 After a player discards a card (completing their Draw Action), the game enters **The Matching Stage**. Once the Matching Stage and any resulting Special Abilities are fully resolved, the turn passes to the next player.
 
 #### C. Turn Timer
+
 Each decision window is time-limited (default: 45 seconds) so a single player cannot stall the game:
-*   **Draw window:** if the player has not acted when time expires, they automatically draw from the Draw Pile.
-*   **Discard window:** an unresolved deck draw is automatically discarded; a discard-pile draw is automatically swapped with the first card in the player's grid.
-*   **Ability window:** an unresolved Special Ability fizzles (see Section 11.C).
-*   **Initial Peek:** if a player never declares Ready, the peek phase begins anyway once the timer expires.
+
+- **Draw window:** if the player has not acted when time expires, they automatically draw from the Draw Pile.
+- **Discard window:** an unresolved deck draw is automatically discarded; a discard-pile draw is automatically swapped with the first card in the player's grid.
+- **Ability window:** an unresolved Special Ability fizzles (see Section 11.C).
+- **Initial Peek:** if a player never declares Ready, the peek phase begins anyway once the timer expires.
 
 ## 7. The Matching Stage
 
-This is a timed, real-time event that occurs immediately after *any* card is discarded.
+This is a timed, real-time event that occurs immediately after _any_ card is discarded.
 
-*   **Trigger:** A card being placed face-up on the Discard Pile.
-*   **Objective:** To discard a card of the **exact same rank** from your hand onto the newly discarded card.
-*   **Participants:** Any player who is **not locked**, including the player who just discarded the card.
+- **Trigger:** A card being placed face-up on the Discard Pile.
+- **Objective:** To discard a card of the **exact same rank** from your hand onto the newly discarded card.
+- **Participants:** Any player who is **not locked**, including the player who just discarded the card.
 
 #### Mechanics of Matching
+
 1.  **Timer:** A short timer (e.g., 5 seconds) begins the moment the opportunity starts.
 2.  **Attempting a Match:** Any eligible player can select a card from their hand and play it to attempt a match.
-3.  **Passing:** Any eligible player can choose to **Pass**. *The decision to Pass is final for that specific matching opportunity.* The player cannot attempt a match after passing.
+3.  **Passing:** Any eligible player can choose to **Pass**. _The decision to Pass is final for that specific matching opportunity._ The player cannot attempt a match after passing.
 4.  **Ending the Stage:** The Matching Stage ends as soon as one of the following occurs:
-    *   A player makes a **successful match**.
-    *   All eligible players have manually **passed**.
-    *   The **timer expires**. (This counts as a "Pass" for any player who has not acted).
+    - A player makes a **successful match**.
+    - All eligible players have manually **passed**.
+    - The **timer expires**. (This counts as a "Pass" for any player who has not acted).
 
 #### Outcomes of Matching
-*   **Successful Match:**
-    1.  The first player to play a card of the correct rank succeeds.
-    2.  The matching card is removed from their hand and placed on the Discard Pile. Their hand size is reduced by one, and the card's grid slot stays empty (see **The Hand Grid & Empty Slots** below).
-    3.  The Discard Pile is now considered **"sealed."** A sealed pile cannot be drawn from. It remains sealed until the start of the next player's turn or until another action unseals it.
-    4.  If the matched pair consists of two Special Cards (e.g., a King on a King), this triggers a LIFO ability stack (see Section 8.B).
-    5.  If a player's hand becomes empty as a result of a successful match, they have automatically **Called "Check"** (see Section 9.B).
-    6.  **Matched cards are locked for the round.** Both the card that was matched and the card
-        played on top of it become **locked**: they can never be drawn from the Discard Pile by any
-        player for the rest of the round, even after the pile is unsealed. (The "sealed" state in
-        point 3 blocks *any* draw for the brief window after a match; the permanent lock keeps the
-        matched cards themselves undrawable forever.)
 
-*   **Failed Match (Penalty):**
-    1.  If a player attempts to match with a card of the wrong rank, the attempt fails.
-    2.  **Penalty:** The player must immediately **draw one card** from the Draw Pile and add it to their hand. The invalid card returns to their hand.
-    3.  The matching opportunity then **continues** for all other eligible players until the stage ends. The penalized player may attempt to match again if they have another valid card.
-    4.  **Penalty Limit (Disqualification):** If a penalty card brings a player's hand to **eight cards**, that player is **disqualified** from the round. They are immediately **locked** (see Section 9.D): they take no further turns, cannot match, and their pending abilities fizzle. Their hand is still revealed and scored at the end of the round, but a disqualified player **cannot win**. If disqualifications leave fewer than two active players and no "Check" is in progress, the round ends immediately and proceeds to Scoring.
+- **Successful Match:**
+
+  1.  The first player to play a card of the correct rank succeeds.
+  2.  The matching card is removed from their hand and placed on the Discard Pile. Their hand size is reduced by one, and the card's grid slot stays empty (see **The Hand Grid & Empty Slots** below).
+  3.  The Discard Pile is now considered **"sealed."** A sealed pile cannot be drawn from. It remains sealed until the start of the next player's turn or until another action unseals it.
+  4.  If the matched pair consists of two Special Cards (e.g., a King on a King), this triggers a LIFO ability stack (see Section 8.B).
+  5.  If a player's hand becomes empty as a result of a successful match, they have automatically **Called "Check"** (see Section 9.B).
+  6.  **Matched cards are locked for the round.** Both the card that was matched and the card
+      played on top of it become **locked**: they can never be drawn from the Discard Pile by any
+      player for the rest of the round, even after the pile is unsealed. (The "sealed" state in
+      point 3 blocks _any_ draw for the brief window after a match; the permanent lock keeps the
+      matched cards themselves undrawable forever.)
+
+- **Failed Match (Penalty):**
+  1.  If a player attempts to match with a card of the wrong rank, the attempt fails.
+  2.  **Penalty:** The player must immediately **draw one card** from the Draw Pile and add it to their hand. The invalid card returns to their hand.
+  3.  The matching opportunity then **continues** for all other eligible players until the stage ends. The penalized player may attempt to match again if they have another valid card.
+  4.  **Penalty Limit (Disqualification):** If a penalty card brings a player's hand to **eight cards**, that player is **disqualified** from the round. They are immediately **locked** (see Section 9.D): they take no further turns, cannot match, and their pending abilities fizzle. Their hand is still revealed and scored at the end of the round, but a disqualified player **cannot win**. If disqualifications leave fewer than two active players and no "Check" is in progress, the round ends immediately and proceeds to Scoring.
 
 #### The Hand Grid & Empty Slots
 
@@ -111,48 +121,57 @@ A player's cards occupy fixed positions in a two-row grid, and those positions a
 
 Abilities are triggered when a Special Card (King, Queen, or Jack) is discarded to the top of the Discard Pile. This can happen during a player's normal turn or as part of a successful match. The game enters an "Ability Resolution" phase to handle them.
 
-*   **King (K):** Peek at any **two** cards on the table (your own or an opponent's). Then, swap any **one** card on the table with any **other** card.
-*   **Queen (Q):** Peek at any **one** card on the table. Then, swap any **one** card with any **other** card.
-*   **Jack (J):** Swap any **one** card with any **other** card. (No peek).
+- **King (K):** Peek at any **two** cards on the table (your own or an opponent's). Then, swap any **one** card on the table with any **other** card.
+- **Queen (Q):** Peek at any **one** card on the table. Then, swap any **one** card with any **other** card.
+- **Jack (J):** Swap any **one** card with any **other** card. (No peek).
 
 The peek counts above are maximums, not requirements. You may peek at fewer cards than an ability allows and confirm, which matters when matched Special Cards pool their peeks (Section 8.B) and the table holds fewer cards than the pool. Peeking nothing at all is a skip (Section 8.A).
 
 **Note on peek visibility.** As at a real table, all players can see which card positions are being peeked at, but only the peeking player sees the card's face. Similarly, a card taken from the Discard Pile stays face-up for everyone while it is held, since it was already public knowledge.
 
 #### A. Skipping Abilities
+
 A player may choose to skip parts of their ability. For a King or Queen, they can skip the "peek" stage and proceed to the "swap" stage. They can also skip the "swap" stage, which ends the ability's effect.
 
 #### B. LIFO Stack Resolution (For Matched Special Cards)
+
 When one Special Card is matched on top of another, two abilities are triggered and placed on a stack. They resolve in **Last-In, First-Out (LIFO)** order.
 
-*   **Example:** Alice discards a King. Bob successfully matches it with his own King.
-    1.  Alice's King ability is triggered and placed on the stack first.
-    2.  Bob's King ability is triggered and placed on top of Alice's.
-    3.  **Bob resolves his ability first.**
-    4.  After Bob's ability is finished, **Alice resolves her ability.**
+- **Example:** Alice discards a King. Bob successfully matches it with his own King.
+  1.  Alice's King ability is triggered and placed on the stack first.
+  2.  Bob's King ability is triggered and placed on top of Alice's.
+  3.  **Bob resolves his ability first.**
+  4.  After Bob's ability is finished, **Alice resolves her ability.**
 
 ## 9. Calling "Check" & Ending the Round
 
 #### A. Player-Initiated "Check"
+
 On their turn, if no other actions are pending and the Final Turns phase has not yet begun, a player may choose to **"Call Check."**
-*   This player is now the official **Check-caller**.
-*   Their turn immediately ends.
-*   They become **locked**. A locked player takes no more actions for the rest of the round.
-*   The game enters the **Final Turns Phase**.
+
+- This player is now the official **Check-caller**.
+- Their turn immediately ends.
+- They become **locked**. A locked player takes no more actions for the rest of the round.
+- The game enters the **Final Turns Phase**.
 
 #### B. Automatic "Check" (Empty Hand)
+
 If a player successfully makes a match that causes their hand to become empty, they automatically "Call Check."
-*   They immediately become **locked**.
-*   If this is the first "Check" of the round, they become the official Check-caller, and the game enters the **Final Turns Phase**.
+
+- They immediately become **locked**.
+- If this is the first "Check" of the round, they become the official Check-caller, and the game enters the **Final Turns Phase**.
 
 #### C. The Final Turns Phase
+
 Once "Check" has been called, every other eligible player gets to take **one last turn.**
-*   The Check-caller is locked and does not get a final turn.
-*   **Turn order in this phase** follows the normal clockwise seating, continuing from the seat that would have played next, meaning the player after whoever's turn was in progress when Check was called, and wraps around the table until every eligible player has taken exactly one final turn. When Check is triggered automatically by an out-of-turn match (§9.B), this means play continues from where it actually was at the table, **not** from the checker's seat.
-*   During a final turn, all standard gameplay rules apply, including the **Matching Stage** (Section 7) and **Special Card Abilities** (Section 8).
-*   Players cannot manually "Call Check" during this phase.
+
+- The Check-caller is locked and does not get a final turn.
+- **Turn order in this phase** follows the normal clockwise seating, continuing from the seat that would have played next, meaning the player after whoever's turn was in progress when Check was called, and wraps around the table until every eligible player has taken exactly one final turn. When Check is triggered automatically by an out-of-turn match (§9.B), this means play continues from where it actually was at the table, **not** from the checker's seat.
+- During a final turn, all standard gameplay rules apply, including the **Matching Stage** (Section 7) and **Special Card Abilities** (Section 8).
+- Players cannot manually "Call Check" during this phase.
 
 #### D. Locked Player State
+
 Once any player is locked (either by calling "Check" or emptying their hand), their hand cards **cannot be targeted** by opponents' Special Card abilities.
 
 ## 10. Scoring & Winning
@@ -164,6 +183,6 @@ Once any player is locked (either by calling "Check" or emptying their hand), th
 
 ## 11. Appendix: Edge Cases & Special Rulings
 
-*   **A. Empty Draw Pile:** If the Draw Pile becomes empty and a player needs to draw a card, the Discard Pile is immediately repurposed. The current top card of the Discard Pile is left in place, and all cards underneath it are shuffled to become the new face-down Draw Pile.
-*   **B. Impossible Draw:** In the rare event that a player is required to draw a card (e.g., for a penalty) and no cards are available in either the Draw Pile or the Discard Pile to be reshuffled, the game ends immediately. All players proceed to the Scoring Phase with their current hands.
-*   **C. Ability Fizzling:** If a player's turn to resolve a Special Ability comes up but they are locked (e.g., from a LIFO stack interaction), their ability does not trigger. It "fizzles" and is removed from the stack with no effect.
+- **A. Empty Draw Pile:** If the Draw Pile becomes empty and a player needs to draw a card, the Discard Pile is immediately repurposed. The current top card of the Discard Pile is left in place, and all cards underneath it are shuffled to become the new face-down Draw Pile.
+- **B. Impossible Draw:** In the rare event that a player is required to draw a card (e.g., for a penalty) and no cards are available in either the Draw Pile or the Discard Pile to be reshuffled, the game ends immediately. All players proceed to the Scoring Phase with their current hands.
+- **C. Ability Fizzling:** If a player's turn to resolve a Special Ability comes up but they are locked (e.g., from a LIFO stack interaction), their ability does not trigger. It "fizzles" and is removed from the stack with no effect.

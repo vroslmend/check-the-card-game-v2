@@ -162,11 +162,14 @@ export const PileDiagram = ({
       {showHand && (
         <Pile label="A hand">
           <div className="inline-grid grid-cols-2 gap-2">
-            {["rules-hand-1", "rules-hand-2", "rules-hand-3", "rules-hand-4"].map(
-              (id) => (
-                <SizedCard key={id} faceDown className="w-10 sm:w-12" />
-              ),
-            )}
+            {[
+              "rules-hand-1",
+              "rules-hand-2",
+              "rules-hand-3",
+              "rules-hand-4",
+            ].map((id) => (
+              <SizedCard key={id} faceDown className="w-10 sm:w-12" />
+            ))}
           </div>
         </Pile>
       )}
@@ -231,7 +234,10 @@ export const AbilityTriptych = () => (
   >
     <div className="grid grid-cols-3 gap-3 sm:gap-6">
       {ABILITIES.map(({ c, icons, text }) => (
-        <div key={c.id} className="flex flex-col items-center gap-3 text-center">
+        <div
+          key={c.id}
+          className="flex flex-col items-center gap-3 text-center"
+        >
           <SizedCard card={c} />
           <div className="flex items-center gap-1.5">
             {icons.map((Icon, i) => (

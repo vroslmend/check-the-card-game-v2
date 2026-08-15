@@ -55,13 +55,20 @@ export const secondSignature: SignatureData = {
  * is self-contained and renders correctly on its own.
  */
 function toSegments(path: string): string[] {
-  const tokens = path.match(/[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:[0-9]*\.)?[0-9]+(?:[eE][-+]?[0-9]+)?/g) ?? [];
+  const tokens =
+    path.match(
+      /[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:[0-9]*\.)?[0-9]+(?:[eE][-+]?[0-9]+)?/g,
+    ) ?? [];
   const segments: string[] = [];
   let current: string[] = [];
-  let cx = 0, cy = 0;
+  let cx = 0,
+    cy = 0;
 
   const flush = () => {
-    if (current.length) { segments.push(current.join(" ")); current = []; }
+    if (current.length) {
+      segments.push(current.join(" "));
+      current = [];
+    }
   };
 
   let i = 0;
@@ -69,39 +76,55 @@ function toSegments(path: string): string[] {
     const cmd = tokens[i++];
     if (cmd === "M") {
       flush();
-      const x = parseFloat(tokens[i++]), y = parseFloat(tokens[i++]);
-      cx = x; cy = y;
+      const x = parseFloat(tokens[i++]),
+        y = parseFloat(tokens[i++]);
+      cx = x;
+      cy = y;
       current.push(`M ${x} ${y}`);
       while (i < tokens.length && !/[A-Za-z]/.test(tokens[i])) {
-        const lx = parseFloat(tokens[i++]), ly = parseFloat(tokens[i++]);
-        cx = lx; cy = ly;
+        const lx = parseFloat(tokens[i++]),
+          ly = parseFloat(tokens[i++]);
+        cx = lx;
+        cy = ly;
         current.push(`L ${lx} ${ly}`);
       }
     } else if (cmd === "m") {
       flush();
-      const dx = parseFloat(tokens[i++]), dy = parseFloat(tokens[i++]);
-      cx += dx; cy += dy;
+      const dx = parseFloat(tokens[i++]),
+        dy = parseFloat(tokens[i++]);
+      cx += dx;
+      cy += dy;
       current.push(`M ${cx} ${cy}`);
       while (i < tokens.length && !/[A-Za-z]/.test(tokens[i])) {
-        const ldx = parseFloat(tokens[i++]), ldy = parseFloat(tokens[i++]);
-        cx += ldx; cy += ldy;
+        const ldx = parseFloat(tokens[i++]),
+          ldy = parseFloat(tokens[i++]);
+        cx += ldx;
+        cy += ldy;
         current.push(`L ${cx} ${cy}`);
       }
     } else if (cmd === "Z" || cmd === "z") {
       current.push("Z");
     } else {
       const args: string[] = [cmd];
-      while (i < tokens.length && !/[A-Za-z]/.test(tokens[i])) args.push(tokens[i++]);
+      while (i < tokens.length && !/[A-Za-z]/.test(tokens[i]))
+        args.push(tokens[i++]);
       current.push(args.join(" "));
       const nums = args.slice(1).map(Number);
       const uc = cmd.toUpperCase();
-      if (["L","C","S","Q","T"].includes(uc) && nums.length >= 2) {
-        if (cmd === cmd.toUpperCase()) { cx = nums[nums.length - 2]; cy = nums[nums.length - 1]; }
-        else { cx += nums[nums.length - 2]; cy += nums[nums.length - 1]; }
+      if (["L", "C", "S", "Q", "T"].includes(uc) && nums.length >= 2) {
+        if (cmd === cmd.toUpperCase()) {
+          cx = nums[nums.length - 2];
+          cy = nums[nums.length - 1];
+        } else {
+          cx += nums[nums.length - 2];
+          cy += nums[nums.length - 1];
+        }
       } else if (uc === "H" && nums.length >= 1) {
-        if (cmd === "H") cx = nums[nums.length - 1]; else cx += nums[nums.length - 1];
+        if (cmd === "H") cx = nums[nums.length - 1];
+        else cx += nums[nums.length - 1];
       } else if (uc === "V" && nums.length >= 1) {
-        if (cmd === "V") cy = nums[nums.length - 1]; else cy += nums[nums.length - 1];
+        if (cmd === "V") cy = nums[nums.length - 1];
+        else cy += nums[nums.length - 1];
       }
     }
   }
@@ -145,7 +168,11 @@ function makeFilledPathVariants(duration: number): Variants {
       transition: {
         pathLength: { duration, ease: "easeInOut" },
         opacity: { duration: 0.2 },
-        fillOpacity: { delay: duration * 0.7, duration: duration * 0.8, ease: "easeOut" },
+        fillOpacity: {
+          delay: duration * 0.7,
+          duration: duration * 0.8,
+          ease: "easeOut",
+        },
       },
     },
   };
@@ -161,7 +188,9 @@ export function Signature({
   const pathSegments = toSegments(data.path);
   const filled = data.filled ?? false;
   const duration = data.animDuration ?? 0.5;
-  const pv = filled ? makeFilledPathVariants(duration) : makePathVariants(duration);
+  const pv = filled
+    ? makeFilledPathVariants(duration)
+    : makePathVariants(duration);
 
   return (
     <motion.svg

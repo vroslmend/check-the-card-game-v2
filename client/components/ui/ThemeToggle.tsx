@@ -44,7 +44,11 @@ export function ThemeToggle() {
             transition={{ duration: 0.18, ease: "easeOut" }}
             className="flex"
           >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {isDark ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
           </motion.span>
         </AnimatePresence>
       ) : (

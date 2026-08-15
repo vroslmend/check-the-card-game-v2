@@ -9,7 +9,13 @@ import { PlayingCard } from "../cards/PlayingCard";
 import { CardFlight } from "../cards/CardFlight";
 import { CARD_RING_GEOMETRY } from "../cards/cardRing";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Eye, ArrowLeftRight, Equal, Plus, type LucideIcon } from "lucide-react";
+import {
+  Eye,
+  ArrowLeftRight,
+  Equal,
+  Plus,
+  type LucideIcon,
+} from "lucide-react";
 
 /** Corner badge on a ringed card slot: surface chip, ink glyph. The icon
  *  distinguishes the action (eye = peek, arrows = swap); the ring color says
@@ -187,7 +193,9 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   // like a real table. `index` stays the ORIGINAL hand index — peek rings,
   // visibleCards and click targets all key off the server-side index.
   const handEntries = handToDisplay.map((card, index) => ({ card, index }));
-  const displayEntries = isLocalPlayer ? handEntries : [...handEntries].reverse();
+  const displayEntries = isLocalPlayer
+    ? handEntries
+    : [...handEntries].reverse();
 
   // Everyone is looking at their bottom two cards right now; show opponents
   // which slots those are (real-life parity: you see the cards being lifted).
@@ -195,7 +203,11 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     gameStage === GameStage.INITIAL_PEEK &&
     visibleCards.some((vc) => vc.source === "initial-peek");
 
-  const combinedClass = cn(isLocked && "opacity-60", dense && "gap-1", className);
+  const combinedClass = cn(
+    isLocked && "opacity-60",
+    dense && "gap-1",
+    className,
+  );
 
   return (
     <HandGrid numItems={handToDisplay.length} className={combinedClass}>
@@ -318,11 +330,11 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                     }
                   : undefined
               }
-            className={cn(
-              "absolute inset-0 rounded-card",
-              "data-[interactive=true]:cursor-pointer",
-              "data-[interactive=true]:hover:filter-[brightness(1.15)]",
-            )}
+              className={cn(
+                "absolute inset-0 rounded-card",
+                "data-[interactive=true]:cursor-pointer",
+                "data-[interactive=true]:hover:filter-[brightness(1.15)]",
+              )}
               data-interactive={canInteract && !isLocked}
               onClick={() => canInteract && !isLocked && onCardClick?.(index)}
             >
@@ -350,7 +362,9 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
                   >
                     {isMatchSelected && <SlotBadge icon={Equal} />}
                     {isAbilityPeekSelected && <SlotBadge icon={Eye} />}
-                    {isAbilitySwapSelected && <SlotBadge icon={ArrowLeftRight} />}
+                    {isAbilitySwapSelected && (
+                      <SlotBadge icon={ArrowLeftRight} />
+                    )}
                   </motion.div>
                 )}
                 {/* Someone else's peek — informational ink ring + eye badge. */}

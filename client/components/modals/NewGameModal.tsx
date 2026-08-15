@@ -64,15 +64,12 @@ export function NewGameModal({
           Create a game
         </DialogTitle>
         <DialogDescription className="mt-2 text-sm leading-relaxed text-ink-muted">
-          You host the table: share the code, wait for your friends, start
-          when everyone is ready.
+          You host the table: share the code, wait for your friends, start when
+          everyone is ready.
         </DialogDescription>
 
         <div className="mt-6">
-          <label
-            htmlFor="name"
-            className="text-sm font-semibold text-ink"
-          >
+          <label htmlFor="name" className="text-sm font-semibold text-ink">
             Your name
           </label>
           <input

@@ -112,9 +112,7 @@ const SeatCard = ({
         <motion.div
           className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-card border border-hairline bg-surface px-1"
           animate={{ opacity: showFace ? 1 : 0 }}
-          transition={
-            reduced ? { duration: 0 } : { duration: 0.1, delay: 0.2 }
-          }
+          transition={reduced ? { duration: 0 } : { duration: 0.1, delay: 0.2 }}
         >
           <span className="text-3xl font-extrabold leading-none text-ink sm:text-4xl">
             {initial}
@@ -127,9 +125,7 @@ const SeatCard = ({
           className="absolute inset-0"
           style={{ scaleX: -1 }}
           animate={{ opacity: showFace ? 0 : 1 }}
-          transition={
-            reduced ? { duration: 0 } : { duration: 0.1, delay: 0.2 }
-          }
+          transition={reduced ? { duration: 0 } : { duration: 0.1, delay: 0.2 }}
         >
           <CardBack />
         </motion.div>

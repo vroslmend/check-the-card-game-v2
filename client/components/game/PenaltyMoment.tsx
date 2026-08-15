@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  useUISelector,
-  type UIMachineSnapshot,
-} from "@/context/GameUIContext";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
 import { claimStampSlot } from "@/lib/stampQueue";
 
 const PENALTY_HOLD_MS = 1200;
@@ -77,11 +74,7 @@ export function usePenaltyMoment(): PenaltyMomentInfo | null {
  * MATCH? slot it replaces announced a non-event; a penalty is actual news).
  * No board scale — the recede stays unique to CHECK.
  */
-export function PenaltyStamp({
-  moment,
-}: {
-  moment: PenaltyMomentInfo | null;
-}) {
+export function PenaltyStamp({ moment }: { moment: PenaltyMomentInfo | null }) {
   const reduced = useReducedMotion();
   return (
     <AnimatePresence>

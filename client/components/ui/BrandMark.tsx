@@ -13,10 +13,7 @@ export function BrandMark({ className }: { className?: string }) {
         className,
       )}
     >
-      <Check
-        className="h-[38%] w-[38%] text-accent-ink"
-        strokeWidth={3}
-      />
+      <Check className="h-[38%] w-[38%] text-accent-ink" strokeWidth={3} />
     </span>
   );
 }

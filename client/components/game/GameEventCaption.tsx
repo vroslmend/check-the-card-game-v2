@@ -10,10 +10,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
-import {
-  useUISelector,
-  type UIMachineSnapshot,
-} from "@/context/GameUIContext";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
 import { GameStage } from "shared-types";
 
 const CAPTION_VISIBLE_MS = 4000;
@@ -50,8 +47,7 @@ interface Caption {
  * so appearing/disappearing text never reflows the board.
  */
 export const GameEventCaption = () => {
-  const { log, isFinalTurns, callerName } =
-    useUISelector(selectCaptionContext);
+  const { log, isFinalTurns, callerName } = useUISelector(selectCaptionContext);
   const [caption, setCaption] = React.useState<Caption | null>(null);
   // Everything present on first sight (mount, rejoin) is history, not news.
   const seenIds = React.useRef<Set<string> | null>(null);
@@ -79,10 +75,7 @@ export const GameEventCaption = () => {
     if (latest) {
       setCaption(latest);
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(
-        () => setCaption(null),
-        CAPTION_VISIBLE_MS,
-      );
+      timerRef.current = setTimeout(() => setCaption(null), CAPTION_VISIBLE_MS);
     }
   }, [log]);
 

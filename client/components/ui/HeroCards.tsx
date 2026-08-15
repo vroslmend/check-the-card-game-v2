@@ -78,9 +78,7 @@ export function HeroCards({ checkHovered }: { checkHovered: boolean }) {
             key={card.id}
             className="absolute h-56 w-40"
             initial={
-              reduced
-                ? false
-                : { x: p.x, y: p.y - 48, rotate: 0, opacity: 0 }
+              reduced ? false : { x: p.x, y: p.y - 48, rotate: 0, opacity: 0 }
             }
             animate={{
               x: spread ? p.x * 1.6 : p.x,

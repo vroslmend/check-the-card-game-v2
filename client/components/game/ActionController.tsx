@@ -263,7 +263,8 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       // Prefer the server-shipped window length; fall back to the local
       // constant only for older payloads. This is what keeps the bar from
       // ending early when the server's env-configured duration differs.
-      const windowMs = matchingOpportunity.durationMs ?? MATCHING_STAGE_DURATION_MS;
+      const windowMs =
+        matchingOpportunity.durationMs ?? MATCHING_STAGE_DURATION_MS;
       const startTs = matchingOpportunity.startTimestamp ?? props.serverNow;
       // Receipt-anchored deadline. (serverNow − startTs) is how far the server
       // was INTO the window when it sent this broadcast — both are the server's
@@ -274,7 +275,10 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       // ring drift to ~75% while long turn timers looked fine. Only the one-way
       // network latency (small) is unaccounted for.
       const serverElapsedAtBroadcast = Math.max(0, props.serverNow - startTs);
-      const remainingAtBroadcast = Math.max(0, windowMs - serverElapsedAtBroadcast);
+      const remainingAtBroadcast = Math.max(
+        0,
+        windowMs - serverElapsedAtBroadcast,
+      );
       const expireAt =
         (props.lastStateReceivedAt || Date.now()) + remainingAtBroadcast;
       const remainingMs = Math.max(0, expireAt - Date.now());
@@ -316,7 +320,9 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
         // Show the tally when there is more than one to take, so confirming
         // early reads as a choice rather than an accident.
         const confirmLabel =
-          required > 1 ? `Confirm Peek (${selected}/${required})` : "Confirm Peek";
+          required > 1
+            ? `Confirm Peek (${selected}/${required})`
+            : "Confirm Peek";
 
         actions.push(
           createConfirmAbilityAction(

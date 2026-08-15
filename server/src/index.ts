@@ -191,9 +191,7 @@ io.on("connection", (socket: Socket) => {
     const recoveredSession = socketSessionMap.get(socket.id);
     if (recoveredSession) {
       const gameActor = activeGameMachines.get(recoveredSession.gameId);
-      if (
-        gameActor?.getSnapshot().context.players[recoveredSession.playerId]
-      ) {
+      if (gameActor?.getSnapshot().context.players[recoveredSession.playerId]) {
         logger.info(
           { socketId: socket.id, session: recoveredSession },
           "Recovered socket — restoring player connection",
