@@ -63,20 +63,24 @@ Before changing anything, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). `sh
 
 There is no automated test suite yet, tracked in #36. Until there is, verification is manual and the burden sits with the pull request.
 
-Type checks and the client build must pass:
+Everything CI runs has to pass, and you can run all of it locally first:
 
 ```
 npx tsc --noEmit -p shared-types/tsconfig.json
 npx tsc --noEmit -p server/tsconfig.json
 npx tsc --noEmit -p client/tsconfig.json
+npm run lint
+npm run format:check
 npm run build:client
 ```
+
+CI also starts the built server and waits for it to answer `/health`, which catches a throw on startup that type checking cannot.
 
 Game behaviour is specified in [docs/GAME_RULES.md](docs/GAME_RULES.md). If you touched the rules, play a real round with a second browser window and follow the affected rule end to end.
 
 ## Things that will bite you
 
-- **Do not run `prettier --write .`.** Prettier is configured but deliberately not enforced, and most of the repo predates it. A blanket format touches over a hundred files and destroys `git blame`. Format what you actually edited, if anything.
+- **Do not mix formatting into a commit that changes logic.** The repo is prettier formatted and CI checks it, so run `npm run format` before you push. Keep any reformat in a commit of its own: mixed in, it buries the real change in noise, and only a formatting-only commit can safely go in `.git-blame-ignore-revs`. Blame already skips the one bulk reformat. Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so your local blame agrees with GitHub's.
 - **Do not add an `engines` field or an `.nvmrc`.** Vercel and Render both read them, so adding one silently changes the Node version the live deployment builds with.
 - **Do not add `paths-ignore` to `.github/workflows/ci.yml`.** CI is a required check, and a workflow skipped by path filtering leaves that check pending forever, which blocks the pull request from merging with no obvious cause. Use a job level `if:` instead, since a skipped job reports success.
 - **`main` is protected by a repository ruleset, not classic branch protection.** `gh api repos/OWNER/REPO/branches/main/protection` returns 404 even though main is fully protected. Use `gh api repos/OWNER/REPO/rulesets`.
