@@ -37,7 +37,8 @@ That runs the Next.js client and the Socket.IO server together. You need both, b
 
 ## Making a change
 
-- Branch off `main`. Main is protected, so a pull request is the only way in: one approving review, no direct commits, no force pushes.
+- Branch off `main`. Main is protected, so a pull request is the only way in: CI must pass, one approving review, no direct commits, no force pushes.
+- Name the branch after the work: `fix/short-description` or `feat/short-description`. One branch per pull request, rather than one branch you keep reusing.
 - One issue, one pull request. If you find a second problem along the way, open a second issue for it. A small fix bundled with a large rewrite cannot be reviewed or reverted cleanly and will be sent back.
 - Stay inside the scope the issue describes. Where scope matters, the issue says what is out of bounds.
 - Match the style of the code around you.
