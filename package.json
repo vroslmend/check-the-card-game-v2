@@ -29,6 +29,7 @@
     "build:client": "npm run build -w client",
     "build:shared": "npm run build -w shared-types",
     "lint": "npm run lint -w client",
+    "check:majors": "node scripts/check-dependency-majors.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "start:server": "npm start -w server",
