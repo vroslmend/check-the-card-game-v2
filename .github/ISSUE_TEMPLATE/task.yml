@@ -1,6 +1,6 @@
 name: Task
 description: A piece of work to be done, written so someone can pick it up cold
-labels: []
+labels: ["chore"]
 body:
   - type: markdown
     attributes:

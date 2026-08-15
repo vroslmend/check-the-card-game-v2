@@ -23,6 +23,16 @@ Anything larger than a quick fix gets an issue, so the reason for a change exist
 - Comment on an issue before you start, so two people do not build the same thing.
 - If there is no issue for what you want to do, open one and wait for a reply before writing code. It is a short wait and it saves work being thrown away.
 
+The labels are deliberately few:
+
+- **bug** — the game does something the rules say it should not.
+- **enhancement** — something new, or something working as designed that should work differently.
+- **chore** — tooling, CI, dependencies, repo housekeeping. No effect on how the game plays.
+- **documentation** — the docs disagree with reality, or a gap in them.
+- **needs decision** — waiting on a call from me before anyone builds it. Adding this to your own issue is a useful signal that you want an answer rather than a pull request.
+
+The templates apply the first three for you. Anything filed without a label gets one from me, so pick the closest and do not worry about it.
+
 ## Setting up
 
 Requirements, install steps and environment variables are in the [README](README.md). The short version:
