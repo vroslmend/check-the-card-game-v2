@@ -331,7 +331,7 @@ export const GameLobby = () => {
   const emptySeats = Math.max(0, maxPlayers - players.length);
 
   return (
-    <div className="flex min-h-dvh w-full flex-col bg-ground font-game">
+    <div className="flex h-full w-full flex-col overflow-y-auto bg-ground font-game">
       <div className="flex h-14 shrink-0 items-center justify-between px-4 md:px-6">
         <Link
           href="/"
@@ -362,7 +362,10 @@ export const GameLobby = () => {
         </div>
       </div>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 pb-14 text-center">
+      {/* Centred with auto margins rather than justify-center. Both centre
+          when there is room, but justify-center puts the overflow past the top
+          edge, where scrolling cannot reach it. */}
+      <main className="mx-auto my-auto flex w-full max-w-3xl flex-col items-center px-4 pb-14 text-center">
         <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
           Private table
         </p>
