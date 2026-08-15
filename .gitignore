@@ -54,6 +54,10 @@ logs.md
 references
 .remember
 
+# Playwright MCP writes snapshots, console logs and screenshots here when the
+# browser is driven against a local build.
+.playwright-mcp/
+
 # Local scratch files that some editors and tools drop in the working tree.
 # Listed so a contributor cannot commit one by accident.
 Gemini.md
