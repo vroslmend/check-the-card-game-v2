@@ -1,0 +1,15 @@
+# Git already stores every text file in this repo with LF. Without this file,
+# a Windows checkout with core.autocrlf=true writes them out as CRLF, and
+# Prettier, whose endOfLine default is lf, then reports files as unformatted
+# whose committed content is already correct. That gap was 39 files: Windows
+# reported 96, Linux and CI would report 57.
+#
+# Normalising here makes the working tree match the blobs on every platform, so
+# a formatting check means the same thing wherever it runs.
+* text=auto eol=lf
+
+# Explicit, so a misfire in Git's text detection can never rewrite a byte of
+# these. Git already classifies them correctly; this only removes the question.
+*.png binary
+*.mp3 binary
+*.ttf binary
