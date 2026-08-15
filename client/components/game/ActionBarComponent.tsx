@@ -2,10 +2,7 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ActionButton from "./ActionButton";
 import { useActionController } from "./ActionController";
-import {
-  useUISelector,
-  type UIMachineSnapshot,
-} from "@/context/GameUIContext";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
 import { play } from "@/lib/sounds";
 
 // An action is "in flight" from emit until the next server state lands; cap

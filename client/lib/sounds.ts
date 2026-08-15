@@ -56,7 +56,8 @@ export const getVolume = (): number => {
 const effectiveGain = (): number => (isMuted() ? 0 : getVolume());
 
 const applyGain = () => {
-  if (master && ctx) master.gain.setValueAtTime(effectiveGain(), ctx.currentTime);
+  if (master && ctx)
+    master.gain.setValueAtTime(effectiveGain(), ctx.currentTime);
 };
 
 export const setMuted = (muted: boolean) => {

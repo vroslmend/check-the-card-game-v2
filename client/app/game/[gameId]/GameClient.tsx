@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React from 'react';
-import GameUI from '@/components/game/GameUI';
+import React from "react";
+import GameUI from "@/components/game/GameUI";
 
 /**
  * GameClient is now a simple, "dumb" component.

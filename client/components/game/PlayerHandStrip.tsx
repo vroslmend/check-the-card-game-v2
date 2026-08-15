@@ -307,10 +307,7 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         y: { type: "tween", duration: 0.35, ease: "easeInOut" },
       }}
       animate={dqBeat ? { y: [0, 3, 0] } : { y: 0 }}
-      className={cn(
-        "flex flex-col items-center",
-        compact ? "gap-1" : "gap-2",
-      )}
+      className={cn("flex flex-col items-center", compact ? "gap-1" : "gap-2")}
     >
       <PlayerInfoBadge
         player={player}

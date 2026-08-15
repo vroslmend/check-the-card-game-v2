@@ -58,7 +58,10 @@ export const generatePlayerView = (
       return { facedown: true as const, id: card.id };
     });
 
-    let clientPendingDrawnCard: { card: PublicCard; source: "deck" | "discard" } | null = null;
+    let clientPendingDrawnCard: {
+      card: PublicCard;
+      source: "deck" | "discard";
+    } | null = null;
     if (serverPlayer.pendingDrawnCard) {
       // A card taken from the discard pile was already public knowledge, so
       // everyone keeps seeing its face (real-life parity). Deck draws stay
@@ -139,8 +142,8 @@ export const generatePlayerView = (
     // Only include wins for players still at the table to avoid stale entries
     // when someone leaves mid-session.
     playerWins: Object.fromEntries(
-      Object.entries(fullGameContext.playerWins ?? {}).filter(([id]) =>
-        !!fullGameContext.players[id],
+      Object.entries(fullGameContext.playerWins ?? {}).filter(
+        ([id]) => !!fullGameContext.players[id],
       ),
     ),
     // Filter to players still at the table so a voter who left doesn't inflate

@@ -146,15 +146,13 @@ export const SidePanel = () => {
       const endOfGroup =
         !next ||
         next.senderId !== msg.senderId ||
-        new Date(next.timestamp).getTime() -
-          new Date(msg.timestamp).getTime() >
+        new Date(next.timestamp).getTime() - new Date(msg.timestamp).getTime() >
           GROUP_WINDOW_MS;
       const prev = rows[i - 1];
       const startOfGroup =
         !prev ||
         prev.senderId !== msg.senderId ||
-        new Date(msg.timestamp).getTime() -
-          new Date(prev.timestamp).getTime() >
+        new Date(msg.timestamp).getTime() - new Date(prev.timestamp).getTime() >
           GROUP_WINDOW_MS;
       return { msg, endOfGroup, startOfGroup };
     });

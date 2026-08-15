@@ -45,7 +45,7 @@
      invisible on dark yet harsh on light). Framer can't tween a var()-based
      box-shadow, so .card-lift CSS-transitions these on [data-inflight]. */
   --card-rest-shadow: 0 0 0 0 hsl(30 12% 15% / 0);
-  --card-lift-shadow: 0 10px 24px -6px hsl(30 25% 22% / 0.20);
+  --card-lift-shadow: 0 10px 24px -6px hsl(30 25% 22% / 0.2);
 
   /* shadcn bridge — re-points shadcn's own vars onto the palette so its
      primitives (button, select, dropdown, dialog…) resolve from one source.

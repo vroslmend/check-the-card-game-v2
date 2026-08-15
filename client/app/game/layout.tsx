@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 export default function GameLayout({
   children,
@@ -6,4 +6,4 @@ export default function GameLayout({
   children: React.ReactNode;
 }) {
   return <>{children}</>;
-} 
+}

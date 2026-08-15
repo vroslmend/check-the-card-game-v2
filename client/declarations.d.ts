@@ -1,1 +1,1 @@
-declare module '@georgedoescode/spline'; 
+declare module "@georgedoescode/spline";

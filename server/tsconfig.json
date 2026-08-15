@@ -14,12 +14,9 @@
     "declaration": true,
     "composite": true,
     "baseUrl": ".",
-    "paths": {
-    }
+    "paths": {}
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "references": [
-    { "path": "../shared-types" }
-  ]
-} 
+  "references": [{ "path": "../shared-types" }]
+}

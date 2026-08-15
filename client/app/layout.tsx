@@ -31,11 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={nunito.variable}
-    >
+    <html lang="en" suppressHydrationWarning className={nunito.variable}>
       <body className="font-game antialiased">
         <Providers>{children}</Providers>
       </body>

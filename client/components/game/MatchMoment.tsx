@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  useUISelector,
-  type UIMachineSnapshot,
-} from "@/context/GameUIContext";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
 import { claimStampSlot } from "@/lib/stampQueue";
 
 // The stamp lands with the card (cardTravelTransition = 0.65s), together

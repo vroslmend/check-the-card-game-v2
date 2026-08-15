@@ -200,9 +200,7 @@ export function GameBoard() {
   // band). Below that, seats render at their regular full size, so the 2-4
   // player experience is unchanged.
   const totalPlayers = Object.keys(gameState.players).length;
-  const denseBand = endScene
-    ? totalPlayers >= 4
-    : opponentPlayers.length >= 3;
+  const denseBand = endScene ? totalPlayers >= 4 : opponentPlayers.length >= 3;
   const localPlayerData = gameState.players[localPlayerId];
 
   const handlePlayAgain = () => {
@@ -307,10 +305,7 @@ export function GameBoard() {
                 endScene ? "order-3" : "py-4 @md:py-8",
               )}
             >
-              <TableArea
-                drawnCard={drawnCardData}
-                dealingDeck={dealingDeck}
-              />
+              <TableArea drawnCard={drawnCardData} dealingDeck={dealingDeck} />
             </div>
 
             {/* Local player area. At the reveal the local hand moves up into

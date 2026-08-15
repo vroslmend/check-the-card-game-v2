@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  useUISelector,
-  type UIMachineSnapshot,
-} from "@/context/GameUIContext";
+import { useUISelector, type UIMachineSnapshot } from "@/context/GameUIContext";
 import { claimStampSlot } from "@/lib/stampQueue";
 
 // Visible hold + exit fade; also the stamp-slot claim so queued stamps

@@ -168,10 +168,7 @@ const selectTableAreaProps = (state: UIMachineSnapshot) => {
   };
 };
 
-export const TableArea = ({
-  drawnCard,
-  dealingDeck = [],
-}: TableAreaProps) => {
+export const TableArea = ({ drawnCard, dealingDeck = [] }: TableAreaProps) => {
   const { send } = useUIActorRef();
   const {
     deckSize,

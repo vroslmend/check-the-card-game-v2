@@ -515,7 +515,10 @@ function HomePage() {
           </div>
         </section>
 
-        <div id="how" className="mx-auto w-full max-w-4xl scroll-mt-20 px-5 sm:px-8">
+        <div
+          id="how"
+          className="mx-auto w-full max-w-4xl scroll-mt-20 px-5 sm:px-8"
+        >
           <StorySection
             kicker="The deal"
             title="A hand you barely know"
@@ -523,9 +526,9 @@ function HomePage() {
           >
             <p>
               Four cards land face down in front of you, and you may peek at
-              your bottom two, once. From then on it is draw, swap, and
-              discard: every card that crosses the table is information, and
-              the sharpest memory holds the advantage.
+              your bottom two, once. From then on it is draw, swap, and discard:
+              every card that crosses the table is information, and the sharpest
+              memory holds the advantage.
             </p>
           </StorySection>
 
@@ -669,7 +672,6 @@ function HomePage() {
               <SignatureInView />
             </a>
           </div>
-
         </div>
       </footer>
     </div>
