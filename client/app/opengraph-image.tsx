@@ -139,119 +139,117 @@ export default async function OpengraphImage() {
   ]);
 
   return new ImageResponse(
-    (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        background: GROUND,
+        color: INK,
+        padding: "0 84px",
+        fontFamily: "Nunito Sans",
+      }}
+    >
       <div
         style={{
-          width: "100%",
-          height: "100%",
           display: "flex",
-          alignItems: "center",
-          background: GROUND,
-          color: INK,
-          padding: "0 84px",
-          fontFamily: "Nunito Sans",
+          flexDirection: "column",
+          justifyContent: "center",
+          width: 560,
         }}
       >
+        {/* Mark and wordmark on one line, the way the app's header sets it:
+              an accent card back tilted like one just placed on the table,
+              sized to the cap height of the type beside it. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 26,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              width: 68,
+              height: 95,
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 10,
+              background: ACCENT,
+              transform: "rotate(-6deg)",
+            }}
+          >
+            <CheckMark size={30} color={ACCENT_INK} />
+          </div>
+          <div
+            style={{
+              display: "flex",
+              fontSize: 132,
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+              lineHeight: 0.95,
+            }}
+          >
+            Check!
+          </div>
+        </div>
+
+        {/* Set as two explicit lines rather than left to wrap. The break
+              belongs at the sentence, and a column this width would otherwise
+              break it after "your". */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            justifyContent: "center",
-            width: 560,
+            marginTop: 26,
+            fontSize: 30,
+            lineHeight: 1.32,
+            color: INK_MUTED,
           }}
         >
-          {/* Mark and wordmark on one line, the way the app's header sets it:
-              an accent card back tilted like one just placed on the table,
-              sized to the cap height of the type beside it. */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 26,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                width: 68,
-                height: 95,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 10,
-                background: ACCENT,
-                transform: "rotate(-6deg)",
-              }}
-            >
-              <CheckMark size={30} color={ACCENT_INK} />
-            </div>
-            <div
-              style={{
-                display: "flex",
-                fontSize: 132,
-                fontWeight: 800,
-                letterSpacing: "-0.04em",
-                lineHeight: 0.95,
-              }}
-            >
-              Check!
-            </div>
+          <div style={{ display: "flex" }}>
+            You only ever saw two of your cards.
           </div>
-
-          {/* Set as two explicit lines rather than left to wrap. The break
-              belongs at the sentence, and a column this width would otherwise
-              break it after "your". */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              marginTop: 26,
-              fontSize: 30,
-              lineHeight: 1.32,
-              color: INK_MUTED,
-            }}
-          >
-            <div style={{ display: "flex" }}>
-              You only ever saw two of your cards.
-            </div>
-            <div style={{ display: "flex" }}>Lowest hand wins.</div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              marginTop: 38,
-              fontSize: 21,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              color: INK_MUTED,
-            }}
-          >
-            check-the-game.vercel.app
-          </div>
+          <div style={{ display: "flex" }}>Lowest hand wins.</div>
         </div>
 
-        {/* A held fan: evenly spaced, rotations symmetric about the middle,
+        <div
+          style={{
+            display: "flex",
+            marginTop: 38,
+            fontSize: 21,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: INK_MUTED,
+          }}
+        >
+          check-the-game.vercel.app
+        </div>
+      </div>
+
+      {/* A held fan: evenly spaced, rotations symmetric about the middle,
             outer cards dipping so the arc peaks in the centre. The container
             is sized to what it holds, a 235 tall card plus 44 of dip and the
             swing the rotation adds, so the parent's align-items centre
             centres the cards against the type rather than against empty
             space. Widths are set so the two columns and the padding total
             less than 1200, or the frame squeezes them. */}
-        <div
-          style={{
-            position: "relative",
-            display: "flex",
-            width: 460,
-            height: 320,
-          }}
-        >
-          <Card left={0} top={44} rotate={-17} width={166} />
-          <Card left={96} top={12} rotate={-6} width={166} />
-          <Card left={192} top={12} rotate={6} width={166} />
-          <Card left={288} top={44} rotate={17} width={166} faceUp />
-        </div>
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          width: 460,
+          height: 320,
+        }}
+      >
+        <Card left={0} top={44} rotate={-17} width={166} />
+        <Card left={96} top={12} rotate={-6} width={166} />
+        <Card left={192} top={12} rotate={6} width={166} />
+        <Card left={288} top={44} rotate={17} width={166} faceUp />
       </div>
-    ),
+    </div>,
     {
       ...size,
       fonts: [

@@ -35,13 +35,10 @@
     "start:client": "npm start -w client",
     "dev:client": "npm run dev -w client",
     "dev": "npm run build:server-deps && concurrently \"npm:dev:client\" \"npm:start:server\"",
-    "start": "concurrently \"npm:start:client\" \"npm:start:server\"",
-    "test": "vitest",
-    "test:ui": "vitest --ui"
+    "start": "concurrently \"npm:start:client\" \"npm:start:server\""
   },
   "devDependencies": {
-    "concurrently": "^9.1.2",
-    "prettier": "3.5.3",
-    "vitest": "^3.2.2"
+    "concurrently": "^9.2.4",
+    "prettier": "3.9.6"
   }
 }
