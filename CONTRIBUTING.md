@@ -46,6 +46,8 @@ That builds the shared types and the server, then runs the Next.js client and th
 
 The client hot reloads. The server does not: it runs from a build, so after changing anything under `server/` you restart `npm run dev` to pick it up.
 
+Before changing anything, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). `shared-types` is the contract between the two halves, so anything crossing that boundary starts there.
+
 ## Making a change
 
 - Branch off `main`. Main is protected, so a pull request is the only way in: CI must pass, one approving review, no direct commits, no force pushes.
