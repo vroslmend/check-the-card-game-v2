@@ -212,7 +212,7 @@ export function GameBoard() {
   };
 
   return (
-    <div className="relative h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
+    <div className="relative h-screen w-full bg-ground flex flex-col overflow-y-auto @container font-game">
       <GameHeader />
       {/* CHECK's recede is momentary and returns to identity. A HELD scale
           here (the R12 end-of-round recede) made every layout-projected card
