@@ -47,5 +47,32 @@ jobs:
       - name: Typecheck client
         run: npx tsc --noEmit -p client/tsconfig.json
 
+      - name: Build server
+        run: npm run build:server
+
+      # Typechecking proves the server compiles, not that it runs. This catches
+      # a throw on startup, an import that only resolves at build time, or a
+      # broken module-alias mapping, all of which would otherwise reach
+      # production with CI green.
+      - name: Server starts and answers /health
+        run: |
+          node server/dist/index.js &
+          pid=$!
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health > /dev/null; then
+              echo "server answered /health"
+              kill $pid
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "server did not answer /health within 15s"
+          cat <<'EOF'
+          The server built but never became reachable. Run it locally with
+          npm run build:server-deps && node server/dist/index.js
+          EOF
+          kill $pid 2>/dev/null || true
+          exit 1
+
       - name: Build client
         run: npm run build:client
