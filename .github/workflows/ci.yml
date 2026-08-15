@@ -29,6 +29,10 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Before install, so a surprise major fails in seconds.
+      - name: Check dependency majors
+        run: npm run check:majors
+
       - name: Install
         run: npm ci
 

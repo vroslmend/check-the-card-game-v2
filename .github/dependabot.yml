@@ -12,6 +12,10 @@ updates:
           - patch
     # Majors are excluded on purpose, not by oversight. With no test suite
     # (#36), a green build is not evidence a breaking release is safe.
+    #
+    # This is not a guarantee. Security updates ignore these rules, so a major
+    # can still arrive as one. scripts/check-dependency-majors.mjs is what
+    # actually catches it.
     ignore:
       - dependency-name: "*"
         update-types:
