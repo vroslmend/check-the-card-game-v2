@@ -60,6 +60,8 @@ function Card({
   faceUp?: boolean;
 }) {
   const height = Math.round((width * 7) / 5);
+  const rankSize = Math.round(width * 0.27);
+  const pipSize = Math.round(width * 0.38);
   return (
     <div
       style={{
@@ -92,7 +94,7 @@ function Card({
           <div
             style={{
               display: "flex",
-              fontSize: 46,
+              fontSize: rankSize,
               fontWeight: 800,
               color: ACCENT,
               lineHeight: 1,
@@ -106,13 +108,13 @@ function Card({
               justifyContent: "center",
             }}
           >
-            <Heart size={96} color={ACCENT} />
+            <Heart size={pipSize} color={ACCENT} />
           </div>
           <div
             style={{
               display: "flex",
               justifyContent: "flex-end",
-              fontSize: 46,
+              fontSize: rankSize,
               fontWeight: 800,
               color: ACCENT,
               lineHeight: 1,
@@ -155,50 +157,63 @@ export default async function OpengraphImage() {
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
-            width: 600,
+            width: 560,
           }}
         >
-          {/* The brand mark, exactly as the app draws it: an accent card back
-              tilted like one just placed on the table. */}
+          {/* Mark and wordmark on one line, the way the app's header sets it:
+              an accent card back tilted like one just placed on the table,
+              sized to the cap height of the type beside it. */}
           <div
             style={{
               display: "flex",
-              width: 54,
-              height: 76,
               alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 8,
-              background: ACCENT,
-              transform: "rotate(-6deg)",
-              marginBottom: 34,
+              gap: 26,
             }}
           >
-            <CheckMark size={22} color={ACCENT_INK} />
+            <div
+              style={{
+                display: "flex",
+                width: 68,
+                height: 95,
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 10,
+                background: ACCENT,
+                transform: "rotate(-6deg)",
+              }}
+            >
+              <CheckMark size={30} color={ACCENT_INK} />
+            </div>
+            <div
+              style={{
+                display: "flex",
+                fontSize: 132,
+                fontWeight: 800,
+                letterSpacing: "-0.04em",
+                lineHeight: 0.95,
+              }}
+            >
+              Check!
+            </div>
           </div>
 
+          {/* Set as two explicit lines rather than left to wrap. The break
+              belongs at the sentence, and a column this width would otherwise
+              break it after "your". */}
           <div
             style={{
               display: "flex",
-              fontSize: 138,
-              fontWeight: 800,
-              letterSpacing: "-0.04em",
-              lineHeight: 0.95,
-            }}
-          >
-            Check!
-          </div>
-
-          <div
-            style={{
-              display: "flex",
+              flexDirection: "column",
               marginTop: 26,
-              fontSize: 32,
-              lineHeight: 1.35,
+              fontSize: 30,
+              lineHeight: 1.32,
               color: INK_MUTED,
-              maxWidth: 570,
             }}
           >
-            You only ever saw two of your cards. Lowest hand wins.
+            <div style={{ display: "flex" }}>
+              You only ever saw two of your cards.
+            </div>
+            <div style={{ display: "flex" }}>Lowest hand wins.</div>
           </div>
 
           <div
@@ -215,18 +230,25 @@ export default async function OpengraphImage() {
           </div>
         </div>
 
+        {/* A held fan: evenly spaced, rotations symmetric about the middle,
+            outer cards dipping so the arc peaks in the centre. The container
+            is sized to what it holds, a 235 tall card plus 44 of dip and the
+            swing the rotation adds, so the parent's align-items centre
+            centres the cards against the type rather than against empty
+            space. Widths are set so the two columns and the padding total
+            less than 1200, or the frame squeezes them. */}
         <div
           style={{
             position: "relative",
             display: "flex",
-            width: 430,
-            height: 470,
+            width: 460,
+            height: 320,
           }}
         >
-          <Card left={-30} top={104} rotate={-16} width={180} />
-          <Card left={78} top={48} rotate={-7} width={180} />
-          <Card left={190} top={34} rotate={2} width={180} />
-          <Card left={292} top={96} rotate={14} width={180} faceUp />
+          <Card left={0} top={44} rotate={-17} width={166} />
+          <Card left={96} top={12} rotate={-6} width={166} />
+          <Card left={192} top={12} rotate={6} width={166} />
+          <Card left={288} top={44} rotate={17} width={166} faceUp />
         </div>
       </div>
     ),
