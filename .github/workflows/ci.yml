@@ -29,7 +29,14 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          # Matches the Node version Vercel builds the client with, so this
+          # gate exercises what actually ships. It ran on 24 while Vercel was
+          # on 22, which meant a break that only shows up on 22 passed here
+          # and reached production. Local development is on 24.
+          #
+          # If the Vercel setting moves, move this with it. The number matters
+          # less than the two agreeing.
+          node-version: 22
           cache: npm
 
       - name: Install
