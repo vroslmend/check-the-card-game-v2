@@ -2,7 +2,6 @@
 
 import React from "react";
 import ActionBarComponent from "./ActionBarComponent";
-import { useActionController } from "./ActionController";
 
 /**
  * This component is responsible for rendering the UI of the action bar.

@@ -115,10 +115,9 @@ const selectActionControllerProps = (state: UIMachineSnapshot) => {
       topDiscardCard.rank,
     );
 
-  // Type of deep state path is not covered by xstate typing; cast for compile.
   const isViewingPeek = state.matches({
     inGame: { ability: { resolving: "viewingPeek" } },
-  } as any);
+  });
 
   const isAbilitySelecting =
     !!currentAbilityContext &&
@@ -299,7 +298,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
 
     if (abilityContext && isAbilityPlayer && isAbilitySelecting) {
       const {
-        type,
         stage,
         sourceCard,
         selectedPeekTargets,
@@ -469,7 +467,6 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
     if (abilityContext && isAbilityPlayer && isAbilitySelecting) {
       const {
         stage,
-        type,
         selectedPeekTargets,
         maxPeekTargets,
         selectedSwapTargets,

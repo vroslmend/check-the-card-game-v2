@@ -15,18 +15,15 @@ import {
   GameStage,
   type ClientAbilityContext,
   type PlayerId,
-  type GameId,
   type ClientCheckGameState,
   type CreateGameResponse,
   type JoinGameResponse,
-  type AttemptRejoinResponse,
   type ChatMessage,
   type RichGameLogMessage,
   type Card,
   type AbilityActionPayload,
   type PeekTarget,
   type SwapTarget,
-  type AbilityType,
   TurnPhase,
 } from "shared-types";
 import { toast } from "sonner";
@@ -50,7 +47,7 @@ type ServerToClientEvents =
 
 type SocketEmitEvent = {
   eventName: SocketEventName.PLAYER_ACTION;
-  payload: { type: PlayerActionType | string; payload?: any };
+  payload: { type: PlayerActionType | string; payload?: unknown };
 };
 
 type EmittedEventToSocket = { type: "EMIT_TO_SOCKET" } & SocketEmitEvent;
@@ -354,7 +351,10 @@ export const uiMachine = setup({
       } as const;
     }),
     emitPlayerAction: emit(({ event }) => {
-      const { type, ...rest } = event as any;
+      const { type, ...rest } = event as { type: string } & Record<
+        string,
+        unknown
+      >;
       return {
         type: "EMIT_TO_SOCKET",
         eventName: SocketEventName.PLAYER_ACTION,

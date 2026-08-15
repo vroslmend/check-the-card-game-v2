@@ -2,7 +2,6 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Nunito_Sans } from "next/font/google";
 import { Providers } from "./providers";
-import { cn } from "@/lib/utils";
 import "lenis/dist/lenis.css";
 
 // The one type family, app-wide (exposed as --font-game). The landing page

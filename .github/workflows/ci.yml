@@ -47,6 +47,13 @@ jobs:
       - name: Typecheck client
         run: npx tsc --noEmit -p client/tsconfig.json
 
+      # A step of its own rather than letting the client build lint, which is
+      # how it was switched off for the life of the project: the build carries
+      # --no-lint, and Next 16 drops build time linting altogether. This calls
+      # the ESLint CLI, which outlives both.
+      - name: Lint client
+        run: npm run lint
+
       - name: Build server
         run: npm run build:server
 

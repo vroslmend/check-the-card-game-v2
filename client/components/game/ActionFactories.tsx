@@ -90,7 +90,6 @@ export const createPassMatchAction = (
 export const createAttemptMatchAction = (
   onClick: () => void,
   disabled?: boolean,
-  _hasSelection: boolean = false,
 ): Action => ({
   label: "Confirm Match",
   variant: "primary",

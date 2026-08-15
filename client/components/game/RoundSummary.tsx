@@ -4,7 +4,11 @@ import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Crown } from "lucide-react";
 import { type Player, PlayerStatus } from "shared-types";
-import { useUIActorRef, useUISelector } from "@/context/GameUIContext";
+import {
+  useUIActorRef,
+  useUISelector,
+  type UIMachineSnapshot,
+} from "@/context/GameUIContext";
 import { cn } from "@/lib/utils";
 import { play } from "@/lib/sounds";
 
@@ -22,16 +26,16 @@ interface RoundSummaryProps {
   onToggleChat: () => void;
 }
 
-const selectIsGameMaster = (state: any) =>
+const selectIsGameMaster = (state: UIMachineSnapshot) =>
   state.context.currentGameState?.gameMasterId === state.context.localPlayerId;
 
-const selectGameMasterId = (state: any) =>
+const selectGameMasterId = (state: UIMachineSnapshot) =>
   state.context.currentGameState?.gameMasterId ?? null;
 
-const selectCheckCallerId = (state: any) =>
+const selectCheckCallerId = (state: UIMachineSnapshot) =>
   state.context.currentGameState?.checkDetails?.callerId ?? null;
 
-const selectRoundEpoch = (state: any) =>
+const selectRoundEpoch = (state: UIMachineSnapshot) =>
   state.context.currentGameState?.roundEpoch ?? 0;
 
 // The table ripple upstairs runs ~1.5s after the panel mounts (PlayerHand's

@@ -10,6 +10,13 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  {
+    // `next lint` applied these implicitly. The ESLint CLI does not, and it is
+    // the only entry point left once Next 16 removes `next lint`, so the scope
+    // has to be stated here. Without it a run walks the build output and
+    // reports about 15,000 problems, none of them ours.
+    ignores: ["**/node_modules/**", ".next/**", "out/**", "next-env.d.ts"],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 

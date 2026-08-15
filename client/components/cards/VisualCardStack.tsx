@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { type Card, PublicCard } from "shared-types";
+import { PublicCard } from "shared-types";
 import { PlayingCard } from "./PlayingCard";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";

@@ -17,10 +17,24 @@ import { useEffect, useRef } from "react";
 import { createActor } from "xstate";
 import {
   SocketEventName,
+  type Card,
+  type ChatMessage,
   type ClientCheckGameState,
-  type PlayerActionType,
+  type ClientToServerEvents,
+  type RichGameLogMessage,
+  type ServerToClientEvents,
 } from "shared-types";
 import { DeviceProvider } from "@/context/DeviceContext";
+
+// The socket contract in shared-types already describes every payload these
+// bridges carry. Deriving the handler types from it means a change on the
+// server side surfaces here as a type error instead of being absorbed.
+type PlayerActionPayload = Parameters<
+  ClientToServerEvents[SocketEventName.PLAYER_ACTION]
+>[0];
+type AbilityPeekResultPayload = Parameters<
+  ServerToClientEvents[SocketEventName.ABILITY_PEEK_RESULT]
+>[0];
 
 // ============================================================================
 //  EFFECTS BRIDGE COMPONENT – connects the actor to sockets and routing
@@ -34,10 +48,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     const socketSub = actor.on("EMIT_TO_SOCKET", (emitted: EmittedEvent) => {
       if (emitted.type !== "EMIT_TO_SOCKET") return;
       if (emitted.eventName === SocketEventName.PLAYER_ACTION) {
-        socket.emit(
-          emitted.eventName,
-          emitted.payload as { type: PlayerActionType; payload?: any },
-        );
+        socket.emit(emitted.eventName, emitted.payload as PlayerActionPayload);
       } else {
         logger.warn(
           { event: emitted },
@@ -54,21 +65,22 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     // Socket → Actor bridges
     const gs = (g: ClientCheckGameState) =>
       actor.send({ type: "CLIENT_GAME_STATE_UPDATED", gameState: g });
-    const lg = (m: any) => actor.send({ type: "NEW_GAME_LOG", logMessage: m });
-    const cm = (m: any) =>
+    const lg = (m: RichGameLogMessage) =>
+      actor.send({ type: "NEW_GAME_LOG", logMessage: m });
+    const cm = (m: ChatMessage) =>
       actor.send({ type: "NEW_CHAT_MESSAGE", chatMessage: m });
-    const pk = (d: { hand: any[] }) =>
+    const pk = (d: { hand: Card[] }) =>
       actor.send({ type: "INITIAL_PEEK_INFO", hand: d.hand });
-    const pr = (d: { results: any[] }) =>
+    const pr = (d: AbilityPeekResultPayload) =>
       actor.send({ type: "ABILITY_PEEK_RESULT", results: d.results });
     const er = (e: { message: string }) =>
       actor.send({ type: "ERROR_RECEIVED", error: e.message });
-    const ce = (err: any) =>
+    const ce = (err: Error) =>
       logger.warn(
         { error: err?.message ?? "connection error" },
         "Socket connection error",
       );
-    const il = (l: any[]) =>
+    const il = (l: RichGameLogMessage[]) =>
       actor.send({ type: "INITIAL_LOGS_RECEIVED", logs: l });
     const onConnect = () =>
       actor.send({
@@ -125,7 +137,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   if (actorRef.current === null) {
     const getInitialInput = (): UIMachineInput => {
-      let initial: UIMachineInput = {};
+      const initial: UIMachineInput = {};
 
       // Capture gameId from URL when landing directly on game page
       if (pathname.startsWith("/game/")) {

@@ -195,7 +195,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
     gameStage === GameStage.INITIAL_PEEK &&
     visibleCards.some((vc) => vc.source === "initial-peek");
 
-  const combinedClass = cn(isLocked && "opacity-60", dense && "gap-1");
+  const combinedClass = cn(isLocked && "opacity-60", dense && "gap-1", className);
 
   return (
     <HandGrid numItems={handToDisplay.length} className={combinedClass}>
