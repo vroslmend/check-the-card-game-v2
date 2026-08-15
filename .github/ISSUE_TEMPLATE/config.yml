@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/vroslmend/check-the-card-game-v2/security/advisories/new
+    about: Anything exploitable, especially anything that lets a player see cards they should not. This reaches the maintainer privately, so please do not open a public issue for it.
