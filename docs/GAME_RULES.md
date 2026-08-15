@@ -115,6 +115,8 @@ Abilities are triggered when a Special Card (King, Queen, or Jack) is discarded 
 *   **Queen (Q):** Peek at any **one** card on the table. Then, swap any **one** card with any **other** card.
 *   **Jack (J):** Swap any **one** card with any **other** card. (No peek).
 
+The peek counts above are maximums, not requirements. You may peek at fewer cards than an ability allows and confirm, which matters when matched Special Cards pool their peeks (Section 8.B) and the table holds fewer cards than the pool. Peeking nothing at all is a skip (Section 8.A).
+
 **Note on peek visibility.** As at a real table, all players can see which card positions are being peeked at, but only the peeking player sees the card's face. Similarly, a card taken from the Discard Pile stays face-up for everyone while it is held, since it was already public knowledge.
 
 #### A. Skipping Abilities

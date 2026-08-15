@@ -310,12 +310,20 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
       if (stage === "peeking") {
         const required = maxPeekTargets ?? 0;
         const selected = selectedPeekTargets?.length ?? 0;
-        const isDisabled = selected !== required;
+        // Peeking fewer cards than the ability grants is allowed: a pooled
+        // King pair asks for four, and the table often holds fewer than that
+        // once hands shrink and locked players are off limits. Requiring the
+        // full count stranded the ability with no way to use it at all.
+        const isDisabled = selected === 0;
+        // Show the tally when there is more than one to take, so confirming
+        // early reads as a choice rather than an accident.
+        const confirmLabel =
+          required > 1 ? `Confirm Peek (${selected}/${required})` : "Confirm Peek";
 
         actions.push(
           createConfirmAbilityAction(
             () => sendEvent({ type: "CONFIRM_ABILITY_ACTION" }),
-            "Confirm Peek",
+            confirmLabel,
             isDisabled,
           ),
         );
