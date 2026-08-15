@@ -29,6 +29,8 @@
     "build:client": "npm run build -w client",
     "build:shared": "npm run build -w shared-types",
     "lint": "npm run lint -w client",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "start:server": "npm start -w server",
     "start:client": "npm start -w client",
     "dev:client": "npm run dev -w client",
