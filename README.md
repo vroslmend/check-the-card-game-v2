@@ -24,7 +24,6 @@ Play at [check-the-game.vercel.app](https://check-the-game.vercel.app)
 
 ```bash
 npm ci
-npm run build:shared
 npm run dev
 ```
 

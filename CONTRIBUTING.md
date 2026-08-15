@@ -39,11 +39,12 @@ Requirements, install steps and environment variables are in the [README](README
 
 ```
 npm ci
-npm run build:shared
 npm run dev
 ```
 
-That runs the Next.js client and the Socket.IO server together. You need both, because the server is authoritative for every rule in the game.
+That builds the shared types and the server, then runs the Next.js client and the Socket.IO server together. You need both, because the server is authoritative for every rule in the game.
+
+The client hot reloads. The server does not: it runs from a build, so after changing anything under `server/` you restart `npm run dev` to pick it up.
 
 ## Making a change
 
