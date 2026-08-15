@@ -11,6 +11,7 @@ Fixes #
 <!-- What you actually ran and looked at. There is no automated test suite yet, so this section is the verification.
 
 What CI will run, so you can fail it locally first:
+  npm run check:majors
   npx tsc --noEmit -p shared-types/tsconfig.json
   npx tsc --noEmit -p server/tsconfig.json
   npx tsc --noEmit -p client/tsconfig.json
