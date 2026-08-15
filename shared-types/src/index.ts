@@ -430,9 +430,7 @@ export type SkipAbilityPayload = {
 };
 
 export type AbilityActionPayload =
-  | PeekAbilityPayload
-  | SwapAbilityPayload
-  | SkipAbilityPayload;
+  PeekAbilityPayload | SwapAbilityPayload | SkipAbilityPayload;
 
 // ================================================================================================
 //                                    CLIENT-SPECIFIC STATE

@@ -3,13 +3,7 @@
 import React, { createContext, useState, useContext, ReactNode } from "react";
 
 export type CursorVariant =
-  | "default"
-  | "link"
-  | "text"
-  | "pressed"
-  | "button"
-  | "icon"
-  | "area";
+  "default" | "link" | "text" | "pressed" | "button" | "icon" | "area";
 
 interface CursorContextType {
   variant: CursorVariant;
