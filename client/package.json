@@ -7,7 +7,7 @@
     "build": "next build --no-lint",
     "postinstall": "npm run build -w shared-types",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@georgedoescode/spline": "^1.0.1",

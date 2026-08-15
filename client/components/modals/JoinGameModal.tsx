@@ -145,7 +145,7 @@ export function JoinGameModal({
                   className="mt-2 h-12 w-full rounded-full border border-hairline bg-surface px-5 text-center text-lg font-bold uppercase tracking-[0.3em] text-ink outline-none transition-colors placeholder:font-normal placeholder:tracking-normal placeholder:text-ink-muted focus:border-accent"
                 />
                 <p className="mt-2 text-xs text-ink-muted">
-                  Five characters, shown big in the host's lobby.
+                  Five characters, shown big in the host&apos;s lobby.
                 </p>
               </motion.div>
             )}

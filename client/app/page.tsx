@@ -19,7 +19,6 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Users, ArrowRight, Menu, X } from "lucide-react";
-import { FaGithub, FaSpotify } from "react-icons/fa";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { HeroCards } from "@/components/ui/HeroCards";
 import { Signature, secondSignature } from "@/components/ui/Signature";
@@ -240,7 +239,7 @@ function HomePage() {
         className="fixed top-0 z-50 w-full border-b border-hairline bg-ground"
       >
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-8">
-          <a
+          <Link
             href="/"
             onClick={(e) => {
               e.preventDefault();
@@ -252,7 +251,7 @@ function HomePage() {
             <span className="text-2xl font-extrabold tracking-tight text-ink">
               Check
             </span>
-          </a>
+          </Link>
 
           <nav className="hidden items-center gap-8 lg:flex">
             {NAV_ITEMS.map((item) => (
