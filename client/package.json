@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --no-lint",
+    "build": "next build",
     "postinstall": "npm run build -w shared-types",
     "start": "next start",
     "lint": "eslint ."

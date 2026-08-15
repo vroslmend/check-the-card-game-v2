@@ -4,6 +4,10 @@ import path from "path";
 const nextConfig: NextConfig = {
   transpilePackages: ["shared-types"],
 
+  // Not an oversight: lint runs as its own CI step, so the build does not
+  // repeat it.
+  eslint: { ignoreDuringBuilds: true },
+
   turbopack: {
     resolveAlias: {
       "@": "./",
