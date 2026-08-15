@@ -6,8 +6,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Least privilege: this workflow only reads the code. Nothing it runs needs
-# write access to the repository.
 permissions:
   contents: read
 
@@ -15,10 +13,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# No paths-ignore here on purpose. This is a required check, and a workflow
-# skipped by path filtering leaves the check pending forever, which blocks the
-# pull request from merging. Running it on documentation changes costs a couple
-# of minutes and keeps the gate honest.
+# No paths-ignore. This is a required check, and a path-filtered skip leaves it
+# pending forever, blocking the pull request with no obvious cause.
 jobs:
   build:
     name: Typecheck and build
@@ -59,9 +55,7 @@ jobs:
         run: npm run build:server
 
       # Typechecking proves the server compiles, not that it runs. This catches
-      # a throw on startup, an import that only resolves at build time, or a
-      # broken module-alias mapping, all of which would otherwise reach
-      # production with CI green.
+      # a throw on startup or a broken module-alias mapping.
       - name: Server starts and answers /health
         run: |
           node server/dist/index.js &

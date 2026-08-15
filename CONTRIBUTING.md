@@ -55,6 +55,7 @@ Before changing anything, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). `sh
 - One issue, one pull request. If you find a second problem along the way, open a second issue for it. A small fix bundled with a large rewrite cannot be reviewed or reverted cleanly and will be sent back.
 - Stay inside the scope the issue describes. Where scope matters, the issue says what is out of bounds.
 - Match the style of the code around you.
+- Comment to stop a reader getting something wrong, not to narrate. Before writing one, ask what someone would do wrong without it. If the answer is nothing, delete it. The two common failures are restating what the code already says, and recounting how something came to be. History, counts and the reasoning behind a change belong in the commit message and the issue, where they stay searchable and cannot rot. A comment that documents a trap, an ordering that matters, or something that looks wrong and is deliberate, has earned its place.
 - The docs follow the same rule. Match what is already there: short sentences, plain words, no decoration.
 - Write plain commit messages that say what changed and why.
 
