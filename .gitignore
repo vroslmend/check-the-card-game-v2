@@ -51,6 +51,13 @@ dist/
 .cursor
 logs.md
 /temp
-Gemini.md
 references
 .remember
+
+# Local scratch files that some editors and tools drop in the working tree.
+# Listed so a contributor cannot commit one by accident.
+Gemini.md
+CLAUDE.md
+AGENTS.md
+.claude/
+.gemini/

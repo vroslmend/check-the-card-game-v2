@@ -10,7 +10,11 @@ package-lock.json
 next-env.d.ts
 *.tsbuildinfo
 
-# Local.
+# Local. These never reach a clean checkout, so formatting them would make a
+# local run disagree with CI, which is the whole thing this file just stopped
+# doing.
 .env*
 *.log
 .DS_Store
+.claude/
+.gemini/
