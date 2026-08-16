@@ -1,0 +1,14 @@
+{
+  "name": "check-probe",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Layout and reachability probe. Deliberately outside the root workspaces so it never enters the Vercel or Render install.",
+  "scripts": {
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1",
+    "socket.io-client": "^4.8.3"
+  }
+}
