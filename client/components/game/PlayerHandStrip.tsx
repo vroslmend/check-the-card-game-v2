@@ -141,6 +141,11 @@ const PlayerInfoBadge = ({
   // the two-line header is what made every seat cost ~54px of chrome. The
   // full status text still lives on the results sheet and in the log. The
   // local player keeps its status text inline (it is the acting signal).
+  // What the columns either side of the name reserve. Wide enough for the
+  // longest status the machine produces ("Disconnected") on your own seat,
+  // icon width on everyone else's, where the status is only an icon.
+  const statusWidth = isLocalPlayer ? "w-[5.5rem] shrink-0" : "w-3.5 shrink-0";
+
   if (compact) {
     return (
       // Two different jobs, so two different rules.
@@ -156,51 +161,61 @@ const PlayerInfoBadge = ({
       // trade. Its status block is fixed width instead, which is what actually
       // stops the drift: the word changes on every phase and a header that
       // resizes mid turn slides every card sideways to recentre.
+      // The name sits at true centre, and the two things beside it are what
+      // would otherwise stop it: the status, whose word changes on every
+      // phase, and the turn dot, which appears and disappears. Both get a
+      // fixed reservation, and the left column mirrors the right one exactly,
+      // so the middle column is centred by construction. Reserving rather than
+      // reacting is also what keeps the seat still, since neither can change
+      // the header's width any more.
       <div
         className={cn(
-          "flex items-center justify-center gap-1.5 font-game",
+          "grid grid-cols-[auto_1fr_auto] items-center gap-1.5 font-game",
           !isLocalPlayer && "w-0 min-w-full",
         )}
       >
-        {isCurrentTurn && (
+        <span className={statusWidth} aria-hidden />
+        <span className="flex min-w-0 items-center justify-center gap-1.5">
           <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+            className={cn(
+              "h-1.5 w-1.5 shrink-0 rounded-full bg-accent",
+              !isCurrentTurn && "invisible",
+            )}
             aria-hidden
           />
-        )}
-        <span
-          className={cn(
-            "truncate text-sm font-bold text-ink",
-            isLocalPlayer ? "max-w-[8rem]" : "max-w-[5.5rem]",
-            isDisqualified && "text-ink-muted line-through",
-          )}
-        >
-          {player.name}
+          <span
+            className={cn(
+              "truncate text-sm font-bold text-ink",
+              isDisqualified && "text-ink-muted line-through",
+            )}
+          >
+            {player.name}
+          </span>
         </span>
-        {!hideChip &&
-          (isLocalPlayer ? (
-            <span
-              className={cn(
-                // Fixed width, wide enough for the longest status the machine
-                // produces ("Disconnected"). The status is the only part of
-                // this header whose content changes during a turn, so pinning
-                // it is what keeps the seat still.
-                "flex w-[5.5rem] shrink-0 items-center justify-center gap-1 text-[11px] font-semibold",
-                muted ? "text-ink-muted" : "text-ink",
-              )}
-            >
-              <Icon className="h-3 w-3 shrink-0" />
-              <span className="truncate">{text}</span>
-            </span>
-          ) : (
+        {hideChip ? (
+          <span className={statusWidth} aria-hidden />
+        ) : isLocalPlayer ? (
+          <span
+            className={cn(
+              statusWidth,
+              "flex items-center justify-center gap-1 text-[11px] font-semibold",
+              muted ? "text-ink-muted" : "text-ink",
+            )}
+          >
+            <Icon className="h-3 w-3 shrink-0" />
+            <span className="truncate">{text}</span>
+          </span>
+        ) : (
+          <span className={cn(statusWidth, "flex justify-center")}>
             <Icon
               className={cn(
-                "h-3.5 w-3.5 shrink-0",
+                "h-3.5 w-3.5",
                 muted ? "text-ink-muted" : "text-ink",
               )}
               aria-label={text}
             />
-          ))}
+          </span>
+        )}
       </div>
     );
   }
