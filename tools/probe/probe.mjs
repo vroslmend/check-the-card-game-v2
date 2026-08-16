@@ -10,7 +10,9 @@
 // It reports measurements. Judgement is at the bottom, in one place.
 
 import { chromium } from "playwright";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { PNG } from "pngjs";
+import pixelmatch from "pixelmatch";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HeadlessPlayer } from "./player.mjs";
@@ -22,7 +24,6 @@ const SERVER = process.env.PROBE_SERVER_URL ?? "http://localhost:8000";
 // Anchored to the repo, not to the shell's directory, so output lands in the
 // same place whether this is run from the root or from tools/probe.
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const OUT = join(ROOT, ".probe");
 
 const CHECKPOINTS = ["lobby", "peek", "play", "drawn", "matching", "scoring"];
 
@@ -42,7 +43,23 @@ const opts = {
   verbose: flag("verbose"),
   breakdown: flag("breakdown"),
   shift: flag("shift"),
+  theme: arg("theme", "dark"),
+  // The observed player's name. Worth turning up deliberately: a seat's width
+  // is set by its hand, so a long name truncates rather than widening the
+  // seat, and how much it truncates is a thing to look at rather than assume.
+  name: arg("name", "Observed"),
+  out: arg("out", ".probe"),
+  // A directory of shots from an earlier run. Every capture is compared
+  // against its opposite number and the changed pixel count reported, so
+  // "did this change anything it should not have" is answered rather than
+  // hoped about.
+  baseline: arg("baseline", null),
 };
+
+if (!["dark", "light"].includes(opts.theme)) {
+  console.error(`--theme must be dark or light`);
+  process.exit(2);
+}
 
 if (!CHECKPOINTS.includes(opts.at)) {
   console.error(
@@ -141,7 +158,7 @@ const drive = async (page, opts) => {
     waitUntil: "domcontentloaded",
   });
   const dialog = page.locator('[role="dialog"]');
-  await dialog.locator("input").first().fill("Observed");
+  await dialog.locator("input").first().fill(opts.name);
   await dialog.getByRole("button", { name: /confirm and join/i }).click();
 
   await host.waitFor(
@@ -508,9 +525,31 @@ const shiftCheck = async (page, host, observedId) => {
   return moved;
 };
 
+/** Compares one capture against the same shot from an earlier run. Returns the
+ *  share of pixels that differ, or null when there is nothing to compare to. */
+const compareToBaseline = (shotPath, baselineDir, fileName, outDir) => {
+  if (!baselineDir) return null;
+  const prior = join(baselineDir, fileName);
+  if (!existsSync(prior)) return null;
+  const a = PNG.sync.read(readFileSync(prior));
+  const b = PNG.sync.read(readFileSync(shotPath));
+  if (a.width !== b.width || a.height !== b.height) return { resized: true };
+  const diff = new PNG({ width: a.width, height: a.height });
+  const changed = pixelmatch(a.data, b.data, diff.data, a.width, a.height, {
+    threshold: 0.1,
+  });
+  const share = changed / (a.width * a.height);
+  if (changed > 0) {
+    writeFileSync(join(outDir, `diff-${fileName}`), PNG.sync.write(diff));
+  }
+  return { changed, share };
+};
+
 const main = async () => {
   await preflight();
+  const OUT = join(ROOT, opts.out);
   mkdirSync(OUT, { recursive: true });
+  const shots = [];
 
   const viewports = resolveViewports(opts.viewports);
   const browser = await chromium.launch({ headless: !opts.headed });
@@ -525,6 +564,14 @@ const main = async () => {
     viewport: { width: 1600, height: 1200 },
     deviceScaleFactor: 1,
   });
+  // next-themes reads its choice from localStorage before paint, so it has to
+  // be there before the first navigation or the run silently shoots whichever
+  // theme happens to be the default.
+  await context.addInitScript((theme) => {
+    try {
+      localStorage.setItem("theme", theme);
+    } catch {}
+  }, opts.theme);
   const page = await context.newPage();
 
   const consoleErrors = [];
@@ -565,12 +612,16 @@ const main = async () => {
       const m = await page.evaluate(measureInPage);
       rows.push({ viewport, m });
 
-      const unreachable = m.controls.some((c) => c.status !== "ok");
-      if (unreachable || m.scrollers.length) {
-        await page.screenshot({
-          path: join(OUT, `${opts.at}-${viewport.name}.png`),
-        });
-      }
+      // Always, not only on failure. Capturing only failures leaves the run
+      // visually blind exactly when everything passes, which is when a fix is
+      // most likely to have quietly made something ugly rather than broken.
+      const fileName = `${opts.at}-${opts.players}p${opts.seats}s-${opts.theme}-${viewport.name}.png`;
+      const shotPath = join(OUT, fileName);
+      await page.screenshot({ path: shotPath });
+      shots.push({
+        fileName,
+        diff: compareToBaseline(shotPath, opts.baseline, fileName, OUT),
+      });
     }
 
     const after = stamp();
@@ -582,9 +633,32 @@ const main = async () => {
     }
 
     failures = report(rows, opts);
+
+    console.log(`${shots.length} shots (${opts.theme}) -> ${OUT}`);
+    if (opts.baseline) {
+      const compared = shots.filter((s) => s.diff);
+      const moved = compared.filter((s) => s.diff.resized || s.diff.changed);
+      if (!compared.length) {
+        console.log(`  nothing in ${opts.baseline} to compare against`);
+      } else if (!moved.length) {
+        console.log(
+          `  pixel identical to ${opts.baseline} (${compared.length} shots)`,
+        );
+      } else {
+        console.log(`  changed against ${opts.baseline}:`);
+        for (const s of moved) {
+          console.log(
+            s.diff.resized
+              ? `    ${s.fileName}  different dimensions`
+              : `    ${s.fileName}  ${(s.diff.share * 100).toFixed(2)}% of pixels (diff-${s.fileName})`,
+          );
+        }
+      }
+    }
+
     writeFileSync(
       join(OUT, "report.json"),
-      JSON.stringify({ opts, rows, consoleErrors }, null, 2),
+      JSON.stringify({ opts, rows, shots, consoleErrors }, null, 2),
     );
     console.log(`detail -> ${join(OUT, "report.json")}`);
 

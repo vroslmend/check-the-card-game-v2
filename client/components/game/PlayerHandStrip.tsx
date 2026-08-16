@@ -143,14 +143,25 @@ const PlayerInfoBadge = ({
   // local player keeps its status text inline (it is the acting signal).
   if (compact) {
     return (
-      // w-0 min-w-full: the hand decides how wide a seat is, never the header.
-      // A zero width box contributes nothing to the parent's intrinsic width,
-      // and min-width brings it back up to whatever the hand settled on. The
-      // status word changes on every phase ("Your Turn" to "Matching…"), and
-      // while the header could size the seat, that changed the seat's width
-      // mid turn and slid every card sideways to recentre. The name truncates
-      // instead, which nobody is trying to memorise the position of.
-      <div className="flex w-0 min-w-full items-center justify-center gap-1.5 font-game">
+      // Two different jobs, so two different rules.
+      //
+      // An opponent's header is pinned to its hand's width with w-0 min-w-full:
+      // a zero width box adds nothing to the parent's intrinsic width and the
+      // min-width brings it back up to whatever the hand settled on. That keeps
+      // dense seats packing three to a phone row, which is the whole point of
+      // compact mode, and their names are secondary enough to truncate.
+      //
+      // Your own seat gets to be wider than its hand, because truncating the
+      // player's own name to "Am…" to save space nobody was using is a bad
+      // trade. Its status block is fixed width instead, which is what actually
+      // stops the drift: the word changes on every phase and a header that
+      // resizes mid turn slides every card sideways to recentre.
+      <div
+        className={cn(
+          "flex items-center justify-center gap-1.5 font-game",
+          !isLocalPlayer && "w-0 min-w-full",
+        )}
+      >
         {isCurrentTurn && (
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
@@ -170,12 +181,16 @@ const PlayerInfoBadge = ({
           (isLocalPlayer ? (
             <span
               className={cn(
-                "flex shrink-0 items-center gap-1 text-[11px] font-semibold",
+                // Fixed width, wide enough for the longest status the machine
+                // produces ("Disconnected"). The status is the only part of
+                // this header whose content changes during a turn, so pinning
+                // it is what keeps the seat still.
+                "flex w-[5.5rem] shrink-0 items-center justify-center gap-1 text-[11px] font-semibold",
                 muted ? "text-ink-muted" : "text-ink",
               )}
             >
-              <Icon className="h-3 w-3" />
-              <span>{text}</span>
+              <Icon className="h-3 w-3 shrink-0" />
+              <span className="truncate">{text}</span>
             </span>
           ) : (
             <Icon
@@ -337,7 +352,12 @@ export const PlayerHandStrip: React.FC<PlayerHandStripProps> = ({
         selectedCardIndex={
           isLocalPlayer && canMatch ? matchAttempt?.cardIndex : undefined
         }
-        className="w-full max-w-md"
+        // w-fit, not w-full. The grid's tracks are 1fr and the cards inside
+        // them are a fixed width, so a hand told to fill a seat wider than
+        // itself widens its tracks and leaves the cards sitting apart. Your own
+        // seat is wider than its hand now, and the gap between your cards
+        // should not depend on how long your name is.
+        className="w-fit max-w-md"
         dense={denseCards}
       />
     </motion.div>
