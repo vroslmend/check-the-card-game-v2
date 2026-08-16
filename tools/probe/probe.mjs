@@ -43,6 +43,11 @@ const opts = {
   verbose: flag("verbose"),
   breakdown: flag("breakdown"),
   shift: flag("shift"),
+  sweep: flag("sweep"),
+  sweepWidths: arg("widths", "393,820,1440,1920"),
+  sweepFrom: Number(arg("from", 360)),
+  sweepTo: Number(arg("to", 1200)),
+  sweepStep: Number(arg("step", 20)),
   theme: arg("theme", "dark"),
   // The observed player's name. Worth turning up deliberately: a seat's width
   // is set by its hand, so a long name truncates rather than widening the
@@ -545,6 +550,55 @@ const compareToBaseline = (shotPath, baselineDir, fileName, outDir) => {
   return { changed, share };
 };
 
+/** Walks every height in a range instead of sampling named devices.
+ *
+ *  A device list is a guess about where browser chrome leaves the viewport,
+ *  and a wrong guess hides exactly the cliff it was meant to find: 1920x1080
+ *  passed while the 1920x910 a real maximised Chrome gives was broken in
+ *  production. Sweeping removes the guess. If every height fits, no device can
+ *  land badly, whatever its chrome takes. */
+const sweep = async (page, widths, from, to, step) => {
+  const bad = [];
+  let checked = 0;
+  for (const width of widths) {
+    let run = null;
+    for (let height = from; height <= to; height += step) {
+      await page.setViewportSize({ width, height });
+      await page.waitForTimeout(90);
+      const m = await page.evaluate(measureInPage);
+      checked++;
+      const over = m.scrollers.reduce((n, s) => Math.max(n, s.overflowPx), 0);
+      const unreachable = m.controls.filter((c) => c.status !== "ok").length;
+      if (over > 0 || unreachable > 0) {
+        if (run && run.width === width && run.to === height - step) {
+          run.to = height;
+          run.worst = Math.max(run.worst, over);
+        } else {
+          run = { width, from: height, to: height, worst: over };
+          bad.push(run);
+        }
+      } else if (run && run.to !== height) {
+        run = null;
+      }
+    }
+  }
+
+  console.log(
+    `\nheight sweep ${from} to ${to} by ${step}, ${checked} viewports\n${"-".repeat(60)}`,
+  );
+  if (!bad.length) {
+    console.log(`  fits at every height, at widths ${widths.join(", ")}`);
+  } else {
+    for (const b of bad) {
+      console.log(
+        `  FAIL width ${b.width}  heights ${b.from}${b.to !== b.from ? ` to ${b.to}` : ""}  worst ${b.worst}px over`,
+      );
+    }
+  }
+  console.log("");
+  return bad.length;
+};
+
 const main = async () => {
   await preflight();
   const OUT = join(ROOT, opts.out);
@@ -588,6 +642,16 @@ const main = async () => {
     );
     let observedId;
     ({ bots, observedId } = await drive(page, opts));
+
+    if (opts.sweep) {
+      failures += await sweep(
+        page,
+        opts.sweepWidths.split(",").map(Number),
+        opts.sweepFrom,
+        opts.sweepTo,
+        opts.sweepStep,
+      );
+    }
 
     if (opts.shift) {
       await page.setViewportSize(viewports[0]);
