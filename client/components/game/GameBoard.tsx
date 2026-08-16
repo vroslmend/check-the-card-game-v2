@@ -255,7 +255,7 @@ export function GameBoard() {
             {/* Opponents area */}
             <div
               className={cn(
-                "flex justify-center items-center py-2 tiny:py-1",
+                "flex justify-center items-center py-2 tiny:py-0.5",
                 endScene && "order-1",
               )}
             >
@@ -329,7 +329,7 @@ export function GameBoard() {
                 collapses) rather than duplicating the hand. */}
             <div
               className={cn(
-                "flex flex-col items-center justify-center py-2 tiny:py-1",
+                "flex flex-col items-center justify-center py-2 tiny:py-0.5",
                 endScene && "order-2",
               )}
             >
@@ -343,7 +343,12 @@ export function GameBoard() {
                   isCurrentTurn={isMyTurn}
                   tableIndex={opponentPlayers.length}
                   compact={compactSeats}
-                  denseCards={false}
+                  // Your own hand stays regular size, because it is the one
+                  // you act on. The exception is a crowded table on a short
+                  // screen: at six players a phone cannot afford both a
+                  // wrapped opponent band and a full size hand, and a hand
+                  // that does not fit is worse than a smaller one.
+                  denseCards={denseBand && shortViewport}
                 />
               ) : null}
             </div>

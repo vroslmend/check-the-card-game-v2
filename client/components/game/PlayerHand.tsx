@@ -222,7 +222,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               className={cn(
                 "relative aspect-[5/7]",
                 dense
-                  ? "w-[min(8svh,11.5vw,3.5rem)] tiny:w-[min(7svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
+                  ? "w-[min(6.5svh,9.5vw,3.5rem)] tiny:w-[min(5.5svh,9.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
                   : "w-[min(8svh,15vw)] tiny:w-[min(7svh,15vw)]",
               )}
             >
@@ -307,7 +307,7 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               // full row fits anyway and the cap lifts, so desktop and
               // half-screen sizes are unchanged.
               dense
-                ? "w-[min(8svh,11.5vw,3.5rem)] tiny:w-[min(7svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
+                ? "w-[min(6.5svh,9.5vw,3.5rem)] tiny:w-[min(5.5svh,9.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
                 : "w-[min(8svh,15vw)] tiny:w-[min(7svh,15vw)]",
             )}
           >
