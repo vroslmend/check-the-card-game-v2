@@ -41,6 +41,7 @@ const opts = {
   headed: flag("headed"),
   verbose: flag("verbose"),
   breakdown: flag("breakdown"),
+  shift: flag("shift"),
 };
 
 if (!CHECKPOINTS.includes(opts.at)) {
@@ -424,6 +425,89 @@ const report = (rows, opts) => {
 
 // ---------------------------------------------------------------------------
 
+/** Does anything move sideways when only the game's phase changed?
+ *
+ *  Nothing in a seat should. Card positions are the game's spatial memory: a
+ *  player is remembering "the nine is bottom-left", and a seat that drifts
+ *  every time a status word changes length is quietly undermining that. */
+const shiftCheck = async (page, host, observedId) => {
+  const snap = () =>
+    page.evaluate(() => {
+      const out = [];
+      for (const grid of document.querySelectorAll(".inline-grid")) {
+        const seat = grid.closest(".flex.flex-col.items-center");
+        const r = grid.getBoundingClientRect();
+        const head = seat?.firstElementChild?.getBoundingClientRect();
+        out.push({
+          who: (seat?.innerText || "").split("\n")[0]?.slice(0, 16) ?? "?",
+          handX: Math.round(r.x * 10) / 10,
+          handW: Math.round(r.width * 10) / 10,
+          headW: head ? Math.round(head.width * 10) / 10 : null,
+          cards: [...grid.children].map(
+            (c) => Math.round(c.getBoundingClientRect().x * 10) / 10,
+          ),
+        });
+      }
+      return out;
+    });
+
+  const label = () => {
+    const s = host.state;
+    return `${s?.turnPhase ?? "?"}${s?.currentPlayerId === observedId ? " (yours)" : ""}`;
+  };
+
+  const frames = [{ phase: label(), seats: await snap() }];
+  const step = async (name, fn) => {
+    await fn();
+    await page.waitForTimeout(700); // let the layout spring settle
+    frames.push({ phase: `${name} -> ${label()}`, seats: await snap() });
+  };
+
+  await step("draw", async () => {
+    await page
+      .getByRole("button", { name: /draw from deck/i })
+      .click({ timeout: 8000 })
+      .catch(() => {});
+    await host
+      .waitFor((s) => !!s.players[observedId]?.pendingDrawnCard, "drawn", 8000)
+      .catch(() => {});
+  });
+  await step("discard", async () => {
+    await page
+      .getByRole("button", { name: /discard card/i })
+      .click({ timeout: 8000 })
+      .catch(() => {});
+    await host
+      .waitFor((s) => !!s.matchingOpportunity, "matching", 8000)
+      .catch(() => {});
+  });
+
+  console.log(`\nsideways movement across phase changes\n${"-".repeat(72)}`);
+  let moved = 0;
+  const base = frames[0];
+  for (const f of frames.slice(1)) {
+    for (let i = 0; i < base.seats.length; i++) {
+      const a = base.seats[i];
+      const b = f.seats[i];
+      if (!a || !b) continue;
+      const dx = Math.round((b.handX - a.handX) * 10) / 10;
+      const dw = Math.round((b.handW - a.handW) * 10) / 10;
+      const dh = Math.round((b.headW - a.headW) * 10) / 10;
+      if (Math.abs(dx) < 0.5 && Math.abs(dw) < 0.5) continue;
+      moved++;
+      console.log(
+        `  ${f.phase.padEnd(28)} ${a.who.padEnd(12)} hand moved ${dx > 0 ? "+" : ""}${dx}px, width ${dw > 0 ? "+" : ""}${dw}px` +
+          (Math.abs(dh) >= 0.5
+            ? `  (its header changed ${dh > 0 ? "+" : ""}${dh}px)`
+            : ""),
+      );
+    }
+  }
+  if (!moved) console.log("  nothing moved");
+  console.log("");
+  return moved;
+};
+
 const main = async () => {
   await preflight();
   mkdirSync(OUT, { recursive: true });
@@ -457,6 +541,12 @@ const main = async () => {
     );
     let observedId;
     ({ bots, observedId } = await drive(page, opts));
+
+    if (opts.shift) {
+      await page.setViewportSize(viewports[0]);
+      await page.waitForTimeout(300);
+      failures += await shiftCheck(page, bots[0], observedId);
+    }
 
     // Every row has to describe the same game, or the table is comparing
     // different boards and quietly says nothing.
