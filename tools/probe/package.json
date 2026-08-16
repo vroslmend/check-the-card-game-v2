@@ -8,7 +8,9 @@
     "probe": "node probe.mjs"
   },
   "dependencies": {
+    "pixelmatch": "^7.2.0",
     "playwright": "^1.62.1",
+    "pngjs": "^7.0.0",
     "socket.io-client": "^4.8.3"
   }
 }

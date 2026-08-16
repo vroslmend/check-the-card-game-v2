@@ -39,11 +39,39 @@ and the rows stop describing the same game.
 | `--players`   | How many actually join, 2 to 6. Default 2.                                           |
 | `--seats`     | Lobby capacity. Defaults to `--players`. Six seats with two players is its own case. |
 | `--viewports` | `smoke` (default), `all`, or a comma separated list.                                 |
+| `--theme`     | `dark` (default) or `light`.                                                         |
+| `--name`      | The observed player's name. Long ones are worth trying on purpose.                   |
+| `--out`       | Where captures land. Default `.probe`.                                               |
+| `--baseline`  | An earlier `--out` directory to compare this run's captures against.                 |
+| `--shift`     | Change phase, then report anything that moved sideways.                              |
+| `--breakdown` | Itemise where the height goes, row by row.                                           |
 | `--headed`    | Watch it drive.                                                                      |
 | `--verbose`   | Dump the raw measurements.                                                           |
 
 Exit code is 1 when something fails and 2 when the probe could not run at all.
-Failure screenshots and `report.json` land in `.probe/`.
+
+## Screenshots are taken always, not only on failure
+
+This was the other way round once, and it made a run blind exactly when
+everything passed, which is when a change is most likely to have quietly made
+something ugly rather than broken. Green tells you nothing about whether a name
+now truncates to three letters.
+
+Every viewport is captured as `<at>-<players>p<seats>s-<theme>-<viewport>.png`,
+so two runs of the same command produce comparable files. Point the second run
+at the first:
+
+```
+npm run probe -- --at play --name "Ammar Hassan" --out .probe/before
+# change something
+npm run probe -- --at play --name "Ammar Hassan" --out .probe/after --baseline .probe/before
+```
+
+It reports the share of pixels that moved per shot and writes a `diff-*.png`
+marking them, so "did this touch anything it should not have" is answered
+rather than assumed.
+
+`report.json` lands beside them.
 
 ## How it is put together
 
