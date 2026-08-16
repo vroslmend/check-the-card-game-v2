@@ -362,7 +362,7 @@ export function GameBoard() {
                   // The bar's own content is 112px: the pill, then the
                   // fixed prompt slot, then the countdown rail. h-32 is
                   // headroom, and headroom is the first thing to go.
-                  shortViewport ? "h-28" : "h-28 @md:h-32",
+                  shortViewport ? "h-28 tiny:h-[5.5rem]" : "h-28 @md:h-32",
                 )}
               >
                 <ActionControllerView />

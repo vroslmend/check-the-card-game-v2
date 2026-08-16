@@ -143,14 +143,7 @@ export function measureInPage() {
   // and the first thing anyone needs is the itemised bill rather than a guess
   // at which row is fat.
   const budget = [];
-  const tallest = scrollers.sort((a, b) => b.scrollH - a.scrollH)[0];
-  const root = tallest
-    ? [...document.querySelectorAll("body *")].find(
-        (e) =>
-          e.tagName.toLowerCase() === tallest.el &&
-          e.scrollHeight === tallest.scrollH,
-      )
-    : document.querySelector("main");
+  const root = document.querySelector("main") ?? document.body;
   if (root) {
     // display:contents boxes generate no box of their own, so their children
     // are the real rows and have to be walked through. Descend two levels:
@@ -170,30 +163,36 @@ export function measureInPage() {
       }
       return out;
     };
-    const collect = (el, depth) => {
-      const children = boxes(el);
-      const tallest = children.reduce(
-        (a, b) =>
-          b.getBoundingClientRect().height >
-          (a?.getBoundingClientRect().height ?? 0)
-            ? b
-            : a,
+    // Descend through pass-through wrappers, then list what is left.
+    //
+    // A wrapper that holds essentially all of its parent's height is not a row,
+    // it is a box around the rows, and listing it says nothing. Keep going
+    // while the tallest child is nearly as tall as its parent, and stop at the
+    // first level where the height is genuinely divided up. Walking a fixed
+    // number of levels instead meant the report went blank as soon as the view
+    // stopped overflowing and the starting element changed.
+    const heightOf = (el) => el.getBoundingClientRect().height;
+    const tallestOf = (children) =>
+      children.reduce(
+        (a, b) => (heightOf(b) > (a ? heightOf(a) : 0) ? b : a),
         null,
       );
-      for (const child of children) {
-        const r = child.getBoundingClientRect();
-        if (depth > 0 && child === tallest && boxes(child).length > 0) {
-          collect(child, depth - 1);
-          continue;
-        }
-        budget.push({
-          tag: child.tagName.toLowerCase(),
-          cls: String(child.className).slice(0, 46),
-          height: Math.round(r.height),
-        });
-      }
-    };
-    collect(root, 1);
+
+    let node = root;
+    for (let guard = 0; guard < 8; guard++) {
+      const children = boxes(node);
+      const tallest = tallestOf(children);
+      if (!tallest || boxes(tallest).length === 0) break;
+      if (heightOf(tallest) < heightOf(node) * 0.85) break;
+      node = tallest;
+    }
+    for (const child of boxes(node)) {
+      budget.push({
+        tag: child.tagName.toLowerCase(),
+        cls: String(child.className).slice(0, 46),
+        height: Math.round(heightOf(child)),
+      });
+    }
   }
 
   return {

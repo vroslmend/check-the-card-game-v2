@@ -97,7 +97,7 @@ const ActionBarComponent: React.FC = () => {
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 400, damping: 35 }}
-        className="flex flex-row flex-wrap items-center justify-center gap-2 rounded-full border border-hairline bg-surface p-2 shadow-lg"
+        className="flex flex-row flex-wrap items-center justify-center gap-2 rounded-full border border-hairline bg-surface p-2 shadow-lg tiny:gap-1.5 tiny:p-1.5"
       >
         {actions.map((action, i) => (
           <ActionButton
@@ -113,7 +113,7 @@ const ActionBarComponent: React.FC = () => {
       <div
         // Two lines either way: the slot and the type shrink together, so a
         // wrapping prompt still fits and does not clip.
-        className="mt-2 flex h-10 items-start justify-center short:h-8"
+        className="mt-2 flex h-10 items-start justify-center short:h-8 tiny:mt-1 tiny:h-5"
         aria-live="polite"
       >
         <AnimatePresence>
@@ -124,7 +124,7 @@ const ActionBarComponent: React.FC = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="max-w-[min(92vw,40rem)] px-4 text-center text-sm font-semibold text-ink-muted text-balance short:text-xs"
+              className="max-w-[min(92vw,40rem)] px-4 text-center text-sm font-semibold text-ink-muted text-balance short:text-xs tiny:truncate"
             >
               {promptText}
             </motion.p>
