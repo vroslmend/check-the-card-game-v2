@@ -44,6 +44,10 @@ const opts = {
   breakdown: flag("breakdown"),
   shift: flag("shift"),
   sweep: flag("sweep"),
+  matrix: flag("matrix"),
+  counts: arg("counts", "2,4,6"),
+  states: arg("states", "lobby,play,drawn,matching,scoring"),
+  matrixStep: Number(arg("matrix-step", 40)),
   sweepWidths: arg("widths", "393,820,1440,1920"),
   sweepFrom: Number(arg("from", 360)),
   sweepTo: Number(arg("to", 1200)),
@@ -596,7 +600,90 @@ const sweep = async (page, widths, from, to, step) => {
     }
   }
   console.log("");
-  return bad.length;
+  return bad;
+};
+
+/** Every combination that changes the board's height, swept.
+ *
+ *  Player count and game stage both change how tall the board is, and each
+ *  had a failure the other could not see: a six player table did not fit a
+ *  phone at all while two players fit everywhere, and two players turned out
+ *  to be the worst case at low heights because it never triggers dense seats.
+ *  Sweeping one and assuming the other is how both were missed.
+ *
+ *  Theme is deliberately not a dimension. The themes swap colour tokens and
+ *  nothing else, so the geometry is identical and sweeping both would double
+ *  the runtime for the same numbers. Theme is a screenshot question. */
+const runMatrix = async (browser, counts, states, step) => {
+  const rows = [];
+  for (const players of counts) {
+    for (const at of states) {
+      const label = `${players}p ${at}`;
+      const context = await browser.newContext({
+        viewport: { width: 1600, height: 1200 },
+        deviceScaleFactor: 1,
+      });
+      await context.addInitScript((t) => {
+        try {
+          localStorage.setItem("theme", t);
+        } catch {}
+      }, opts.theme);
+      const page = await context.newPage();
+      let bots = [];
+      try {
+        process.stdout.write(`  building ${label} ... `);
+        ({ bots } = await drive(page, { ...opts, at, players, seats: 6 }));
+        const bad = await sweep(
+          page,
+          opts.sweepWidths.split(",").map(Number),
+          opts.sweepFrom,
+          opts.sweepTo,
+          step,
+          true,
+        );
+        rows.push({ label, bad });
+        process.stdout.write(
+          bad.length ? `${bad.length} failing band(s)\n` : "clean\n",
+        );
+      } catch (e) {
+        rows.push({ label, error: e.message.split("\n")[0] });
+        process.stdout.write(`could not build: ${e.message.split("\n")[0]}\n`);
+      } finally {
+        for (const b of bots) b.disconnect();
+        await context.close();
+      }
+    }
+  }
+
+  console.log(`\n${"=".repeat(72)}\nmatrix result\n${"=".repeat(72)}`);
+  let failures = 0;
+  let worstFloor = 0;
+  for (const r of rows) {
+    if (r.error) {
+      console.log(`  ${r.label.padEnd(14)} could not build: ${r.error}`);
+      failures++;
+      continue;
+    }
+    if (!r.bad.length) {
+      console.log(`  ${r.label.padEnd(14)} fits at every height`);
+      continue;
+    }
+    failures += r.bad.length;
+    for (const b of r.bad) {
+      worstFloor = Math.max(worstFloor, b.to);
+      console.log(
+        `  ${r.label.padEnd(14)} FAIL w${String(b.width).padEnd(5)} h${b.from}${b.to !== b.from ? `-${b.to}` : ""}  ${b.worst}px over`,
+      );
+    }
+  }
+  if (worstFloor) {
+    console.log(
+      `\n  Everything fits at every height above ${worstFloor}.` +
+        `\n  Below that, see the bands above.`,
+    );
+  }
+  console.log("");
+  return failures;
 };
 
 const main = async () => {
@@ -605,8 +692,20 @@ const main = async () => {
   mkdirSync(OUT, { recursive: true });
   const shots = [];
 
-  const viewports = resolveViewports(opts.viewports);
   const browser = await chromium.launch({ headless: !opts.headed });
+
+  if (opts.matrix) {
+    const n = await runMatrix(
+      browser,
+      opts.counts.split(",").map(Number),
+      opts.states.split(","),
+      opts.matrixStep,
+    );
+    await browser.close();
+    process.exit(n ? 1 : 0);
+  }
+
+  const viewports = resolveViewports(opts.viewports);
   // A fresh context every run: identity lives in localStorage as
   // `playerSession`, and a stale one makes the client try to rejoin a game the
   // server no longer has.
@@ -644,13 +743,15 @@ const main = async () => {
     ({ bots, observedId } = await drive(page, opts));
 
     if (opts.sweep) {
-      failures += await sweep(
-        page,
-        opts.sweepWidths.split(",").map(Number),
-        opts.sweepFrom,
-        opts.sweepTo,
-        opts.sweepStep,
-      );
+      failures += (
+        await sweep(
+          page,
+          opts.sweepWidths.split(",").map(Number),
+          opts.sweepFrom,
+          opts.sweepTo,
+          opts.sweepStep,
+        )
+      ).length;
     }
 
     if (opts.shift) {
