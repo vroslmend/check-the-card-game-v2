@@ -157,30 +157,40 @@ const PlayerInfoBadge = ({
       // the header either overhung its cards or truncated the name to nothing.
       // The dot already says whose turn it is, and the action bar says it
       // again.
-      <div className="grid w-0 min-w-full grid-cols-[auto_1fr_auto] items-center gap-1.5 font-game">
+      <div className="grid w-0 min-w-full grid-cols-[1fr_auto_1fr] items-center gap-1.5 font-game">
+        {/* The name is what the eye reads as centred, so the name is what is
+            centred: it sits in the middle column with two equal 1fr columns
+            either side. The dot and the icon hug it from the inside edge of
+            those columns rather than being pushed out to the hand's edges.
+            Centring the whole group instead leaves the name off centre,
+            because the dot's ink is 6px against the icon's 14px. */}
+        <span className="flex justify-end">
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full bg-accent",
+              !isCurrentTurn && "invisible",
+            )}
+            aria-hidden
+          />
+        </span>
         <span
           className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full bg-accent",
-            !isCurrentTurn && "invisible",
-          )}
-          aria-hidden
-        />
-        <span
-          className={cn(
-            "min-w-0 truncate text-center text-sm font-bold text-ink",
+            "min-w-0 truncate text-sm font-bold text-ink",
             isDisqualified && "text-ink-muted line-through",
           )}
         >
           {player.name}
         </span>
-        <Icon
-          className={cn(
-            "h-3.5 w-3.5 shrink-0",
-            hideChip && "invisible",
-            muted ? "text-ink-muted" : "text-ink",
-          )}
-          aria-label={text}
-        />
+        <span className="flex justify-start">
+          <Icon
+            className={cn(
+              "h-3.5 w-3.5 shrink-0",
+              hideChip && "invisible",
+              muted ? "text-ink-muted" : "text-ink",
+            )}
+            aria-label={text}
+          />
+        </span>
       </div>
     );
   }
