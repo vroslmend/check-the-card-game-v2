@@ -143,7 +143,14 @@ const PlayerInfoBadge = ({
   // local player keeps its status text inline (it is the acting signal).
   if (compact) {
     return (
-      <div className="flex max-w-full items-center gap-1.5 font-game">
+      // w-0 min-w-full: the hand decides how wide a seat is, never the header.
+      // A zero width box contributes nothing to the parent's intrinsic width,
+      // and min-width brings it back up to whatever the hand settled on. The
+      // status word changes on every phase ("Your Turn" to "Matching…"), and
+      // while the header could size the seat, that changed the seat's width
+      // mid turn and slid every card sideways to recentre. The name truncates
+      // instead, which nobody is trying to memorise the position of.
+      <div className="flex w-0 min-w-full items-center justify-center gap-1.5 font-game">
         {isCurrentTurn && (
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
@@ -184,8 +191,9 @@ const PlayerInfoBadge = ({
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 font-game">
-      <h3 className="flex items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] font-bold text-ink">
+    // Same rule as the compact header above: the hand sets the seat's width.
+    <div className="flex w-0 min-w-full flex-col items-center gap-2 font-game">
+      <h3 className="flex max-w-full items-center gap-2 text-[clamp(1rem,2.5vw,1.125rem)] font-bold text-ink">
         {/* The one "whose turn" color on screen: an accent dot before the name. */}
         {isCurrentTurn && (
           <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
