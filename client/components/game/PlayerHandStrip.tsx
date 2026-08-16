@@ -139,83 +139,48 @@ const PlayerInfoBadge = ({
 
   // Dense table: one-line header (dot + name + status icon), no full chip —
   // the two-line header is what made every seat cost ~54px of chrome. The
-  // full status text still lives on the results sheet and in the log. The
-  // local player keeps its status text inline (it is the acting signal).
-  // What the columns either side of the name reserve. Wide enough for the
-  // longest status the machine produces ("Disconnected") on your own seat,
-  // icon width on everyone else's, where the status is only an icon.
-  const statusWidth = isLocalPlayer ? "w-[5.5rem] shrink-0" : "w-3.5 shrink-0";
-
+  // full status text still lives on the results sheet and in the log.
   if (compact) {
     return (
-      // Two different jobs, so two different rules.
+      // Every seat reads the same: turn dot, name, status icon, pinned to the
+      // width of its own hand so the name sits over its cards rather than
+      // beside them.
       //
-      // An opponent's header is pinned to its hand's width with w-0 min-w-full:
-      // a zero width box adds nothing to the parent's intrinsic width and the
-      // min-width brings it back up to whatever the hand settled on. That keeps
-      // dense seats packing three to a phone row, which is the whole point of
-      // compact mode, and their names are secondary enough to truncate.
+      // Nothing in here changes width during a turn. The dot keeps its space
+      // whether or not it is showing and the status is an icon, so the header
+      // cannot resize mid turn and slide the cards sideways to recentre. That
+      // is the drift fix, reached by making the header constant rather than by
+      // constraining what it may do.
       //
-      // Your own seat gets to be wider than its hand, because truncating the
-      // player's own name to "Am…" to save space nobody was using is a bad
-      // trade. Its status block is fixed width instead, which is what actually
-      // stops the drift: the word changes on every phase and a header that
-      // resizes mid turn slides every card sideways to recentre.
-      // The name sits at true centre, and the two things beside it are what
-      // would otherwise stop it: the status, whose word changes on every
-      // phase, and the turn dot, which appears and disappears. Both get a
-      // fixed reservation, and the left column mirrors the right one exactly,
-      // so the middle column is centred by construction. Reserving rather than
-      // reacting is also what keeps the seat still, since neither can change
-      // the header's width any more.
-      <div
-        className={cn(
-          "grid grid-cols-[auto_1fr_auto] items-center gap-1.5 font-game",
-          !isLocalPlayer && "w-0 min-w-full",
-        )}
-      >
-        <span className={statusWidth} aria-hidden />
-        <span className="flex min-w-0 items-center justify-center gap-1.5">
-          <span
-            className={cn(
-              "h-1.5 w-1.5 shrink-0 rounded-full bg-accent",
-              !isCurrentTurn && "invisible",
-            )}
-            aria-hidden
-          />
-          <span
-            className={cn(
-              "truncate text-sm font-bold text-ink",
-              isDisqualified && "text-ink-muted line-through",
-            )}
-          >
-            {player.name}
-          </span>
+      // Your own status was the words "Your Turn" here, which is why this seat
+      // used to need its own rule: the words never fit over a hand's width, so
+      // the header either overhung its cards or truncated the name to nothing.
+      // The dot already says whose turn it is, and the action bar says it
+      // again.
+      <div className="grid w-0 min-w-full grid-cols-[auto_1fr_auto] items-center gap-1.5 font-game">
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full bg-accent",
+            !isCurrentTurn && "invisible",
+          )}
+          aria-hidden
+        />
+        <span
+          className={cn(
+            "min-w-0 truncate text-center text-sm font-bold text-ink",
+            isDisqualified && "text-ink-muted line-through",
+          )}
+        >
+          {player.name}
         </span>
-        {hideChip ? (
-          <span className={statusWidth} aria-hidden />
-        ) : isLocalPlayer ? (
-          <span
-            className={cn(
-              statusWidth,
-              "flex items-center justify-center gap-1 text-[11px] font-semibold",
-              muted ? "text-ink-muted" : "text-ink",
-            )}
-          >
-            <Icon className="h-3 w-3 shrink-0" />
-            <span className="truncate">{text}</span>
-          </span>
-        ) : (
-          <span className={cn(statusWidth, "flex justify-center")}>
-            <Icon
-              className={cn(
-                "h-3.5 w-3.5",
-                muted ? "text-ink-muted" : "text-ink",
-              )}
-              aria-label={text}
-            />
-          </span>
-        )}
+        <Icon
+          className={cn(
+            "h-3.5 w-3.5 shrink-0",
+            hideChip && "invisible",
+            muted ? "text-ink-muted" : "text-ink",
+          )}
+          aria-label={text}
+        />
       </div>
     );
   }
