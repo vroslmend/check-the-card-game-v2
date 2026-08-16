@@ -58,6 +58,9 @@ references
 # browser is driven against a local build.
 .playwright-mcp/
 
+# npm run probe writes its report and failure screenshots here.
+.probe/
+
 # Local scratch files that some editors and tools drop in the working tree.
 # Listed so a contributor cannot commit one by accident.
 Gemini.md
