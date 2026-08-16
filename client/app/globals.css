@@ -2,6 +2,19 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Height, not width. The cards size themselves off the viewport height, so a
+   short screen shrinks them while fixed-height furniture keeps its full
+   budget and the board stops fitting. Kept in step with the same threshold in
+   GameBoard, which drives the parts that are a prop rather than a class. */
+@custom-variant short (@media (max-height: 900px));
+
+/* A second tier for genuinely small heights, a half-height desktop window or
+   a phone in landscape. Trimming furniture is not enough there: at 500px the
+   cards are already the smaller of 8svh and 15vw, and 8svh has won, so the
+   card scale itself has to come down. Above this, 15vw is the binding limit
+   and nothing here changes what a phone renders. */
+@custom-variant tiny (@media (max-height: 600px));
+
 /* ============================================================================
    Design tokens — "The Clean One, multiplayer" (Round 4 visual identity)
    Four roles per theme: ground / surface / ink / accent (+ surface-2,

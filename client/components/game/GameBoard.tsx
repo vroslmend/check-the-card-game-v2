@@ -16,6 +16,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { RoundSummary } from "./RoundSummary";
 import { GameHeader } from "./GameHeader";
 import SidePanel from "@/components/layout/SidePanel";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useCheckMoment, CheckStamp } from "./CheckMoment";
 import { usePenaltyMoment, PenaltyStamp } from "./PenaltyMoment";
 import { useAbilityMoment, AbilityStamp } from "./AbilityMoment";
@@ -138,6 +139,11 @@ export function GameBoard() {
   const abilityMoment = useAbilityMoment();
   const matchMoment = useMatchMoment();
   const reducedMotion = useReducedMotion();
+  // Height, not width. The cards are already height-aware, so on a short
+  // screen they shrink while the furniture around them keeps its full budget
+  // and the board overflows. Below this the seats drop to their one-line
+  // header and the caption rail retires, which is worth about 90px.
+  const shortViewport = useMediaQuery("(max-height: 900px)");
 
   // The round-ending broadcast both moves the last card and flips the stage:
   // mounting the end sheet immediately buries a flight ~0.3s into its 0.65s
@@ -201,6 +207,11 @@ export function GameBoard() {
   // player experience is unchanged.
   const totalPlayers = Object.keys(gameState.players).length;
   const denseBand = endScene ? totalPlayers >= 4 : opponentPlayers.length >= 3;
+  // The one-line seat header is driven by height as well as by seat count: it
+  // is the same trade either way, the status text moving to an icon so the
+  // chip's ~29px comes back, and it costs twice on a two player board and six
+  // times on a full one.
+  const compactSeats = denseBand || shortViewport;
   const localPlayerData = gameState.players[localPlayerId];
 
   const handlePlayAgain = () => {
@@ -212,7 +223,7 @@ export function GameBoard() {
   };
 
   return (
-    <div className="relative h-screen w-full bg-ground flex flex-col overflow-y-auto @container font-game">
+    <div className="relative h-screen w-full bg-ground flex flex-col overflow-hidden @container font-game">
       <GameHeader />
       {/* CHECK's recede is momentary and returns to identity. A HELD scale
           here (the R12 end-of-round recede) made every layout-projected card
@@ -244,7 +255,7 @@ export function GameBoard() {
             {/* Opponents area */}
             <div
               className={cn(
-                "flex justify-center items-center py-2",
+                "flex justify-center items-center py-2 tiny:py-1",
                 endScene && "order-1",
               )}
             >
@@ -267,7 +278,7 @@ export function GameBoard() {
                       isLocalPlayer={false}
                       isCurrentTurn={gameState.currentPlayerId === op.id}
                       tableIndex={i}
-                      compact={denseBand}
+                      compact={compactSeats}
                       denseCards={denseBand}
                     />
                   ))}
@@ -282,7 +293,7 @@ export function GameBoard() {
                       isLocalPlayer
                       isCurrentTurn={false}
                       tableIndex={opponentPlayers.length}
-                      compact={denseBand}
+                      compact={compactSeats}
                       denseCards={denseBand}
                     />
                   )}
@@ -301,8 +312,13 @@ export function GameBoard() {
                 dense phone layouts. */}
             <div
               className={cn(
-                "flex items-center justify-center @container",
-                endScene ? "order-3" : "py-4 @md:py-8",
+                // min-h-0 so the 1fr track can actually give. Grid items floor
+                // at their content's min height by default, so the one row
+                // meant to absorb slack could not, and fractional card heights
+                // (15vw on an aspect-[5/7]) left the board a pixel or two over
+                // its frame with nowhere to put it.
+                "flex min-h-0 items-center justify-center @container",
+                endScene ? "order-3" : shortViewport ? "py-2" : "py-4 @md:py-8",
               )}
             >
               <TableArea drawnCard={drawnCardData} dealingDeck={dealingDeck} />
@@ -313,7 +329,7 @@ export function GameBoard() {
                 collapses) rather than duplicating the hand. */}
             <div
               className={cn(
-                "flex flex-col items-center justify-center py-2",
+                "flex flex-col items-center justify-center py-2 tiny:py-1",
                 endScene && "order-2",
               )}
             >
@@ -326,7 +342,7 @@ export function GameBoard() {
                   isLocalPlayer={true}
                   isCurrentTurn={isMyTurn}
                   tableIndex={opponentPlayers.length}
-                  compact={denseBand}
+                  compact={compactSeats}
                   denseCards={false}
                 />
               ) : null}
@@ -337,7 +353,18 @@ export function GameBoard() {
                 every phase change. Retired for the end scene (it would be an
                 empty pill floating under the results panel). */}
             {!endScene && (
-              <div className="h-28 @md:h-32 flex items-start justify-center pb-2">
+              <div
+                className={cn(
+                  // pb-2 goes on a short screen: the bar's own content is
+                  // 114px against this row's 112, so the padding was pushing
+                  // the last two pixels out through the bottom of the board.
+                  "flex items-start justify-center pb-2 short:pb-0",
+                  // The bar's own content is 112px: the pill, then the
+                  // fixed prompt slot, then the countdown rail. h-32 is
+                  // headroom, and headroom is the first thing to go.
+                  shortViewport ? "h-28" : "h-28 @md:h-32",
+                )}
+              >
                 <ActionControllerView />
               </div>
             )}

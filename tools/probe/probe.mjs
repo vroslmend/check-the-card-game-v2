@@ -40,6 +40,7 @@ const opts = {
   viewports: arg("viewports", "smoke"),
   headed: flag("headed"),
   verbose: flag("verbose"),
+  breakdown: flag("breakdown"),
 };
 
 if (!CHECKPOINTS.includes(opts.at)) {
@@ -197,15 +198,23 @@ const drive = async (page, opts) => {
   const passTurnToObserved = async () => {
     for (let guard = 0; guard < opts.players * 2; guard++) {
       if (host.state?.currentPlayerId === observedId) return;
-      const turn = bots.find((b) => b.isMyTurn);
+      // Whose turn it is comes from one socket's view, not from each bot's own.
+      // With six players the broadcasts land at slightly different moments and
+      // asking every bot "is it me?" can pick one whose state has not caught up.
+      const turn = bots.find((b) => b.id === host.state?.currentPlayerId);
       if (!turn) {
         await host.waitFor(
           (s) =>
-            s.currentPlayerId === observedId || bots.some((b) => b.isMyTurn),
+            s.currentPlayerId === observedId ||
+            bots.some((b) => b.id === s.currentPlayerId),
           "someone to hold the turn",
         );
         continue;
       }
+      // An ability can be waiting before this bot has drawn anything: a match
+      // on a special card hands one to whoever made it, so a turn can open in
+      // ABILITY rather than DRAW, and DRAW_FROM_DECK is refused there.
+      await skipAnyAbility(turn);
       turn.act("DRAW_FROM_DECK");
       await turn.waitFor(
         (s) => !!s.players[turn.id]?.pendingDrawnCard,
@@ -280,12 +289,18 @@ const report = (rows, opts) => {
         pad(viewport.name, 16) +
         pad(viewport.height, 7) +
         pad(worst ? worst.scrollH : "-", 9) +
-        pad(worst ? worst.overflowPx : 0, 6) +
+        pad(worst ? `${worst.overflowPx} ${worst.mode}` : 0, 14) +
         (bad.length
           ? bad.map((c) => `${c.name} (${c.status})`).join(", ")
           : "all reachable"),
     );
 
+    if (worst?.deepest) {
+      const d = worst.deepest;
+      console.log(
+        `  ${pad("", 20)}furthest down: ${d.tag} ${d.cls} (${d.position}) reaches ${d.bottom} in a ${worst.clientH} frame`,
+      );
+    }
     for (const o of m.overlays) {
       if (o.uncoveredTop > 1 || o.uncoveredBottom > 1) {
         console.log(
@@ -304,6 +319,15 @@ const report = (rows, opts) => {
     }
     if (m.docScrollsX) {
       console.log(`  ${pad("", 14)}the document scrolls horizontally`);
+    }
+    if (opts.breakdown && m.budget?.length) {
+      const total = m.budget.reduce((n, b) => n + b.height, 0);
+      console.log(`  ${pad("", 6)}where the ${total}px goes:`);
+      for (const b of m.budget) {
+        console.log(
+          `  ${pad("", 6)}${String(b.height).padStart(5)}px  ${b.tag} ${b.cls}`,
+        );
+      }
     }
   }
 
