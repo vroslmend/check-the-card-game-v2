@@ -120,8 +120,9 @@ export const RoundSummary = ({
   const seriesStarted = players.some((p) => (playerWins[p.id] ?? 0) > 0);
 
   // One-shot recap from the accumulated log (append-only; merged in the
-  // machine). Counted once on mount. Late joiners hold only a log tail, so
-  // counts can undercount for them.
+  // machine). Counted once on mount. A player who reconnects mid round is
+  // sent the log again, so their counts are whatever that log holds rather
+  // than what they personally witnessed.
   const actorRef = useUIActorRef();
   const recap = React.useMemo(() => {
     const log = actorRef.getSnapshot().context.currentGameState?.log ?? [];
