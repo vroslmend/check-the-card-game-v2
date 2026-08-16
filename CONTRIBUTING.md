@@ -61,7 +61,7 @@ Before changing anything, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). `sh
 
 ## Verifying your change
 
-There is no automated test suite yet, tracked in #36. Until there is, verification is manual and the burden sits with the pull request.
+There is no unit or state machine suite yet, tracked in #36, so rules verification is manual and the burden sits with the pull request. Layout is covered, see below.
 
 Everything CI runs has to pass, and you can run all of it locally first:
 
@@ -76,6 +76,21 @@ Two notes on what it can tell you. If `check:majors` fails, a guarded package ch
 CI also starts the built server and waits for it to answer `/health`, which catches a throw on startup that type checking cannot.
 
 Game behaviour is specified in [docs/GAME_RULES.md](docs/GAME_RULES.md). If you touched the rules, play a real round with a second browser window and follow the affected rule end to end.
+
+## If you touched the layout
+
+Run the probe. It drives a real game in a real browser and sweeps a matrix of screen sizes, reporting whether the view fits, whether every control can actually be hit, and whether anything moves sideways when only the game's phase changed.
+
+```
+npm run probe:install                                    # once
+npm run probe -- --at play --players 2 --seats 6
+```
+
+It needs the client and server running, with the peek and matching windows shortened so a scripted round does not sit through them. The probe prints the exact command if they are not up.
+
+A game view is expected to fit at every size, so any overflow at all is a failure, not a warning. Six seats with two players is its own case and worth running: every seat renders whether or not anyone is in it. `tools/probe/README.md` covers the rest.
+
+It is not part of `npm run verify` or CI, because it needs a browser and takes minutes rather than seconds. Wiring it into its own CI job is tracked in #57.
 
 ## Things that will bite you
 
