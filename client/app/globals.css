@@ -13,7 +13,7 @@
    cards are already the smaller of 8svh and 15vw, and 8svh has won, so the
    card scale itself has to come down. Above this, 15vw is the binding limit
    and nothing here changes what a phone renders. */
-@custom-variant tiny (@media (max-height: 600px));
+@custom-variant tiny (@media (max-height: 700px));
 
 /* ============================================================================
    Design tokens — "The Clean One, multiplayer" (Round 4 visual identity)
