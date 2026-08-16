@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Crown } from "lucide-react";
+import { Crown, Trophy } from "lucide-react";
 import { type Player, PlayerStatus } from "shared-types";
 import {
   useUIActorRef,
@@ -108,26 +108,16 @@ export const RoundSummary = ({
     ? `${caller.name} called Check.`
     : "The round ended without a Check.";
 
-  // Series standing across Play Agains — the kicker reads as a scoreboard.
-  // playerWins accumulates for the lobby's lifetime and roundEpoch counts
-  // the Play Agains, so this round is epoch + 1. By the time the sheet is
-  // up, calculateScores has already credited this round's winner.
+  // playerWins accumulates for the lobby's lifetime and roundEpoch counts the
+  // Play Agains, so this round is epoch + 1. By the time the sheet is up,
+  // calculateScores has already credited this round's winner.
+  //
+  // The series standing used to live here as one sentence, which could only
+  // ever name the leader and a runner-up. Past two players that hid everyone
+  // else, so it now rides on the rows instead, where every player already has
+  // one.
   const roundNumber = roundEpoch + 1;
-  const standings = players
-    .map((p) => ({ name: p.name, wins: playerWins[p.id] ?? 0 }))
-    .sort((a, b) => b.wins - a.wins);
-  const leader = standings[0];
-  const coLeaders = leader
-    ? standings.filter((s) => s.wins === leader.wins)
-    : [];
-  const series =
-    !leader || leader.wins === 0
-      ? null
-      : coLeaders.length === 1
-        ? `${leader.name} leads ${leader.wins}–${standings[1]?.wins ?? 0}`
-        : coLeaders.length === 2
-          ? `${coLeaders[0]!.name} and ${coLeaders[1]!.name} tied at ${leader.wins}`
-          : `Tied at ${leader.wins}`;
+  const seriesStarted = players.some((p) => (playerWins[p.id] ?? 0) > 0);
 
   // One-shot recap from the accumulated log (append-only; merged in the
   // machine). Counted once on mount. Late joiners hold only a log tail, so
@@ -171,7 +161,6 @@ export const RoundSummary = ({
         <div>
           <p className="truncate text-xs font-semibold uppercase tracking-widest text-ink-muted">
             Round {roundNumber}
-            {series && ` · ${series}`}
           </p>
           <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
             {title}
@@ -239,6 +228,21 @@ export const RoundSummary = ({
                     </span>
                   )}
                 </span>
+                {/* Series wins, on every row so a six player table can see
+                    the whole standing. Trophy rather than the Crown above it:
+                    the crown marks who took THIS round, and the two numbers
+                    would otherwise read as the same thing. Hidden until
+                    someone has actually won one, so a first round does not
+                    show a column of zeroes. */}
+                {seriesStarted && (
+                  <span
+                    className="flex shrink-0 items-center gap-1 text-sm font-semibold tabular-nums text-ink-muted"
+                    aria-label={`${playerWins[player.id] ?? 0} rounds won this series`}
+                  >
+                    <Trophy className="h-3.5 w-3.5" aria-hidden />
+                    {playerWins[player.id] ?? 0}
+                  </span>
+                )}
                 <ScoreStamp
                   value={player.score}
                   delay={FIRST_STAMP_DELAY_S + i * STAMP_STAGGER_S}

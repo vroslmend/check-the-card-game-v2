@@ -24,7 +24,7 @@ const SERVER = process.env.PROBE_SERVER_URL ?? "http://localhost:8000";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT = join(ROOT, ".probe");
 
-const CHECKPOINTS = ["lobby", "peek", "play", "drawn", "matching"];
+const CHECKPOINTS = ["lobby", "peek", "play", "drawn", "matching", "scoring"];
 
 const argv = process.argv.slice(2);
 const arg = (name, fallback) => {
@@ -194,9 +194,55 @@ const drive = async (page, opts) => {
   });
   if (!observedId) throw new Error("browser player never got a session");
 
+  /** One whole bot turn: draw, discard, clear whatever that opened. Returns
+   *  false when this seat could not act, which is normal rather than fatal at
+   *  six players (locked after check, disqualified on hand size, mid
+   *  reshuffle, or the turn simply moved). */
+  const playBotTurn = async (turn) => {
+    // An ability can be waiting before this bot has drawn anything: a match on
+    // a special card hands one to whoever made it, so a turn can open in
+    // ABILITY rather than DRAW, and DRAW_FROM_DECK is refused there.
+    await skipAnyAbility(turn);
+    turn.act("DRAW_FROM_DECK");
+    try {
+      await turn.waitFor(
+        (s) => !!s.players[turn.id]?.pendingDrawnCard,
+        "the bot's drawn card",
+        6000,
+      );
+    } catch {
+      return false;
+    }
+    turn.act("DISCARD_DRAWN_CARD");
+    // A discarded King, Queen or Jack opens an ability instead of a matching
+    // window, so the two have to be waited on together. Whichever the deck
+    // deals is not something the driver gets to choose: CREATE_GAME takes no
+    // seed, so every run gets a different deck.
+    await turn
+      .waitFor(
+        (s) => !!s.matchingOpportunity || s.turnPhase === "ABILITY",
+        "the matching window or an ability",
+        8000,
+      )
+      .catch(() => {});
+    await skipAnyAbility(turn);
+    if (host.state?.matchingOpportunity) {
+      for (const b of bots) b.act("PASS_ON_MATCH_ATTEMPT");
+      await host
+        .waitFor(
+          (s) => !s.matchingOpportunity,
+          "the matching window to close",
+          8000,
+        )
+        .catch(() => {});
+    }
+    await skipAnyAbility(turn);
+    return true;
+  };
+
   /** Plays whole bot turns until the browser player is the one on the clock. */
   const passTurnToObserved = async () => {
-    for (let guard = 0; guard < opts.players * 2; guard++) {
+    for (let guard = 0; guard < opts.players * 3; guard++) {
       if (host.state?.currentPlayerId === observedId) return;
       // Whose turn it is comes from one socket's view, not from each bot's own.
       // With six players the broadcasts land at slightly different moments and
@@ -211,49 +257,79 @@ const drive = async (page, opts) => {
         );
         continue;
       }
-      // An ability can be waiting before this bot has drawn anything: a match
-      // on a special card hands one to whoever made it, so a turn can open in
-      // ABILITY rather than DRAW, and DRAW_FROM_DECK is refused there.
-      await skipAnyAbility(turn);
-      turn.act("DRAW_FROM_DECK");
-      try {
-        await turn.waitFor(
-          (s) => !!s.players[turn.id]?.pendingDrawnCard,
-          "the bot's drawn card",
-          6000,
-        );
-      } catch {
-        // The turn moved, or this seat cannot draw right now: locked after
-        // calling check, disqualified on hand size, or mid reshuffle. Re-read
-        // who is on the clock and try again rather than insisting this bot
-        // must be the one to act. Six players make these overlap often enough
-        // that treating it as fatal only produces flaky runs.
-        continue;
-      }
-      turn.act("DISCARD_DRAWN_CARD");
-      // A discarded King, Queen or Jack opens an ability instead of a matching
-      // window, so the two have to be waited on together. Whichever the deck
-      // deals is not something the driver gets to choose: CREATE_GAME takes no
-      // seed, so every run gets a different deck.
-      await turn.waitFor(
-        (s) => !!s.matchingOpportunity || s.turnPhase === "ABILITY",
-        "the matching window or an ability",
-      );
-      await skipAnyAbility(turn);
-      if (host.state?.matchingOpportunity) {
-        for (const b of bots) b.act("PASS_ON_MATCH_ATTEMPT");
-        await host.waitFor(
-          (s) => !s.matchingOpportunity,
-          "the matching window to close",
-        );
-      }
-      await skipAnyAbility(turn);
+      await playBotTurn(turn);
     }
     throw new Error("could not hand the turn to the observed player");
   };
 
   if (opts.at === "play") {
     await passTurnToObserved();
+    return { gameId, bots, observedId };
+  }
+
+  if (opts.at === "scoring") {
+    // A bot calls it rather than the browser: CALL_CHECK goes straight down
+    // the socket, where the button is a press-and-hold that would have to be
+    // simulated. Then everyone takes their final turn and the round scores.
+    const caller = bots.find((b) => b.id === host.state?.currentPlayerId);
+    if (!caller) {
+      await host.waitFor(
+        (s) => bots.some((b) => b.id === s.currentPlayerId),
+        "a bot to hold the turn so it can call check",
+      );
+    }
+    (bots.find((b) => b.id === host.state?.currentPlayerId) ?? bots[0]).act(
+      "CALL_CHECK",
+    );
+    await host.waitFor(
+      (s) =>
+        s.gameStage !== GameStage.PLAYING ||
+        s.checkCalledBy ||
+        Object.values(s.players).some((p) => p.hasCalledCheck),
+      "check to be called",
+    );
+
+    // Final turns. Whoever is on the clock plays, browser included, until the
+    // round scores.
+    for (let guard = 0; guard < opts.players * 3; guard++) {
+      if (
+        host.state?.gameStage === "SCORING" ||
+        host.state?.gameStage === "GAMEOVER"
+      ) {
+        break;
+      }
+      const turn = bots.find((b) => b.id === host.state?.currentPlayerId);
+      if (turn) {
+        await playBotTurn(turn);
+        continue;
+      }
+      if (host.state?.currentPlayerId === observedId) {
+        await page
+          .getByRole("button", { name: /draw from deck/i })
+          .click({ timeout: 8000 })
+          .catch(() => {});
+        await page
+          .getByRole("button", { name: /discard card/i })
+          .click({ timeout: 8000 })
+          .catch(() => {});
+      }
+      await host
+        .waitFor(
+          (s) => s.currentPlayerId !== observedId,
+          "the turn to move on",
+          6000,
+        )
+        .catch(() => {});
+    }
+    await host.waitFor(
+      (s) => s.gameStage === "SCORING" || s.gameStage === "GAMEOVER",
+      "the round to score",
+      30000,
+    );
+    // The sheet is deliberately held back ~1.1s so the last card flight can
+    // land before it covers the table. Measuring before that catches the board
+    // mid animation with no sheet on it.
+    await page.waitForTimeout(1800);
     return { gameId, bots, observedId };
   }
 
