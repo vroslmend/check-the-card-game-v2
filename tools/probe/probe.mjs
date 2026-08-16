@@ -216,10 +216,20 @@ const drive = async (page, opts) => {
       // ABILITY rather than DRAW, and DRAW_FROM_DECK is refused there.
       await skipAnyAbility(turn);
       turn.act("DRAW_FROM_DECK");
-      await turn.waitFor(
-        (s) => !!s.players[turn.id]?.pendingDrawnCard,
-        "the bot's drawn card",
-      );
+      try {
+        await turn.waitFor(
+          (s) => !!s.players[turn.id]?.pendingDrawnCard,
+          "the bot's drawn card",
+          6000,
+        );
+      } catch {
+        // The turn moved, or this seat cannot draw right now: locked after
+        // calling check, disqualified on hand size, or mid reshuffle. Re-read
+        // who is on the clock and try again rather than insisting this bot
+        // must be the one to act. Six players make these overlap often enough
+        // that treating it as fatal only produces flaky runs.
+        continue;
+      }
       turn.act("DISCARD_DRAWN_CARD");
       // A discarded King, Queen or Jack opens an ability instead of a matching
       // window, so the two have to be waited on together. Whichever the deck
