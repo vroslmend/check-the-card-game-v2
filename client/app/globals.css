@@ -15,6 +15,12 @@
    and nothing here changes what a phone renders. */
 @custom-variant tiny (@media (max-height: 700px));
 
+/* Dropping the event caption is a content decision, not a sizing one, so it
+   gets its own line rather than riding along with the compact seats. Bundled
+   into `short` it vanished from every normal desktop, which has room for it:
+   a maximised browser at 1080p leaves 910, and the board uses 862 of that. */
+@custom-variant cramped (@media (max-height: 820px));
+
 /* ============================================================================
    Design tokens — "The Clean One, multiplayer" (Round 4 visual identity)
    Four roles per theme: ground / surface / ink / accent (+ surface-2,

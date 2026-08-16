@@ -95,7 +95,7 @@ export const GameEventCaption = () => {
       // this row shifts every row up a track: the local hand inherits the 1fr
       // and the table gets squeezed into an auto. Zero height keeps the
       // mapping and still gives the height back.
-      className="flex h-8 items-center justify-center overflow-hidden font-game short:h-0"
+      className="flex h-8 items-center justify-center overflow-hidden font-game cramped:h-0"
       aria-live="polite"
     >
       <AnimatePresence mode="wait">
