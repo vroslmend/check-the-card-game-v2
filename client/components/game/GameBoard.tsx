@@ -358,11 +358,11 @@ export function GameBoard() {
                   // pb-2 goes on a short screen: the bar's own content is
                   // 114px against this row's 112, so the padding was pushing
                   // the last two pixels out through the bottom of the board.
-                  "flex items-start justify-center pb-2 short:pb-0",
+                  "flex items-center justify-center pb-2 short:pb-0",
                   // The bar's own content is 112px: the pill, then the
                   // fixed prompt slot, then the countdown rail. h-32 is
                   // headroom, and headroom is the first thing to go.
-                  shortViewport ? "h-28" : "h-28 @md:h-32",
+                  shortViewport ? "h-28 tiny:h-24" : "h-28 @md:h-32",
                 )}
               >
                 <ActionControllerView />

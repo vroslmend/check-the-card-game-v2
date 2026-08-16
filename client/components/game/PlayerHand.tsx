@@ -222,8 +222,8 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               className={cn(
                 "relative aspect-[5/7]",
                 dense
-                  ? "w-[min(8svh,11.5vw,3.5rem)] tiny:w-[min(6svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
-                  : "w-[min(8svh,15vw)] tiny:w-[min(6svh,15vw)]",
+                  ? "w-[min(8svh,11.5vw,3.5rem)] tiny:w-[min(7svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
+                  : "w-[min(8svh,15vw)] tiny:w-[min(7svh,15vw)]",
               )}
             >
               <div className="absolute inset-0 rounded-card border border-hairline" />
@@ -307,8 +307,8 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
               // full row fits anyway and the cap lifts, so desktop and
               // half-screen sizes are unchanged.
               dense
-                ? "w-[min(8svh,11.5vw,3.5rem)] tiny:w-[min(6svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
-                : "w-[min(8svh,15vw)] tiny:w-[min(6svh,15vw)]",
+                ? "w-[min(8svh,11.5vw,3.5rem)] tiny:w-[min(7svh,11.5vw,3.5rem)] @4xl:w-[min(8svh,11.5vw)]"
+                : "w-[min(8svh,15vw)] tiny:w-[min(7svh,15vw)]",
             )}
           >
             {/* No whileHover here: this is the layoutId projection node, and
