@@ -143,7 +143,7 @@ export function GameBoard() {
   // screen they shrink while the furniture around them keeps its full budget
   // and the board overflows. Below this the seats drop to their one-line
   // header and the caption rail retires, which is worth about 90px.
-  const shortViewport = useMediaQuery("(max-height: 900px)");
+  const shortViewport = useMediaQuery("(max-height: 1000px)");
 
   // The round-ending broadcast both moves the last card and flips the stage:
   // mounting the end sheet immediately buries a flight ~0.3s into its 0.65s
@@ -318,7 +318,7 @@ export function GameBoard() {
                 // (15vw on an aspect-[5/7]) left the board a pixel or two over
                 // its frame with nowhere to put it.
                 "flex min-h-0 items-center justify-center @container",
-                endScene ? "order-3" : shortViewport ? "py-2" : "py-4 @md:py-8",
+                endScene ? "order-3" : shortViewport ? "py-2" : "py-4 @md:py-6",
               )}
             >
               <TableArea drawnCard={drawnCardData} dealingDeck={dealingDeck} />
