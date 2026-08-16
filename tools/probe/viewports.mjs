@@ -10,23 +10,37 @@
 // the URL bar, and minus the Android navigation bar where there is one.
 
 export const VIEWPORTS = [
-  { name: "pixel5-nobar", width: 393, height: 801 },
+  // Browser viewports, not screen sizes. The number a device is sold with is
+  // the screen; what matters is what is left after the browser and the OS have
+  // taken theirs, and the gap between the two is where this breaks. A 1080p
+  // desktop gives about 910, not 1080, and testing 1080 missed a live bug.
+  { name: "iphone-se", width: 375, height: 553 },
+  { name: "iphone-15", width: 393, height: 659 },
   { name: "pixel5-bar", width: 393, height: 745 },
-  { name: "iphone-se", width: 375, height: 667 },
-  { name: "ipad-portrait", width: 820, height: 1080 },
+  { name: "pixel5-nobar", width: 393, height: 801 },
+  { name: "phone-landscape", width: 745, height: 393 },
+  { name: "ipad-portrait", width: 820, height: 1024 },
+  { name: "ipad-landscape", width: 1080, height: 764 },
+  // 1366x768 is still the most common laptop panel and leaves about 600, which
+  // lands exactly on the second tier's boundary.
+  { name: "laptop-1366", width: 1366, height: 600 },
   { name: "laptop-short", width: 1280, height: 500 },
-  { name: "laptop", width: 1440, height: 780 },
-  { name: "desktop", width: 1920, height: 1080 },
+  { name: "macbook-air", width: 1440, height: 790 },
+  { name: "macbook-14", width: 1512, height: 872 },
+  { name: "desktop-window", width: 1920, height: 910 },
+  { name: "desktop-full", width: 1920, height: 1080 },
 ];
 
 /** The cells a pull request runs. The full sweep is for the nightly job. Any
  *  cell that has ever failed belongs in here permanently. */
 export const SMOKE = new Set([
-  "pixel5-bar",
-  "pixel5-nobar",
   "iphone-se",
+  "pixel5-bar",
+  "laptop-1366",
   "laptop-short",
-  "desktop",
+  "macbook-14",
+  "desktop-window",
+  "desktop-full",
 ]);
 
 export const resolve = (names) => {

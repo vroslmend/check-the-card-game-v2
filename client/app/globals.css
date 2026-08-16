@@ -6,7 +6,7 @@
    short screen shrinks them while fixed-height furniture keeps its full
    budget and the board stops fitting. Kept in step with the same threshold in
    GameBoard, which drives the parts that are a prop rather than a class. */
-@custom-variant short (@media (max-height: 900px));
+@custom-variant short (@media (max-height: 1000px));
 
 /* A second tier for genuinely small heights, a half-height desktop window or
    a phone in landscape. Trimming furniture is not enough there: at 500px the
