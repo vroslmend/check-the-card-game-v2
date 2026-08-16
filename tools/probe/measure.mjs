@@ -38,8 +38,14 @@ export function measureInPage() {
     // own corner radius with overflow-hidden and that is not a layout failure;
     // a box tall enough to be a view is a different matter. A scrollbar at any
     // size still counts, because a game view should have none at all.
-    const isView = el.getBoundingClientRect().height >= vh * 0.6;
-    if ((scrolls || (clips && isView)) && over > 0 && visible(el, style)) {
+    // A view may not scroll. A panel inside one may.
+    //
+    // The results sheet is capped at half the viewport and scrolls its own
+    // rows on purpose, which is ordinary for a panel listing six players. Only
+    // something the size of the view itself is a fit failure, so the test is
+    // whether this box IS the view rather than merely whether it scrolls.
+    const isView = el.getBoundingClientRect().height >= vh * 0.85;
+    if ((scrolls || clips) && isView && over > 0 && visible(el, style)) {
       // Which descendant actually reaches furthest down. Summing the rows does
       // not always find it: an out-of-flow child still counts toward scrollable
       // overflow, so the rows can add up to exactly the frame while the box
@@ -94,10 +100,23 @@ export function measureInPage() {
     // under the fold is still a button a thumb misses.
     const whole = r.top >= 0 && r.bottom <= vh && r.left >= 0 && r.right <= vw;
 
+    // A control below the fold of a panel that scrolls is reachable: the panel
+    // is meant to be scrolled. Only a control the view itself cannot reach is
+    // a failure.
+    let inScrollablePanel = false;
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const ps = getComputedStyle(p);
+      if (!/auto|scroll/.test(ps.overflowY + ps.overflow)) continue;
+      if (p.getBoundingClientRect().height < vh * 0.85) {
+        inScrollablePanel = true;
+      }
+      break;
+    }
+
     let status = "ok";
     let blockedBy = null;
     if (!inViewport) {
-      status = "offscreen";
+      status = inScrollablePanel ? "ok" : "offscreen";
     } else if (!hit) {
       status = "no-hit";
     } else if (hit !== el && !el.contains(hit)) {
