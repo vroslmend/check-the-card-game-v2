@@ -111,7 +111,9 @@ const ActionBarComponent: React.FC = () => {
           lines without ever changing the bar's height (which would reflow
           the whole board). */}
       <div
-        className="mt-2 flex h-10 items-start justify-center"
+        // Two lines either way: the slot and the type shrink together, so a
+        // wrapping prompt still fits and does not clip.
+        className="mt-2 flex h-10 items-start justify-center short:h-8"
         aria-live="polite"
       >
         <AnimatePresence>
@@ -122,7 +124,7 @@ const ActionBarComponent: React.FC = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="max-w-[min(92vw,40rem)] px-4 text-center text-sm font-semibold text-ink-muted text-balance"
+              className="max-w-[min(92vw,40rem)] px-4 text-center text-sm font-semibold text-ink-muted text-balance short:text-xs"
             >
               {promptText}
             </motion.p>

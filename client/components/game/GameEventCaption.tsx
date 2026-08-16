@@ -90,7 +90,12 @@ export const GameEventCaption = () => {
 
   return (
     <div
-      className="flex h-8 items-center justify-center font-game"
+      // Collapsed rather than unmounted on a short screen. The board's grid is
+      // grid-rows-[auto_auto_1fr_auto_auto] and places by order, so removing
+      // this row shifts every row up a track: the local hand inherits the 1fr
+      // and the table gets squeezed into an auto. Zero height keeps the
+      // mapping and still gives the height back.
+      className="flex h-8 items-center justify-center overflow-hidden font-game short:h-0"
       aria-live="polite"
     >
       <AnimatePresence mode="wait">

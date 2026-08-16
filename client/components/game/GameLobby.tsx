@@ -330,8 +330,20 @@ export const GameLobby = () => {
 
   const emptySeats = Math.max(0, maxPlayers - players.length);
 
+  // Seats size to the table, the way the board's seats already do. Every seat
+  // renders whether or not anyone is in it, so a host picking six makes the
+  // lobby its tallest before a single guest arrives, which is exactly when it
+  // has to fit. Narrower cards also fit more per row, and a row saved is worth
+  // more than the width given up.
+  const seatWidth =
+    maxPlayers >= 6
+      ? "w-16 sm:w-20"
+      : maxPlayers >= 4
+        ? "w-20 sm:w-24"
+        : "w-24 sm:w-28";
+
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto bg-ground font-game">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-ground font-game">
       <div className="flex h-14 shrink-0 items-center justify-between px-4 md:px-6">
         <Link
           href="/"
@@ -365,14 +377,14 @@ export const GameLobby = () => {
       {/* Centred with auto margins rather than justify-center. Both centre
           when there is room, but justify-center puts the overflow past the top
           edge, where scrolling cannot reach it. */}
-      <main className="mx-auto my-auto flex w-full max-w-3xl flex-col items-center px-4 pb-14 text-center">
+      <main className="mx-auto my-auto flex w-full max-w-3xl flex-col items-center px-4 pb-14 text-center short:pb-4 tiny:pb-2">
         <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
           Private table
         </p>
 
         <button
           onClick={copyInvite}
-          className="mt-3 rounded-card px-4 py-1 text-6xl font-extrabold tracking-[0.25em] text-ink tabular-nums transition-colors hover:text-ink/80 sm:text-7xl"
+          className="mt-3 rounded-card px-4 py-1 text-6xl font-extrabold tracking-[0.25em] text-ink tabular-nums transition-colors hover:text-ink/80 short:mt-1 short:text-4xl tiny:text-3xl sm:text-7xl"
           aria-label="Copy invite link"
         >
           {gameId}
@@ -383,11 +395,11 @@ export const GameLobby = () => {
             : "Tap the code to copy an invite link"}
         </p>
 
-        <div className="mt-10 flex flex-wrap items-start justify-center gap-4 sm:gap-6">
+        <div className="mt-10 flex flex-wrap items-start justify-center gap-4 short:mt-4 tiny:mt-2 sm:gap-6">
           {players.map((p) => (
             <div
               key={p.id}
-              className="flex w-24 flex-col items-center gap-2 sm:w-28"
+              className={cn("flex flex-col items-center gap-2", seatWidth)}
             >
               <button
                 onClick={p.id === localPlayer?.id ? toggleReady : undefined}
@@ -417,7 +429,7 @@ export const GameLobby = () => {
           {Array.from({ length: emptySeats }).map((_, i) => (
             <div
               key={`empty-${i}`}
-              className="flex w-24 flex-col items-center gap-2 sm:w-28"
+              className={cn("flex flex-col items-center gap-2", seatWidth)}
             >
               <div className="flex aspect-[5/7] w-full items-center justify-center rounded-card border border-hairline">
                 <span className="text-xs font-semibold text-ink-muted">
@@ -429,7 +441,7 @@ export const GameLobby = () => {
           ))}
         </div>
 
-        <p className="mt-8 text-sm font-semibold text-ink-muted">
+        <p className="mt-8 text-sm font-semibold text-ink-muted short:mt-3 tiny:mt-1">
           {players.length} of {maxPlayers} seats filled
         </p>
         <p className="mt-1 h-5 text-sm text-ink-muted">{statusLine}</p>
@@ -437,7 +449,7 @@ export const GameLobby = () => {
         <button
           onClick={action.onClick}
           className={cn(
-            "mt-6 flex h-14 min-w-[12rem] items-center justify-center rounded-full px-8 text-base font-bold transition-colors sm:min-w-[16rem]",
+            "mt-6 flex h-14 min-w-[12rem] items-center justify-center rounded-full px-8 text-base font-bold transition-colors short:mt-3 short:h-11 sm:min-w-[16rem]",
             action.accent
               ? "bg-accent text-accent-ink hover:bg-accent/90"
               : "border border-hairline bg-surface-2 text-ink-muted hover:text-ink",
@@ -446,7 +458,7 @@ export const GameLobby = () => {
           {action.label}
         </button>
 
-        <p className="mt-10 text-sm text-ink-muted">
+        <p className="mt-10 text-sm text-ink-muted short:mt-4 tiny:mt-2">
           New here?{" "}
           <button
             onClick={() => setLearnOpen(true)}

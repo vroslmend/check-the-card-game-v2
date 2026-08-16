@@ -20,23 +20,57 @@ export function measureInPage() {
     style.visibility !== "hidden" &&
     Number(style.opacity) !== 0;
 
-  // Anything that scrolls, anywhere. A game view should produce an empty list.
+  // Anything whose content does not fit it, however it is hiding that. A game
+  // view should produce an empty list.
+  //
+  // `hidden` counts, and counts for more once the view stops scrolling: the
+  // content still reports its real scrollHeight, and clipping is exactly the
+  // failure that leaves a control unreachable with nothing on screen to say
+  // so. Watching only for scrollbars would go blind the moment the fix lands.
   const scrollers = [];
   for (const el of document.querySelectorAll("body *")) {
     const style = getComputedStyle(el);
-    const scrolls = /auto|scroll/.test(style.overflowY + style.overflow);
+    const overflowY = style.overflowY + style.overflow;
+    const scrolls = /auto|scroll/.test(overflowY);
+    const clips = /hidden|clip/.test(overflowY);
     const over = el.scrollHeight - el.clientHeight;
-    if (scrolls && over > 0 && visible(el, style)) {
+    // Size gate on the clipping case only. Half the card components clip their
+    // own corner radius with overflow-hidden and that is not a layout failure;
+    // a box tall enough to be a view is a different matter. A scrollbar at any
+    // size still counts, because a game view should have none at all.
+    const isView = el.getBoundingClientRect().height >= vh * 0.6;
+    if ((scrolls || (clips && isView)) && over > 0 && visible(el, style)) {
+      // Which descendant actually reaches furthest down. Summing the rows does
+      // not always find it: an out-of-flow child still counts toward scrollable
+      // overflow, so the rows can add up to exactly the frame while the box
+      // still scrolls.
+      const top = el.getBoundingClientRect().top;
+      let deepest = null;
+      for (const d of el.querySelectorAll("*")) {
+        const ds = getComputedStyle(d);
+        if (!visible(d, ds)) continue;
+        const bottom = d.getBoundingClientRect().bottom - top + el.scrollTop;
+        if (!deepest || bottom > deepest.bottom) {
+          deepest = {
+            bottom: Math.round(bottom),
+            tag: d.tagName.toLowerCase(),
+            cls: String(d.className).slice(0, 46),
+            position: ds.position,
+          };
+        }
+      }
       scrollers.push({
         el: el.tagName.toLowerCase(),
         cls: String(el.className).slice(0, 60),
         clientH: el.clientHeight,
         scrollH: el.scrollHeight,
         overflowPx: over,
+        mode: scrolls ? "scrolls" : "clips",
         scrollbarPx: el.offsetWidth - el.clientWidth,
         // A scrollbar on the element that is also a container-query container
         // silently changes the width its own @md: breakpoints resolve against.
         isQueryContainer: style.containerType !== "normal",
+        deepest,
       });
     }
   }
@@ -105,6 +139,63 @@ export function measureInPage() {
     });
   }
 
+  // Where the height actually goes. Fitting the board is a budgeting problem,
+  // and the first thing anyone needs is the itemised bill rather than a guess
+  // at which row is fat.
+  const budget = [];
+  const tallest = scrollers.sort((a, b) => b.scrollH - a.scrollH)[0];
+  const root = tallest
+    ? [...document.querySelectorAll("body *")].find(
+        (e) =>
+          e.tagName.toLowerCase() === tallest.el &&
+          e.scrollHeight === tallest.scrollH,
+      )
+    : document.querySelector("main");
+  if (root) {
+    // display:contents boxes generate no box of their own, so their children
+    // are the real rows and have to be walked through. Descend two levels:
+    // the outer children are the header and the grid, and it is the grid's own
+    // rows that the budget is actually made of.
+    // Follow the tallest child down. Everything else at a level is recorded as
+    // it stands, so the bill reads header, then the rows inside the one box
+    // that holds the rest of the height.
+    const boxes = (el) => {
+      const out = [];
+      for (const child of el.children) {
+        if (getComputedStyle(child).display === "contents") {
+          out.push(...boxes(child));
+          continue;
+        }
+        if (child.getBoundingClientRect().height > 0) out.push(child);
+      }
+      return out;
+    };
+    const collect = (el, depth) => {
+      const children = boxes(el);
+      const tallest = children.reduce(
+        (a, b) =>
+          b.getBoundingClientRect().height >
+          (a?.getBoundingClientRect().height ?? 0)
+            ? b
+            : a,
+        null,
+      );
+      for (const child of children) {
+        const r = child.getBoundingClientRect();
+        if (depth > 0 && child === tallest && boxes(child).length > 0) {
+          collect(child, depth - 1);
+          continue;
+        }
+        budget.push({
+          tag: child.tagName.toLowerCase(),
+          cls: String(child.className).slice(0, 46),
+          height: Math.round(r.height),
+        });
+      }
+    };
+    collect(root, 1);
+  }
+
   return {
     viewport: { width: vw, height: vh },
     docScrollsX:
@@ -113,5 +204,6 @@ export function measureInPage() {
     scrollers,
     controls,
     overlays,
+    budget,
   };
 }
