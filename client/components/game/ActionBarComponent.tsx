@@ -86,7 +86,7 @@ const ActionBarComponent: React.FC = () => {
 
   return (
     <motion.div
-      className="flex flex-col items-center w-full"
+      className="flex w-full flex-col items-center gap-2 tiny:gap-1.5"
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{
@@ -107,31 +107,6 @@ const ActionBarComponent: React.FC = () => {
         ))}
       </motion.div>
 
-      {/* Fixed-height slot: the prompt fades in place and can wrap to two
-          lines without ever changing the bar's height (which would reflow
-          the whole board). */}
-      <div
-        // Two lines either way: the slot and the type shrink together, so a
-        // wrapping prompt still fits and does not clip.
-        className="mt-2 flex h-10 items-start justify-center short:h-8 tiny:mt-1 tiny:h-5"
-        aria-live="polite"
-      >
-        <AnimatePresence>
-          {promptText && (
-            <motion.p
-              key="prompt-text"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="max-w-[min(92vw,40rem)] px-4 text-center text-sm font-semibold text-ink-muted text-balance short:text-xs tiny:truncate"
-            >
-              {promptText}
-            </motion.p>
-          )}
-        </AnimatePresence>
-      </div>
-
       {/* Countdown for the active timed window. Pure CSS-driven animation
           keyed by deadline: no per-frame re-renders. Fixed-height slot for
           the same no-reflow reason. */}
@@ -139,7 +114,7 @@ const ActionBarComponent: React.FC = () => {
           in one cell. As flex siblings they sat side by side during the
           crossfade — the new bar mounted half a bar-width off-center and
           snapped back when the exit finished (the "teleporting" bar). */}
-      <div className="mt-1 grid h-1 w-full items-center justify-items-center">
+      <div className="grid h-1 w-full items-center justify-items-center">
         <AnimatePresence>
           {timedIndicator && remainingMs > 0 && countdownRevealed && (
             <motion.div
@@ -158,6 +133,32 @@ const ActionBarComponent: React.FC = () => {
                 transition={{ duration: remainingMs / 1000, ease: "linear" }}
               />
             </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      {/* Prompt last, under the countdown. The countdown times the action the
+          buttons offer, so it sits against them; the prompt is the explanation
+          and reads after. With the prompt in between, the gap under the pill
+          ran three times the gap above it however the margins were tuned.
+          Fixed height so it cannot reflow the row above. */}
+      <div
+        // Two lines either way: the slot and the type shrink together, so a
+        // wrapping prompt still fits and does not clip.
+        className="flex h-10 items-start justify-center short:h-8 tiny:h-5"
+        aria-live="polite"
+      >
+        <AnimatePresence>
+          {promptText && (
+            <motion.p
+              key="prompt-text"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="max-w-[min(92vw,40rem)] px-4 text-center text-sm font-semibold text-ink-muted text-balance short:text-xs tiny:truncate"
+            >
+              {promptText}
+            </motion.p>
           )}
         </AnimatePresence>
       </div>
