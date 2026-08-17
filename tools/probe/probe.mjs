@@ -44,6 +44,7 @@ const opts = {
   breakdown: flag("breakdown"),
   shift: flag("shift"),
   sweep: flag("sweep"),
+  scrolled: flag("scrolled"),
   matrix: flag("matrix"),
   counts: arg("counts", "2,4,6"),
   states: arg("states", "lobby,play,drawn,matching,scoring"),
@@ -354,9 +355,12 @@ const drive = async (page, opts) => {
       30000,
     );
     // The sheet is deliberately held back ~1.1s so the last card flight can
-    // land before it covers the table. Measuring before that catches the board
-    // mid animation with no sheet on it.
-    await page.waitForTimeout(1800);
+    // land before it covers the table, and the scores stamp in one by one
+    // after it, the last landing around 2.1s. Whichever viewport is measured
+    // first gets photographed at whatever this wait allows, so anything
+    // shorter than the whole sequence produces a shot of the smallest screen
+    // with its last rows blank, which reads as scores that failed to render.
+    await page.waitForTimeout(3000);
     return { gameId, bots, observedId };
   }
 
@@ -817,6 +821,30 @@ const main = async () => {
         fileName,
         diff: compareToBaseline(shotPath, opts.baseline, fileName, OUT),
       });
+
+      // What the panel looks like once a player has done what the marker at
+      // its fold is asking. Measuring only the arrival state says nothing
+      // about whether the rest of a list is actually reachable.
+      if (opts.scrolled) {
+        await page.evaluate(() => {
+          const vh = window.innerHeight;
+          for (const el of document.querySelectorAll("body *")) {
+            const s = getComputedStyle(el);
+            if (!/auto|scroll/.test(s.overflowY + s.overflow)) continue;
+            if (el.scrollHeight - el.clientHeight <= 0) continue;
+            if (el.getBoundingClientRect().height >= vh * 0.85) continue;
+            el.scrollTop = el.scrollHeight;
+          }
+        });
+        await page.waitForTimeout(200);
+        rows.push({
+          viewport: { ...viewport, name: `${viewport.name} (end)` },
+          m: await page.evaluate(measureInPage),
+        });
+        const endName = fileName.replace(/\.png$/, "-scrolled.png");
+        await page.screenshot({ path: join(OUT, endName) });
+        shots.push({ fileName: endName, diff: null });
+      }
     }
 
     const after = stamp();
