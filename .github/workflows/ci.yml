@@ -22,6 +22,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          # verify checks the commit messages a branch adds, which needs the
+          # base branch present to compare against. A shallow checkout has none.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
