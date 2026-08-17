@@ -11,6 +11,7 @@ import {
   Send,
   Shuffle,
   Sparkles,
+  Trophy,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -25,13 +26,18 @@ const MAX_CHAT_MESSAGE_LENGTH = 500;
 const TAB_KEY = "check:panel-tab";
 const GROUP_WINDOW_MS = 2 * 60 * 1000;
 
-type Tab = "activity" | "chat";
+type Tab = "activity" | "chat" | "standings";
 
 const selectSidePanelProps = (state: UIMachineSnapshot) => ({
   isOpen: state.context.isSidePanelOpen,
   log: state.context.currentGameState?.log,
   chat: state.context.currentGameState?.chat,
   localPlayerId: state.context.localPlayerId,
+  players: state.context.currentGameState?.players,
+  turnOrder: state.context.currentGameState?.turnOrder,
+  playerWins: state.context.currentGameState?.playerWins,
+  playerTotals: state.context.currentGameState?.playerTotals,
+  roundEpoch: state.context.currentGameState?.roundEpoch,
 });
 
 const formatTime = (timestamp: string) => {
@@ -92,8 +98,17 @@ const TabChip = ({
 
 export const SidePanel = () => {
   const { send } = useUIActorRef();
-  const { isOpen, log, chat, localPlayerId } =
-    useUISelector(selectSidePanelProps);
+  const {
+    isOpen,
+    log,
+    chat,
+    localPlayerId,
+    players,
+    turnOrder,
+    playerWins,
+    playerTotals,
+    roundEpoch,
+  } = useUISelector(selectSidePanelProps);
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return "activity";
@@ -136,6 +151,26 @@ export const SidePanel = () => {
     send({ type: "SUBMIT_CHAT_MESSAGE", message });
     setDraft("");
   };
+
+  // Same order as the end screen's block, so the two read as one board at two
+  // densities: wins first, the lower total separating equal wins. Seat order
+  // settles the rest, which is the whole table in round one and is why this
+  // list does not reshuffle itself every time a broadcast arrives.
+  const standing = useMemo(() => {
+    const wins = playerWins ?? {};
+    const totals = playerTotals ?? {};
+    const seat = (id: string) => {
+      const i = (turnOrder ?? []).indexOf(id);
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return Object.values(players ?? {}).sort(
+      (a, b) =>
+        (wins[b.id] ?? 0) - (wins[a.id] ?? 0) ||
+        (totals[a.id] ?? 0) - (totals[b.id] ?? 0) ||
+        seat(a.id) - seat(b.id),
+    );
+  }, [players, turnOrder, playerWins, playerTotals]);
+  const scored = standing.some((p) => (playerWins?.[p.id] ?? 0) > 0);
 
   // Group consecutive same-sender messages within two minutes: one timestamp
   // per group, on its last message.
@@ -185,6 +220,13 @@ export const SidePanel = () => {
                 <MessageCircle className="h-3.5 w-3.5" />
                 Chat
               </TabChip>
+              <TabChip
+                active={tab === "standings"}
+                onClick={() => pickTab("standings")}
+              >
+                <Trophy className="h-3.5 w-3.5" />
+                Standing
+              </TabChip>
             </div>
             <button
               onClick={() => send({ type: "TOGGLE_SIDE_PANEL" })}
@@ -220,6 +262,56 @@ export const SidePanel = () => {
                   Nothing yet
                 </p>
               )}
+            </div>
+          ) : tab === "standings" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {/* The round number lives here and nowhere else during play, so
+                  in a long session this is the only way to tell round three
+                  from round eleven. */}
+              <p className="text-sm font-bold text-ink">
+                Round {(roundEpoch ?? 0) + 1}
+              </p>
+              {/* Only while every column is a zero. The table already says who
+                  is here; this says why it has nothing in it yet, which a
+                  column of zeroes on its own reads as a bug. */}
+              {!scored && (
+                <p className="mt-0.5 text-xs text-ink-muted">
+                  Fills in as rounds are scored.
+                </p>
+              )}
+              {/* Same columns as the end screen's block, in the same order, so
+                  the two are recognisably one board. Rendered from round one,
+                  zeros and all: a table of names with nothing won yet still
+                  says who is here and what it will fill in. */}
+              <div className="mt-3 flex items-baseline gap-3 text-[11px] font-semibold uppercase tracking-widest text-ink-muted">
+                <span className="w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1">Player</span>
+                <span className="w-10 shrink-0 text-right">Wins</span>
+                <span className="w-12 shrink-0 text-right">Total</span>
+              </div>
+              <div className="divide-y divide-hairline">
+                {standing.map((player, i) => (
+                  <div key={player.id} className="flex items-center gap-3 py-2">
+                    <span className="w-4 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                      {player.name}
+                      {player.id === localPlayerId && (
+                        <span className="ml-1.5 text-xs font-normal text-ink-muted">
+                          (you)
+                        </span>
+                      )}
+                    </span>
+                    <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums text-ink-muted">
+                      {playerWins?.[player.id] ?? 0}
+                    </span>
+                    <span className="w-12 shrink-0 text-right text-sm font-bold tabular-nums text-ink">
+                      {playerTotals?.[player.id] ?? 0}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
