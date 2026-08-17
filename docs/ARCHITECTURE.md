@@ -95,15 +95,15 @@ The integrity of the game relies on the well-defined structures in `shared-types
 
 ## 7. Testing Strategy
 
-There is no unit or state machine suite. An earlier Vitest suite covering the game machine, the state redactor and the deck utilities was removed and has not been replaced, so rules verification is manual against `GAME_RULES.md`. Restoring it is tracked in issue #36.
+There is no unit or state machine suite. An earlier Vitest suite covering the game machine, the state redactor and the deck utilities was removed and has not been replaced, so rules verification is manual against `GAME_RULES.md`. Restoring it is tracked in issue [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36).
 
 The architecture supports that well: the game machine is pure and configured by input, and `generatePlayerView` is a pure function, so both can be exercised without a socket or a browser.
 
 One layer is covered. `npm run probe` drives a real game in a real browser and reports whether the view fits, whether every control can actually be hit, and whether anything moves sideways when only the game's phase changed. It lives in `tools/probe`, deliberately outside the root workspaces and with its own manifest, so `npm ci` never pulls a browser into the Vercel or Render install.
 
-Only the player being observed gets a browser. Everyone else is a `socket.io-client` connection acting at socket speed, which is what makes a scripted round take seconds. Those clients are an importable module rather than a script, because the wire level harness in issue #75 wants the same ones.
+Only the player being observed gets a browser. Everyone else is a `socket.io-client` connection acting at socket speed, which is what makes a scripted round take seconds. Those clients are an importable module rather than a script, because the wire level harness in issue [#75](https://github.com/vroslmend/check-the-card-game-v2/issues/75) wants the same ones.
 
-The remaining scope of that layer is issue #57.
+The remaining scope of that layer is issue [#57](https://github.com/vroslmend/check-the-card-game-v2/issues/57).
 
 ## 8. Where the two halves run
 

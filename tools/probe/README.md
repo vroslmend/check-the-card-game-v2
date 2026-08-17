@@ -145,7 +145,7 @@ rather than assumed.
 needs a rendering engine. The rest are `socket.io-client` connections in
 `player.mjs` that act the instant the server allows it, which is what makes a
 scripted round take seconds. That module is deliberately an importable API
-rather than a script, because #75 wants the same clients for wire level
+rather than a script, because [#75](https://github.com/vroslmend/check-the-card-game-v2/issues/75) wants the same clients for wire level
 assertions and two drivers would drift.
 
 **The game is built once and every viewport re-measures it.** Sweeping seven
@@ -166,12 +166,12 @@ judgement is made in one place in `probe.mjs`, so a failure reads
 - No seed control. `CREATE_GAME` takes a name and `maxPlayers` and nothing
   else, so each run gets a different deck and the driver has to cope with
   whatever it deals, including a King turning a discard into an ability.
-  Seeding is #36 step 1 and is already done in the machine; plumbing it through
+  Seeding is [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36) step 1 and is already done in the machine; plumbing it through
   the socket payload would make runs repeatable.
-- Not wired into CI. #57 wants its own job, separate from the fast typecheck
+- Not wired into CI. [#57](https://github.com/vroslmend/check-the-card-game-v2/issues/57) wants its own job, separate from the fast typecheck
   workflow. Adding one is a follow up, not part of introducing the tool.
 - Layout and reachability only. The stability probe, which catches things
-  moving when nothing asked them to (#83), is the obvious next one.
+  moving when nothing asked them to ([#83](https://github.com/vroslmend/check-the-card-game-v2/issues/83)), is the obvious next one.
 
 ## Why it lives outside the workspaces
 

@@ -64,7 +64,7 @@ The client hot reloads. The server does not: it runs from a build, so after chan
 
 ## Verifying your change
 
-There is no unit or state machine suite yet, tracked in #36, so rules verification is manual and the burden sits with the pull request. Layout is covered, see below.
+There is no unit or state machine suite yet, tracked in [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36), so rules verification is manual and the burden sits with the pull request. Layout is covered, see below.
 
 Everything CI runs has to pass, and you can run all of it locally first:
 
@@ -95,7 +95,7 @@ A game view is expected to fit at every size, so any overflow at all is a failur
 
 If you changed anything that decides a size, sweep rather than sample. `npm run probe -- --matrix` walks every player count and stage against a range of heights and reports the bands that fail, so take its output before you start and check the bands have not grown after. `tools/probe/README.md` covers the rest.
 
-It is not part of `npm run verify` or CI, because it needs a browser and takes minutes rather than seconds. Wiring it into its own CI job is tracked in #57.
+It is not part of `npm run verify` or CI, because it needs a browser and takes minutes rather than seconds. Wiring it into its own CI job is tracked in [#57](https://github.com/vroslmend/check-the-card-game-v2/issues/57).
 
 ## Things that will bite you
 
