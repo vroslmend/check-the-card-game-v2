@@ -691,8 +691,11 @@ export const uiMachine = setup({
     isAbilityActionComplete: ({ context }) => {
       const ability = context.currentAbilityContext;
       if (!ability) return false;
+      // Must agree with the confirm button's gate in ActionController: peeking
+      // fewer cards than the ability grants is a valid confirm, so only zero
+      // blocks. Requiring the full count here drops the click silently.
       if (ability.stage === "peeking")
-        return ability.selectedPeekTargets.length === ability.maxPeekTargets;
+        return ability.selectedPeekTargets.length > 0;
       if (ability.stage === "swapping")
         return ability.selectedSwapTargets.length === 2;
       return false;

@@ -1056,14 +1056,11 @@ export const gameMachine = setup({
           ability.stage === "peeking" &&
           (ability.type === "peek" || ability.type === "king")
         ) {
-          const peeksUsed = Array.isArray(payload.targets)
-            ? payload.targets.length
-            : 1;
-          if (ability.remainingPeeks && ability.remainingPeeks > peeksUsed) {
-            ability.remainingPeeks -= peeksUsed;
-          } else {
-            delete ability.remainingPeeks;
-          }
+          // Confirming ends the peek stage whatever the count, because peeks
+          // are taken in one batch. Leaving a remainder here strands the
+          // ability: schedulePeekToSwap only arms the peek to swap timer once
+          // remainingPeeks is gone, so the stage would never advance.
+          delete ability.remainingPeeks;
           logAction(`${playerName} used Peek.`);
         } else if (payload.action === "swap" && ability.stage === "swapping") {
           // Pooled combo: consume one swap and stay in the swapping stage for
