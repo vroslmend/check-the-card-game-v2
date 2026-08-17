@@ -134,6 +134,55 @@ const compactFullColumns = (hand: (Card | null)[]): (Card | null)[] => {
   return [...tops, ...bottoms];
 };
 
+// The same hazard as compactFullColumns, in the growing direction. Appending a
+// penalty card changes C = ceil(slots/2) whenever it crosses a column boundary,
+// and a new C re-wraps every index onto a different cell, including the two the
+// initial peek is the player's only look at. So place into the grid a player
+// sees rather than onto the end of the array: pad the two rows out to a full
+// rectangle, take the earliest empty cell, and add a column only when there is
+// none. Exported for scripts/check-penalty-placement.mjs.
+export const placePenaltyCard = (
+  hand: (Card | null)[],
+  penaltyCard: Card,
+): { hand: (Card | null)[]; index: number } => {
+  const S = hand.length;
+  const C = Math.max(1, Math.ceil(S / 2));
+
+  // Padding is what makes this correct on a hand that has shrunk. A three card
+  // hand renders with one visible empty cell, but that cell is a hole in the
+  // rectangle rather than a null in the array, so without padding the code
+  // cannot see it and grows a column it did not need.
+  const tops: (Card | null)[] = [];
+  const bottoms: (Card | null)[] = [];
+  for (let j = 0; j < C; j++) {
+    tops.push(j < S ? (hand[j] ?? null) : null);
+    bottoms.push(C + j < S ? (hand[C + j] ?? null) : null);
+  }
+
+  const topGap = tops.indexOf(null);
+  const bottomGap = bottoms.indexOf(null);
+
+  let index: number;
+  if (topGap >= 0) {
+    tops[topGap] = penaltyCard;
+    index = topGap;
+  } else if (bottomGap >= 0) {
+    bottoms[bottomGap] = penaltyCard;
+    index = tops.length + bottomGap;
+  } else {
+    // A genuinely full hand. The new column takes its top cell and keeps the
+    // bottom as a real gap, so the next penalty is a fill rather than more
+    // growth. Do not trim that trailing null: compactFullColumns trims one when
+    // a hand shrinks, and trimming here throws away the slot the next penalty
+    // is meant to use.
+    tops.push(penaltyCard);
+    bottoms.push(null);
+    index = tops.length - 1;
+  }
+
+  return { hand: [...tops, ...bottoms], index };
+};
+
 // -----------------------------------------------------------------------------
 // Action & Event Type Unions
 // -----------------------------------------------------------------------------
@@ -1738,15 +1787,9 @@ export const gameMachine = setup({
       let penaltyIndex = 0;
       const updatedPlayers = produce(context.players, (draft) => {
         const player = draft[playerId]!;
-        // Reuse the first empty gap if there is one, else grow the hand.
-        const gap = player.hand.indexOf(null);
-        if (gap >= 0) {
-          player.hand[gap] = penaltyCard;
-          penaltyIndex = gap;
-        } else {
-          penaltyIndex = player.hand.length;
-          player.hand.push(penaltyCard);
-        }
+        const placed = placePenaltyCard(player.hand, penaltyCard);
+        player.hand = placed.hand;
+        penaltyIndex = placed.index;
         if (disqualified) {
           player.isLocked = true;
           player.status = PlayerStatus.DISQUALIFIED;
