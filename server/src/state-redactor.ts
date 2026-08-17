@@ -146,6 +146,11 @@ export const generatePlayerView = (
         ([id]) => !!fullGameContext.players[id],
       ),
     ),
+    playerTotals: Object.fromEntries(
+      Object.entries(fullGameContext.playerTotals ?? {}).filter(
+        ([id]) => !!fullGameContext.players[id],
+      ),
+    ),
     // Filter to players still at the table so a voter who left doesn't inflate
     // the tally (votes are also reset each new round).
     rematchVotes: fullGameContext.rematchVotes.filter(

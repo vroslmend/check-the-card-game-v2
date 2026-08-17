@@ -1522,10 +1522,18 @@ export const gameMachine = setup({
         nextPlayerWins[id] = (nextPlayerWins[id] ?? 0) + 1;
       }
 
+      // Every player, not only the winners: a total is the sum of the rounds
+      // you played, and a disqualified player still scored one.
+      const nextPlayerTotals = { ...context.playerTotals };
+      for (const [id, score] of Object.entries(playerScores)) {
+        nextPlayerTotals[id] = (nextPlayerTotals[id] ?? 0) + score;
+      }
+
       return {
         players: updatedPlayers,
         winnerId: winnerIds[0] ?? null,
         playerWins: nextPlayerWins,
+        playerTotals: nextPlayerTotals,
         gameover: { winnerIds, loserId, playerScores },
         gameStage: GameStage.SCORING,
         publicPeek: null,
@@ -1855,6 +1863,10 @@ export const gameMachine = setup({
         if (winnerId) {
           nextPlayerWins[winnerId] = (nextPlayerWins[winnerId] ?? 0) + 1;
         }
+        const nextPlayerTotals = { ...context.playerTotals };
+        for (const [id, score] of Object.entries(playerScores)) {
+          nextPlayerTotals[id] = (nextPlayerTotals[id] ?? 0) + score;
+        }
         return {
           players: newPlayers,
           turnOrder: newTurnOrder,
@@ -1865,6 +1877,7 @@ export const gameMachine = setup({
           gameStage: GameStage.GAMEOVER,
           winnerId,
           playerWins: nextPlayerWins,
+          playerTotals: nextPlayerTotals,
           gameover: {
             winnerIds: winnerId ? [winnerId] : [],
             loserId: affectedPlayerId,
@@ -2082,6 +2095,7 @@ export const gameMachine = setup({
     gameover: null,
     lastRoundLoserId: null,
     playerWins: {},
+    playerTotals: {},
     rematchVotes: [],
     roundEpoch: 0,
     log: [],

@@ -173,6 +173,10 @@ export interface ClientCheckGameState {
   /** Cumulative round wins per player for this lobby's lifetime. Survives
    *  Play Again (unlike scores); only players still at the table appear. */
   playerWins: Record<PlayerId, number>;
+  /** Cumulative round scores per player, same lifetime and same survival as
+   *  playerWins. Lower is better, consistently with a round score. Ordering
+   *  only: wins decide the standing and this breaks their ties. */
+  playerTotals: Record<PlayerId, number>;
   /** Players (at GAMEOVER) who signalled they want to play again — a live
    *  rematch tally shown to everyone. The host still starts the next round
    *  via PLAY_AGAIN; this is advisory. Reset on each new round. */
