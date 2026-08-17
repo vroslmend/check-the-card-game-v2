@@ -35,7 +35,7 @@ and the rows stop describing the same game.
 
 |               |                                                                                      |
 | ------------- | ------------------------------------------------------------------------------------ |
-| `--at`        | `lobby`, `peek`, `play`, `drawn`, `matching`. Default `play`.                        |
+| `--at`        | `lobby`, `peek`, `play`, `drawn`, `matching`, `scoring`. Default `play`.             |
 | `--players`   | How many actually join, 2 to 6. Default 2.                                           |
 | `--seats`     | Lobby capacity. Defaults to `--players`. Six seats with two players is its own case. |
 | `--viewports` | `smoke` (default), `all`, or a comma separated list.                                 |
@@ -45,10 +45,76 @@ and the rows stop describing the same game.
 | `--baseline`  | An earlier `--out` directory to compare this run's captures against.                 |
 | `--shift`     | Change phase, then report anything that moved sideways.                              |
 | `--breakdown` | Itemise where the height goes, row by row.                                           |
+| `--scrolled`  | Measure and capture a second time with every inner scroller run to its end.          |
 | `--headed`    | Watch it drive.                                                                      |
 | `--verbose`   | Dump the raw measurements.                                                           |
 
 Exit code is 1 when something fails and 2 when the probe could not run at all.
+
+## Sweeping, rather than trusting the device list
+
+A device list is a guess about how much viewport the browser chrome leaves, and
+a wrong guess hides the cliff it was meant to find. 1920x1080 passed while the
+1920x910 a maximised Chrome actually gives was broken in production.
+
+`--sweep` removes the guess. It walks every height in a range at several widths
+and reports the bands that fail, so whether the board fits stops depending on
+which devices someone thought to list.
+
+```
+npm run probe -- --at drawn --sweep
+```
+
+|            |                                                |
+| ---------- | ---------------------------------------------- |
+| `--sweep`  | Walk a height range rather than named devices. |
+| `--widths` | Comma separated. Default `393,820,1440,1920`.  |
+| `--from`   | First height. Default 360.                     |
+| `--to`     | Last height. Default 1200.                     |
+| `--step`   | Height increment. Default 20.                  |
+
+## The matrix
+
+Player count and stage both change how tall the board is, and each has hidden a
+failure the other could not see. Six players did not fit a phone at all while
+two players fit everywhere, and two players turned out to be the worst case at
+low heights because it never triggers dense seats. Sweeping one and assuming the
+other is how both were missed.
+
+`--matrix` sweeps every count against every stage, at six seats throughout, and
+prints the failing bands per combination.
+
+```
+npm run probe -- --matrix
+```
+
+|                 |                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------- |
+| `--counts`      | Comma separated player counts. Default `2,4,6`.                                       |
+| `--states`      | Comma separated checkpoints. Default `lobby,play,drawn,matching,scoring`.             |
+| `--matrix-step` | Height increment. Default 40, coarser than `--step` because it runs many more sweeps. |
+
+Theme is not a dimension here. The themes swap colour tokens and nothing else,
+so the geometry is identical and sweeping both would double the runtime for the
+same numbers. Theme is a screenshot question.
+
+## Filming the end screen
+
+A settled screenshot cannot see anything that only exists while a view is
+arriving, and the end screen spends its first seconds animating. The sheet
+climbs, the scores stamp in one at a time, the board is still finishing its card
+flights. `--film` captures a burst instead of one shot, and applies at
+`--at scoring`.
+
+```
+npm run probe -- --at scoring --film
+```
+
+|              |                                           |
+| ------------ | ----------------------------------------- |
+| `--film`     | Capture frames instead of one screenshot. |
+| `--frames`   | How many. Default 16.                     |
+| `--frame-ms` | Milliseconds between them. Default 120.   |
 
 ## Screenshots are taken always, not only on failure
 
