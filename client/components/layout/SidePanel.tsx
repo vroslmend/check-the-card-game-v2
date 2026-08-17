@@ -170,6 +170,7 @@ export const SidePanel = () => {
         seat(a.id) - seat(b.id),
     );
   }, [players, turnOrder, playerWins, playerTotals]);
+  const scored = standing.some((p) => (playerWins?.[p.id] ?? 0) > 0);
 
   // Group consecutive same-sender messages within two minutes: one timestamp
   // per group, on its last message.
@@ -267,18 +268,28 @@ export const SidePanel = () => {
               {/* The round number lives here and nowhere else during play, so
                   in a long session this is the only way to tell round three
                   from round eleven. */}
-              <div className="flex items-baseline justify-between">
-                <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
-                  Standing
+              <p className="text-sm font-bold text-ink">
+                Round {(roundEpoch ?? 0) + 1}
+              </p>
+              {/* Only while every column is a zero. The table already says who
+                  is here; this says why it has nothing in it yet, which a
+                  column of zeroes on its own reads as a bug. */}
+              {!scored && (
+                <p className="mt-0.5 text-xs text-ink-muted">
+                  Fills in as rounds are scored.
                 </p>
-                <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
-                  Round {(roundEpoch ?? 0) + 1}
-                </p>
+              )}
+              {/* Same columns as the end screen's block, in the same order, so
+                  the two are recognisably one board. Rendered from round one,
+                  zeros and all: a table of names with nothing won yet still
+                  says who is here and what it will fill in. */}
+              <div className="mt-3 flex items-baseline gap-3 text-[11px] font-semibold uppercase tracking-widest text-ink-muted">
+                <span className="w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1">Player</span>
+                <span className="w-10 shrink-0 text-right">Wins</span>
+                <span className="w-12 shrink-0 text-right">Total</span>
               </div>
-              {/* Rendered from round one, zeros and all. A table of names with
-                  nothing won yet still says who is here and what it will fill
-                  in; an empty panel says neither. */}
-              <div className="mt-2 divide-y divide-hairline">
+              <div className="divide-y divide-hairline">
                 {standing.map((player, i) => (
                   <div key={player.id} className="flex items-center gap-3 py-2">
                     <span className="w-4 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
@@ -292,11 +303,10 @@ export const SidePanel = () => {
                         </span>
                       )}
                     </span>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
-                      {playerWins?.[player.id] ?? 0}{" "}
-                      {(playerWins?.[player.id] ?? 0) === 1 ? "win" : "wins"}
+                    <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums text-ink-muted">
+                      {playerWins?.[player.id] ?? 0}
                     </span>
-                    <span className="w-10 shrink-0 text-right text-sm font-bold tabular-nums text-ink">
+                    <span className="w-12 shrink-0 text-right text-sm font-bold tabular-nums text-ink">
                       {playerTotals?.[player.id] ?? 0}
                     </span>
                   </div>

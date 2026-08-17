@@ -142,7 +142,9 @@ export const RoundSummary = ({
   // else, so it now rides on the rows instead, where every player already has
   // one.
   const roundNumber = roundEpoch + 1;
-  const seriesStarted = players.some((p) => (playerWins[p.id] ?? 0) > 0);
+  // A series needs a round to compare against. The epoch counts Play Agains,
+  // so it is still 0 on the first end screen and 1 on the second.
+  const seriesHistory = roundEpoch > 0;
 
   // A panel that scrolls with nothing to say so reads as a list that ended,
   // and at a full table the rows below the fold are most of the result. The
@@ -296,38 +298,38 @@ export const RoundSummary = ({
               })}
             </div>
 
-            {/* The series, once, as a summary rather than a second table. It
-                used to ride on every row as a trophy, which stated the same
-                fact six times and read as a rival to the round's own score.
-                "wins" is spelled out on the leader only: the unit is named
-                once and the rest are read against it. */}
-            {seriesStarted && (
-              <div className="mt-4">
-                <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
-                  Standing
-                </p>
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-                  {standing.map((player, i) => (
-                    <span
-                      key={player.id}
-                      className="text-sm text-ink-muted"
-                      aria-label={`${player.name}, ${playerWins[player.id] ?? 0} rounds won, ${playerTotals[player.id] ?? 0} points across the series`}
-                    >
-                      <span className="tabular-nums">{i + 1}</span>{" "}
-                      <span className="font-semibold text-ink">
-                        {player.name}
-                      </span>{" "}
-                      <span className="tabular-nums">
-                        {playerWins[player.id] ?? 0}
-                        {i === 0 &&
-                          ((playerWins[player.id] ?? 0) === 1
-                            ? " win"
-                            : " wins")}{" "}
-                        · {playerTotals[player.id] ?? 0}
-                      </span>
-                    </span>
-                  ))}
+            {/* Only from the second round. After the first, the series IS the
+                result directly above it, restated in a worse format with a
+                column of zeroes for a total nothing has accumulated into.
+                Columns line up with the rows above and with the side panel's
+                tab, so the same board reads the same way wherever it is. */}
+            {seriesHistory && (
+              <div className="mt-4 border-t border-hairline pt-3">
+                <div className="flex items-baseline gap-3 text-[11px] font-semibold uppercase tracking-widest text-ink-muted">
+                  <span className="w-5 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1">Series</span>
+                  <span className="w-10 shrink-0 text-right">Wins</span>
+                  <span className="w-12 shrink-0 text-right">Total</span>
                 </div>
+                {standing.map((player, i) => (
+                  <div
+                    key={player.id}
+                    className="flex items-center gap-3 py-1 text-sm"
+                  >
+                    <span className="w-5 shrink-0 font-semibold tabular-nums text-ink-muted">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-semibold text-ink">
+                      {player.name}
+                    </span>
+                    <span className="w-10 shrink-0 text-right font-semibold tabular-nums text-ink-muted">
+                      {playerWins[player.id] ?? 0}
+                    </span>
+                    <span className="w-12 shrink-0 text-right font-bold tabular-nums text-ink">
+                      {playerTotals[player.id] ?? 0}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
