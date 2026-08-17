@@ -105,12 +105,8 @@ Only the player being observed gets a browser. Everyone else is a `socket.io-cli
 
 The remaining scope of that layer is issue #57.
 
-## 8. Deployment
+## 8. Where the two halves run
 
-The two halves deploy to different platforms, both from `main`. The client goes to Vercel, the server to Render. There is no staging environment: merging to `main` is what ships.
+The client and the server deploy separately, to different platforms, both from `main`: the client to Vercel, the server to Render. There is no staging environment between them.
 
-A pull request gets a Vercel preview, and that preview is the client alone. It connects to whichever server URL its environment supplies, which is a server already running rather than one built from the branch. So a preview exercises client changes and cannot exercise server ones: a branch that adds a field to the broadcast will show a preview client reading it as absent, because the server sending that broadcast does not have it yet.
-
-Server changes are therefore verified before merge by driving the compiled machine directly, the pattern the `repro-*.mjs` scripts use, and after merge by playing a round against production. Saying which of those a claim rests on is the difference between "the machine does this" and "the game does this".
-
-The client reads `NEXT_PUBLIC_WEBSOCKET_URL` (`client/lib/socket.ts`), falling back to `http://localhost:8000` for local development, where `npm run dev` runs both halves together.
+They are only joined at runtime, by URL. The client reads `NEXT_PUBLIC_WEBSOCKET_URL` (`client/lib/socket.ts`) and falls back to `http://localhost:8000`, which is what `npm run dev` serves when it runs both halves together. Nothing else couples the two deployments, so either can be running a different version of the shared types than the other.
