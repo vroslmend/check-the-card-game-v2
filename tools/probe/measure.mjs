@@ -175,6 +175,54 @@ export function measureInPage() {
     });
   }
 
+  // Cards a panel covers. The end screen is a report about the hands it has
+  // just turned face up, so a sheet tall enough to sit on them defeats the
+  // reveal it exists to explain.
+  //
+  // Full-bleed overlays are excluded by their own geometry rather than by
+  // name: a moment stamp covers the board deliberately. Only a panel that
+  // leaves part of the viewport uncovered is answering for what it hides.
+  const cardRects = [];
+  for (const grid of document.querySelectorAll(".inline-grid")) {
+    for (const card of grid.children) {
+      const cr = card.getBoundingClientRect();
+      if (cr.width > 0 && cr.height > 0) cardRects.push(cr);
+    }
+  }
+
+  const covers = [];
+  for (const el of document.querySelectorAll("body *")) {
+    const style = getComputedStyle(el);
+    if (style.position !== "absolute" && style.position !== "fixed") continue;
+    if (!visible(el, style)) continue;
+    const z = Number(style.zIndex);
+    if (!Number.isFinite(z) || z < 40) continue;
+    const r = el.getBoundingClientRect();
+    // Panels only. Cards are absolutely positioned and stack on each other at
+    // the deck, and a card lying on a card is the game working.
+    if (r.width < vw * 0.6 || r.height <= 0) continue;
+    if (r.top <= 1 && r.bottom >= vh - 1) continue;
+
+    let hidden = 0;
+    let worst = 0;
+    for (const cr of cardRects) {
+      const y = Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top);
+      const x = Math.min(cr.right, r.right) - Math.max(cr.left, r.left);
+      if (y > 1 && x > 1) {
+        hidden++;
+        worst = Math.max(worst, Math.round(y));
+      }
+    }
+    if (hidden > 0) {
+      covers.push({
+        name: named(el).slice(0, 30),
+        hidden,
+        worst,
+        cards: cardRects.length,
+      });
+    }
+  }
+
   // Where the height actually goes. Fitting the board is a budgeting problem,
   // and the first thing anyone needs is the itemised bill rather than a guess
   // at which row is fat.
@@ -238,6 +286,7 @@ export function measureInPage() {
       document.documentElement.clientWidth,
     scrollers,
     starved,
+    covers,
     controls,
     overlays,
     budget,

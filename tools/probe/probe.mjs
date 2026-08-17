@@ -396,9 +396,11 @@ const report = (rows, opts) => {
     );
     const scrolled = m.controls.filter((c) => c.status === "needs-scroll");
     const starved = m.starved ?? [];
+    const covers = m.covers ?? [];
     // A game view that scrolls at all is a failure, whether or not the scroll
     // makes anything unreachable. That is the whole of #82.
-    const failed = bad.length > 0 || !!worst || starved.length > 0;
+    const failed =
+      bad.length > 0 || !!worst || starved.length > 0 || covers.length > 0;
     if (failed) failures++;
 
     console.log(
@@ -412,6 +414,11 @@ const report = (rows, opts) => {
           : "all reachable"),
     );
 
+    for (const c of covers) {
+      console.log(
+        `  ${pad("", 14)}"${c.name}" covers ${c.hidden} of ${c.cards} cards, worst ${c.worst}px`,
+      );
+    }
     for (const s of starved) {
       console.log(
         `  ${pad("", 14)}shows none of its ${s.items} items: a ${s.itemH}px item in a ${s.clientH}px frame (${s.cls})`,
@@ -591,7 +598,12 @@ const sweep = async (page, widths, from, to, step) => {
       const unreachable = m.controls.filter(
         (c) => c.status !== "ok" && c.status !== "needs-scroll",
       ).length;
-      if (over > 0 || unreachable > 0 || (m.starved?.length ?? 0) > 0) {
+      if (
+        over > 0 ||
+        unreachable > 0 ||
+        (m.starved?.length ?? 0) > 0 ||
+        (m.covers?.length ?? 0) > 0
+      ) {
         if (run && run.width === width && run.to === height - step) {
           run.to = height;
           run.worst = Math.max(run.worst, over);
