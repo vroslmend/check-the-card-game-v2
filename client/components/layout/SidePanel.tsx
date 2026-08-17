@@ -11,6 +11,7 @@ import {
   Send,
   Shuffle,
   Sparkles,
+  Trophy,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -25,13 +26,17 @@ const MAX_CHAT_MESSAGE_LENGTH = 500;
 const TAB_KEY = "check:panel-tab";
 const GROUP_WINDOW_MS = 2 * 60 * 1000;
 
-type Tab = "activity" | "chat";
+type Tab = "activity" | "chat" | "standings";
 
 const selectSidePanelProps = (state: UIMachineSnapshot) => ({
   isOpen: state.context.isSidePanelOpen,
   log: state.context.currentGameState?.log,
   chat: state.context.currentGameState?.chat,
   localPlayerId: state.context.localPlayerId,
+  players: state.context.currentGameState?.players,
+  playerWins: state.context.currentGameState?.playerWins,
+  playerTotals: state.context.currentGameState?.playerTotals,
+  roundEpoch: state.context.currentGameState?.roundEpoch,
 });
 
 const formatTime = (timestamp: string) => {
@@ -92,8 +97,16 @@ const TabChip = ({
 
 export const SidePanel = () => {
   const { send } = useUIActorRef();
-  const { isOpen, log, chat, localPlayerId } =
-    useUISelector(selectSidePanelProps);
+  const {
+    isOpen,
+    log,
+    chat,
+    localPlayerId,
+    players,
+    playerWins,
+    playerTotals,
+    roundEpoch,
+  } = useUISelector(selectSidePanelProps);
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return "activity";
@@ -136,6 +149,19 @@ export const SidePanel = () => {
     send({ type: "SUBMIT_CHAT_MESSAGE", message });
     setDraft("");
   };
+
+  // Same order as the end screen's block, so the two read as one board at two
+  // densities: wins first, the lower total separating equal wins.
+  const standing = useMemo(() => {
+    const wins = playerWins ?? {};
+    const totals = playerTotals ?? {};
+    return Object.values(players ?? {}).sort(
+      (a, b) =>
+        (wins[b.id] ?? 0) - (wins[a.id] ?? 0) ||
+        (totals[a.id] ?? 0) - (totals[b.id] ?? 0),
+    );
+  }, [players, playerWins, playerTotals]);
+  const seriesStarted = standing.some((p) => (playerWins?.[p.id] ?? 0) > 0);
 
   // Group consecutive same-sender messages within two minutes: one timestamp
   // per group, on its last message.
@@ -185,6 +211,13 @@ export const SidePanel = () => {
                 <MessageCircle className="h-3.5 w-3.5" />
                 Chat
               </TabChip>
+              <TabChip
+                active={tab === "standings"}
+                onClick={() => pickTab("standings")}
+              >
+                <Trophy className="h-3.5 w-3.5" />
+                Standing
+              </TabChip>
             </div>
             <button
               onClick={() => send({ type: "TOGGLE_SIDE_PANEL" })}
@@ -218,6 +251,53 @@ export const SidePanel = () => {
               ) : (
                 <p className="pt-2 text-xs font-semibold uppercase tracking-widest text-ink-muted">
                   Nothing yet
+                </p>
+              )}
+            </div>
+          ) : tab === "standings" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {/* The round number lives here and nowhere else during play, so
+                  in a long session this is the only way to tell round three
+                  from round eleven. */}
+              <div className="flex items-baseline justify-between">
+                <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
+                  Standing
+                </p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
+                  Round {(roundEpoch ?? 0) + 1}
+                </p>
+              </div>
+              {seriesStarted ? (
+                <div className="mt-2 divide-y divide-hairline">
+                  {standing.map((player, i) => (
+                    <div
+                      key={player.id}
+                      className="flex items-center gap-3 py-2"
+                    >
+                      <span className="w-4 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                        {player.name}
+                        {player.id === localPlayerId && (
+                          <span className="ml-1.5 text-xs font-normal text-ink-muted">
+                            (you)
+                          </span>
+                        )}
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
+                        {playerWins?.[player.id] ?? 0}{" "}
+                        {(playerWins?.[player.id] ?? 0) === 1 ? "win" : "wins"}
+                      </span>
+                      <span className="w-10 shrink-0 text-right text-sm font-bold tabular-nums text-ink">
+                        {playerTotals?.[player.id] ?? 0}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="pt-2 text-xs font-semibold uppercase tracking-widest text-ink-muted">
+                  After the first round
                 </p>
               )}
             </div>
