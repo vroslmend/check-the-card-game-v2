@@ -34,6 +34,7 @@ const selectSidePanelProps = (state: UIMachineSnapshot) => ({
   chat: state.context.currentGameState?.chat,
   localPlayerId: state.context.localPlayerId,
   players: state.context.currentGameState?.players,
+  turnOrder: state.context.currentGameState?.turnOrder,
   playerWins: state.context.currentGameState?.playerWins,
   playerTotals: state.context.currentGameState?.playerTotals,
   roundEpoch: state.context.currentGameState?.roundEpoch,
@@ -103,6 +104,7 @@ export const SidePanel = () => {
     chat,
     localPlayerId,
     players,
+    turnOrder,
     playerWins,
     playerTotals,
     roundEpoch,
@@ -151,17 +153,23 @@ export const SidePanel = () => {
   };
 
   // Same order as the end screen's block, so the two read as one board at two
-  // densities: wins first, the lower total separating equal wins.
+  // densities: wins first, the lower total separating equal wins. Seat order
+  // settles the rest, which is the whole table in round one and is why this
+  // list does not reshuffle itself every time a broadcast arrives.
   const standing = useMemo(() => {
     const wins = playerWins ?? {};
     const totals = playerTotals ?? {};
+    const seat = (id: string) => {
+      const i = (turnOrder ?? []).indexOf(id);
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
     return Object.values(players ?? {}).sort(
       (a, b) =>
         (wins[b.id] ?? 0) - (wins[a.id] ?? 0) ||
-        (totals[a.id] ?? 0) - (totals[b.id] ?? 0),
+        (totals[a.id] ?? 0) - (totals[b.id] ?? 0) ||
+        seat(a.id) - seat(b.id),
     );
-  }, [players, playerWins, playerTotals]);
-  const seriesStarted = standing.some((p) => (playerWins?.[p.id] ?? 0) > 0);
+  }, [players, turnOrder, playerWins, playerTotals]);
 
   // Group consecutive same-sender messages within two minutes: one timestamp
   // per group, on its last message.
@@ -267,39 +275,33 @@ export const SidePanel = () => {
                   Round {(roundEpoch ?? 0) + 1}
                 </p>
               </div>
-              {seriesStarted ? (
-                <div className="mt-2 divide-y divide-hairline">
-                  {standing.map((player, i) => (
-                    <div
-                      key={player.id}
-                      className="flex items-center gap-3 py-2"
-                    >
-                      <span className="w-4 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
-                        {i + 1}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
-                        {player.name}
-                        {player.id === localPlayerId && (
-                          <span className="ml-1.5 text-xs font-normal text-ink-muted">
-                            (you)
-                          </span>
-                        )}
-                      </span>
-                      <span className="shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
-                        {playerWins?.[player.id] ?? 0}{" "}
-                        {(playerWins?.[player.id] ?? 0) === 1 ? "win" : "wins"}
-                      </span>
-                      <span className="w-10 shrink-0 text-right text-sm font-bold tabular-nums text-ink">
-                        {playerTotals?.[player.id] ?? 0}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="pt-2 text-xs font-semibold uppercase tracking-widest text-ink-muted">
-                  After the first round
-                </p>
-              )}
+              {/* Rendered from round one, zeros and all. A table of names with
+                  nothing won yet still says who is here and what it will fill
+                  in; an empty panel says neither. */}
+              <div className="mt-2 divide-y divide-hairline">
+                {standing.map((player, i) => (
+                  <div key={player.id} className="flex items-center gap-3 py-2">
+                    <span className="w-4 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                      {player.name}
+                      {player.id === localPlayerId && (
+                        <span className="ml-1.5 text-xs font-normal text-ink-muted">
+                          (you)
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
+                      {playerWins?.[player.id] ?? 0}{" "}
+                      {(playerWins?.[player.id] ?? 0) === 1 ? "win" : "wins"}
+                    </span>
+                    <span className="w-10 shrink-0 text-right text-sm font-bold tabular-nums text-ink">
+                      {playerTotals?.[player.id] ?? 0}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
