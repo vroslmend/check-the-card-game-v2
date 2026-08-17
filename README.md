@@ -29,7 +29,7 @@ npm run dev
 
 Client on `localhost:3000`, server on `localhost:8000`. Copy the `.env.example` files in `client/` and `server/` if you want to change ports, timers or table size.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Open work is in [issues](https://github.com/vroslmend/check-the-card-game-v2/issues).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before filing an issue or opening a pull request. It covers how work is tracked here, what an issue has to end with, and what to run before you push. Open work is in [issues](https://github.com/vroslmend/check-the-card-game-v2/issues).
 
 ## Licence
 
