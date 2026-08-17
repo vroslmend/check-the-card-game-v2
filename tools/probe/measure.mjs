@@ -28,6 +28,10 @@ export function measureInPage() {
   // failure that leaves a control unreachable with nothing on screen to say
   // so. Watching only for scrollbars would go blind the moment the fix lands.
   const scrollers = [];
+  // Panels squeezed until not one of their items fits. No overflow number says
+  // so, because what they are hiding is all of it, and a results sheet showing
+  // nobody's score still measures as a panel that scrolls.
+  const starved = [];
   for (const el of document.querySelectorAll("body *")) {
     const style = getComputedStyle(el);
     const overflowY = style.overflowY + style.overflow;
@@ -79,6 +83,19 @@ export function measureInPage() {
         deepest,
       });
     }
+
+    if (scrolls && !isView && over > 0 && visible(el, style)) {
+      const first = el.firstElementChild;
+      const itemH = first ? first.getBoundingClientRect().height : 0;
+      if (itemH > 0 && el.clientHeight < itemH) {
+        starved.push({
+          cls: String(el.className).slice(0, 60),
+          clientH: el.clientHeight,
+          itemH: Math.round(itemH),
+          items: el.childElementCount,
+        });
+      }
+    }
   }
 
   // Every control a player has to be able to hit.
@@ -100,9 +117,9 @@ export function measureInPage() {
     // under the fold is still a button a thumb misses.
     const whole = r.top >= 0 && r.bottom <= vh && r.left >= 0 && r.right <= vw;
 
-    // A control below the fold of a panel that scrolls is reachable: the panel
-    // is meant to be scrolled. Only a control the view itself cannot reach is
-    // a failure.
+    // A control below the fold of a scrolling panel is reachable, so it is
+    // reported rather than failed: whether a player should have to scroll to
+    // reach that particular control is a judgement, not a measurement.
     let inScrollablePanel = false;
     for (let p = el.parentElement; p; p = p.parentElement) {
       const ps = getComputedStyle(p);
@@ -116,7 +133,7 @@ export function measureInPage() {
     let status = "ok";
     let blockedBy = null;
     if (!inViewport) {
-      status = inScrollablePanel ? "ok" : "offscreen";
+      status = inScrollablePanel ? "needs-scroll" : "offscreen";
     } else if (!hit) {
       status = "no-hit";
     } else if (hit !== el && !el.contains(hit)) {
@@ -156,6 +173,54 @@ export function measureInPage() {
       uncoveredTop: Math.max(0, Math.round(r.top)),
       uncoveredBottom: Math.max(0, Math.round(vh - r.bottom)),
     });
+  }
+
+  // Cards a panel covers. The end screen is a report about the hands it has
+  // just turned face up, so a sheet tall enough to sit on them defeats the
+  // reveal it exists to explain.
+  //
+  // Full-bleed overlays are excluded by their own geometry rather than by
+  // name: a moment stamp covers the board deliberately. Only a panel that
+  // leaves part of the viewport uncovered is answering for what it hides.
+  const cardRects = [];
+  for (const grid of document.querySelectorAll(".inline-grid")) {
+    for (const card of grid.children) {
+      const cr = card.getBoundingClientRect();
+      if (cr.width > 0 && cr.height > 0) cardRects.push(cr);
+    }
+  }
+
+  const covers = [];
+  for (const el of document.querySelectorAll("body *")) {
+    const style = getComputedStyle(el);
+    if (style.position !== "absolute" && style.position !== "fixed") continue;
+    if (!visible(el, style)) continue;
+    const z = Number(style.zIndex);
+    if (!Number.isFinite(z) || z < 40) continue;
+    const r = el.getBoundingClientRect();
+    // Panels only. Cards are absolutely positioned and stack on each other at
+    // the deck, and a card lying on a card is the game working.
+    if (r.width < vw * 0.6 || r.height <= 0) continue;
+    if (r.top <= 1 && r.bottom >= vh - 1) continue;
+
+    let hidden = 0;
+    let worst = 0;
+    for (const cr of cardRects) {
+      const y = Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top);
+      const x = Math.min(cr.right, r.right) - Math.max(cr.left, r.left);
+      if (y > 1 && x > 1) {
+        hidden++;
+        worst = Math.max(worst, Math.round(y));
+      }
+    }
+    if (hidden > 0) {
+      covers.push({
+        name: named(el).slice(0, 30),
+        hidden,
+        worst,
+        cards: cardRects.length,
+      });
+    }
   }
 
   // Where the height actually goes. Fitting the board is a budgeting problem,
@@ -220,6 +285,8 @@ export function measureInPage() {
       document.documentElement.scrollWidth >
       document.documentElement.clientWidth,
     scrollers,
+    starved,
+    covers,
     controls,
     overlays,
     budget,
