@@ -23,6 +23,8 @@ Anything larger than a quick fix gets an issue, so the reason for a change exist
 - Comment on an issue before you start, so two people do not build the same thing.
 - If there is no issue for what you want to do, open one and wait for a reply before writing code. It is a short wait and it saves work being thrown away.
 
+Issues #107 and #92 are the shape at full length and worth reading before you write your first one. Both say what the problem is, where it is not, what is deliberately out of scope, what finished looks like, and how to tell whether it is still real.
+
 The labels are deliberately few:
 
 - **bug** — the game does something the rules say it should not.
