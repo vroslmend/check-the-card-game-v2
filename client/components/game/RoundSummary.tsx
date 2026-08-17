@@ -269,10 +269,10 @@ export const RoundSummary = ({
                     </span>
                     {/* Series wins, on every row so a six player table can see
                     the whole standing. Trophy rather than the Crown above it:
-                    the crown marks who took THIS round, and the two numbers
-                    would otherwise read as the same thing. Hidden until
-                    someone has actually won one, so a first round does not
-                    show a column of zeroes. */}
+                    the crown marks who took THIS round, the trophy the series,
+                    and the two would otherwise read as the same number. The
+                    guard only bites on a round that produced no winner at all,
+                    since this round's is credited before the sheet mounts. */}
                     {seriesStarted && (
                       <span
                         className="flex shrink-0 items-center gap-1 text-sm font-semibold tabular-nums text-ink-muted"
