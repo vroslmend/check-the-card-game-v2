@@ -158,103 +158,113 @@ export const RoundSummary = ({
           : { type: "spring", stiffness: 300, damping: 30, delay: 0.35 }
       }
     >
-      <div className="mx-auto flex max-h-[50vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto px-5 py-5 sm:px-8 lg:max-h-[34vh]">
-        <div>
-          <p className="truncate text-xs font-semibold uppercase tracking-widest text-ink-muted">
-            Round {roundNumber}
-          </p>
-          <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-            {title}
-          </h2>
-          {winners.length > 0 && (
-            <motion.div
-              className="mt-2 h-1 rounded-full bg-accent"
-              style={{ originX: 0, width: "clamp(4rem, 30%, 10rem)" }}
-              initial={{ scaleX: reduced ? 1 : 0 }}
-              animate={{ scaleX: 1 }}
-              transition={
-                reduced
-                  ? { duration: 0 }
-                  : { duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.9 }
-              }
-            />
-          )}
-          <p className="mt-2 text-sm text-ink-muted">{caption}</p>
-        </div>
+      {/* The floor is the point. A share of the viewport alone goes to nothing
+          on a short screen, and with the actions pinned it is the scores that
+          vanish rather than the buttons. */}
+      <div className="mx-auto flex max-h-[max(50vh,20rem)] w-full max-w-2xl flex-col gap-3 px-5 py-5 sm:px-8 lg:max-h-[max(34vh,20rem)]">
+        {/* Heading and rows scroll together. Only the actions are pinned: on a
+            phone the heading costs as much as the whole row list, and pinning
+            it too leaves the sheet with no room to show a single score. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div>
+            <p className="truncate text-xs font-semibold uppercase tracking-widest text-ink-muted">
+              Round {roundNumber}
+            </p>
+            <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+              {title}
+            </h2>
+            {winners.length > 0 && (
+              <motion.div
+                className="mt-2 h-1 rounded-full bg-accent"
+                style={{ originX: 0, width: "clamp(4rem, 30%, 10rem)" }}
+                initial={{ scaleX: reduced ? 1 : 0 }}
+                animate={{ scaleX: 1 }}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.9 }
+                }
+              />
+            )}
+            <p className="mt-2 text-sm text-ink-muted">{caption}</p>
+          </div>
 
-        <div className="divide-y divide-hairline">
-          {sorted.map((player, i) => {
-            const isWinner = winnerIds.includes(player.id);
-            const dq = player.status === PlayerStatus.DISQUALIFIED;
-            const m = recap.matches[player.id] ?? 0;
-            const pen = recap.penalties[player.id] ?? 0;
-            const abil = recap.abilities[player.id] ?? 0;
-            const attempts = m + pen;
-            const accuracy =
-              attempts > 0 ? Math.round((m / attempts) * 100) : null;
-            // One muted line under the name (all breakpoints; chips were
-            // hidden on phones). Same dot idiom as the rematch tally below.
-            const statLine = [
-              dq && "disqualified",
-              m > 0 && `${m} match${m > 1 ? "es" : ""}`,
-              pen > 0 && `${pen} penalt${pen > 1 ? "ies" : "y"}`,
-              accuracy !== null && `${accuracy}% accuracy`,
-              abil > 0 && `${abil} abilit${abil > 1 ? "ies" : "y"}`,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return (
-              <div key={player.id} className="flex items-center gap-3 py-2">
-                <span className="w-5 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
-                  {i + 1}
-                </span>
-                {isWinner && <Crown className="h-4 w-4 shrink-0 text-accent" />}
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={cn(
-                      "block truncate text-base font-bold text-ink",
-                      dq && "text-ink-muted line-through",
-                    )}
-                  >
-                    {player.name}
-                    {player.id === localPlayerId && (
-                      <span className="ml-1.5 text-xs font-normal text-ink-muted">
-                        (you)
+          <div className="mt-3 divide-y divide-hairline">
+            {sorted.map((player, i) => {
+              const isWinner = winnerIds.includes(player.id);
+              const dq = player.status === PlayerStatus.DISQUALIFIED;
+              const m = recap.matches[player.id] ?? 0;
+              const pen = recap.penalties[player.id] ?? 0;
+              const abil = recap.abilities[player.id] ?? 0;
+              const attempts = m + pen;
+              const accuracy =
+                attempts > 0 ? Math.round((m / attempts) * 100) : null;
+              // One muted line under the name (all breakpoints; chips were
+              // hidden on phones). Same dot idiom as the rematch tally below.
+              const statLine = [
+                dq && "disqualified",
+                m > 0 && `${m} match${m > 1 ? "es" : ""}`,
+                pen > 0 && `${pen} penalt${pen > 1 ? "ies" : "y"}`,
+                accuracy !== null && `${accuracy}% accuracy`,
+                abil > 0 && `${abil} abilit${abil > 1 ? "ies" : "y"}`,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <div key={player.id} className="flex items-center gap-3 py-2">
+                  <span className="w-5 shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
+                    {i + 1}
+                  </span>
+                  {isWinner && (
+                    <Crown className="h-4 w-4 shrink-0 text-accent" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={cn(
+                        "block truncate text-base font-bold text-ink",
+                        dq && "text-ink-muted line-through",
+                      )}
+                    >
+                      {player.name}
+                      {player.id === localPlayerId && (
+                        <span className="ml-1.5 text-xs font-normal text-ink-muted">
+                          (you)
+                        </span>
+                      )}
+                    </span>
+                    {statLine && (
+                      <span className="block truncate text-[11px] font-medium text-ink-muted">
+                        {statLine}
                       </span>
                     )}
                   </span>
-                  {statLine && (
-                    <span className="block truncate text-[11px] font-medium text-ink-muted">
-                      {statLine}
-                    </span>
-                  )}
-                </span>
-                {/* Series wins, on every row so a six player table can see
+                  {/* Series wins, on every row so a six player table can see
                     the whole standing. Trophy rather than the Crown above it:
                     the crown marks who took THIS round, and the two numbers
                     would otherwise read as the same thing. Hidden until
                     someone has actually won one, so a first round does not
                     show a column of zeroes. */}
-                {seriesStarted && (
-                  <span
-                    className="flex shrink-0 items-center gap-1 text-sm font-semibold tabular-nums text-ink-muted"
-                    aria-label={`${playerWins[player.id] ?? 0} rounds won this series`}
-                  >
-                    <Trophy className="h-3.5 w-3.5" aria-hidden />
-                    {playerWins[player.id] ?? 0}
-                  </span>
-                )}
-                <ScoreStamp
-                  value={player.score}
-                  delay={FIRST_STAMP_DELAY_S + i * STAMP_STAGGER_S}
-                  reduced={reduced}
-                />
-              </div>
-            );
-          })}
+                  {seriesStarted && (
+                    <span
+                      className="flex shrink-0 items-center gap-1 text-sm font-semibold tabular-nums text-ink-muted"
+                      aria-label={`${playerWins[player.id] ?? 0} rounds won this series`}
+                    >
+                      <Trophy className="h-3.5 w-3.5" aria-hidden />
+                      {playerWins[player.id] ?? 0}
+                    </span>
+                  )}
+                  <ScoreStamp
+                    value={player.score}
+                    delay={FIRST_STAMP_DELAY_S + i * STAMP_STAGGER_S}
+                    reduced={reduced}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 pt-1">
+        <div className="flex shrink-0 flex-wrap items-center gap-3 pt-1">
           {isGameMaster ? (
             <>
               <button
