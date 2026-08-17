@@ -41,3 +41,12 @@ body:
       description: Game code if you still have it, screenshots, a recording, console errors.
     validations:
       required: false
+  - type: textarea
+    id: current
+    attributes:
+      label: Current state
+      description: If you can, end with a command that shows whether this is still happening, what it returns today, and the date you checked. A grep beats a line number, because line numbers rot and commands do not. Leave it blank if you are reporting from play rather than from the code, and it will be filled in during triage.
+      placeholder: |
+        Open as of YYYY-MM-DD. `grep -n "some distinctive string" path/to/file.ts` returns a hit while this is live. Empty output means the code changed and this may already be fixed.
+    validations:
+      required: false

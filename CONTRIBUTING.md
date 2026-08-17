@@ -17,8 +17,8 @@ Be decent to people in issues and pull requests. That is the whole code of condu
 
 Anything larger than a quick fix gets an issue, so the reason for a change exists in writing before the code does.
 
-- Every issue ends with a **Current state** line recording what was verified and when. Check that it still holds before you start, because the problem may already be gone.
-- When you file one, end it the same way: a command anyone can run to see whether the problem still exists, what it returns today, and the date. A `grep` beats a sentence, and it beats a line number, because line numbers rot within weeks and a search only breaks when the code it describes actually changes. The Task template has the shape.
+- Every issue ends with a **Current state** line holding a command that decides whether it is still real. Run that command first, rather than trusting the description above it. An issue can be months old and the code it describes can have moved on. If the command comes back empty, the problem is already gone, and saying so and closing the issue is the whole job.
+- When you file one, end it the same way: a command anyone can run to see whether the problem still exists, what it returns today, and the date. A `grep` beats a sentence, and it beats a line number, because line numbers rot within weeks and a search only breaks when the code it describes actually changes. The forms carry the field, but the requirement is the shape rather than the form, so it applies to an issue opened from the command line too.
 - Issues labelled **needs decision** are not ready to build. They are waiting on a call from me about how the feature should work, and code sent against one will sit unmerged until that is settled.
 - Comment on an issue before you start, so two people do not build the same thing.
 - If there is no issue for what you want to do, open one and wait for a reply before writing code. It is a short wait and it saves work being thrown away.
@@ -46,10 +46,11 @@ That builds the shared types and the server, then runs the Next.js client and th
 
 The client hot reloads. The server does not: it runs from a build, so after changing anything under `server/` you restart `npm run dev` to pick it up.
 
-Before changing anything, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). `shared-types` is the contract between the two halves, so anything crossing that boundary starts there.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes how the two halves fit together. `shared-types` is the contract between them, so anything crossing that boundary starts there.
 
 ## Making a change
 
+- Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before you change anything, and [docs/GAME_RULES.md](docs/GAME_RULES.md) before you change anything about how the game plays. The rules document is the specification rather than a description of what the code currently does, so read it instead of inferring the rules from the state machine.
 - Branch off `main`. Main is protected, so a pull request is the only way in: CI must pass, one approving review, no direct commits, no force pushes.
 - Name the branch after the work: `fix/short-description`, `feat/short-description`, or `chore/short-description` for maintenance that is neither, such as tooling, formatting or dependencies. One branch per pull request, rather than one branch you keep reusing.
 - One issue, one pull request. If you find a second problem along the way, open a second issue for it. A small fix bundled with a large rewrite cannot be reviewed or reverted cleanly and will be sent back.
@@ -88,7 +89,9 @@ npm run probe -- --at play --players 2 --seats 6
 
 It needs the client and server running, with the peek and matching windows shortened so a scripted round does not sit through them. The probe prints the exact command if they are not up.
 
-A game view is expected to fit at every size, so any overflow at all is a failure, not a warning. Six seats with two players is its own case and worth running: every seat renders whether or not anyone is in it. `tools/probe/README.md` covers the rest.
+A game view is expected to fit at every size, so any overflow at all is a failure, not a warning. Six seats with two players is its own case and worth running: every seat renders whether or not anyone is in it.
+
+If you changed anything that decides a size, sweep rather than sample. `npm run probe -- --matrix` walks every player count and stage against a range of heights and reports the bands that fail, so take its output before you start and check the bands have not grown after. `tools/probe/README.md` covers the rest.
 
 It is not part of `npm run verify` or CI, because it needs a browser and takes minutes rather than seconds. Wiring it into its own CI job is tracked in #57.
 
