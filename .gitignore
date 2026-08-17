@@ -63,8 +63,9 @@ references
 
 # Local scratch files that some editors and tools drop in the working tree.
 # Listed so a contributor cannot commit one by accident.
-Gemini.md
+GEMINI.md
 CLAUDE.md
+CLAUDE.local.md
 AGENTS.md
 .claude/
 .gemini/
