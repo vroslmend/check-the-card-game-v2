@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ChevronDown, Crown, Trophy } from "lucide-react";
+import { ChevronDown, Crown } from "lucide-react";
 import { type Player, PlayerStatus } from "shared-types";
 import {
   useUIActorRef,
@@ -18,6 +18,8 @@ interface RoundSummaryProps {
   localPlayerId: string;
   /** Cumulative wins per player across rounds in this lobby. */
   playerWins: Record<string, number>;
+  /** Cumulative round scores, same lifetime as playerWins. Lower is better. */
+  playerTotals: Record<string, number>;
   /** Non-host players who have signalled they want a rematch (advisory tally). */
   rematchVotes: string[];
   onPlayAgain: () => void;
@@ -71,6 +73,7 @@ export const RoundSummary = ({
   winnerIds,
   localPlayerId,
   playerWins,
+  playerTotals,
   rematchVotes,
   onPlayAgain,
   onRequestPlayAgain,
@@ -97,7 +100,23 @@ export const RoundSummary = ({
     : `${rematchCount > 0 ? `${rematchCount}/${nonHostCount} in · ` : ""}Waiting for the host to start`;
 
   const winners = players.filter((p) => winnerIds.includes(p.id));
-  const sorted = [...players].sort((a, b) => a.score - b.score);
+  // Rows answer "what happened this round", so they follow this round's score
+  // and the headline above them. The series is the tiebreak, never the key:
+  // ordering rows by the standing would put the crown on row four.
+  const sorted = [...players].sort(
+    (a, b) =>
+      a.score - b.score ||
+      (playerTotals[a.id] ?? 0) - (playerTotals[b.id] ?? 0),
+  );
+
+  // The standing is the other question, so it gets the other order. Wins
+  // first, because a round is the unit of play; the total only separates
+  // players on equal wins, which at six players is most of them.
+  const standing = [...players].sort(
+    (a, b) =>
+      (playerWins[b.id] ?? 0) - (playerWins[a.id] ?? 0) ||
+      (playerTotals[a.id] ?? 0) - (playerTotals[b.id] ?? 0),
+  );
   const caller = callerId ? players.find((p) => p.id === callerId) : null;
 
   // A shared lowest score is a tie, not a group of separate winners: name it
@@ -267,21 +286,6 @@ export const RoundSummary = ({
                         </span>
                       )}
                     </span>
-                    {/* Series wins, on every row so a six player table can see
-                    the whole standing. Trophy rather than the Crown above it:
-                    the crown marks who took THIS round, the trophy the series,
-                    and the two would otherwise read as the same number. The
-                    guard only bites on a round that produced no winner at all,
-                    since this round's is credited before the sheet mounts. */}
-                    {seriesStarted && (
-                      <span
-                        className="flex shrink-0 items-center gap-1 text-sm font-semibold tabular-nums text-ink-muted"
-                        aria-label={`${playerWins[player.id] ?? 0} rounds won this series`}
-                      >
-                        <Trophy className="h-3.5 w-3.5" aria-hidden />
-                        {playerWins[player.id] ?? 0}
-                      </span>
-                    )}
                     <ScoreStamp
                       value={player.score}
                       delay={FIRST_STAMP_DELAY_S + i * STAMP_STAGGER_S}
@@ -291,6 +295,41 @@ export const RoundSummary = ({
                 );
               })}
             </div>
+
+            {/* The series, once, as a summary rather than a second table. It
+                used to ride on every row as a trophy, which stated the same
+                fact six times and read as a rival to the round's own score.
+                "wins" is spelled out on the leader only: the unit is named
+                once and the rest are read against it. */}
+            {seriesStarted && (
+              <div className="mt-4">
+                <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
+                  Standing
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+                  {standing.map((player, i) => (
+                    <span
+                      key={player.id}
+                      className="text-sm text-ink-muted"
+                      aria-label={`${player.name}, ${playerWins[player.id] ?? 0} rounds won, ${playerTotals[player.id] ?? 0} points across the series`}
+                    >
+                      <span className="tabular-nums">{i + 1}</span>{" "}
+                      <span className="font-semibold text-ink">
+                        {player.name}
+                      </span>{" "}
+                      <span className="tabular-nums">
+                        {playerWins[player.id] ?? 0}
+                        {i === 0 &&
+                          ((playerWins[player.id] ?? 0) === 1
+                            ? " win"
+                            : " wins")}{" "}
+                        · {playerTotals[player.id] ?? 0}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           {moreBelow && (
             <div
