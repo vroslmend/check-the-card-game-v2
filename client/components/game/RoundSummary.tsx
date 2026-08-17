@@ -215,7 +215,17 @@ export const RoundSummary = ({
             phone the heading costs as much as the whole row list, and pinning
             it too leaves the sheet with no room to show a single score. */}
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
+          {/* overflow-x-hidden is load-bearing. Asking for overflow-y auto
+              turns the other axis auto too, and the score stamps land from
+              scale 1.12 flush against this box's right edge, so the arrival
+              flashed a horizontal scrollbar for as long as the spring ran. */}
+          {/* pr-3 is the scrollbar's lane. The sheet's padding sits on the box
+              outside this one, so without it the scores are printed under the
+              bar rather than beside it. */}
+          <div
+            ref={listRef}
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-3"
+          >
             <div>
               <p className="truncate text-xs font-semibold uppercase tracking-widest text-ink-muted">
                 Round {roundNumber}

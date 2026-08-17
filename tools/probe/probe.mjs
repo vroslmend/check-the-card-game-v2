@@ -45,6 +45,9 @@ const opts = {
   shift: flag("shift"),
   sweep: flag("sweep"),
   scrolled: flag("scrolled"),
+  film: flag("film"),
+  filmFrames: Number(arg("frames", 16)),
+  filmEveryMs: Number(arg("frame-ms", 120)),
   matrix: flag("matrix"),
   counts: arg("counts", "2,4,6"),
   states: arg("states", "lobby,play,drawn,matching,scoring"),
@@ -360,7 +363,23 @@ const drive = async (page, opts) => {
     // first gets photographed at whatever this wait allows, so anything
     // shorter than the whole sequence produces a shot of the smallest screen
     // with its last rows blank, which reads as scores that failed to render.
-    await page.waitForTimeout(3000);
+    // A settled screenshot cannot see anything that only exists while the view
+    // is arriving, and the end screen spends its first seconds animating: the
+    // sheet climbs, the scores stamp, the board is still finishing its flights.
+    // Filming it is the only way to look at that window.
+    if (opts.film) {
+      const filmDir = join(ROOT, opts.out);
+      mkdirSync(filmDir, { recursive: true });
+      for (let i = 0; i < opts.filmFrames; i++) {
+        await page.screenshot({
+          path: join(filmDir, `film-${String(i).padStart(2, "0")}.png`),
+        });
+        await page.waitForTimeout(opts.filmEveryMs);
+      }
+      console.log(`${opts.filmFrames} frames -> ${filmDir}`);
+    } else {
+      await page.waitForTimeout(3000);
+    }
     return { gameId, bots, observedId };
   }
 
