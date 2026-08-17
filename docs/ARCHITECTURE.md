@@ -104,3 +104,13 @@ One layer is covered. `npm run probe` drives a real game in a real browser and r
 Only the player being observed gets a browser. Everyone else is a `socket.io-client` connection acting at socket speed, which is what makes a scripted round take seconds. Those clients are an importable module rather than a script, because the wire level harness in issue #75 wants the same ones.
 
 The remaining scope of that layer is issue #57.
+
+## 8. Deployment
+
+The two halves deploy to different platforms, both from `main`. The client goes to Vercel, the server to Render. There is no staging environment: merging to `main` is what ships.
+
+A pull request gets a Vercel preview, and that preview is the client alone. It connects to whichever server URL its environment supplies, which is a server already running rather than one built from the branch. So a preview exercises client changes and cannot exercise server ones: a branch that adds a field to the broadcast will show a preview client reading it as absent, because the server sending that broadcast does not have it yet.
+
+Server changes are therefore verified before merge by driving the compiled machine directly, the pattern the `repro-*.mjs` scripts use, and after merge by playing a round against production. Saying which of those a claim rests on is the difference between "the machine does this" and "the game does this".
+
+The client reads `NEXT_PUBLIC_WEBSOCKET_URL` (`client/lib/socket.ts`), falling back to `http://localhost:8000` for local development, where `npm run dev` runs both halves together.
