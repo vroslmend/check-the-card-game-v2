@@ -28,6 +28,10 @@ export function measureInPage() {
   // failure that leaves a control unreachable with nothing on screen to say
   // so. Watching only for scrollbars would go blind the moment the fix lands.
   const scrollers = [];
+  // Panels squeezed until not one of their items fits. No overflow number says
+  // so, because what they are hiding is all of it, and a results sheet showing
+  // nobody's score still measures as a panel that scrolls.
+  const starved = [];
   for (const el of document.querySelectorAll("body *")) {
     const style = getComputedStyle(el);
     const overflowY = style.overflowY + style.overflow;
@@ -79,6 +83,19 @@ export function measureInPage() {
         deepest,
       });
     }
+
+    if (scrolls && !isView && over > 0 && visible(el, style)) {
+      const first = el.firstElementChild;
+      const itemH = first ? first.getBoundingClientRect().height : 0;
+      if (itemH > 0 && el.clientHeight < itemH) {
+        starved.push({
+          cls: String(el.className).slice(0, 60),
+          clientH: el.clientHeight,
+          itemH: Math.round(itemH),
+          items: el.childElementCount,
+        });
+      }
+    }
   }
 
   // Every control a player has to be able to hit.
@@ -100,9 +117,9 @@ export function measureInPage() {
     // under the fold is still a button a thumb misses.
     const whole = r.top >= 0 && r.bottom <= vh && r.left >= 0 && r.right <= vw;
 
-    // A control below the fold of a panel that scrolls is reachable: the panel
-    // is meant to be scrolled. Only a control the view itself cannot reach is
-    // a failure.
+    // A control below the fold of a scrolling panel is reachable, so it is
+    // reported rather than failed: whether a player should have to scroll to
+    // reach that particular control is a judgement, not a measurement.
     let inScrollablePanel = false;
     for (let p = el.parentElement; p; p = p.parentElement) {
       const ps = getComputedStyle(p);
@@ -116,7 +133,7 @@ export function measureInPage() {
     let status = "ok";
     let blockedBy = null;
     if (!inViewport) {
-      status = inScrollablePanel ? "ok" : "offscreen";
+      status = inScrollablePanel ? "needs-scroll" : "offscreen";
     } else if (!hit) {
       status = "no-hit";
     } else if (hit !== el && !el.contains(hit)) {
@@ -220,6 +237,7 @@ export function measureInPage() {
       document.documentElement.scrollWidth >
       document.documentElement.clientWidth,
     scrollers,
+    starved,
     controls,
     overlays,
     budget,

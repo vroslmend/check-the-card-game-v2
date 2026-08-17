@@ -391,10 +391,14 @@ const report = (rows, opts) => {
 
   for (const { viewport, m } of rows) {
     const worst = m.scrollers.sort((a, b) => b.overflowPx - a.overflowPx)[0];
-    const bad = m.controls.filter((c) => c.status !== "ok");
+    const bad = m.controls.filter(
+      (c) => c.status !== "ok" && c.status !== "needs-scroll",
+    );
+    const scrolled = m.controls.filter((c) => c.status === "needs-scroll");
+    const starved = m.starved ?? [];
     // A game view that scrolls at all is a failure, whether or not the scroll
     // makes anything unreachable. That is the whole of #82.
-    const failed = bad.length > 0 || !!worst;
+    const failed = bad.length > 0 || !!worst || starved.length > 0;
     if (failed) failures++;
 
     console.log(
@@ -408,6 +412,18 @@ const report = (rows, opts) => {
           : "all reachable"),
     );
 
+    for (const s of starved) {
+      console.log(
+        `  ${pad("", 14)}shows none of its ${s.items} items: a ${s.itemH}px item in a ${s.clientH}px frame (${s.cls})`,
+      );
+    }
+    if (scrolled.length) {
+      console.log(
+        `  ${pad("", 14)}reachable only by scrolling: ${scrolled
+          .map((c) => c.name)
+          .join(", ")}`,
+      );
+    }
     if (worst?.deepest) {
       const d = worst.deepest;
       console.log(
@@ -572,8 +588,10 @@ const sweep = async (page, widths, from, to, step) => {
       const m = await page.evaluate(measureInPage);
       checked++;
       const over = m.scrollers.reduce((n, s) => Math.max(n, s.overflowPx), 0);
-      const unreachable = m.controls.filter((c) => c.status !== "ok").length;
-      if (over > 0 || unreachable > 0) {
+      const unreachable = m.controls.filter(
+        (c) => c.status !== "ok" && c.status !== "needs-scroll",
+      ).length;
+      if (over > 0 || unreachable > 0 || (m.starved?.length ?? 0) > 0) {
         if (run && run.width === width && run.to === height - step) {
           run.to = height;
           run.worst = Math.max(run.worst, over);
