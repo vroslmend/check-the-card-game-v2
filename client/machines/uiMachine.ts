@@ -31,6 +31,10 @@ import logger from "@/lib/logger";
 import { createGameActor, joinGameActor, rejoinActor } from "@/lib/actors";
 
 const PEEK_ABILITY_DURATION_MS = 5000;
+// How long a move may go unanswered before we stop trusting the connection.
+// Every player action ends in a broadcast, so silence this long means the
+// server has stopped talking to us while the socket has not yet noticed.
+const ACTION_ANSWER_TIMEOUT_MS = 8000;
 const INITIAL_PEEK_DURATION_MS = 10000;
 
 type ServerToClientEvents =
@@ -107,6 +111,7 @@ export type UIMachineEvents =
       cardIndex: number;
     }
   | { type: "ACTION_NOT_SENT" }
+  | { type: "ACTION_UNANSWERED" }
   | { type: "CONFIRM_ABILITY_ACTION" }
   | { type: "SKIP_ABILITY_STAGE" }
   | { type: "TOGGLE_SIDE_PANEL" }
@@ -322,7 +327,13 @@ export const uiMachine = setup({
       reconnectionAttempts: 0,
       pendingActionSince: null,
     }),
-    markActionPending: assign({ pendingActionSince: () => Date.now() }),
+    markActionPending: enqueueActions(({ enqueue }) => {
+      enqueue.assign({ pendingActionSince: () => Date.now() });
+      enqueue.raise(
+        { type: "ACTION_UNANSWERED" },
+        { delay: ACTION_ANSWER_TIMEOUT_MS, id: "actionAnswerWatchdog" },
+      );
+    }),
     persistSession: ({ event }) => {
       assertEvent(event, "_SESSION_ESTABLISHED");
       if (
@@ -910,6 +921,19 @@ export const uiMachine = setup({
         },
         CLEANUP_EXPIRED_CARDS: { actions: "cleanupExpiredVisibleCards" },
         DISCONNECT: { target: ".disconnected" },
+        // A move nobody answered means the board is dead even though the
+        // socket still claims otherwise. Re-run the handshake instead of
+        // leaving the player pressing a button that does nothing. Guarded on
+        // the CURRENT wait so a stale timer from an answered move cannot fire.
+        ACTION_UNANSWERED: {
+          target: ".reconnecting",
+          guard: ({ context }) =>
+            context.pendingActionSince !== null &&
+            Date.now() - context.pendingActionSince >= ACTION_ANSWER_TIMEOUT_MS,
+        },
+        // Reachable from every game view, not just the lobby, so a player who
+        // can see something is wrong is never told to reload the page.
+        RETRY_REJOIN: { target: ".reconnecting" },
       },
       states: {
         routing: {

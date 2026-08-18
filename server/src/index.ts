@@ -153,6 +153,13 @@ export const io = new SocketIOServer<
     maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes buffer
     skipMiddlewares: true, // keep auth cost low during recovery
   },
+  // Both sides notice a dead link after pingInterval + pingTimeout, so the
+  // engine.io defaults (25s + 20s) leave a player staring at a frozen board
+  // for 45 seconds. Getting it wrong in this direction is the cheap mistake:
+  // recovery and the reconnect grace both run for minutes, so a premature
+  // disconnect costs a brief reconnecting flash and heals itself.
+  pingInterval: parseInt(process.env.SOCKET_PING_INTERVAL_MS || "10000", 10),
+  pingTimeout: parseInt(process.env.SOCKET_PING_TIMEOUT_MS || "8000", 10),
   // Game-state broadcasts are repetitive JSON that deflates 5-10×; slow
   // client links are the binding constraint, not server CPU. Frames under
   // 1 KB skip compression.
