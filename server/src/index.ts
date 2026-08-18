@@ -81,6 +81,18 @@ const SESSION_RETENTION_MS = 2 * 60 * 1000 + 30_000;
 // is internal and must not be spoofable through the PLAYER_ACTION socket event.
 const ALLOWED_PLAYER_ACTIONS = new Set<string>(Object.values(PlayerActionType));
 
+// Actions whose contract includes a payload. Guards inside the machine
+// destructure it directly, so one arriving without it throws mid-transition,
+// which stops the actor and takes the whole game down with it. Checking the
+// shape here keeps a bad message a rejected message.
+const ACTIONS_REQUIRING_PAYLOAD = new Set<string>([
+  PlayerActionType.SWAP_AND_DISCARD,
+  PlayerActionType.ATTEMPT_MATCH,
+  PlayerActionType.USE_ABILITY,
+  PlayerActionType.REMOVE_PLAYER,
+  PlayerActionType.SEND_CHAT_MESSAGE,
+]);
+
 const stopAndRemoveGame = (gameId: GameId, reason: string) => {
   const gameActor = activeGameMachines.get(gameId);
   if (!gameActor) return;
@@ -316,7 +328,20 @@ io.on("connection", (socket: Socket) => {
         );
 
         const actorSubscription = gameActor.subscribe({
-          error: (err) => logger.error({ err, gameId }, "Game machine error"),
+          error: (err) => {
+            logger.error({ err, gameId }, "Game machine error");
+            // A stopped actor still answers getSnapshot, so leaving it in the
+            // map hands arrivals a seat at a table that can never move again.
+            // Say so and clear it out rather than let it rot.
+            io.to(gameId).emit(SocketEventName.ERROR_MESSAGE, {
+              message: "This game ended unexpectedly. Please start a new one.",
+            });
+            stopAndRemoveGame(gameId, "game machine error");
+            broadcastSubscription.unsubscribe();
+            chatSubscription.unsubscribe();
+            directMessageSubscription.unsubscribe();
+            actorSubscription.unsubscribe();
+          },
           complete: () => {
             logger.info({ gameId }, "Game machine has completed.");
             activeGameMachines.delete(gameId);
@@ -627,6 +652,17 @@ io.on("connection", (socket: Socket) => {
         logger.warn(
           { action, socketId: socket.id },
           "Rejected player action with unknown or internal event type.",
+        );
+        return;
+      }
+
+      if (
+        ACTIONS_REQUIRING_PAYLOAD.has(action.type) &&
+        (typeof action.payload !== "object" || action.payload === null)
+      ) {
+        logger.warn(
+          { actionType: action.type, socketId: socket.id },
+          "Rejected player action missing its payload.",
         );
         return;
       }
