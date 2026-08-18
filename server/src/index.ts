@@ -41,6 +41,11 @@ const socketSessionMap = new Map<
 // turnOrder), so an id alone cannot authorise a rejoin: anyone could take over
 // anyone. This never enters game state, so it cannot reach another player.
 const reconnectTokens = new Map<string, string>();
+
+// Counts broadcasts per game so a player action can be told apart from one the
+// machine refused. A refused action changes nothing and emits nothing, which
+// on the client is indistinguishable from a connection that has died.
+const broadcastCounts = new Map<GameId, number>();
 const seatKey = (gameId: GameId, playerId: PlayerId) => `${gameId}:${playerId}`;
 const issueReconnectToken = (gameId: GameId, playerId: PlayerId): string => {
   const token = nanoid(32);
@@ -82,6 +87,7 @@ const stopAndRemoveGame = (gameId: GameId, reason: string) => {
   logger.info({ gameId, reason }, "Stopping and removing game machine");
   gameActor.stop();
   activeGameMachines.delete(gameId);
+  broadcastCounts.delete(gameId);
   for (const key of reconnectTokens.keys()) {
     if (key.startsWith(`${gameId}:`)) reconnectTokens.delete(key);
   }
@@ -186,6 +192,7 @@ io.on("connection", (socket: Socket) => {
     gameActor: GameMachineActorRef,
   ) => {
     const snapshot = gameActor.getSnapshot();
+    broadcastCounts.set(gameId, (broadcastCounts.get(gameId) ?? 0) + 1);
 
     logger.debug(
       {
@@ -634,11 +641,24 @@ io.on("connection", (socket: Socket) => {
         return;
       }
 
+      const broadcastsBefore = broadcastCounts.get(session.gameId) ?? 0;
+
       gameActor.send({
         type: action.type,
         payload: action.payload,
         playerId: session.playerId,
       } as any);
+
+      // An action every guard refused changes nothing and broadcasts nothing,
+      // so the player is left waiting on an answer that will never come and
+      // their client eventually mistakes the silence for a dead connection.
+      // Send them the unchanged view so the wait ends now.
+      if ((broadcastCounts.get(session.gameId) ?? 0) === broadcastsBefore) {
+        io.to(socket.id).emit(
+          SocketEventName.GAME_STATE_UPDATE,
+          generatePlayerView(gameActor.getSnapshot(), session.playerId),
+        );
+      }
 
       if (action.type === PlayerActionType.LEAVE_GAME) {
         socketSessionMap.delete(socket.id);
