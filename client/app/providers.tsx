@@ -175,6 +175,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             (!initial.gameId || initial.gameId === session.gameId)
           ) {
             initial.localPlayerId = session.playerId;
+            initial.reconnectToken = session.reconnectToken;
             if (!initial.gameId) initial.gameId = session.gameId;
           }
         } catch (e) {

@@ -55,6 +55,7 @@ type EmittedEventToSocket = { type: "EMIT_TO_SOCKET" } & SocketEmitEvent;
 export type UIMachineInput = {
   gameId?: string;
   localPlayerId?: string;
+  reconnectToken?: string;
 };
 
 export type PeekedCardInfo = {
@@ -70,6 +71,8 @@ export interface UIMachineContext {
   currentGameState?: ClientCheckGameState;
   localPlayerId?: string;
   currentAbilityContext?: ClientAbilityContext;
+  /** Proves this seat is ours when rejoining. Server-issued, never broadcast. */
+  reconnectToken?: string;
   visibleCards: PeekedCardInfo[];
   isSidePanelOpen: boolean;
   reconnectionAttempts: number;
@@ -303,10 +306,15 @@ export const uiMachine = setup({
         assertEvent(event, "_SESSION_ESTABLISHED");
         return event.response.playerId!;
       },
+      reconnectToken: ({ event }) => {
+        assertEvent(event, "_SESSION_ESTABLISHED");
+        return event.response.reconnectToken;
+      },
     }),
     resetGameContext: assign({
       localPlayerId: undefined,
       gameId: undefined,
+      reconnectToken: undefined,
       currentGameState: undefined,
       currentAbilityContext: undefined,
       visibleCards: [],
@@ -326,6 +334,7 @@ export const uiMachine = setup({
         const sessionData = {
           gameId: event.response.gameId,
           playerId: event.response.playerId,
+          reconnectToken: event.response.reconnectToken,
         };
         const sessionJSON = JSON.stringify(sessionData);
         localStorage.setItem("playerSession", sessionJSON);
@@ -706,6 +715,7 @@ export const uiMachine = setup({
   context: ({ input }) => ({
     localPlayerId: input.localPlayerId,
     gameId: input.gameId,
+    reconnectToken: input.reconnectToken,
     currentGameState: undefined,
     currentAbilityContext: undefined,
     visibleCards: [],
@@ -1085,6 +1095,7 @@ export const uiMachine = setup({
             input: ({ context }) => ({
               gameId: context.gameId!,
               playerId: context.localPlayerId!,
+              token: context.reconnectToken,
             }),
             onDone: {
               target: "routing",
