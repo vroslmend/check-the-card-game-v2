@@ -179,6 +179,17 @@ io.on("connection", (socket: Socket) => {
           SocketEventName.GAME_STATE_UPDATE,
           generatePlayerView(snapshot, player.id),
         );
+        return;
+      }
+      // Skipping a player whose transport is still open is the one shape worth
+      // hearing about: they sit in front of a frozen board while everyone else
+      // plays on, and nothing on their side knows yet. Guarded on the live
+      // socket so an ordinary departure stays silent.
+      if (player.socketId && io.sockets.sockets.has(player.socketId)) {
+        logger.warn(
+          { gameId, playerId: player.id, socketId: player.socketId },
+          "Skipped a broadcast to a player whose socket is still connected",
+        );
       }
     });
   };
@@ -544,6 +555,22 @@ io.on("connection", (socket: Socket) => {
       }
       const gameActor = activeGameMachines.get(session.gameId);
       if (!gameActor) return;
+
+      // The other half of the same picture: input still arriving from someone
+      // the machine has written off. Their action moves the game for everyone
+      // else while no result reaches them.
+      if (
+        !gameActor.getSnapshot().context.players[session.playerId]?.isConnected
+      ) {
+        logger.warn(
+          {
+            gameId: session.gameId,
+            playerId: session.playerId,
+            actionType: action?.type,
+          },
+          "Player action from a player the server considers disconnected",
+        );
+      }
 
       if (!action || !ALLOWED_PLAYER_ACTIONS.has(action.type)) {
         logger.warn(
