@@ -125,6 +125,11 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     socket.on("connect_error", ce);
     socket.on("disconnect", onDisconnect);
 
+    // Connects on every route, landing page included, and that is load bearing:
+    // the host spins the service down when idle, and this is the request that
+    // starts it back up while the visitor is still reading. Measured at ~21s to
+    // boot, which is roughly the time it buys. Removing it off the game routes
+    // would move that wait onto the first click instead.
     if (!socket.connected) socket.connect();
     else onConnect();
 
