@@ -121,8 +121,10 @@ const StorySection = ({
 const SignatureInView = () => {
   const ref = useRef<HTMLSpanElement | null>(null);
   const inView = useInView(ref, { once: true, amount: 0.5 });
+  // The signatures are drawings with no text in them, so left alone the link
+  // they sit in announces as its only readable character, an ampersand.
   return (
-    <span ref={ref} className="inline-flex items-center gap-2">
+    <span ref={ref} className="inline-flex items-center gap-2" aria-hidden>
       <Signature isInView={inView} />
       <span>&amp;</span>
       <Signature isInView={inView} data={secondSignature} />
@@ -673,6 +675,7 @@ function HomePage() {
               href="https://github.com/vroslmend/check-the-card-game-v2"
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Ammar and Farhan, on GitHub"
               className="inline-flex items-center transition-colors hover:text-accent"
               data-cursor-icon
             >
