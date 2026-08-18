@@ -244,7 +244,7 @@ export interface ClientToServerEvents {
     callback: (response: JoinGameResponse) => void,
   ) => void;
   [SocketEventName.ATTEMPT_REJOIN]: (
-    payload: { gameId: string; playerId: string },
+    payload: { gameId: string; playerId: string; token?: string },
     callback: (response: AttemptRejoinResponse) => void,
   ) => void;
   [SocketEventName.PLAYER_ACTION]: (payload: {
@@ -285,12 +285,17 @@ export interface CreateGameResponse extends BasicResponse {
   gameId?: GameId;
   playerId?: PlayerId;
   gameState?: ClientCheckGameState;
+  /** Proves this seat is yours when reconnecting. Never appears in any
+   *  broadcast or redacted view, so no other player can learn it. */
+  reconnectToken?: string;
 }
 
 export interface JoinGameResponse extends BasicResponse {
   gameId?: GameId;
   playerId?: PlayerId;
   gameState?: ClientCheckGameState;
+  /** See CreateGameResponse.reconnectToken. */
+  reconnectToken?: string;
 }
 
 export interface AttemptRejoinResponse extends BasicResponse {

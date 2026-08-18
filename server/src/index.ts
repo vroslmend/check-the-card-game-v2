@@ -36,6 +36,18 @@ const socketSessionMap = new Map<
   { gameId: GameId; playerId: PlayerId }
 >();
 
+// Proof that a rejoining socket owns the seat it is asking for. Player ids are
+// public to everyone at the table (they ride in every broadcast, and in
+// turnOrder), so an id alone cannot authorise a rejoin: anyone could take over
+// anyone. This never enters game state, so it cannot reach another player.
+const reconnectTokens = new Map<string, string>();
+const seatKey = (gameId: GameId, playerId: PlayerId) => `${gameId}:${playerId}`;
+const issueReconnectToken = (gameId: GameId, playerId: PlayerId): string => {
+  const token = nanoid(32);
+  reconnectTokens.set(seatKey(gameId, playerId), token);
+  return token;
+};
+
 // Short, shareable lobby codes: uppercase, no lookalikes (0/O, 1/I/L).
 // ~28.6M combinations at length 5; collision-checked against live games.
 const LOBBY_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -70,6 +82,9 @@ const stopAndRemoveGame = (gameId: GameId, reason: string) => {
   logger.info({ gameId, reason }, "Stopping and removing game machine");
   gameActor.stop();
   activeGameMachines.delete(gameId);
+  for (const key of reconnectTokens.keys()) {
+    if (key.startsWith(`${gameId}:`)) reconnectTokens.delete(key);
+  }
 };
 
 const cleanupGameIfEmpty = (gameId: GameId) => {
@@ -323,6 +338,7 @@ io.on("connection", (socket: Socket) => {
             success: true,
             gameId,
             playerId,
+            reconnectToken: issueReconnectToken(gameId, playerId),
             gameState: generatePlayerView(gameActor.getSnapshot(), playerId),
           });
         }
@@ -426,6 +442,7 @@ io.on("connection", (socket: Socket) => {
             success: true,
             gameId,
             playerId,
+            reconnectToken: issueReconnectToken(gameId, playerId),
             gameState: generatePlayerView(gameActor.getSnapshot(), playerId),
           });
         }
@@ -443,11 +460,11 @@ io.on("connection", (socket: Socket) => {
   socket.on(
     SocketEventName.ATTEMPT_REJOIN,
     (
-      data: { gameId: GameId; playerId: PlayerId },
+      data: { gameId: GameId; playerId: PlayerId; token?: string },
       callback: (r: AttemptRejoinResponse) => void,
     ) => {
       try {
-        const { gameId, playerId } = data;
+        const { gameId, playerId, token } = data;
         const gameActor = activeGameMachines.get(gameId);
 
         if (!gameActor) {
@@ -467,6 +484,26 @@ io.on("connection", (socket: Socket) => {
           );
           if (callback)
             callback({ success: false, message: "Player not found." });
+          return;
+        }
+
+        // A player id proves nothing: every client at the table is sent every
+        // other player's id in each broadcast. Only the token, which never
+        // leaves the socket it was issued to, says this seat is yours.
+        const expected = reconnectTokens.get(seatKey(gameId, playerId));
+        if (!expected || token !== expected) {
+          logger.warn(
+            { gameId, playerId, socketId: socket.id, hadToken: !!token },
+            "Rejected a rejoin that could not prove it owns the seat",
+          );
+          // Phrased to match the client's terminal-failure guard, so a stale
+          // session is cleared and sent home instead of retrying on a backoff
+          // that can never succeed.
+          if (callback)
+            callback({
+              success: false,
+              message: "Session not found for this game.",
+            });
           return;
         }
 

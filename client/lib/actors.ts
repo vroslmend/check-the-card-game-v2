@@ -46,7 +46,7 @@ export const joinGameActor = fromPromise<
 
 export const rejoinActor = fromPromise<
   AttemptRejoinResponse,
-  { gameId: string; playerId: string }
+  { gameId: string; playerId: string; token?: string }
 >(async ({ input }) => {
   return new Promise((resolve, reject) => {
     socket.emit(SocketEventName.ATTEMPT_REJOIN, input, (response) => {
