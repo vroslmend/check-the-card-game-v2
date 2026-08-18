@@ -106,6 +106,7 @@ export type UIMachineEvents =
       playerId: PlayerId;
       cardIndex: number;
     }
+  | { type: "ACTION_NOT_SENT" }
   | { type: "CONFIRM_ABILITY_ACTION" }
   | { type: "SKIP_ABILITY_STAGE" }
   | { type: "TOGGLE_SIDE_PANEL" }
@@ -743,6 +744,19 @@ export const uiMachine = setup({
       ],
     },
     ERROR_RECEIVED: { actions: "showErrorToast" },
+    // The bridge refused to put a move on a dead socket. Clear the in-flight
+    // state now rather than letting the action bar grey out for its full
+    // unstick delay over a move that was never sent.
+    ACTION_NOT_SENT: {
+      actions: [
+        assign({ pendingActionSince: null }),
+        () =>
+          toast.error("Move not sent", {
+            description:
+              "You are not connected right now. Try again in a moment.",
+          }),
+      ],
+    },
   },
   states: {
     initializing: {

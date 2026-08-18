@@ -49,6 +49,14 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     const socketSub = actor.on("EMIT_TO_SOCKET", (emitted: EmittedEvent) => {
       if (emitted.type !== "EMIT_TO_SOCKET") return;
       if (emitted.eventName === SocketEventName.PLAYER_ACTION) {
+        // Never hand a move to a disconnected socket. socket.io buffers it and
+        // flushes on reconnect BEFORE the connect handler below can rejoin, so
+        // it lands with no session and the server discards it. Replaying it
+        // later would be worse: the board has moved on by then.
+        if (!socket.connected) {
+          actor.send({ type: "ACTION_NOT_SENT" });
+          return;
+        }
         socket.emit(emitted.eventName, emitted.payload as PlayerActionPayload);
       } else {
         logger.warn(
