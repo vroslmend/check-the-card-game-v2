@@ -885,10 +885,14 @@ export const uiMachine = setup({
         INITIAL_PEEK_INFO: {
           actions: "setInitialPeekCards",
         },
-        START_GAME: { actions: "emitPlayerAction" },
-        DECLARE_LOBBY_READY: { actions: "emitPlayerAction" },
-        DECLARE_LOBBY_UNREADY: { actions: "emitPlayerAction" },
-        REMOVE_PLAYER: { actions: "emitPlayerAction" },
+        START_GAME: { actions: ["markActionPending", "emitPlayerAction"] },
+        DECLARE_LOBBY_READY: {
+          actions: ["markActionPending", "emitPlayerAction"],
+        },
+        DECLARE_LOBBY_UNREADY: {
+          actions: ["markActionPending", "emitPlayerAction"],
+        },
+        REMOVE_PLAYER: { actions: ["markActionPending", "emitPlayerAction"] },
         DRAW_FROM_DECK: { actions: ["markActionPending", "emitPlayerAction"] },
         DRAW_FROM_DISCARD: {
           actions: ["markActionPending", "emitPlayerAction"],
@@ -1173,7 +1177,17 @@ export const uiMachine = setup({
             ],
           },
         },
-        recoveryFailed: { entry: ["clearSession", "redirectToHome"] },
+        recoveryFailed: {
+          entry: [
+            "clearSession",
+            () =>
+              toast.error("Could not rejoin", {
+                description: "That game is no longer available.",
+              }),
+            // Navigate rather than reload, so the explanation survives the trip.
+            emit(() => ({ type: "NAVIGATE" as const, path: "/" })),
+          ],
+        },
         promptToJoin: {
           tags: ["prompting"],
           entry: assign({
