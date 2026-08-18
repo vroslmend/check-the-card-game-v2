@@ -92,7 +92,7 @@ export const GameHeader = () => {
         >
           <ChevronLeft className="h-4 w-4 text-ink-muted transition-transform group-hover:-translate-x-0.5" />
           <BrandMark className="h-6 rounded-[4px]" />
-          Check
+          Check!
         </Link>
         <span className="text-hairline" aria-hidden>
           ·
