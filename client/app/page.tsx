@@ -201,12 +201,16 @@ function HomePage() {
 
   const checkText = (isCheckHovered ? "Check!" : "Check").split("");
 
+  // Restoring scroll is a first-mount concern. Keyed on the menu it also fired
+  // on every open and close, which threw the reader back to the top of the page.
   useEffect(() => {
     if ("scrollRestoration" in history) {
       history.scrollRestoration = "manual";
     }
     window.scrollTo(0, 0);
+  }, []);
 
+  useEffect(() => {
     if (!isMobile && isMobileMenuOpen) {
       setIsMobileMenuOpen(false);
     }
@@ -243,7 +247,10 @@ function HomePage() {
             href="/"
             onClick={(e) => {
               e.preventDefault();
-              window.location.reload();
+              window.scrollTo({
+                top: 0,
+                behavior: shouldReduceMotion ? "auto" : "smooth",
+              });
             }}
             className="flex items-center gap-3"
           >
