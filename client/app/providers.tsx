@@ -41,6 +41,7 @@ type AbilityPeekResultPayload = Parameters<
 // ============================================================================
 function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
   const router = useRouter();
+  const lastStateAt = useRef(0);
 
   useEffect(() => {
     type EmittedEvent = Parameters<Parameters<typeof actor.on>[1]>[0];
@@ -63,8 +64,10 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     });
 
     // Socket → Actor bridges
-    const gs = (g: ClientCheckGameState) =>
+    const gs = (g: ClientCheckGameState) => {
+      lastStateAt.current = Date.now();
       actor.send({ type: "CLIENT_GAME_STATE_UPDATED", gameState: g });
+    };
     const lg = (m: RichGameLogMessage) =>
       actor.send({ type: "NEW_GAME_LOG", logMessage: m });
     const cm = (m: ChatMessage) =>
@@ -87,7 +90,21 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
         type: "CONNECT",
         recovered: (socket as { recovered?: boolean }).recovered === true,
       });
-    const onDisconnect = () => actor.send({ type: "DISCONNECT" });
+    const onDisconnect = (reason: string) => {
+      // The server stops broadcasting the moment it writes a player off, which
+      // can be well before this side's ping timeout fires. How long the board
+      // had already been frozen is the measurement that separates the two.
+      logger.warn(
+        {
+          reason,
+          boardStaleForMs: lastStateAt.current
+            ? Date.now() - lastStateAt.current
+            : null,
+        },
+        "Socket disconnected",
+      );
+      actor.send({ type: "DISCONNECT" });
+    };
 
     socket.on(SocketEventName.GAME_STATE_UPDATE, gs);
     socket.on(SocketEventName.SERVER_LOG_ENTRY, lg);
