@@ -34,10 +34,17 @@ const NAV_ITEMS = [
   { label: "Rules", href: "/rules" },
 ] as const;
 
+const LETTER_STAGGER = 0.08;
+const LETTER_LIFT = {
+  type: "spring",
+  stiffness: 400,
+  damping: 10,
+} as const;
+
 const textContainerVariants = {
   hover: {
     transition: {
-      staggerChildren: 0.08,
+      staggerChildren: LETTER_STAGGER,
       delayChildren: 0,
     },
   },
@@ -49,12 +56,22 @@ const letterVariants: Variants = {
   },
   hover: {
     y: -10,
-    transition: {
-      type: "spring",
-      stiffness: 400,
-      damping: 10,
-    },
+    transition: LETTER_LIFT,
   },
+};
+
+/** The mark takes the letters' lift, but it cannot take their stagger: it
+ *  mounts after the container has already dealt the delays out, so it waits its
+ *  turn on a delay of its own. Zero while the name is announcing itself, where
+ *  the mark arrives to letters that are already up and belongs up with them. */
+const markLiftVariants: Variants = {
+  initial: {
+    y: 0,
+  },
+  hover: (delay: number) => ({
+    y: -10,
+    transition: { ...LETTER_LIFT, delay },
+  }),
 };
 
 const REVEAL_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -420,6 +437,9 @@ function HomePage() {
   };
 
   const checkText = (showMark ? "Check!" : "Check").split("");
+  // The mark is the last child of the lockup, so it lifts one beat after the
+  // letter before it, the same beat the container puts between the letters.
+  const markLiftDelay = (checkText.length - 1) * LETTER_STAGGER;
   // One signal for the whole hero: the lockup and the hand each raise it and
   // both read it, so hovering either one animates the other.
   const isLifted = (isHeroHovered || isAnnouncing) && !shouldReduceMotion;
@@ -598,7 +618,21 @@ function HomePage() {
                             exit={{ opacity: 0, width: 0, x: 10 }}
                             transition={{ duration: 0.3, ease: "easeInOut" }}
                           >
-                            {char}
+                            {/* The mark arrives on its own poses, not the
+                                container's variants: it mounts after the lift
+                                has already fired, so an inherited label
+                                resolves once and never tracks the way back
+                                down. The lift is its own child, driven by the
+                                same signal the letters read. */}
+                            <motion.span
+                              className="inline-block"
+                              variants={markLiftVariants}
+                              custom={isAnnouncing ? 0 : markLiftDelay}
+                              initial="initial"
+                              animate={isLifted ? "hover" : "initial"}
+                            >
+                              {char}
+                            </motion.span>
                           </motion.span>
                         ) : (
                           <motion.span
