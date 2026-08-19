@@ -34,10 +34,17 @@ const NAV_ITEMS = [
   { label: "Rules", href: "/rules" },
 ] as const;
 
+const LETTER_STAGGER = 0.08;
+const LETTER_LIFT = {
+  type: "spring",
+  stiffness: 400,
+  damping: 10,
+} as const;
+
 const textContainerVariants = {
   hover: {
     transition: {
-      staggerChildren: 0.08,
+      staggerChildren: LETTER_STAGGER,
       delayChildren: 0,
     },
   },
@@ -49,12 +56,22 @@ const letterVariants: Variants = {
   },
   hover: {
     y: -10,
-    transition: {
-      type: "spring",
-      stiffness: 400,
-      damping: 10,
-    },
+    transition: LETTER_LIFT,
   },
+};
+
+/** The mark takes the letters' lift, but it cannot take their stagger: it
+ *  mounts after the container has already dealt the delays out, so it waits its
+ *  turn on a delay of its own. Zero while the name is announcing itself, where
+ *  the mark arrives to letters that are already up and belongs up with them. */
+const markLiftVariants: Variants = {
+  initial: {
+    y: 0,
+  },
+  hover: (delay: number) => ({
+    y: -10,
+    transition: { ...LETTER_LIFT, delay },
+  }),
 };
 
 const REVEAL_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -75,6 +92,7 @@ const FAN = [
     rotate: -17,
     open: { left: -22, top: 34, rotate: -24 },
     faceUp: false,
+    suit: Suit.Spades,
   },
   {
     id: "hero-2",
@@ -83,6 +101,7 @@ const FAN = [
     rotate: -6,
     open: { left: 89, top: 2, rotate: -8.5 },
     faceUp: false,
+    suit: Suit.Diamonds,
   },
   {
     id: "hero-3",
@@ -91,6 +110,7 @@ const FAN = [
     rotate: 6,
     open: { left: 199, top: 2, rotate: 8.5 },
     faceUp: false,
+    suit: Suit.Clubs,
   },
   {
     id: "hero-4",
@@ -99,21 +119,44 @@ const FAN = [
     rotate: 17,
     open: { left: 310, top: 34, rotate: 24 },
     faceUp: true,
+    suit: Suit.Hearts,
   },
 ];
 
 /** Nunito Sans carries no heart, so the key art draws one. Same path here, so
- *  the two surfaces stay identical. */
-const Heart = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+ *  the two surfaces stay identical, and the other three are drawn onto the same
+ *  24 box at the same weight — a typeface's pips would arrive at four different
+ *  sizes and turn the hand into four fonts. The club is circles rather than one
+ *  contour: three lobes and a stem in a single path have to wind the same way
+ *  or the overlaps punch holes in each other. */
+const PIP_SHAPES: Record<Suit, ReactNode> = {
+  [Suit.Hearts]: (
     <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  ),
+  [Suit.Spades]: (
+    <path d="M12 2L6.5 8.5C4.5 10.7 4 12.2 4 13.5A4.5 4.5 0 0 0 11 17.2L10 22h4l-1-4.8a4.5 4.5 0 0 0 7-3.7c0-1.3-.5-2.8-2.5-5L12 2z" />
+  ),
+  [Suit.Diamonds]: <path d="M12 2.5L19.5 12 12 21.5 4.5 12z" />,
+  [Suit.Clubs]: (
+    <>
+      <circle cx="12" cy="6.8" r="4.2" />
+      <circle cx="8" cy="13" r="4.2" />
+      <circle cx="16" cy="13" r="4.2" />
+      <path d="M12 13c0 4 1 6.5 2.4 9h-4.8c1.4-2.5 2.4-5 2.4-9z" />
+    </>
+  ),
+};
+
+const Pip = ({ suit, size }: { suit: Suit; size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    {PIP_SHAPES[suit]}
   </svg>
 );
 
 /** The key art's card, not the table's. The board card centres its rank with no
  *  corner index, which caps a fan at about a third of overlap before the rank
  *  disappears; this face carries corner ranks, so it reads at the key art's 42%. */
-const ArtCard = ({ faceUp }: { faceUp: boolean }) => (
+const ArtCard = ({ faceUp, suit }: { faceUp: boolean; suit: Suit }) => (
   <div
     className={
       faceUp
@@ -124,7 +167,11 @@ const ArtCard = ({ faceUp }: { faceUp: boolean }) => (
   >
     {faceUp ? (
       <div
-        className="flex h-full w-full flex-col justify-between text-accent"
+        className={
+          suit === Suit.Hearts || suit === Suit.Diamonds
+            ? "flex h-full w-full flex-col justify-between text-accent"
+            : "flex h-full w-full flex-col justify-between text-ink"
+        }
         style={{ padding: 20 }}
       >
         <span
@@ -134,7 +181,7 @@ const ArtCard = ({ faceUp }: { faceUp: boolean }) => (
           A
         </span>
         <span className="flex justify-center">
-          <Heart size={Math.round(CARD_W * 0.38)} />
+          <Pip suit={suit} size={Math.round(CARD_W * 0.38)} />
         </span>
         <span
           className="text-right font-extrabold leading-none"
@@ -162,10 +209,12 @@ const ArtCard = ({ faceUp }: { faceUp: boolean }) => (
  *  is staggered, so the hand turns over as a wave and rights itself at once. */
 const FlipCard = ({
   faceUp,
+  suit,
   flipped,
   delay,
 }: {
   faceUp: boolean;
+  suit: Suit;
   flipped: boolean;
   delay: number;
 }) => (
@@ -189,7 +238,7 @@ const FlipCard = ({
           borderRadius: CARD_R,
         }}
       >
-        <ArtCard faceUp={faceUp} />
+        <ArtCard faceUp={faceUp} suit={suit} />
       </div>
       <div
         className="absolute inset-0 shadow-[0_26px_50px_rgba(0,0,0,0.18)] dark:shadow-[0_26px_50px_rgba(0,0,0,0.55)]"
@@ -200,7 +249,7 @@ const FlipCard = ({
           transform: "rotateY(180deg)",
         }}
       >
-        <ArtCard faceUp={!faceUp} />
+        <ArtCard faceUp={!faceUp} suit={suit} />
       </div>
     </motion.div>
   </div>
@@ -260,6 +309,7 @@ const HeroFan = ({ open }: { open: boolean }) => {
           >
             <FlipCard
               faceUp={slot.faceUp}
+              suit={slot.suit}
               flipped={dealt && !reduced && open}
               delay={slot.faceUp ? FAN.length * 0.08 : i * 0.08}
             />
@@ -420,6 +470,9 @@ function HomePage() {
   };
 
   const checkText = (showMark ? "Check!" : "Check").split("");
+  // The mark is the last child of the lockup, so it lifts one beat after the
+  // letter before it, the same beat the container puts between the letters.
+  const markLiftDelay = (checkText.length - 1) * LETTER_STAGGER;
   // One signal for the whole hero: the lockup and the hand each raise it and
   // both read it, so hovering either one animates the other.
   const isLifted = (isHeroHovered || isAnnouncing) && !shouldReduceMotion;
@@ -598,7 +651,21 @@ function HomePage() {
                             exit={{ opacity: 0, width: 0, x: 10 }}
                             transition={{ duration: 0.3, ease: "easeInOut" }}
                           >
-                            {char}
+                            {/* The mark arrives on its own poses, not the
+                                container's variants: it mounts after the lift
+                                has already fired, so an inherited label
+                                resolves once and never tracks the way back
+                                down. The lift is its own child, driven by the
+                                same signal the letters read. */}
+                            <motion.span
+                              className="inline-block"
+                              variants={markLiftVariants}
+                              custom={isAnnouncing ? 0 : markLiftDelay}
+                              initial="initial"
+                              animate={isLifted ? "hover" : "initial"}
+                            >
+                              {char}
+                            </motion.span>
                           </motion.span>
                         ) : (
                           <motion.span
