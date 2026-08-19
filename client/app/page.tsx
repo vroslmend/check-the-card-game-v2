@@ -474,7 +474,7 @@ function HomePage() {
   // letter before it, the same beat the container puts between the letters.
   const markLiftDelay = (checkText.length - 1) * LETTER_STAGGER;
   // One signal for the whole hero: the lockup and the hand each raise it and
-  // both read it, so hovering either one anximates the other.
+  // both read it, so hovering either one animates the other.
   const isLifted = (isHeroHovered || isAnnouncing) && !shouldReduceMotion;
   const engageHero = {
     onMouseEnter: () => setIsHeroHovered(true),
