@@ -65,6 +65,8 @@ const REVEAL_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
  *  on the outer pair is what makes the arc peak in the centre, and a pivot
  *  swing produces the opposite. `open` is the hovered pose. */
 const CARD_W = 166;
+const CARD_H = Math.round((CARD_W * 7) / 5);
+const CARD_R = Math.round(CARD_W * 0.1);
 const FAN = [
   {
     id: "hero-1",
@@ -118,11 +120,7 @@ const ArtCard = ({ faceUp }: { faceUp: boolean }) => (
         ? "flex items-center justify-center border-2 border-hairline bg-surface"
         : "flex items-center justify-center bg-accent"
     }
-    style={{
-      width: CARD_W,
-      height: Math.round((CARD_W * 7) / 5),
-      borderRadius: Math.round(CARD_W * 0.1),
-    }}
+    style={{ width: CARD_W, height: CARD_H, borderRadius: CARD_R }}
   >
     {faceUp ? (
       <div
@@ -158,9 +156,61 @@ const ArtCard = ({ faceUp }: { faceUp: boolean }) => (
   </div>
 );
 
+/** Both faces of one card on a shared 3D plane, so `flipped` turns the card
+ *  over rather than crossfading it. The back face is the other side of the same
+ *  slot: a hole card turns up an Ace, the Ace turns down. Only the flipped pose
+ *  is staggered, so the hand turns over as a wave and rights itself at once. */
+const FlipCard = ({
+  faceUp,
+  flipped,
+  delay,
+}: {
+  faceUp: boolean;
+  flipped: boolean;
+  delay: number;
+}) => (
+  <div style={{ width: CARD_W, height: CARD_H, perspective: 900 }}>
+    <motion.div
+      className="relative h-full w-full"
+      style={{ transformStyle: "preserve-3d" }}
+      animate={{ rotateY: flipped ? 180 : 0 }}
+      transition={{
+        type: "spring",
+        stiffness: 190,
+        damping: 24,
+        delay: flipped ? delay : 0,
+      }}
+    >
+      <div
+        className="absolute inset-0 shadow-[0_26px_50px_rgba(0,0,0,0.18)] dark:shadow-[0_26px_50px_rgba(0,0,0,0.55)]"
+        style={{
+          backfaceVisibility: "hidden",
+          WebkitBackfaceVisibility: "hidden",
+          borderRadius: CARD_R,
+        }}
+      >
+        <ArtCard faceUp={faceUp} />
+      </div>
+      <div
+        className="absolute inset-0 shadow-[0_26px_50px_rgba(0,0,0,0.18)] dark:shadow-[0_26px_50px_rgba(0,0,0,0.55)]"
+        style={{
+          backfaceVisibility: "hidden",
+          WebkitBackfaceVisibility: "hidden",
+          borderRadius: CARD_R,
+          transform: "rotateY(180deg)",
+        }}
+      >
+        <ArtCard faceUp={!faceUp} />
+      </div>
+    </motion.div>
+  </div>
+);
+
 /** The key art's hand, dealt rather than drawn: the cards start squared up on
  *  the middle position and open into the arc. `open` widens the fan while the
- *  lockup or the hand is hovered, the same signal that lifts the wordmark. */
+ *  lockup or the hand is hovered, the same signal that lifts the wordmark. On
+ *  that same signal the hand also turns over: the three hole cards come up as
+ *  Aces in sequence, and the one that was already up goes down behind them. */
 const HeroFan = ({ open }: { open: boolean }) => {
   const reduced = useReducedMotion();
   const [dealt, setDealt] = useState(false);
@@ -182,12 +232,8 @@ const HeroFan = ({ open }: { open: boolean }) => {
         {FAN.map((slot, i) => (
           <motion.div
             key={slot.id}
-            className="absolute shadow-[0_26px_50px_rgba(0,0,0,0.18)] dark:shadow-[0_26px_50px_rgba(0,0,0,0.55)]"
-            style={{
-              top: slot.top,
-              borderRadius: Math.round(CARD_W * 0.1),
-              zIndex: i,
-            }}
+            className="absolute"
+            style={{ top: slot.top, zIndex: i }}
             initial={
               reduced
                 ? false
@@ -212,7 +258,11 @@ const HeroFan = ({ open }: { open: boolean }) => {
               delay: dealt && !reduced && !open ? i * 0.07 : 0,
             }}
           >
-            <ArtCard faceUp={slot.faceUp} />
+            <FlipCard
+              faceUp={slot.faceUp}
+              flipped={dealt && !reduced && open}
+              delay={slot.faceUp ? FAN.length * 0.08 : i * 0.08}
+            />
           </motion.div>
         ))}
       </div>
