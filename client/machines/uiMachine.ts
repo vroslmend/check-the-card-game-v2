@@ -162,6 +162,10 @@ const adoptServerClockOffset = (
 /** Broadcasts carry only a recent tail of the append-only log/chat; keep the
  *  locally accumulated history and append whatever is new (dedup by id,
  *  incoming version wins). */
+// Chat survives Play Again, so this copy is the only one that grows for the
+// life of the lobby. Matches the server's own retention cap.
+const MAX_RETAINED_CHAT = 200;
+
 const mergeAppendOnly = <T extends { id: string }>(
   prev: T[] | undefined,
   incoming: T[],
@@ -197,9 +201,13 @@ export const uiMachine = setup({
               ? event.response.gameState
               : undefined;
         if (!incoming) return undefined;
-        // A bumped roundEpoch means the server reset its log/chat for a new
-        // round (Play Again). Merging would resurrect the old history from
-        // our accumulated copy — start fresh from the incoming arrays.
+        // A bumped roundEpoch means the server reset its log for a new round
+        // (Play Again). Merging would resurrect the old round's entries from
+        // our accumulated copy, so start fresh from the incoming array.
+        //
+        // Chat is deliberately merged across the bump instead: the server keeps
+        // it through the reset, and a broadcast only carries the recent tail, so
+        // replacing here would drop everything said earlier in the session.
         const prevState = context.currentGameState;
         const sameEpoch =
           (prevState?.roundEpoch ?? 0) === (incoming.roundEpoch ?? 0);
@@ -208,9 +216,9 @@ export const uiMachine = setup({
           log: sameEpoch
             ? mergeAppendOnly(prevState?.log, incoming.log)
             : incoming.log,
-          chat: sameEpoch
-            ? mergeAppendOnly(prevState?.chat, incoming.chat)
-            : incoming.chat,
+          chat: mergeAppendOnly(prevState?.chat, incoming.chat).slice(
+            -MAX_RETAINED_CHAT,
+          ),
         };
       },
       // "Pass" is final per matching opportunity, so only reset the flag when
@@ -292,7 +300,9 @@ export const uiMachine = setup({
         if (!context.currentGameState) return undefined;
         return {
           ...context.currentGameState,
-          chat: [...context.currentGameState.chat, event.chatMessage],
+          chat: [...context.currentGameState.chat, event.chatMessage].slice(
+            -MAX_RETAINED_CHAT,
+          ),
         };
       },
     }),

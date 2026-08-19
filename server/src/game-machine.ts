@@ -73,6 +73,9 @@ const MAX_HAND_SIZE = parseInt(process.env.MAX_HAND_SIZE || "8", 10);
 // Per-decision-window time limit (draw, discard, ability). On expiry the turn
 // auto-resolves so one idle player can't stall the whole game.
 const TURN_TIMER_MS = parseInt(process.env.TURN_TIMER_MS || "45000", 10);
+// Chat outlives the round, so it is the one array that grows for the life of
+// the lobby rather than being cleared by resetForNewRound. Oldest drop first.
+const MAX_RETAINED_CHAT = 200;
 
 const getPlayerNameForLog = (
   playerId: PlayerId,
@@ -1619,12 +1622,12 @@ export const gameMachine = setup({
         currentTurnSegment: null,
         lastRoundLoserId: context.gameover?.loserId || null,
         rematchVotes: [],
-        // Clearing log/chat here only resets the SERVER copy — connected
-        // clients keep an accumulated history and merge broadcasts by id.
-        // The epoch bump is what tells them to drop that history too.
+        // Clearing the log resets only the SERVER copy; clients keep an
+        // accumulated one and merge broadcasts by id, so the epoch bump is what
+        // makes them drop it. Chat is missing here on purpose: a log describes
+        // one round, a conversation spans the table's whole session.
         roundEpoch: context.roundEpoch + 1,
         log: [],
-        chat: [],
         // gameMasterId (the lobby host) is deliberately NOT reassigned here:
         // the host is stable for the lobby's lifetime and only changes when
         // the host actually leaves (removePlayerAndHandleGM). It used to be
@@ -2167,7 +2170,9 @@ export const gameMachine = setup({
           timestamp: new Date().toISOString(),
           ...event.payload,
         };
-        enqueue.assign({ chat: [...context.chat, chatMessage] });
+        enqueue.assign({
+          chat: [...context.chat, chatMessage].slice(-MAX_RETAINED_CHAT),
+        });
         enqueue(
           emit({
             type: "BROADCAST_CHAT_MESSAGE",
