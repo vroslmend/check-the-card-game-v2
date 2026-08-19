@@ -32,6 +32,7 @@ The labels are deliberately few:
 - **chore** — tooling, CI, dependencies, repo housekeeping. No effect on how the game plays.
 - **documentation** — the docs disagree with reality, or a gap in them.
 - **needs decision** — waiting on a call from me before anyone builds it. Adding this to your own issue is a useful signal that you want an answer rather than a pull request.
+- **needs reproduction** — observed or suspected bug waiting for reproduction or live verification before coding.
 
 The templates apply the first three for you. Anything filed without a label gets one from me, so pick the closest and do not worry about it.
 
