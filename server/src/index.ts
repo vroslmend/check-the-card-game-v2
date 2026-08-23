@@ -190,7 +190,21 @@ io.on("connection", (socket: Socket) => {
   const registerSocketSession = (gameId: GameId, playerId: PlayerId) => {
     // Remove any previous socketId mapped to this player
     for (const [sid, sess] of socketSessionMap.entries()) {
-      if (sess.playerId === playerId) socketSessionMap.delete(sid);
+      if (sess.playerId !== playerId) continue;
+      // A previous socket that is still open is a second client taking the
+      // seat, not a reconnect after a dropped one. Only the first case has
+      // anyone left to tell, and telling them is the whole fix: the takeover
+      // is legitimate, the silence afterwards is not. Sent before the entry
+      // goes, because after it this socket is unreachable through the session
+      // map and its actions are dropped with no reply.
+      if (sid !== socket.id && io.sockets.sockets.has(sid)) {
+        logger.info(
+          { gameId, playerId, supersededSocketId: sid, bySocketId: socket.id },
+          "Seat claimed by another client; telling the one it replaces",
+        );
+        io.to(sid).emit(SocketEventName.SEAT_CLAIMED_ELSEWHERE);
+      }
+      socketSessionMap.delete(sid);
     }
     socketSessionMap.set(socket.id, { gameId, playerId });
   };

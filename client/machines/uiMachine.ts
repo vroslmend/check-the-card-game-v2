@@ -112,6 +112,7 @@ export type UIMachineEvents =
     }
   | { type: "ACTION_NOT_SENT" }
   | { type: "ACTION_UNANSWERED" }
+  | { type: "SEAT_CLAIMED_ELSEWHERE" }
   | { type: "CONFIRM_ABILITY_ACTION" }
   | { type: "SKIP_ABILITY_STAGE" }
   | { type: "TOGGLE_SIDE_PANEL" }
@@ -948,6 +949,11 @@ export const uiMachine = setup({
         // Reachable from every game view, not just the lobby, so a player who
         // can see something is wrong is never told to reload the page.
         RETRY_REJOIN: { target: ".reconnecting" },
+        // The server only sends this to a socket that is still open, so it
+        // always means a second client took the seat rather than a reconnect
+        // after a drop. Handled here rather than per state because it can
+        // arrive during any of them.
+        SEAT_CLAIMED_ELSEWHERE: { target: ".seatClaimedElsewhere" },
       },
       states: {
         routing: {
@@ -1185,6 +1191,22 @@ export const uiMachine = setup({
               },
               { target: "disconnected" },
             ],
+          },
+        },
+        // Another client holds the seat. Deliberately terminal: the watchdog
+        // below would otherwise re-run the handshake eight seconds after the
+        // last unanswered action and take the seat back with nobody asking,
+        // which is how two windows end up trading it. Nulling
+        // pendingActionSince is what disarms it, since ACTION_UNANSWERED is
+        // guarded on that field rather than cancelled by id.
+        //
+        // The session is kept, not cleared: RETRY_REJOIN needs the token, and
+        // taking the seat back is a decision for the player rather than a
+        // timer.
+        seatClaimedElsewhere: {
+          entry: assign({ pendingActionSince: null }),
+          on: {
+            RETRY_REJOIN: { target: "reconnecting" },
           },
         },
         recoveryFailed: {
