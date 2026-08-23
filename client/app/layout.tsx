@@ -19,6 +19,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: "Check! - The Card Game",
   description: "A card game of strategy, memory, and luck.",
+  // Proves ownership of the Search Console property. A public tag rather than
+  // a secret, and it has to stay: Google re-checks, so a property that loses
+  // its tag goes unverified again.
+  verification: { google: "w0uP0kvKNvORgtpbYZQ8UDucoJr4CDUfi0XLACdzaR0" },
   alternates: { canonical: "/" },
   openGraph: {
     title: "Check!",
