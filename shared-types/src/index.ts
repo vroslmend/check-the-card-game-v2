@@ -231,6 +231,7 @@ export interface ServerToClientEvents {
   [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
   [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;
   [SocketEventName.NEW_CHAT_MESSAGE]: (chatMessage: ChatMessage) => void;
+  [SocketEventName.SEAT_CLAIMED_ELSEWHERE]: () => void;
 }
 
 export interface ClientToServerEvents {
@@ -274,6 +275,10 @@ export enum SocketEventName {
   SERVER_LOG_ENTRY = "SERVER_LOG_ENTRY",
   INITIAL_LOGS = "INITIAL_LOGS",
   NEW_CHAT_MESSAGE = "NEW_CHAT_MESSAGE",
+  /** Sent to a client whose seat has just been claimed by another one, so it
+   *  can say so instead of freezing. Only ever reaches a socket that is still
+   *  open, which is what separates a takeover from an ordinary reconnect. */
+  SEAT_CLAIMED_ELSEWHERE = "SEAT_CLAIMED_ELSEWHERE",
 }
 
 export interface BasicResponse {

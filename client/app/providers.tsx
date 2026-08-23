@@ -86,6 +86,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
       actor.send({ type: "ABILITY_PEEK_RESULT", results: d.results });
     const er = (e: { message: string }) =>
       actor.send({ type: "ERROR_RECEIVED", error: e.message });
+    const sce = () => actor.send({ type: "SEAT_CLAIMED_ELSEWHERE" });
     const ce = (err: Error) =>
       logger.warn(
         { error: err?.message ?? "connection error" },
@@ -120,6 +121,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     socket.on(SocketEventName.INITIAL_PEEK_INFO, pk);
     socket.on(SocketEventName.ABILITY_PEEK_RESULT, pr);
     socket.on(SocketEventName.ERROR_MESSAGE, er);
+    socket.on(SocketEventName.SEAT_CLAIMED_ELSEWHERE, sce);
     socket.on(SocketEventName.INITIAL_LOGS, il);
     socket.on("connect", onConnect);
     socket.on("connect_error", ce);
@@ -147,6 +149,7 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
       socket.off(SocketEventName.INITIAL_PEEK_INFO, pk);
       socket.off(SocketEventName.ABILITY_PEEK_RESULT, pr);
       socket.off(SocketEventName.ERROR_MESSAGE, er);
+      socket.off(SocketEventName.SEAT_CLAIMED_ELSEWHERE, sce);
       socket.off(SocketEventName.INITIAL_LOGS, il);
       socket.off("connect", onConnect);
       socket.off("connect_error", ce);
