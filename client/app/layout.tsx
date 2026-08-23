@@ -1,5 +1,5 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Nunito_Sans } from "next/font/google";
 import { Providers } from "./providers";
 import { SITE_URL } from "@/lib/site";
@@ -33,6 +33,15 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
   },
+};
+
+// themeColor tints the OS chrome around an installed window and the browser
+// UI on mobile. Static and dark rather than a prefers-color-scheme pair,
+// because providers.tsx sets defaultTheme="dark": a visitor whose system is
+// light still sees the dark app unless they change it, so a light tint would
+// frame a dark board.
+export const viewport: Viewport = {
+  themeColor: "#121212",
 };
 
 export default function RootLayout({
