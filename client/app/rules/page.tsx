@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import RulesContent from "./RulesContent";
 
 export const metadata: Metadata = {
-  title: "Rules · Check!",
+  // "How to play" rather than "Rules", because that is how the question gets
+  // asked. This is much the longer of the two public pages, so it is the one
+  // worth titling for what someone is actually looking for. The OG title below
+  // stays short: a share card wants the label, not the sentence.
+  title: "How to play Check! - full rules and scoring",
   description:
     "The complete rules of Check!: card values, setup, turns, the matching window, King, Queen and Jack abilities, calling Check, and scoring.",
   alternates: { canonical: "/rules" },
