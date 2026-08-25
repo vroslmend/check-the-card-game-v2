@@ -8,11 +8,8 @@
 // build. Neither is a URL anyone shares.
 export const SITE_URL = "https://check-the-game.vercel.app";
 
-// The one sentence that says what the game is, here for the same reason as the
-// origin above: three things read it, and they have to agree. The root
-// description, the JSON-LD block beside it, and the manifest that the install
-// prompt shows. Written out separately in each, the manifest is the one that
-// quietly falls behind, because nothing about the site looks wrong when it
-// does. Sized to the roughly 155 characters a search result prints.
+// Read by the root description, the JSON-LD beside it and the manifest. Kept in
+// one place because the manifest is the copy that quietly falls behind when it
+// is not, and nothing about the site looks wrong when that happens.
 export const SITE_DESCRIPTION =
-  "Deal four cards, peek at two, play for the lowest hand. A free browser card game for 2 to 6 players. Create a lobby, send the link, no account needed.";
+  "Check is a free online card game for 2–6 players. You are dealt four cards but only get to see two, and the lowest hand wins the round.";

@@ -17,11 +17,8 @@ export const metadata: Metadata = {
   // against this. Without it Next falls back to VERCEL_URL or localhost, so
   // the share card points somewhere nobody can reach.
   metadataBase: new URL(SITE_URL),
-  // Read far beyond a search result: the title is the browser tab, the
-  // bookmark, the history entry, and the fallback when the link is pasted
-  // somewhere that does not read the OG tags below. So both of these describe
-  // the game rather than name it, and both are sized to what actually gets
-  // printed, roughly 60 characters of title and 155 of description.
+  // Inherited by any route that sets no title of its own, which is why
+  // app/game/layout.tsx sets one: a room tab must not read this sentence.
   title: "Check! - free online card game to play with friends",
   description: SITE_DESCRIPTION,
   // Proves ownership of the Search Console property. A public tag rather than
@@ -49,16 +46,13 @@ export const viewport: Viewport = {
   themeColor: "#121212",
 };
 
-// Structured data, so a crawler is told what this page is rather than left to
-// work it out from the prose. VideoGame is the type that carries the things
-// worth stating about a browser game: that it is multiplayer, that it seats two
-// to six, and that it costs nothing. Written out as a script tag because Next
-// has no metadata field for JSON-LD.
+// A script tag because Next has no metadata field for JSON-LD.
 const gameSchema = {
   "@context": "https://schema.org",
   "@type": "VideoGame",
   name: "Check!",
-  url: SITE_URL,
+  // Trailing slash, so this agrees with the canonical and the sitemap entry.
+  url: `${SITE_URL}/`,
   description: SITE_DESCRIPTION,
   genre: "Card game",
   gamePlatform: "Web browser",
@@ -71,6 +65,10 @@ const gameSchema = {
   inLanguage: "en",
 };
 
+// Escaped and serialised once. A raw "<" in any field, most plausibly a future
+// edit to SITE_DESCRIPTION, would close the script element early.
+const gameSchemaJson = JSON.stringify(gameSchema).replace(/</g, "\\u003c");
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -81,7 +79,7 @@ export default function RootLayout({
       <body className="font-game antialiased">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(gameSchema) }}
+          dangerouslySetInnerHTML={{ __html: gameSchemaJson }}
         />
         <Providers>{children}</Providers>
       </body>
