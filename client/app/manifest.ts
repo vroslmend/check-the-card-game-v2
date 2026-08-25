@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_DESCRIPTION } from "@/lib/site";
 
 // Dark, resolved to hex because a manifest cannot read CSS variables. Same
 // reasoning and same values as opengraph-image.tsx: dark is the app's default
@@ -10,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Check! - The Card Game",
     short_name: "Check!",
-    description: "A card game of strategy, memory, and luck.",
+    description: SITE_DESCRIPTION,
     start_url: "/",
     display: "standalone",
     background_color: GROUND,
