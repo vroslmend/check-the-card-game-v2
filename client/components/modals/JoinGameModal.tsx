@@ -184,7 +184,7 @@ export function JoinGameModal({
           </button>
         </div>
 
-        <ColdStartWaitNotice className="mt-4" />
+        <ColdStartWaitNotice />
       </DialogContent>
     </Dialog>
   );

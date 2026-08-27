@@ -164,7 +164,7 @@ export function RejoinModal() {
                   </button>
                 </div>
 
-                <ColdStartWaitNotice className="mt-4 text-center" />
+                <ColdStartWaitNotice className="text-center" />
               </form>
             </motion.div>
           </DialogContent>

@@ -43,8 +43,15 @@ const INITIAL_PEEK_DURATION_MS = 10000;
 // These phases exist because nothing on screen said so: a spinner that has not
 // moved in forty seconds reads as a hang, and the reasonable response to a
 // hang is a reload, which throws away the wake already paid for.
-const WAKE_HINT_AFTER_MS = 3000;
-const WAKE_EXPLAIN_AFTER_MS = 15000;
+//
+// Both thresholds are measured, not guessed. A warm production create takes up
+// to 2.5s end to end, because the emit waits on a socket that itself needs a
+// couple of seconds, so anything under about 4s fires at a healthy server.
+// The far end is bounded by the player: they start reloading around 20s, so
+// the explanation has to be on screen well before that or it arrives too late
+// to stop the thing it exists to prevent.
+const WAKE_HINT_AFTER_MS = 5000;
+const WAKE_EXPLAIN_AFTER_MS = 12000;
 
 // Named so the exit action can cancel them. A raise still in flight when the
 // wait ends would otherwise land in whatever state follows and show the notice

@@ -136,7 +136,7 @@ export function NewGameModal({
           </button>
         </div>
 
-        <ColdStartWaitNotice className="mt-4" />
+        <ColdStartWaitNotice />
       </DialogContent>
     </Dialog>
   );
