@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useUISelector, useUIActorRef } from "@/context/GameUIContext";
+import { ColdStartWaitNotice } from "@/components/modals/ColdStartWaitNotice";
 
 interface JoinGameModalProps {
   isModalOpen: boolean;
@@ -182,6 +183,8 @@ export function JoinGameModal({
             )}
           </button>
         </div>
+
+        <ColdStartWaitNotice className="mt-4" />
       </DialogContent>
     </Dialog>
   );

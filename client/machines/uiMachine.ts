@@ -37,6 +37,21 @@ const PEEK_ABILITY_DURATION_MS = 5000;
 const ACTION_ANSWER_TIMEOUT_MS = 8000;
 const INITIAL_PEEK_DURATION_MS = 10000;
 
+// A free-tier server spins down after 15 minutes idle and takes roughly a
+// minute to answer the first request after that. HANDSHAKE_TIMEOUT_MS in
+// actors.ts is sized to cover it, so the request is working the whole time.
+// These phases exist because nothing on screen said so: a spinner that has not
+// moved in forty seconds reads as a hang, and the reasonable response to a
+// hang is a reload, which throws away the wake already paid for.
+const WAKE_HINT_AFTER_MS = 3000;
+const WAKE_EXPLAIN_AFTER_MS = 15000;
+
+// Named so the exit action can cancel them. A raise still in flight when the
+// wait ends would otherwise land in whatever state follows and show the notice
+// over a screen that is not waiting for anything.
+const COLD_START_HINT_ID = "coldStartHint";
+const COLD_START_EXPLAIN_ID = "coldStartExplain";
+
 type ServerToClientEvents =
   | { type: "CLIENT_GAME_STATE_UPDATED"; gameState: ClientCheckGameState }
   | { type: "NEW_GAME_LOG"; logMessage: RichGameLogMessage }
@@ -93,6 +108,9 @@ export interface UIMachineContext {
   /** Date.now() when the last game action was emitted; null once any state
    *  update lands. Drives the action bar's in-flight disable. */
   pendingActionSince: number | null;
+  /** How much the modals say about a wait that is still in flight. Escalates on
+   *  elapsed time alone, so a cold server's minute does not read as a hang. */
+  coldStartPhase: "silent" | "waking" | "explaining";
 }
 
 export type UIMachineEvents =
@@ -112,6 +130,8 @@ export type UIMachineEvents =
     }
   | { type: "ACTION_NOT_SENT" }
   | { type: "ACTION_UNANSWERED" }
+  | { type: "_COLD_START_WAKING" }
+  | { type: "_COLD_START_EXPLAINING" }
   | { type: "SEAT_CLAIMED_ELSEWHERE" }
   | { type: "CONFIRM_ABILITY_ACTION" }
   | { type: "SKIP_ABILITY_STAGE" }
@@ -337,6 +357,22 @@ export const uiMachine = setup({
       visibleCards: [],
       reconnectionAttempts: 0,
       pendingActionSince: null,
+    }),
+    armColdStartPhases: enqueueActions(({ enqueue }) => {
+      enqueue.assign({ coldStartPhase: "silent" as const });
+      enqueue.raise(
+        { type: "_COLD_START_WAKING" },
+        { delay: WAKE_HINT_AFTER_MS, id: COLD_START_HINT_ID },
+      );
+      enqueue.raise(
+        { type: "_COLD_START_EXPLAINING" },
+        { delay: WAKE_EXPLAIN_AFTER_MS, id: COLD_START_EXPLAIN_ID },
+      );
+    }),
+    disarmColdStartPhases: enqueueActions(({ enqueue }) => {
+      enqueue.cancel(COLD_START_HINT_ID);
+      enqueue.cancel(COLD_START_EXPLAIN_ID);
+      enqueue.assign({ coldStartPhase: "silent" as const });
     }),
     markActionPending: enqueueActions(({ enqueue }) => {
       enqueue.assign({ pendingActionSince: () => Date.now() });
@@ -749,6 +785,7 @@ export const uiMachine = setup({
     lastStateReceivedAt: 0,
     modal: null,
     pendingActionSince: null,
+    coldStartPhase: "silent",
   }),
   initial: "initializing",
   on: {
@@ -766,6 +803,12 @@ export const uiMachine = setup({
       ],
     },
     ERROR_RECEIVED: { actions: "showErrorToast" },
+    _COLD_START_WAKING: {
+      actions: assign({ coldStartPhase: "waking" as const }),
+    },
+    _COLD_START_EXPLAINING: {
+      actions: assign({ coldStartPhase: "explaining" as const }),
+    },
     // The bridge refused to put a move on a dead socket. Clear the in-flight
     // state now rather than letting the action bar grey out for its full
     // unstick delay over a move that was never sent.
@@ -806,6 +849,8 @@ export const uiMachine = setup({
         idle: { tags: ["idle"] },
         creatingGame: {
           tags: ["loading"],
+          entry: "armColdStartPhases",
+          exit: "disarmColdStartPhases",
           invoke: {
             src: "createGame",
             input: ({ event }) => {
@@ -830,6 +875,8 @@ export const uiMachine = setup({
         },
         joiningGame: {
           tags: ["loading"],
+          entry: "armColdStartPhases",
+          exit: "disarmColdStartPhases",
           invoke: {
             src: "joinGame",
             input: ({ event }) => {
@@ -1245,6 +1292,8 @@ export const uiMachine = setup({
         },
         joiningGame: {
           tags: ["loading"],
+          entry: "armColdStartPhases",
+          exit: "disarmColdStartPhases",
           // The server broadcasts the post-join state BEFORE the join ack
           // reaches this client (the machine's broadcast is emitted
           // synchronously inside the join send). The inGame-level handler

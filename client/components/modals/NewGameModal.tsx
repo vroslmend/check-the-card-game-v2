@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useUIActorRef, useUISelector } from "@/context/GameUIContext";
+import { ColdStartWaitNotice } from "@/components/modals/ColdStartWaitNotice";
 import { cn } from "@/lib/utils";
 
 interface NewGameModalProps {
@@ -134,6 +135,8 @@ export function NewGameModal({
             )}
           </button>
         </div>
+
+        <ColdStartWaitNotice className="mt-4" />
       </DialogContent>
     </Dialog>
   );

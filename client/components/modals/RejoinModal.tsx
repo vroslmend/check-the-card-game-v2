@@ -8,6 +8,7 @@ import {
   useUISelector,
   type UIMachineSnapshot,
 } from "@/context/GameUIContext";
+import { ColdStartWaitNotice } from "@/components/modals/ColdStartWaitNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -162,6 +163,8 @@ export function RejoinModal() {
                     No thanks, take me home
                   </button>
                 </div>
+
+                <ColdStartWaitNotice className="mt-4 text-center" />
               </form>
             </motion.div>
           </DialogContent>
