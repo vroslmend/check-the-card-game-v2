@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -31,6 +31,7 @@ const selectRejoinModalProps = (state: UIMachineSnapshot) => {
 };
 
 export function RejoinModal() {
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const { send } = useUIActorRef();
   const { gameId, modalInfo, isLoading } = useUISelector(
     selectRejoinModalProps,
@@ -43,14 +44,6 @@ export function RejoinModal() {
     }
     return "";
   });
-
-  useEffect(() => {
-    if (modalInfo?.type === "rejoin") {
-      setTimeout(() => {
-        document.getElementById("player-name-rejoin")?.focus();
-      }, 100);
-    }
-  }, [modalInfo]);
 
   const isVisible = modalInfo?.type === "rejoin";
 
@@ -89,6 +82,10 @@ export function RejoinModal() {
         {isVisible && (
           <DialogContent
             showCloseButton={false}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              titleRef.current?.focus();
+            }}
             onInteractOutside={(e) => e.preventDefault()}
             onEscapeKeyDown={(e) => e.preventDefault()}
             className="sm:max-w-md p-0 overflow-hidden bg-surface border-hairline rounded-xl border"
@@ -105,7 +102,11 @@ export function RejoinModal() {
                     <div className="rounded-full bg-surface-2 p-2">
                       <Users className="h-5 w-5 text-ink-muted" />
                     </div>
-                    <DialogTitle className="text-3xl font-bold text-ink">
+                    <DialogTitle
+                      ref={titleRef}
+                      tabIndex={-1}
+                      className="text-3xl font-bold text-ink"
+                    >
                       {modalInfo?.title || "Join Game"}
                     </DialogTitle>
                   </div>
@@ -126,14 +127,12 @@ export function RejoinModal() {
                     <Input
                       id="player-name-rejoin"
                       type="text"
-                      name="playerNickname"
                       value={playerName}
                       onChange={(e) => setPlayerName(e.target.value)}
                       placeholder="Enter your name"
                       className="rounded-xl border-hairline bg-surface h-12 px-4 text-lg text-center"
                       onKeyDown={onKeyDown}
-                      autoComplete="nickname"
-                      autoFocus
+                      autoComplete="off"
                     />
                   </div>
                 </div>

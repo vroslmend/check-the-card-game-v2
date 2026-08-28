@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowRight, Loader2 } from "lucide-react";
 import {
@@ -22,6 +22,7 @@ export function NewGameModal({
   isModalOpen,
   setIsModalOpen,
 }: NewGameModalProps) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const [playerName, setPlayerName] = useState(() => {
     if (typeof localStorage !== "undefined") {
       return localStorage.getItem("localPlayerName") || "";
@@ -53,6 +54,10 @@ export function NewGameModal({
   return (
     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
       <DialogContent
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          titleRef.current?.focus();
+        }}
         onInteractOutside={(e) => {
           if (isLoading) e.preventDefault();
         }}
@@ -61,7 +66,11 @@ export function NewGameModal({
         <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
           New table
         </p>
-        <DialogTitle className="mt-2 text-3xl font-extrabold tracking-tight text-ink">
+        <DialogTitle
+          ref={titleRef}
+          tabIndex={-1}
+          className="mt-2 text-3xl font-extrabold tracking-tight text-ink"
+        >
           Create a game
         </DialogTitle>
         <DialogDescription className="mt-2 text-sm leading-relaxed text-ink-muted">
@@ -76,13 +85,11 @@ export function NewGameModal({
           <input
             id="name"
             type="text"
-            name="playerNickname"
             placeholder="Enter your name"
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
             onKeyDown={onKeyDown}
-            autoComplete="nickname"
-            autoFocus
+            autoComplete="off"
             maxLength={20}
             className="mt-2 h-12 w-full rounded-full border border-hairline bg-surface px-5 text-base text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent"
           />
