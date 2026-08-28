@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Loader2 } from "lucide-react";
@@ -22,6 +22,7 @@ export function JoinGameModal({
   isModalOpen,
   setIsModalOpen,
 }: JoinGameModalProps) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const [gameId, setGameId] = useState("");
   const [playerName, setPlayerName] = useState(() => {
     if (typeof localStorage !== "undefined") {
@@ -75,6 +76,10 @@ export function JoinGameModal({
   return (
     <Dialog open={isModalOpen} onOpenChange={resetAndClose}>
       <DialogContent
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          titleRef.current?.focus();
+        }}
         onInteractOutside={(e) => {
           if (isLoading) e.preventDefault();
         }}
@@ -83,7 +88,11 @@ export function JoinGameModal({
         <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
           Join a table · step {step} of 2
         </p>
-        <DialogTitle className="mt-2 text-3xl font-extrabold tracking-tight text-ink">
+        <DialogTitle
+          ref={titleRef}
+          tabIndex={-1}
+          className="mt-2 text-3xl font-extrabold tracking-tight text-ink"
+        >
           Join a game
         </DialogTitle>
         <DialogDescription className="mt-2 text-sm leading-relaxed text-ink-muted">
@@ -111,13 +120,11 @@ export function JoinGameModal({
                 <input
                   id="player-name"
                   type="text"
-                  name="playerNickname"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
                   placeholder="Enter your name"
                   onKeyDown={onKeyDown}
-                  autoComplete="nickname"
-                  autoFocus
+                  autoComplete="off"
                   maxLength={20}
                   className="mt-2 h-12 w-full rounded-full border border-hairline bg-surface px-5 text-base text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent"
                 />
