@@ -110,11 +110,13 @@ export function JoinGameModal({
                 </label>
                 <input
                   id="player-name"
+                  type="text"
+                  name="playerNickname"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
                   placeholder="Enter your name"
                   onKeyDown={onKeyDown}
-                  autoComplete="off"
+                  autoComplete="nickname"
                   autoFocus
                   maxLength={20}
                   className="mt-2 h-12 w-full rounded-full border border-hairline bg-surface px-5 text-base text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent"

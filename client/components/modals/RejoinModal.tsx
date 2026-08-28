@@ -125,12 +125,14 @@ export function RejoinModal() {
                     </Label>
                     <Input
                       id="player-name-rejoin"
+                      type="text"
+                      name="playerNickname"
                       value={playerName}
                       onChange={(e) => setPlayerName(e.target.value)}
                       placeholder="Enter your name"
                       className="rounded-xl border-hairline bg-surface h-12 px-4 text-lg text-center"
                       onKeyDown={onKeyDown}
-                      autoComplete="off"
+                      autoComplete="nickname"
                       autoFocus
                     />
                   </div>
