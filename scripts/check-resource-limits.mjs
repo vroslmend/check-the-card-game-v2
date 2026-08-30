@@ -41,7 +41,10 @@ const connect = (address) =>
     const socket = ioc(URL, {
       transports: ["websocket"],
       reconnection: false,
-      extraHeaders: { "x-forwarded-for": address },
+      extraHeaders: {
+        Origin: "http://localhost:3000",
+        "x-forwarded-for": address,
+      },
     });
     const onError = (error) => reject(error);
     socket.once("connect_error", onError);
