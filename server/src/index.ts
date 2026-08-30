@@ -217,12 +217,19 @@ const sanitizeChatMessage = (raw: unknown): string | null => {
   return message.length > 0 ? message : null;
 };
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const CORS_ORIGIN = (
-  process.env.CORS_ORIGIN ??
-  "http://localhost:3000,https://check-the-game.vercel.app"
+  process.env.CORS_ORIGIN ?? (IS_PRODUCTION ? "" : "http://localhost:3000")
 )
   .split(",")
-  .map((o) => o.trim());
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+if (IS_PRODUCTION && CORS_ORIGIN.length === 0) {
+  throw new Error(
+    "CORS_ORIGIN must list at least one allowed frontend origin in production.",
+  );
+}
 
 logger.info({ corsOrigins: CORS_ORIGIN }, "CORS origins set");
 
@@ -244,6 +251,27 @@ export const io = new SocketIOServer<
   cors: {
     origin: CORS_ORIGIN,
     methods: ["GET", "POST"],
+  },
+  // CORS only controls which browser responses may be read. Engine.IO's
+  // admission hook is what refuses an unlisted WebSocket Origin before a
+  // Socket.IO connection exists. This is a browser boundary, not client
+  // authentication: non-browser clients can forge the header, so the resource
+  // limits above remain necessary.
+  allowRequest: (request, callback) => {
+    if (!IS_PRODUCTION) {
+      callback(null, true);
+      return;
+    }
+
+    const origin = request.headers.origin;
+    const allowed = typeof origin === "string" && CORS_ORIGIN.includes(origin);
+    if (!allowed) {
+      logger.warn(
+        { origin: origin ?? null },
+        "Rejected connection from an unauthorized origin",
+      );
+    }
+    callback(null, allowed);
   },
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes buffer

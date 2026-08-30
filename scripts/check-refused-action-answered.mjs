@@ -33,7 +33,11 @@ const check = (name, passed, detail = "") => {
 
 const connect = () =>
   new Promise((resolve) => {
-    const s = ioc(URL, { transports: ["websocket"], reconnection: false });
+    const s = ioc(URL, {
+      transports: ["websocket"],
+      reconnection: false,
+      extraHeaders: { Origin: "http://localhost:3000" },
+    });
     s.on("connect", () => resolve(s));
   });
 
