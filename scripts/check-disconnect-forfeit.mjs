@@ -58,6 +58,24 @@ const waitFor = async (predicate, what, timeoutMs = 15_000) => {
   );
 };
 
+const waitForActor = async (
+  targetActor,
+  predicate,
+  what,
+  timeoutMs = 5_000,
+) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const targetContext = targetActor.getSnapshot().context;
+    if (predicate(targetContext)) return;
+    await sleep(10);
+  }
+  const targetContext = targetActor.getSnapshot().context;
+  throw new Error(
+    `Timed out waiting for ${what} (stage=${targetContext.gameStage}, current=${targetContext.currentPlayerId})`,
+  );
+};
+
 let checks = 0;
 let failures = 0;
 const check = (name, passed, detail = "") => {
@@ -307,6 +325,103 @@ check(
     context().gameStage === "PLAYING",
   `turnOrder=${JSON.stringify(context().turnOrder)}`,
 );
+
+const scenarioPlayer = (id, overrides = {}) => ({
+  id,
+  name: id,
+  socketId: `socket-${id}`,
+  hand: [{ id: `${id}-card`, rank: "2", suit: "S" }],
+  status: "WAITING",
+  isReady: true,
+  isDealer: false,
+  hasCalledCheck: false,
+  isLocked: false,
+  score: 0,
+  isConnected: true,
+  pendingDrawnCard: null,
+  forfeited: false,
+  ...overrides,
+});
+
+const scenarioActor = ({
+  players,
+  turnOrder,
+  gameMasterId,
+  currentPlayerId,
+}) => {
+  const seedActor = createActor(gameMachine, {
+    input: { gameId: "CHECK-DISCONNECT-SCENARIO", seed: 148 },
+  });
+  seedActor.start();
+  const initial = seedActor.getSnapshot();
+  seedActor.stop();
+
+  const state = gameMachine.resolveState({
+    value: { PLAYING: { turn: "DRAW" } },
+    context: {
+      ...initial.context,
+      players,
+      turnOrder,
+      gameMasterId,
+      currentPlayerId,
+      currentTurnSegment: "DRAW",
+      gameStage: "PLAYING",
+      deck: [{ id: "scenario-deck-card", rank: "3", suit: "S" }],
+    },
+    status: "active",
+  });
+  const targetActor = createActor(gameMachine, { snapshot: state });
+  targetActor.start();
+  return targetActor;
+};
+
+const tieActor = scenarioActor({
+  players: {
+    "score-a": scenarioPlayer("score-a"),
+    "score-b": scenarioPlayer("score-b", {
+      isConnected: false,
+      isLocked: true,
+      forfeited: true,
+    }),
+  },
+  turnOrder: ["score-a", "score-b"],
+  gameMasterId: "score-a",
+  currentPlayerId: "score-a",
+});
+tieActor.send({ type: "CALL_CHECK", playerId: "score-a" });
+const tieContext = tieActor.getSnapshot().context;
+check(
+  "a forfeited player cannot win a tied score",
+  !tieContext.gameover?.winnerIds.includes("score-b") &&
+    !Object.prototype.hasOwnProperty.call(tieContext.playerWins, "score-b"),
+  `winners=${JSON.stringify(tieContext.gameover?.winnerIds)}`,
+);
+tieActor.stop();
+
+const finalTurnHostActor = scenarioActor({
+  players: {
+    other: scenarioPlayer("other"),
+    host: scenarioPlayer("host"),
+  },
+  turnOrder: ["other", "host"],
+  gameMasterId: "host",
+  currentPlayerId: "other",
+});
+finalTurnHostActor.send({ type: "CALL_CHECK", playerId: "other" });
+finalTurnHostActor.send({ type: "PLAYER_DISCONNECTED", playerId: "host" });
+await waitForActor(
+  finalTurnHostActor,
+  (c) => c.players.host.forfeited === true,
+  "final-turn host to forfeit",
+);
+const finalTurnHostContext = finalTurnHostActor.getSnapshot().context;
+check(
+  "a forfeiting host is reassigned even when the survivor is locked",
+  finalTurnHostContext.gameMasterId === "other" &&
+    finalTurnHostContext.gameStage === "SCORING",
+  `gameMasterId=${finalTurnHostContext.gameMasterId} stage=${finalTurnHostContext.gameStage}`,
+);
+finalTurnHostActor.stop();
 
 actor.stop();
 

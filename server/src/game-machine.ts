@@ -1609,7 +1609,10 @@ export const gameMachine = setup({
       const maxScore = Math.max(...Object.values(playerScores));
       const winnerIds = Object.values(updatedPlayers)
         .filter(
-          (p) => p.status !== PlayerStatus.DISQUALIFIED && p.score === minScore,
+          (p) =>
+            !p.forfeited &&
+            p.status !== PlayerStatus.DISQUALIFIED &&
+            p.score === minScore,
         )
         .map((p) => p.id);
       const loserId =
@@ -1759,7 +1762,7 @@ export const gameMachine = setup({
         (id) =>
           id !== playerId &&
           context.players[id]?.isConnected &&
-          !context.players[id]?.isLocked,
+          !context.players[id]?.forfeited,
       );
 
       return {
