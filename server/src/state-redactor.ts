@@ -128,8 +128,7 @@ export const generatePlayerView = (
     discardPileSize: fullGameContext.discardPile.length,
     turnOrder: fullGameContext.turnOrder,
     // context.gameStage is the single source of truth. Deriving the stage from
-    // the machine's state value breaks whenever the machine is in a non-stage
-    // node such as the error/recovery state.
+    // the machine's state value would couple redaction to internal phase nodes.
     gameStage: fullGameContext.gameStage,
     currentPlayerId: fullGameContext.currentPlayerId,
     turnPhase: fullGameContext.currentTurnSegment,

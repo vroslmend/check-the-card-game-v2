@@ -49,12 +49,6 @@ const MATCHING_STAGE_DURATION_MS = parseInt(
 );
 const MAX_PLAYERS = parseInt(process.env.MAX_PLAYERS || "4", 10);
 const CARDS_PER_PLAYER = parseInt(process.env.CARDS_PER_PLAYER || "4", 10);
-// 120s: phone screen-locks routinely exceed 30s, and the socket layer's
-// connection-state recovery window is 2 minutes — forfeit only after that.
-const RECONNECT_TIMEOUT_MS = parseInt(
-  process.env.RECONNECT_TIMEOUT_MS || "120000",
-  10,
-);
 // Match the in-game reconnect grace (and the socket recovery window): a lobby
 // should survive a brief blip — a phone screen-lock or network hiccup routinely
 // exceeds a few seconds — and only evict a waiting player after the same 2min
@@ -62,6 +56,8 @@ const RECONNECT_TIMEOUT_MS = parseInt(
 // (Note: this only governs eviction of a DISCONNECTED player; a still-connected
 // idle lobby never tears down. Platform-level spindown is a separate, infra
 // concern — see the /health endpoint and hosting tier.)
+// A lobby keeps a disconnected seat for the same grace period before removing
+// it. In-game seats are handled by the ordinary turn deadline instead.
 const LOBBY_DISCONNECT_TIMEOUT_MS = parseInt(
   process.env.LOBBY_DISCONNECT_TIMEOUT_MS || "120000",
   10,
@@ -332,15 +328,22 @@ const baseTurnStateNode = {
         "unsealDiscardPile",
         "broadcastGameState",
       ],
-      // Turn timer: an idle player auto-draws from the deck so the game
-      // can't stall on one connected-but-absent player.
+      // A connected-but-idle player auto-draws. A disconnected player gets the
+      // same ordinary window, then forfeits the round with their hand frozen.
       after: {
-        turnTimer: {
-          actions: raise(({ context }: { context: GameContext }) => ({
-            type: PlayerActionType.DRAW_FROM_DECK as const,
-            playerId: context.currentPlayerId!,
-          })) as any,
-        },
+        turnTimer: [
+          {
+            target: "endOfTurn",
+            guard: "isCurrentPlayerDisconnected",
+            actions: "forfeitDisconnectedCurrentPlayer",
+          },
+          {
+            actions: raise(({ context }: { context: GameContext }) => ({
+              type: PlayerActionType.DRAW_FROM_DECK as const,
+              playerId: context.currentPlayerId!,
+            })) as any,
+          },
+        ],
       },
       on: {
         [PlayerActionType.DRAW_FROM_DECK]: {
@@ -356,31 +359,11 @@ const baseTurnStateNode = {
       },
       always: [
         {
-          // The player whose turn just started is disconnected (they dropped
-          // earlier, while it was not yet their turn). Pause for recovery.
-          target: "#game.error",
-          guard: "isCurrentPlayerDisconnected",
-          actions: [
-            {
-              type: "enterErrorState",
-              params: ({ context }: { context: GameContext }) => ({
-                errorType: "NETWORK_ERROR" as const,
-                playerId: context.currentPlayerId!,
-              }),
-            },
-            "broadcastGameState",
-          ],
-        },
-        {
           // Rules 11.A: the draw pile is exhausted — rebuild it from the
           // discard pile (minus its top card) inline and play on. This is a
-          // normal game event, not an error: the old detour through
-          // #game.error tried to come back via #game.history, and a
-          // root-level history node never records anything (its parent, the
-          // machine root, never exits), so the "resume" silently landed in
-          // WAITING_FOR_PLAYERS and hard-locked the game. Targetless: the
-          // reshuffle refills the deck, the guard turns false, and DRAW
-          // continues with the deadline its entry already armed.
+          // normal game event. Targetless: the reshuffle refills the deck, the
+          // guard turns false, and DRAW continues with the deadline its entry
+          // already armed.
           guard: ({ context }: { context: GameContext }) =>
             context.deck.length === 0 && context.discardPile.length > 1,
           actions: ["reshuffleDiscardIntoDeck", "broadcastGameState"],
@@ -407,32 +390,45 @@ const baseTurnStateNode = {
         })),
         "broadcastGameState",
       ],
-      // Turn timer: deck draws are auto-discarded; discard-pile draws must be
-      // swapped (rules 6.A), so the first hand slot is used.
+      // Turn timer: a disconnected player forfeits before their pending card
+      // can be auto-played. Connected idle players auto-resolve as before.
       after: {
-        turnTimer: {
-          actions: enqueueActions(
-            ({ context, enqueue }: { context: GameContext; enqueue: any }) => {
-              const playerId = context.currentPlayerId;
-              const pending = playerId
-                ? context.players[playerId]?.pendingDrawnCard
-                : null;
-              if (!playerId || !pending) return;
-              if (pending.source === "deck") {
-                enqueue.raise({
-                  type: PlayerActionType.DISCARD_DRAWN_CARD,
-                  playerId,
-                });
-              } else {
-                enqueue.raise({
-                  type: PlayerActionType.SWAP_AND_DISCARD,
-                  playerId,
-                  payload: { handCardIndex: 0 },
-                });
-              }
-            },
-          ) as any,
-        },
+        turnTimer: [
+          {
+            target: "endOfTurn",
+            guard: "isCurrentPlayerDisconnected",
+            actions: "forfeitDisconnectedCurrentPlayer",
+          },
+          {
+            actions: enqueueActions(
+              ({
+                context,
+                enqueue,
+              }: {
+                context: GameContext;
+                enqueue: any;
+              }) => {
+                const playerId = context.currentPlayerId;
+                const pending = playerId
+                  ? context.players[playerId]?.pendingDrawnCard
+                  : null;
+                if (!playerId || !pending) return;
+                if (pending.source === "deck") {
+                  enqueue.raise({
+                    type: PlayerActionType.DISCARD_DRAWN_CARD,
+                    playerId,
+                  });
+                } else {
+                  enqueue.raise({
+                    type: PlayerActionType.SWAP_AND_DISCARD,
+                    playerId,
+                    payload: { handCardIndex: 0 },
+                  });
+                }
+              },
+            ) as any,
+          },
+        ],
       },
       on: {
         [PlayerActionType.SWAP_AND_DISCARD]: {
@@ -462,18 +458,34 @@ const baseTurnStateNode = {
         })),
         "broadcastGameState",
       ],
-      // Turn timer: an unresolved ability fizzles. Re-entering arms a fresh
-      // timer for the next ability on the stack (if any).
+      // Turn timer: an unresolved ability fizzles. If its owner is the
+      // disconnected current player, that same ordinary deadline also marks
+      // the seat out for the round. Re-entering processes the next ability.
       after: {
-        turnTimer: {
-          target: "ability",
-          reenter: true,
-          actions: ["fizzleTopAbility", "broadcastGameState"],
-        },
+        turnTimer: [
+          {
+            target: "ability",
+            reenter: true,
+            guard: "isCurrentAbilityOwnerDisconnected",
+            actions: [
+              "forfeitDisconnectedCurrentPlayer",
+              "fizzleTopAbility",
+              "broadcastGameState",
+            ],
+          },
+          {
+            target: "ability",
+            reenter: true,
+            actions: ["fizzleTopAbility", "broadcastGameState"],
+          },
+        ],
       },
       always: [
         {
-          guard: or(["isAbilityOwnerLocked", "isAbilityOwnerDisconnected"]),
+          guard: or([
+            "isAbilityOwnerLocked",
+            "isNonCurrentAbilityOwnerDisconnected",
+          ]),
           actions: ["fizzleTopAbility", "broadcastGameState"],
         },
         {
@@ -725,6 +737,8 @@ export const gameMachine = setup({
         connectedPlayers.length >= 2 && connectedPlayers.every((p) => p.isReady)
       );
     },
+    hasEnoughConnectedPlayers: ({ context }) =>
+      Object.values(context.players).filter((p) => p.isConnected).length >= 2,
     // Disconnected players count as ready so one dropout can't stall the peek phase forever.
     allPlayersReadyForPeek: ({ context }) =>
       context.turnOrder.every((id) => {
@@ -898,10 +912,6 @@ export const gameMachine = setup({
       );
     },
     isDeckEmpty: ({ context }) => context.deck.length === 0,
-    isCurrentPlayer: ({ context, event }) => {
-      assertEvent(event, ["PLAYER_DISCONNECTED", PlayerActionType.LEAVE_GAME]);
-      return context.currentPlayerId === event.playerId;
-    },
     isInvalidMatchAttempt: ({ context, event }) => {
       assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
       const {
@@ -926,10 +936,21 @@ export const gameMachine = setup({
       const owner = context.players[currentAbility.playerId];
       return !owner || owner.isLocked;
     },
-    isAbilityOwnerDisconnected: ({ context }) => {
+    isNonCurrentAbilityOwnerDisconnected: ({ context }) => {
       const currentAbility = context.abilityStack.at(-1);
       if (!currentAbility) return false;
-      return !context.players[currentAbility.playerId]?.isConnected;
+      return (
+        currentAbility.playerId !== context.currentPlayerId &&
+        !context.players[currentAbility.playerId]?.isConnected
+      );
+    },
+    isCurrentAbilityOwnerDisconnected: ({ context }) => {
+      const currentAbility = context.abilityStack.at(-1);
+      return (
+        !!currentAbility &&
+        currentAbility.playerId === context.currentPlayerId &&
+        !context.players[currentAbility.playerId]?.isConnected
+      );
     },
     isCurrentPlayerDisconnected: ({ context }) =>
       !!context.currentPlayerId &&
@@ -1301,6 +1322,38 @@ export const gameMachine = setup({
     setNextPlayer: assign(({ context }) => {
       const { currentPlayerId, turnOrder } = context;
       if (!currentPlayerId) return {};
+
+      // A forfeited seat is removed only when its turn has fully ended. That
+      // lets this action preserve the normal clockwise successor calculation
+      // without keeping the disconnected player in a later round.
+      if (context.players[currentPlayerId]?.forfeited) {
+        const currentIndex = turnOrder.indexOf(currentPlayerId);
+        const newTurnOrder = turnOrder.filter((id) => id !== currentPlayerId);
+        if (newTurnOrder.length === 0) {
+          return {
+            turnOrder: newTurnOrder,
+            currentPlayerId: null,
+            currentTurnSegment: TurnPhase.DRAW,
+          };
+        }
+
+        let nextIndex =
+          currentIndex >= 0 ? currentIndex % newTurnOrder.length : 0;
+        let stop = newTurnOrder.length;
+        while (
+          stop > 0 &&
+          context.players[newTurnOrder[nextIndex]!]?.isLocked
+        ) {
+          nextIndex = (nextIndex + 1) % newTurnOrder.length;
+          stop--;
+        }
+        return {
+          turnOrder: newTurnOrder,
+          currentPlayerId: newTurnOrder[nextIndex]!,
+          currentTurnSegment: TurnPhase.DRAW,
+        };
+      }
+
       let nextIndex =
         (turnOrder.indexOf(currentPlayerId) + 1) % turnOrder.length;
       let stop = turnOrder.length;
@@ -1337,16 +1390,35 @@ export const gameMachine = setup({
     }),
     setNextPlayerInFinalTurns: assign(({ context }) => {
       if (!context.checkDetails) return {};
+      let finalTurnOrder = context.checkDetails.finalTurnOrder;
       let newIndex = context.checkDetails.finalTurnIndex;
+      const currentPlayerId = context.currentPlayerId;
+
+      // Keep the final-turn index aligned when the current disconnected seat
+      // forfeits. The index is moved back before the normal increment below,
+      // so the next seat is not skipped after filtering the forfeited player.
+      if (currentPlayerId && context.players[currentPlayerId]?.forfeited) {
+        const currentIndex = finalTurnOrder.indexOf(currentPlayerId);
+        if (currentIndex >= 0) {
+          finalTurnOrder = finalTurnOrder.filter(
+            (id) => id !== currentPlayerId,
+          );
+          newIndex = currentIndex - 1;
+        }
+      }
+
       do {
         newIndex++;
       } while (
-        newIndex < context.checkDetails.finalTurnOrder.length &&
-        context.players[context.checkDetails.finalTurnOrder[newIndex]!]
-          ?.isLocked
+        newIndex < finalTurnOrder.length &&
+        context.players[finalTurnOrder[newIndex]!]?.isLocked
       );
       return {
-        checkDetails: { ...context.checkDetails, finalTurnIndex: newIndex },
+        checkDetails: {
+          ...context.checkDetails,
+          finalTurnOrder,
+          finalTurnIndex: newIndex,
+        },
       };
     }),
     setCurrentPlayerInFinalTurns: assign(({ context }) => {
@@ -1553,13 +1625,16 @@ export const gameMachine = setup({
 
       // Disqualified players are revealed and scored but cannot win.
       const eligibleScores = Object.values(updatedPlayers)
-        .filter((p) => p.status !== PlayerStatus.DISQUALIFIED)
+        .filter((p) => !p.forfeited && p.status !== PlayerStatus.DISQUALIFIED)
         .map((p) => p.score);
       const minScore = Math.min(...eligibleScores);
       const maxScore = Math.max(...Object.values(playerScores));
       const winnerIds = Object.values(updatedPlayers)
         .filter(
-          (p) => p.status !== PlayerStatus.DISQUALIFIED && p.score === minScore,
+          (p) =>
+            !p.forfeited &&
+            p.status !== PlayerStatus.DISQUALIFIED &&
+            p.score === minScore,
         )
         .map((p) => p.id);
       const loserId =
@@ -1575,7 +1650,9 @@ export const gameMachine = setup({
       // you played, and a disqualified player still scored one.
       const nextPlayerTotals = { ...context.playerTotals };
       for (const [id, score] of Object.entries(playerScores)) {
-        nextPlayerTotals[id] = (nextPlayerTotals[id] ?? 0) + score;
+        if (!updatedPlayers[id]!.forfeited) {
+          nextPlayerTotals[id] = (nextPlayerTotals[id] ?? 0) + score;
+        }
       }
 
       return {
@@ -1592,21 +1669,29 @@ export const gameMachine = setup({
       };
     }),
     resetForNewRound: assign(({ context }) => {
+      const activeTurnOrder = Object.values(context.players)
+        .filter((p) => p.isConnected)
+        .map((p) => p.id);
+      const gameMasterIndex = activeTurnOrder.indexOf(context.gameMasterId!);
       const newDealerIndex =
-        (context.turnOrder.indexOf(context.gameMasterId!) + 1) %
-        context.turnOrder.length;
-      const newDealerId = context.turnOrder[newDealerIndex]!;
+        (Math.max(gameMasterIndex, -1) + 1) % activeTurnOrder.length;
+      const newDealerId = activeTurnOrder[newDealerIndex]!;
 
       const updatedPlayers = produce(context.players, (draft) => {
         for (const p of Object.values(draft)) {
+          const isActiveThisRound = p.isConnected;
           p.hand = [];
           p.isReady = false;
-          p.isLocked = false;
+          p.isLocked = !isActiveThisRound;
           p.hasCalledCheck = false;
           p.pendingDrawnCard = null;
           p.isDealer = p.id === newDealerId;
           p.status = PlayerStatus.WAITING;
           p.score = 0;
+          // A seat that is still away sits this round out. Reconnecting later
+          // restores the socket, but not round participation; the next reset
+          // deals the player back in automatically.
+          p.forfeited = !isActiveThisRound;
         }
       });
 
@@ -1618,6 +1703,7 @@ export const gameMachine = setup({
         abilityStack: [],
         checkDetails: null,
         gameover: null,
+        turnOrder: activeTurnOrder,
         currentPlayerId: newDealerId,
         currentTurnSegment: null,
         lastRoundLoserId: context.gameover?.loserId || null,
@@ -1682,33 +1768,55 @@ export const gameMachine = setup({
           }
         : {};
     }),
-    // Deck exhaustion is handled inline in DRAW (Rules 11.A/11.B), so the
-    // pause-and-recover state only ever handles a disconnected current player.
-    enterErrorState: assign(
-      (
-        _,
-        params: {
-          errorType: "NETWORK_ERROR";
-          playerId?: PlayerId;
+    // A dropped current player receives the same turn window as everyone else.
+    // If they are still away when that window ends, freeze their hand and mark
+    // them out for this round. The seat remains in `players` so the results
+    // sheet and series history can still show it, and resetForNewRound decides
+    // whether it is dealt back in from the player's current connection state.
+    forfeitDisconnectedCurrentPlayer: assign(({ context }) => {
+      const playerId = context.currentPlayerId;
+      const player = playerId ? context.players[playerId] : undefined;
+      if (!playerId || !player || player.isConnected || player.forfeited) {
+        return {};
+      }
+
+      const connectedSurvivor = context.turnOrder.find(
+        (id) =>
+          id !== playerId &&
+          context.players[id]?.isConnected &&
+          !context.players[id]?.forfeited,
+      );
+
+      return {
+        players: {
+          ...context.players,
+          [playerId]: {
+            ...player,
+            forfeited: true,
+            isLocked: true,
+          },
         },
-      ) => ({
-        errorState: {
-          message: `Player ${params.playerId} has disconnected.`,
-          errorType: params.errorType,
-          affectedPlayerId: params.playerId,
-        },
-        // The game is paused; don't leave a stale countdown ticking on clients.
+        gameMasterId:
+          context.gameMasterId === playerId
+            ? (connectedSurvivor ?? context.gameMasterId)
+            : context.gameMasterId,
         turnDeadline: null,
-      }),
-    ),
-    clearErrorState: assign({ errorState: null }),
+        log: [
+          ...context.log,
+          createLogEntry(context.gameId, {
+            message: `${getPlayerNameForLog(playerId, context.players)} was away when their turn expired and forfeited this round.`,
+            type: "public",
+            tags: ["system-message"],
+          }),
+        ],
+      };
+    }),
     reshuffleDiscardIntoDeck: assign(({ context }) => {
       const newDiscard = [...context.discardPile];
       const topCard = newDiscard.pop();
       return {
         deck: shuffleDeck(newDiscard, context.rng),
         discardPile: topCard ? [topCard] : [],
-        errorState: null,
         log: [
           ...context.log,
           createLogEntry(context.gameId, {
@@ -1736,11 +1844,11 @@ export const gameMachine = setup({
     }),
     setInitialPlayer: assign(({ context }) => {
       // Real-life rule: the winner of the previous round leads the next one.
-      // context.winnerId carries across resetForNewRound; fall back to seating
-      // order for the first-ever game (winnerId null) or if the prior winner
-      // has since left the table.
+      // context.winnerId carries across resetForNewRound; fall back to active
+      // seating order for the first-ever game or if the prior winner is no
+      // longer in this round's connected turn order.
       const winnerStillHere =
-        !!context.winnerId && !!context.players[context.winnerId];
+        !!context.winnerId && context.turnOrder.includes(context.winnerId);
       const firstPlayerId = winnerStillHere
         ? context.winnerId!
         : context.turnOrder[0]!;
@@ -1844,113 +1952,6 @@ export const gameMachine = setup({
               }
             : context.matchingOpportunity,
         log: newLog,
-      };
-    }),
-    handleFailedRecovery: assign(({ context }) => {
-      const affectedPlayerId = context.errorState?.affectedPlayerId;
-      if (!affectedPlayerId || !context.players[affectedPlayerId]) {
-        return { errorState: null };
-      }
-
-      const newPlayers = { ...context.players } as Record<
-        PlayerId,
-        ServerPlayer
-      >;
-      newPlayers[affectedPlayerId] = {
-        ...newPlayers[affectedPlayerId]!,
-        forfeited: true,
-        isConnected: false,
-        isLocked: true,
-      };
-
-      const newTurnOrder = context.turnOrder.filter(
-        (id) => id !== affectedPlayerId,
-      );
-      let newCurrentPlayerId = context.currentPlayerId;
-
-      if (context.currentPlayerId === affectedPlayerId) {
-        const currentIndex = context.turnOrder.indexOf(
-          context.currentPlayerId!,
-        );
-        const nextIndex = (currentIndex + 1) % context.turnOrder.length;
-        newCurrentPlayerId =
-          context.turnOrder[nextIndex] === affectedPlayerId
-            ? null
-            : context.turnOrder[nextIndex]!;
-      }
-
-      const newLog = [
-        ...context.log,
-        createLogEntry(context.gameId, {
-          message: `${getPlayerNameForLog(affectedPlayerId, context.players)} did not reconnect and forfeited the game.`,
-          type: "public",
-          tags: ["system-message"],
-        }),
-      ];
-
-      if (newTurnOrder.length <= 1) {
-        const winnerId = newTurnOrder[0] ?? null;
-        // calculateScores never runs on this path — score the hands here so
-        // the end screen doesn't show zeros, and hand the game-master seat to
-        // a survivor so the Play Again button still exists for someone.
-        const playerScores: Record<PlayerId, number> = {};
-        for (const p of Object.values(newPlayers)) {
-          const score = p.hand.reduce(
-            (acc, card) => acc + (card ? cardScoreValues[card.rank] : 0),
-            0,
-          );
-          newPlayers[p.id] = { ...p, score };
-          playerScores[p.id] = score;
-        }
-        const nextPlayerWins = { ...context.playerWins };
-        if (winnerId) {
-          nextPlayerWins[winnerId] = (nextPlayerWins[winnerId] ?? 0) + 1;
-        }
-        const nextPlayerTotals = { ...context.playerTotals };
-        for (const [id, score] of Object.entries(playerScores)) {
-          nextPlayerTotals[id] = (nextPlayerTotals[id] ?? 0) + score;
-        }
-        return {
-          players: newPlayers,
-          turnOrder: newTurnOrder,
-          gameMasterId:
-            context.gameMasterId === affectedPlayerId && winnerId
-              ? winnerId
-              : context.gameMasterId,
-          gameStage: GameStage.GAMEOVER,
-          winnerId,
-          playerWins: nextPlayerWins,
-          playerTotals: nextPlayerTotals,
-          gameover: {
-            winnerIds: winnerId ? [winnerId] : [],
-            loserId: affectedPlayerId,
-            playerScores,
-          },
-          log: newLog,
-          errorState: null,
-        };
-      }
-
-      return {
-        players: newPlayers,
-        turnOrder: newTurnOrder,
-        currentPlayerId: newCurrentPlayerId,
-        // A forfeited game master must not keep the seat: START/PLAY_AGAIN/
-        // REMOVE are gameMaster-gated and would be permanently unavailable.
-        gameMasterId:
-          context.gameMasterId === affectedPlayerId
-            ? (newTurnOrder[0] ?? context.gameMasterId)
-            : context.gameMasterId,
-        checkDetails: context.checkDetails
-          ? {
-              ...context.checkDetails,
-              finalTurnOrder: context.checkDetails.finalTurnOrder.filter(
-                (id) => id !== affectedPlayerId,
-              ),
-            }
-          : null,
-        log: newLog,
-        errorState: null,
       };
     }),
     fizzleTopAbility: assign({
@@ -2066,8 +2067,6 @@ export const gameMachine = setup({
         { machine: "game", state: "GAMEOVER" },
         "Entered GAMEOVER state",
       ),
-    log_ENTER_ERROR: () =>
-      logger.info({ machine: "game", state: "error" }, "Entered ERROR state"),
     log_ENTER_TURN_DRAW: () =>
       logger.info({ machine: "game", substate: "DRAW" }, "Turn phase: DRAW"),
     log_ENTER_TURN_DISCARD: () =>
@@ -2112,9 +2111,6 @@ export const gameMachine = setup({
           setTimeout(resolve, MATCHING_STAGE_DURATION_MS),
         ),
     ),
-    reconnectTimer: fromPromise(
-      () => new Promise((resolve) => setTimeout(resolve, RECONNECT_TIMEOUT_MS)),
-    ),
   },
 }).createMachine({
   id: "game",
@@ -2145,7 +2141,6 @@ export const gameMachine = setup({
     chat: [],
     discardPileIsSealed: false,
     lockedCardIds: [],
-    errorState: null,
     publicPeek: null,
     publicSwap: null,
     publicPenalty: null,
@@ -2157,8 +2152,7 @@ export const gameMachine = setup({
     // Reconnection never re-targets a state node: re-entering a stage would
     // reset the in-flight turn (draw phase, matching timer, ability stack).
     // Marking the player connected and re-broadcasting is sufficient; the
-    // error.recovering state has its own targeted handler for the player
-    // whose disconnect paused the game.
+    // current turn continues on its already-running ordinary deadline.
     PLAYER_RECONNECTED: {
       actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
     },
@@ -2320,24 +2314,6 @@ export const gameMachine = setup({
       on: {
         [PlayerActionType.LEAVE_GAME]: [
           {
-            target: "#game.error",
-            guard: "isCurrentPlayer" as const,
-            actions: [
-              "setPlayerDisconnected",
-              "addPlayerDisconnectedLog",
-              {
-                type: "enterErrorState",
-                params: ({ event }: { event: GameEvent }) => ({
-                  errorType: "NETWORK_ERROR" as const,
-                  playerId: (event as { playerId: PlayerId }).playerId,
-                }),
-              },
-              // Tell the other clients the game is paused (disconnect flag,
-              // log entry, cleared turn deadline).
-              "broadcastGameState",
-            ],
-          },
-          {
             actions: [
               "setPlayerDisconnected",
               "addPlayerDisconnectedLog",
@@ -2346,24 +2322,6 @@ export const gameMachine = setup({
           },
         ],
         PLAYER_DISCONNECTED: [
-          {
-            target: "#game.error",
-            guard: "isCurrentPlayer" as const,
-            actions: [
-              "setPlayerDisconnected",
-              "addPlayerDisconnectedLog",
-              {
-                type: "enterErrorState",
-                params: ({ event }: { event: GameEvent }) => ({
-                  errorType: "NETWORK_ERROR" as const,
-                  playerId: (event as { playerId: PlayerId }).playerId,
-                }),
-              },
-              // Tell the other clients the game is paused (disconnect flag,
-              // log entry, cleared turn deadline).
-              "broadcastGameState",
-            ],
-          },
           {
             actions: [
               "setPlayerDisconnected",
@@ -2415,24 +2373,6 @@ export const gameMachine = setup({
       on: {
         [PlayerActionType.LEAVE_GAME]: [
           {
-            target: "#game.error",
-            guard: "isCurrentPlayer" as const,
-            actions: [
-              "setPlayerDisconnected",
-              "addPlayerDisconnectedLog",
-              {
-                type: "enterErrorState",
-                params: ({ event }: { event: GameEvent }) => ({
-                  errorType: "NETWORK_ERROR" as const,
-                  playerId: (event as { playerId: PlayerId }).playerId,
-                }),
-              },
-              // Tell the other clients the game is paused (disconnect flag,
-              // log entry, cleared turn deadline).
-              "broadcastGameState",
-            ],
-          },
-          {
             actions: [
               "setPlayerDisconnected",
               "addPlayerDisconnectedLog",
@@ -2441,24 +2381,6 @@ export const gameMachine = setup({
           },
         ],
         PLAYER_DISCONNECTED: [
-          {
-            target: "#game.error",
-            guard: "isCurrentPlayer" as const,
-            actions: [
-              "setPlayerDisconnected",
-              "addPlayerDisconnectedLog",
-              {
-                type: "enterErrorState",
-                params: ({ event }: { event: GameEvent }) => ({
-                  errorType: "NETWORK_ERROR" as const,
-                  playerId: (event as { playerId: PlayerId }).playerId,
-                }),
-              },
-              // Tell the other clients the game is paused (disconnect flag,
-              // log entry, cleared turn deadline).
-              "broadcastGameState",
-            ],
-          },
           {
             actions: [
               "setPlayerDisconnected",
@@ -2497,7 +2419,7 @@ export const gameMachine = setup({
       on: {
         [PlayerActionType.PLAY_AGAIN]: {
           target: GameStage.DEALING,
-          guard: "isGameMaster",
+          guard: and(["isGameMaster", "hasEnoughConnectedPlayers"]),
           actions: "resetForNewRound",
         },
         [PlayerActionType.REQUEST_PLAY_AGAIN]: {
@@ -2516,152 +2438,6 @@ export const gameMachine = setup({
             "addPlayerDisconnectedLog",
             "broadcastGameState",
           ] as const,
-        },
-      },
-    },
-    error: {
-      id: "game.error",
-      entry: "log_ENTER_ERROR",
-      initial: "recovering",
-      on: {
-        // Keep tracking connection changes of the other players while paused.
-        PLAYER_DISCONNECTED: {
-          actions: [
-            "setPlayerDisconnected",
-            "addPlayerDisconnectedLog",
-            "broadcastGameState",
-          ] as const,
-        },
-        [PlayerActionType.LEAVE_GAME]: {
-          actions: [
-            "setPlayerDisconnected",
-            "addPlayerDisconnectedLog",
-            "broadcastGameState",
-          ] as const,
-        },
-      },
-      states: {
-        recovering: {
-          invoke: { src: "reconnectTimer", onDone: "failedRecovery" },
-          on: {
-            // Resume exactly where the game paused. The old target
-            // (#game.history) could never work: a history node records its
-            // value only when its PARENT exits, and this one's parent was
-            // the machine root — which never exits — so its history was
-            // always empty and the "resume" fell through to the root's
-            // initial state (WAITING_FOR_PLAYERS), hard-locking the game.
-            // gameStage + currentTurnSegment identify the pause point; each
-            // target's entry re-arms its own deadline/timers, and matching
-            // deliberately reopens a fresh window.
-            PLAYER_RECONNECTED: [
-              {
-                guard: ({ context, event }) =>
-                  context.errorState?.affectedPlayerId === event.playerId &&
-                  context.gameStage === GameStage.FINAL_TURNS &&
-                  context.currentTurnSegment === TurnPhase.DISCARD,
-                target: "#FINAL_TURNS.turn.DISCARD",
-                actions: [
-                  "markPlayerAsConnected",
-                  "clearErrorState",
-                  "broadcastGameState",
-                ] as const,
-              },
-              {
-                guard: ({ context, event }) =>
-                  context.errorState?.affectedPlayerId === event.playerId &&
-                  context.gameStage === GameStage.FINAL_TURNS &&
-                  context.currentTurnSegment === TurnPhase.MATCHING,
-                target: "#FINAL_TURNS.turn.matching",
-                actions: [
-                  "markPlayerAsConnected",
-                  "clearErrorState",
-                  "broadcastGameState",
-                ] as const,
-              },
-              {
-                guard: ({ context, event }) =>
-                  context.errorState?.affectedPlayerId === event.playerId &&
-                  context.gameStage === GameStage.FINAL_TURNS &&
-                  context.currentTurnSegment === TurnPhase.ABILITY,
-                target: "#FINAL_TURNS.turn.ability",
-                actions: [
-                  "markPlayerAsConnected",
-                  "clearErrorState",
-                  "broadcastGameState",
-                ] as const,
-              },
-              {
-                guard: ({ context, event }) =>
-                  context.errorState?.affectedPlayerId === event.playerId &&
-                  context.gameStage === GameStage.FINAL_TURNS,
-                target: `#${GameStage.FINAL_TURNS}`,
-                actions: [
-                  "markPlayerAsConnected",
-                  "clearErrorState",
-                  "broadcastGameState",
-                ] as const,
-              },
-              {
-                guard: ({ context, event }) =>
-                  context.errorState?.affectedPlayerId === event.playerId &&
-                  context.currentTurnSegment === TurnPhase.DISCARD,
-                target: "#game.PLAYING.turn.DISCARD",
-                actions: [
-                  "markPlayerAsConnected",
-                  "clearErrorState",
-                  "broadcastGameState",
-                ] as const,
-              },
-              {
-                guard: ({ context, event }) =>
-                  context.errorState?.affectedPlayerId === event.playerId &&
-                  context.currentTurnSegment === TurnPhase.MATCHING,
-                target: "#game.PLAYING.turn.matching",
-                actions: [
-                  "markPlayerAsConnected",
-                  "clearErrorState",
-                  "broadcastGameState",
-                ] as const,
-              },
-              {
-                guard: ({ context, event }) =>
-                  context.errorState?.affectedPlayerId === event.playerId &&
-                  context.currentTurnSegment === TurnPhase.ABILITY,
-                target: "#game.PLAYING.turn.ability",
-                actions: [
-                  "markPlayerAsConnected",
-                  "clearErrorState",
-                  "broadcastGameState",
-                ] as const,
-              },
-              {
-                // DRAW pause (or anything unexpected): a fresh turn entry for
-                // the same current player re-arms the draw window.
-                guard: ({ context, event }) =>
-                  context.errorState?.affectedPlayerId === event.playerId,
-                target: `#game.${GameStage.PLAYING}`,
-                actions: [
-                  "markPlayerAsConnected",
-                  "clearErrorState",
-                  "broadcastGameState",
-                ] as const,
-              },
-            ],
-          },
-        },
-        failedRecovery: {
-          entry: ["handleFailedRecovery", "broadcastGameState"] as const,
-          always: [
-            {
-              guard: ({ context }) => !!context.gameover,
-              target: `#game.${GameStage.GAMEOVER}`,
-            },
-            {
-              guard: ({ context }) => !!context.checkDetails,
-              target: `#${GameStage.FINAL_TURNS}`,
-            },
-            { target: `#game.${GameStage.PLAYING}` },
-          ],
         },
       },
     },

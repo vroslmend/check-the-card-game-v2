@@ -91,7 +91,8 @@ export interface Player {
   isLocked: boolean;
   score: number;
   isConnected: boolean;
-  /** True when the player was dropped for failing to reconnect in time. */
+  /** True when the player is sitting this round out after timing out or being
+   *  disconnected when it was dealt. */
   forfeited?: boolean;
   pendingDrawnCard: { card: PublicCard; source: "deck" | "discard" } | null;
 }

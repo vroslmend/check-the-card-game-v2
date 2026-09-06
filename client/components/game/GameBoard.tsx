@@ -91,9 +91,8 @@ const LoadingIndicator = () => (
   </div>
 );
 
-// Shown to a player whose seat was forfeited after a failed reconnect: the
-// board underneath is real but locked for them, which otherwise reads as a
-// silent hardstuck. Dismissible so they can spectate instead.
+// Shown to a player who is out for this round after timing out or sitting out
+// the deal while disconnected. Dismissible so they can spectate instead.
 const ForfeitNotice = ({ onLeave }: { onLeave: () => void }) => {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
@@ -101,11 +100,12 @@ const ForfeitNotice = ({ onLeave }: { onLeave: () => void }) => {
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-ground/80 p-4">
       <div className="flex max-w-sm flex-col items-center gap-4 rounded-2xl border border-hairline bg-surface p-8 text-center">
         <h3 className="text-2xl font-extrabold text-ink">
-          You forfeited this round
+          You are sitting out this round
         </h3>
         <p className="text-sm text-ink-muted">
-          You were disconnected for too long, so your seat was forfeited. You
-          can keep watching, or head home.
+          You were away when this round needed you. You can keep watching, or
+          head home. Once connected, you will be dealt back in when the next
+          round starts.
         </p>
         <button
           onClick={onLeave}

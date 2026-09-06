@@ -44,6 +44,18 @@ The project is structured as a monorepo using npm workspaces, comprising three m
 - Enforcing all game logic via the pure gameMachine.
 - Handling player disconnections gracefully, allowing games to continue if possible.
 
+During a round, a disconnected current player is not given a separate recovery
+pause. Their ordinary turn deadline continues. If they are still away when the
+deadline expires, the server freezes their hand and marks them forfeited for
+that round; the hand remains visible and scored at the end, but the player
+cannot win and does not accrue series totals. The seat stays in `players` so
+results and history remain intact. On `PLAY_AGAIN`, `turnOrder` is rebuilt from
+connected seats. Connected seats have their round-only forfeiture reset and are
+dealt back in automatically; seats that are still disconnected remain marked
+out so their empty hands cannot win or affect series totals. A reconnect during
+the round restores the socket but not participation until the following deal.
+Starting a rematch also requires at least two connected players.
+
 **Key Files/Modules**:
 
 - `server/src/index.ts`: The main server entry point. Manages the Socket.IO server, game instances, and all network communication patterns.

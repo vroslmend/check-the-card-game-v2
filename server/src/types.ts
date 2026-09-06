@@ -72,8 +72,8 @@ export interface GameContext {
    *  players who have left. */
   playerWins: Record<PlayerId, number>;
   /** Cumulative round scores per player, accumulated and surviving exactly as
-   *  playerWins does. Every player is credited each round, disqualified ones
-   *  included, since a total is the sum of the rounds you played. */
+   *  playerWins does. Participating players are credited even when
+   *  disqualified; forfeited seats do not accrue a round total. */
   playerTotals: Record<PlayerId, number>;
   /** Players who signalled "play again" at GAMEOVER (advisory rematch tally;
    *  the host still starts the round). Reset each new round. */
@@ -88,11 +88,6 @@ export interface GameContext {
   /** Ids of cards locked for the round by a successful match. A locked card can
    *  never be drawn from the discard pile. Reset each deal / new round. */
   lockedCardIds: string[];
-  errorState: {
-    message: string;
-    errorType: "DECK_EMPTY" | "NETWORK_ERROR";
-    affectedPlayerId?: PlayerId;
-  } | null;
   maxPlayers: number;
   cardsPerPlayer: number;
   winnerId: PlayerId | null;
