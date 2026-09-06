@@ -88,11 +88,6 @@ export interface GameContext {
   /** Ids of cards locked for the round by a successful match. A locked card can
    *  never be drawn from the discard pile. Reset each deal / new round. */
   lockedCardIds: string[];
-  errorState: {
-    message: string;
-    errorType: "DECK_EMPTY" | "NETWORK_ERROR";
-    affectedPlayerId?: PlayerId;
-  } | null;
   maxPlayers: number;
   cardsPerPlayer: number;
   winnerId: PlayerId | null;
