@@ -50,9 +50,11 @@ deadline expires, the server freezes their hand and marks them forfeited for
 that round; the hand remains visible and scored at the end, but the player
 cannot win and does not accrue series totals. The seat stays in `players` so
 results and history remain intact. On `PLAY_AGAIN`, `turnOrder` is rebuilt from
-connected seats, resetting the round-only forfeiture flag and dealing a
-reconnected player back in automatically. Starting a rematch also requires at
-least two connected players.
+connected seats. Connected seats have their round-only forfeiture reset and are
+dealt back in automatically; seats that are still disconnected remain marked
+out so their empty hands cannot win or affect series totals. A reconnect during
+the round restores the socket but not participation until the following deal.
+Starting a rematch also requires at least two connected players.
 
 **Key Files/Modules**:
 

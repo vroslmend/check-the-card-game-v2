@@ -258,8 +258,10 @@ check(
 
 await waitFor((c) => c.gameStage === "GAMEOVER", "game over");
 const host = context().gameMasterId;
+const inactiveNextRoundId = PLAYERS[2];
+const inactiveTotalBeforeRematch = context().playerTotals[inactiveNextRoundId];
 send({ type: "PLAYER_DISCONNECTED", playerId: disconnectedId });
-send({ type: "PLAYER_DISCONNECTED", playerId: PLAYERS[2] });
+send({ type: "PLAYER_DISCONNECTED", playerId: inactiveNextRoundId });
 const epochBeforeBlockedRematch = context().roundEpoch;
 send({ type: "PLAY_AGAIN", playerId: host });
 await sleep(50);
@@ -273,23 +275,66 @@ send({
   playerId: disconnectedId,
   newSocketId: "socket-reconnected-again",
 });
-send({ type: "PLAYER_RECONNECTED", playerId: PLAYERS[2], newSocketId: "s3b" });
 
 send({ type: "PLAY_AGAIN", playerId: host });
 await waitFor((c) => c.gameStage === "INITIAL_PEEK", "round two peek");
 check(
-  "the next round rebuilds turnOrder from connected seats",
+  "the next round includes connected seats and marks an offline seat out",
+  context().turnOrder.length === 2 &&
+    context().turnOrder.includes(disconnectedId) &&
+    !context().turnOrder.includes(inactiveNextRoundId) &&
+    context().players[disconnectedId].forfeited === false &&
+    context().players[inactiveNextRoundId].forfeited === true &&
+    context().players[inactiveNextRoundId].isLocked &&
+    context().players[inactiveNextRoundId].hand.length === 0,
+  `turnOrder=${JSON.stringify(context().turnOrder)}`,
+);
+for (const playerId of context().turnOrder) {
+  send({ type: "DECLARE_READY_FOR_PEEK", playerId });
+}
+
+await waitFor((c) => c.gameStage === "PLAYING", "playing round two");
+send({
+  type: "PLAYER_RECONNECTED",
+  playerId: inactiveNextRoundId,
+  newSocketId: "s3b",
+});
+check(
+  "reconnecting mid-round does not activate a seat that sat the deal out",
+  context().players[inactiveNextRoundId].isConnected &&
+    context().players[inactiveNextRoundId].forfeited &&
+    !context().turnOrder.includes(inactiveNextRoundId),
+);
+
+send({ type: "CALL_CHECK", playerId: context().currentPlayerId });
+await driveFinalTurnsToScoring();
+await waitFor(
+  (c) => c.gameStage === "SCORING" || c.gameStage === "GAMEOVER",
+  "round two scoring",
+);
+check(
+  "an offline-at-deal seat cannot win or accrue a zero round total",
+  !context().gameover?.winnerIds.includes(inactiveNextRoundId) &&
+    context().playerTotals[inactiveNextRoundId] === inactiveTotalBeforeRematch,
+  `winners=${JSON.stringify(context().gameover?.winnerIds)} totals=${JSON.stringify(context().playerTotals)}`,
+);
+
+await waitFor((c) => c.gameStage === "GAMEOVER", "round two game over");
+send({ type: "PLAY_AGAIN", playerId: host });
+await waitFor((c) => c.gameStage === "INITIAL_PEEK", "round three peek");
+check(
+  "a reconnected spectator is dealt back into the following round",
   context().turnOrder.length === 3 &&
     PLAYERS.every((playerId) => context().turnOrder.includes(playerId)) &&
     new Set(context().turnOrder).size === 3 &&
-    context().players[disconnectedId].forfeited === false,
+    context().players[inactiveNextRoundId].forfeited === false,
   `turnOrder=${JSON.stringify(context().turnOrder)}`,
 );
 for (const playerId of PLAYERS) {
   send({ type: "DECLARE_READY_FOR_PEEK", playerId });
 }
 
-await waitFor((c) => c.gameStage === "PLAYING", "playing round two");
+await waitFor((c) => c.gameStage === "PLAYING", "playing round three");
 const disconnectedBeforeTurn = PLAYERS.find(
   (playerId) => playerId !== context().currentPlayerId,
 );
@@ -308,7 +353,9 @@ const driveUntilLaterForfeit = async () => {
     Date.now() < deadline &&
     !context().players[disconnectedBeforeTurn].forfeited
   ) {
-    driveConnectedTurn();
+    if (context().currentPlayerId !== disconnectedBeforeTurn) {
+      driveConnectedTurn();
+    }
     await sleep(10);
   }
 };
@@ -348,6 +395,7 @@ const scenarioActor = ({
   turnOrder,
   gameMasterId,
   currentPlayerId,
+  deck = [{ id: "scenario-deck-card", rank: "3", suit: "S" }],
 }) => {
   const seedActor = createActor(gameMachine, {
     input: { gameId: "CHECK-DISCONNECT-SCENARIO", seed: 148 },
@@ -366,7 +414,7 @@ const scenarioActor = ({
       currentPlayerId,
       currentTurnSegment: "DRAW",
       gameStage: "PLAYING",
-      deck: [{ id: "scenario-deck-card", rank: "3", suit: "S" }],
+      deck,
     },
     status: "active",
   });
@@ -374,6 +422,77 @@ const scenarioActor = ({
   targetActor.start();
   return targetActor;
 };
+
+const matchingDropActor = scenarioActor({
+  players: {
+    host: scenarioPlayer("host"),
+    other: scenarioPlayer("other"),
+    third: scenarioPlayer("third"),
+  },
+  turnOrder: ["host", "other", "third"],
+  gameMasterId: "host",
+  currentPlayerId: "host",
+  deck: [
+    { id: "matching-next-card", rank: "4", suit: "S" },
+    { id: "matching-card", rank: "3", suit: "S" },
+  ],
+});
+matchingDropActor.send({ type: "DRAW_FROM_DECK", playerId: "host" });
+matchingDropActor.send({ type: "DISCARD_DRAWN_CARD", playerId: "host" });
+matchingDropActor.send({ type: "PLAYER_DISCONNECTED", playerId: "host" });
+for (const playerId of matchingDropActor.getSnapshot().context
+  .matchingOpportunity?.remainingPlayerIDs ?? []) {
+  matchingDropActor.send({ type: "PASS_ON_MATCH_ATTEMPT", playerId });
+}
+const matchingDropContext = matchingDropActor.getSnapshot().context;
+check(
+  "disconnecting during matching waits for the player's next decision window",
+  !matchingDropContext.players.host.forfeited &&
+    matchingDropContext.currentPlayerId === "other" &&
+    matchingDropContext.currentTurnSegment === "DRAW",
+  `stage=${matchingDropContext.gameStage} current=${matchingDropContext.currentPlayerId}`,
+);
+matchingDropActor.stop();
+
+const abilityDropActor = scenarioActor({
+  players: {
+    host: scenarioPlayer("host"),
+    other: scenarioPlayer("other"),
+  },
+  turnOrder: ["host", "other"],
+  gameMasterId: "host",
+  currentPlayerId: "host",
+  deck: [{ id: "ability-card", rank: "J", suit: "S" }],
+});
+abilityDropActor.send({ type: "DRAW_FROM_DECK", playerId: "host" });
+abilityDropActor.send({ type: "DISCARD_DRAWN_CARD", playerId: "host" });
+for (const playerId of abilityDropActor.getSnapshot().context
+  .matchingOpportunity?.remainingPlayerIDs ?? []) {
+  abilityDropActor.send({ type: "PASS_ON_MATCH_ATTEMPT", playerId });
+}
+const abilityDeadline = abilityDropActor.getSnapshot().context.turnDeadline;
+const abilityDisconnectAt = Date.now();
+abilityDropActor.send({ type: "PLAYER_DISCONNECTED", playerId: "host" });
+await sleep(50);
+check(
+  "disconnecting during an owned ability keeps its ordinary deadline armed",
+  !abilityDropActor.getSnapshot().context.players.host.forfeited &&
+    abilityDropActor.getSnapshot().context.currentTurnSegment === "ABILITY" &&
+    abilityDropActor.getSnapshot().context.turnDeadline === abilityDeadline,
+  `deadline=${abilityDropActor.getSnapshot().context.turnDeadline}`,
+);
+await waitForActor(
+  abilityDropActor,
+  (c) => c.players.host.forfeited === true,
+  "ability owner to forfeit after the ordinary window",
+);
+const abilityElapsed = Date.now() - abilityDisconnectAt;
+check(
+  "an offline ability owner forfeits after one ordinary window",
+  abilityElapsed >= 900 && abilityElapsed < 4_000,
+  `elapsed=${abilityElapsed}ms`,
+);
+abilityDropActor.stop();
 
 const tieActor = scenarioActor({
   players: {
@@ -408,6 +527,7 @@ const finalTurnHostActor = scenarioActor({
   currentPlayerId: "other",
 });
 finalTurnHostActor.send({ type: "CALL_CHECK", playerId: "other" });
+finalTurnHostActor.send({ type: "PLAYER_DISCONNECTED", playerId: "other" });
 finalTurnHostActor.send({ type: "PLAYER_DISCONNECTED", playerId: "host" });
 await waitForActor(
   finalTurnHostActor,
@@ -416,10 +536,24 @@ await waitForActor(
 );
 const finalTurnHostContext = finalTurnHostActor.getSnapshot().context;
 check(
-  "a forfeiting host is reassigned even when the survivor is locked",
-  finalTurnHostContext.gameMasterId === "other" &&
+  "a forfeiting host stays recoverable when everyone is offline",
+  finalTurnHostContext.gameMasterId === "host" &&
     finalTurnHostContext.gameStage === "SCORING",
   `gameMasterId=${finalTurnHostContext.gameMasterId} stage=${finalTurnHostContext.gameStage}`,
+);
+finalTurnHostActor.send({
+  type: "PLAYER_RECONNECTED",
+  playerId: "other",
+  newSocketId: "socket-other-returned",
+});
+finalTurnHostActor.send({
+  type: "PLAYER_RECONNECTED",
+  playerId: "host",
+  newSocketId: "socket-host-returned",
+});
+check(
+  "reconnecting after an all-offline forfeit leaves a game master in control",
+  finalTurnHostActor.getSnapshot().context.gameMasterId === "host",
 );
 finalTurnHostActor.stop();
 

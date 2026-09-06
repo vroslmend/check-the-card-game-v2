@@ -335,6 +335,7 @@ const baseTurnStateNode = {
           {
             target: "endOfTurn",
             guard: "isCurrentPlayerDisconnected",
+            actions: "forfeitDisconnectedCurrentPlayer",
           },
           {
             actions: raise(({ context }: { context: GameContext }) => ({
@@ -396,6 +397,7 @@ const baseTurnStateNode = {
           {
             target: "endOfTurn",
             guard: "isCurrentPlayerDisconnected",
+            actions: "forfeitDisconnectedCurrentPlayer",
           },
           {
             actions: enqueueActions(
@@ -456,18 +458,34 @@ const baseTurnStateNode = {
         })),
         "broadcastGameState",
       ],
-      // Turn timer: an unresolved ability fizzles. Re-entering arms a fresh
-      // timer for the next ability on the stack (if any).
+      // Turn timer: an unresolved ability fizzles. If its owner is the
+      // disconnected current player, that same ordinary deadline also marks
+      // the seat out for the round. Re-entering processes the next ability.
       after: {
-        turnTimer: {
-          target: "ability",
-          reenter: true,
-          actions: ["fizzleTopAbility", "broadcastGameState"],
-        },
+        turnTimer: [
+          {
+            target: "ability",
+            reenter: true,
+            guard: "isCurrentAbilityOwnerDisconnected",
+            actions: [
+              "forfeitDisconnectedCurrentPlayer",
+              "fizzleTopAbility",
+              "broadcastGameState",
+            ],
+          },
+          {
+            target: "ability",
+            reenter: true,
+            actions: ["fizzleTopAbility", "broadcastGameState"],
+          },
+        ],
       },
       always: [
         {
-          guard: or(["isAbilityOwnerLocked", "isAbilityOwnerDisconnected"]),
+          guard: or([
+            "isAbilityOwnerLocked",
+            "isNonCurrentAbilityOwnerDisconnected",
+          ]),
           actions: ["fizzleTopAbility", "broadcastGameState"],
         },
         {
@@ -618,10 +636,7 @@ const baseTurnStateNode = {
       ],
     },
 
-    endOfTurn: {
-      type: "final",
-      entry: "forfeitDisconnectedCurrentPlayer",
-    },
+    endOfTurn: { type: "final" },
   },
 } as const;
 
@@ -921,10 +936,21 @@ export const gameMachine = setup({
       const owner = context.players[currentAbility.playerId];
       return !owner || owner.isLocked;
     },
-    isAbilityOwnerDisconnected: ({ context }) => {
+    isNonCurrentAbilityOwnerDisconnected: ({ context }) => {
       const currentAbility = context.abilityStack.at(-1);
       if (!currentAbility) return false;
-      return !context.players[currentAbility.playerId]?.isConnected;
+      return (
+        currentAbility.playerId !== context.currentPlayerId &&
+        !context.players[currentAbility.playerId]?.isConnected
+      );
+    },
+    isCurrentAbilityOwnerDisconnected: ({ context }) => {
+      const currentAbility = context.abilityStack.at(-1);
+      return (
+        !!currentAbility &&
+        currentAbility.playerId === context.currentPlayerId &&
+        !context.players[currentAbility.playerId]?.isConnected
+      );
     },
     isCurrentPlayerDisconnected: ({ context }) =>
       !!context.currentPlayerId &&
@@ -1163,16 +1189,13 @@ export const gameMachine = setup({
     }),
     dealCards: assign(({ context }) => {
       const deck = shuffleDeck(createDeck(context.rng), context.rng);
-      const activeTurnOrder = context.turnOrder.filter(
-        (playerId) => context.players[playerId]?.isConnected,
-      );
       const playersAfterDeal = produce(context.players, (draft) => {
         Object.values(draft).forEach((p) => {
           p.hand = [];
           p.isReady = false;
         });
         for (let i = 0; i < context.cardsPerPlayer; i++) {
-          for (const playerId of activeTurnOrder) {
+          for (const playerId of context.turnOrder) {
             if (deck.length) {
               draft[playerId]!.hand.push(deck.pop()!);
             }
@@ -1182,7 +1205,6 @@ export const gameMachine = setup({
       return {
         deck,
         players: playersAfterDeal,
-        turnOrder: activeTurnOrder,
         discardPile: [] as Card[],
         lockedCardIds: [] as string[],
         log: [
@@ -1657,15 +1679,19 @@ export const gameMachine = setup({
 
       const updatedPlayers = produce(context.players, (draft) => {
         for (const p of Object.values(draft)) {
+          const isActiveThisRound = p.isConnected;
           p.hand = [];
           p.isReady = false;
-          p.isLocked = false;
+          p.isLocked = !isActiveThisRound;
           p.hasCalledCheck = false;
           p.pendingDrawnCard = null;
           p.isDealer = p.id === newDealerId;
           p.status = PlayerStatus.WAITING;
           p.score = 0;
-          p.forfeited = false;
+          // A seat that is still away sits this round out. Reconnecting later
+          // restores the socket, but not round participation; the next reset
+          // deals the player back in automatically.
+          p.forfeited = !isActiveThisRound;
         }
       });
 
@@ -1739,10 +1765,6 @@ export const gameMachine = setup({
                 socketId: event.newSocketId,
               },
             },
-            ...(context.gameStage === GameStage.WAITING_FOR_PLAYERS &&
-            !context.turnOrder.includes(event.playerId)
-              ? { turnOrder: [...context.turnOrder, event.playerId] }
-              : {}),
           }
         : {};
     }),
@@ -1776,7 +1798,7 @@ export const gameMachine = setup({
         },
         gameMasterId:
           context.gameMasterId === playerId
-            ? (connectedSurvivor ?? null)
+            ? (connectedSurvivor ?? context.gameMasterId)
             : context.gameMasterId,
         turnDeadline: null,
         log: [

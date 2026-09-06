@@ -72,8 +72,8 @@ export interface GameContext {
    *  players who have left. */
   playerWins: Record<PlayerId, number>;
   /** Cumulative round scores per player, accumulated and surviving exactly as
-   *  playerWins does. Every player is credited each round, disqualified ones
-   *  included, since a total is the sum of the rounds you played. */
+   *  playerWins does. Participating players are credited even when
+   *  disqualified; forfeited seats do not accrue a round total. */
   playerTotals: Record<PlayerId, number>;
   /** Players who signalled "play again" at GAMEOVER (advisory rematch tally;
    *  the host still starts the round). Reset each new round. */
