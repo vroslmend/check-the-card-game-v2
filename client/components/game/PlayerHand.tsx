@@ -170,9 +170,9 @@ const PlayerHand: React.FC<PlayerHandProps> = ({
   // Deal ripple: only the commit that swaps DEALING -> INITIAL_PEEK mounts
   // the hand cells, and only that commit gets per-card layout delays (a
   // dealer's sweep: tableIndex*80 + cardIndex*40ms). Interrupted flights
-  // never carry a delay — the R11 projection-timing concern (findings §5.4)
-  // applied to delays on live flights, not on mount-time ones; the WAAPI
-  // class itself was closed by motion 12.42.2.
+  // never carry a delay: the projection timing problem is with delays on
+  // flights already in progress, not on cells being mounted, and its WAAPI
+  // form was fixed in motion 12.42.2.
   const prevStageRef = React.useRef(gameStage);
   const dealtThisCommit =
     prevStageRef.current === GameStage.DEALING &&

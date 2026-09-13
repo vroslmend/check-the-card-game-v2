@@ -1187,14 +1187,12 @@ export const uiMachine = setup({
                 guard: ({ context }) => !context.localPlayerId,
                 actions: "resetReconnectionAttempts",
               },
-              // Always re-run the rejoin handshake — even when socket.io
-              // connection-state recovery succeeded (recovered === true).
-              // The server deletes the socket session on disconnect and marks
-              // the player disconnected; a recovered socket that skips
-              // ATTEMPT_REJOIN has no server-side session, so every action it
-              // sends is silently dropped and broadcasts skip it — the exact
-              // "joined back but frozen board" hardstuck. Rejoining is
-              // idempotent and cheap.
+              // Always re-run the rejoin handshake, even when socket.io
+              // connection-state recovery succeeded (recovered === true). The
+              // server heals a recovered socket only while it still holds that
+              // socket's session, and only the rejoin reply carries the full
+              // log. A socket that skips it after losing its session has every
+              // action dropped. Rejoining is idempotent and cheap.
               { target: "reconnecting" },
             ],
             RETRY_REJOIN: { target: "reconnecting" },

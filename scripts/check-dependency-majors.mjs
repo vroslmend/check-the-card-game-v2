@@ -59,7 +59,8 @@ if (problems.length > 0) {
   for (const p of problems) console.error(`  ${p}`);
   console.error(`
 A major version of one of these changes behaviour that type checking and a
-successful build cannot see, and there is no test suite to catch it (#36).
+successful build cannot see, and the game checks cover the rules rather than
+a framework upgrade (#36).
 
 If the bump is wanted, migrate deliberately, then update EXPECTED in
 scripts/check-dependency-majors.mjs in the same pull request.`);

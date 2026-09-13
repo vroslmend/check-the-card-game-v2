@@ -541,16 +541,14 @@ const baseTurnStateNode = {
             // Peek confirm / skip-peek: the ability STAYS on the stack and a
             // new decision window begins (the peek view, then the swap
             // selection). Re-enter so entry assigns a fresh turnDeadline and
-            // re-arms after(turnTimer) — acting resets the clock, the same
-            // model R7.3 gave DISCARD. The old targetless transition left
-            // the entry-armed timer running, so confirming a peek near the
-            // deadline got the ability fizzled mid-peek-view, or the swap
-            // stage squeezed into the window's leftovers (proven in
-            // .remember/repro-peek-swap.mjs). The pending delayed
-            // TIMER.PEEK_TO_SWAP raise is actor-scoped and survives the
-            // re-entry. Entry broadcasts, so no broadcast action here —
-            // emitPeekResults still runs first, preserving today's
-            // results-then-broadcast order.
+            // re-arms after(turnTimer): acting resets the clock, as it does
+            // for DISCARD. A targetless transition would leave the
+            // entry-armed timer running, so a peek confirmed near the deadline
+            // would fizzle mid-view or squeeze the swap stage into what was
+            // left of the window. The pending delayed TIMER.PEEK_TO_SWAP raise
+            // is actor-scoped and survives the re-entry. Entry broadcasts, so
+            // there is no broadcast action here, and emitPeekResults runs
+            // first so the results go out before that broadcast.
             guard: and([
               "isValidAbilityAction",
               ({ context, event }: { context: GameContext; event: any }) =>
