@@ -65,21 +65,31 @@ The client hot reloads. The server does not: it runs from a build, so after chan
 
 ## Verifying your change
 
-There is no unit or state machine suite yet, tracked in [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36), so rules verification is manual and the burden sits with the pull request. Layout is covered, see below.
-
 Everything CI runs has to pass, and you can run all of it locally first:
 
 ```
 npm run verify
 ```
 
-That is the same command CI runs, so if it passes locally it passes there. It checks guarded dependency majors, builds the shared types, type checks all three packages, lints, checks formatting, and builds the server and the client.
+That is the same command CI runs, so if it passes locally it passes there. It checks guarded dependency majors and commit messages, builds the shared types, type checks all three packages, lints, checks formatting, builds the server, runs the game checks, and builds the client.
 
 Two notes on what it can tell you. If `check:majors` fails, a guarded package changed major version: do the migration deliberately and update the expectation in `scripts/check-dependency-majors.mjs` in the same pull request. And CI does one thing `verify` does not, starting the built server and waiting for it to answer `/health`, which catches a throw on startup that type checking cannot.
 
-CI also starts the built server and waits for it to answer `/health`, which catches a throw on startup that type checking cannot.
+## If you touched how the game plays
 
 Game behaviour is specified in [docs/GAME_RULES.md](docs/GAME_RULES.md). If you touched the rules, play a real round with a second browser window and follow the affected rule end to end.
+
+The game checks in `scripts/check-*.mjs` guard rules and bugs that have already broken once. Each one drives the compiled server, usually a real game machine, and `npm test` runs them side by side and reports every failure. They run against the compiled server, so build it first when running them outside `verify`:
+
+```
+npm run build:server-deps
+npm test                                    # every check
+node scripts/check-host-departure.mjs       # one check
+```
+
+To add a check, write `scripts/check-<what-it-guards>.mjs`. Print a PASS or FAIL line for each thing it asserts, and exit non-zero if any failed. `npm test` finds it by its name, so it runs in CI the day it lands. Run it against `main` before your fix and make sure it fails there. The machine reads its timings from the environment once, when it is imported, so set them before the import.
+
+Wider coverage, invariants checked after every event and a scripted full game, is tracked in [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36).
 
 ## If you touched the layout
 
