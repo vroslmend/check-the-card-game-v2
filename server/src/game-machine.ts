@@ -68,7 +68,14 @@ const HOST_DISCONNECT_GRACE_MS = parseInt(
   process.env.HOST_DISCONNECT_GRACE_MS || "30000",
   10,
 );
-const ABILITY_PEEK_VIEW_DURATION_MS = 5000;
+const ABILITY_PEEK_VIEW_DURATION_MS = parseInt(
+  process.env.ABILITY_PEEK_VIEW_DURATION_MS || "5000",
+  10,
+);
+const SCORING_DURATION_MS = parseInt(
+  process.env.SCORING_DURATION_MS || "5000",
+  10,
+);
 // Rules 7: a player whose hand reaches this size via failed-match penalties is
 // disqualified from the round (locked, revealed at scoring, cannot win).
 const MAX_HAND_SIZE = parseInt(process.env.MAX_HAND_SIZE || "8", 10);
@@ -2186,6 +2193,7 @@ export const gameMachine = setup({
         TURN_TIMER_MS,
       );
     },
+    scoringDuration: SCORING_DURATION_MS,
   },
   actors: {
     peekTimer: fromPromise(
@@ -2511,7 +2519,7 @@ export const gameMachine = setup({
         "calculateScores",
         "broadcastGameState",
       ] as const,
-      after: { 5000: GameStage.GAMEOVER },
+      after: { scoringDuration: GameStage.GAMEOVER },
       on: {
         [PlayerActionType.LEAVE_GAME]: {
           actions: [

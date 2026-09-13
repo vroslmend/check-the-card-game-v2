@@ -22,14 +22,17 @@
 process.env.NODE_ENV = "production";
 process.env.PEEK_DURATION_MS = "150";
 process.env.MATCHING_STAGE_DURATION_MS = "300";
+process.env.ABILITY_PEEK_VIEW_DURATION_MS = "300";
 // Long enough that a missing stage flip cannot be mistaken for an ability that
-// simply fizzled first. The peek view window is a hardcoded 5000ms (#73).
+// simply fizzled first, which needs it well above the peek view window.
 process.env.TURN_TIMER_MS = "20000";
 
 const { gameMachine } = await import("../server/dist/game-machine.js");
 const { createActor } = await import("xstate");
 
-const ABILITY_PEEK_VIEW_DURATION_MS = 5000;
+const ABILITY_PEEK_VIEW_DURATION_MS = Number(
+  process.env.ABILITY_PEEK_VIEW_DURATION_MS,
+);
 const P1 = "player-1";
 const P2 = "player-2";
 

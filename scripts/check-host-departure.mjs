@@ -16,6 +16,7 @@ process.env.MATCHING_STAGE_DURATION_MS = "20";
 process.env.TURN_TIMER_MS = "45000";
 process.env.LOBBY_DISCONNECT_TIMEOUT_MS = "60000";
 process.env.HOST_DISCONNECT_GRACE_MS = "1200";
+process.env.SCORING_DURATION_MS = "300";
 
 const { gameMachine } = await import("../server/dist/game-machine.js");
 const { createActor } = await import("xstate");
