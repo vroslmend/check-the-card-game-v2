@@ -2,6 +2,8 @@
 
 This document describes the high-level architecture of the Check! card game: the main components, what each is responsible for, and how they interact. The rules the server enforces are specified separately in [GAME_RULES.md](./GAME_RULES.md).
 
+Parts of sections 2 to 6 were written against an older version of the code and have not been checked since, and [#51](https://github.com/vroslmend/check-the-card-game-v2/issues/51) tracks rebuilding them. Where this document and the code disagree, the code is right.
+
 ## 1. Core Philosophy
 
 The core architectural philosophy for "Check!" centers around creating a seamless and robust multiplayer card game experience. Key goals include:
