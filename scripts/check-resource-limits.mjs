@@ -6,67 +6,45 @@
 //
 // Run from the repo root, after npm run build:server-deps.
 
-process.env.NODE_ENV = "production";
-process.env.PORT = "8231";
-process.env.CORS_ORIGIN = "http://localhost:3000";
-process.env.TRUST_PROXY = "true";
-process.env.MAX_ACTIVE_GAMES = "2";
-process.env.MAX_HTTP_BUFFER_SIZE_BYTES = "1024";
-process.env.CREATE_GAME_RATE_LIMIT = "1";
-process.env.CREATE_GAME_RATE_LIMIT_WINDOW_MS = "60000";
-process.env.HANDSHAKE_RATE_LIMIT = "3";
-process.env.HANDSHAKE_RATE_LIMIT_WINDOW_MS = "60000";
-process.env.PLAYER_ACTION_RATE_LIMIT = "3";
-process.env.PLAYER_ACTION_RATE_LIMIT_WINDOW_MS = "60000";
-process.env.CHAT_MESSAGE_RATE_LIMIT = "2";
-process.env.CHAT_MESSAGE_RATE_LIMIT_WINDOW_MS = "60000";
+import { sleep } from "./lib/game.mjs";
+import { createReport } from "./lib/report.mjs";
+import { startServer } from "./lib/server.mjs";
 
-const { io: ioc } = await import("socket.io-client");
-const { httpServer, io } = await import("../server/dist/index.js");
+const server = await startServer({
+  TRUST_PROXY: true,
+  MAX_ACTIVE_GAMES: 2,
+  MAX_HTTP_BUFFER_SIZE_BYTES: 1024,
+  CREATE_GAME_RATE_LIMIT: 1,
+  CREATE_GAME_RATE_LIMIT_WINDOW_MS: 60_000,
+  HANDSHAKE_RATE_LIMIT: 3,
+  HANDSHAKE_RATE_LIMIT_WINDOW_MS: 60_000,
+  PLAYER_ACTION_RATE_LIMIT: 3,
+  PLAYER_ACTION_RATE_LIMIT_WINDOW_MS: 60_000,
+  CHAT_MESSAGE_RATE_LIMIT: 2,
+  CHAT_MESSAGE_RATE_LIMIT_WINDOW_MS: 60_000,
+});
+const { check, finish } = createReport();
 
-const URL = "http://127.0.0.1:8231";
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-let failures = 0;
-const check = (name, passed, detail = "") => {
-  console.log(
-    `  ${passed ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`,
-  );
-  if (!passed) failures++;
+// Each connection claims its own client address, which the server trusts here
+// because TRUST_PROXY is on.
+const connect = async (name, address) => {
+  const player = server.player(name, {
+    headers: { "x-forwarded-for": address },
+  });
+  await player.connected();
+  return player;
 };
 
-const sockets = [];
-const connect = (address) =>
-  new Promise((resolve, reject) => {
-    const socket = ioc(URL, {
-      transports: ["websocket"],
-      reconnection: false,
-      extraHeaders: {
-        Origin: "http://localhost:3000",
-        "x-forwarded-for": address,
-      },
-    });
-    const onError = (error) => reject(error);
-    socket.once("connect_error", onError);
-    socket.once("connect", () => {
-      socket.off("connect_error", onError);
-      sockets.push(socket);
-      resolve(socket);
-    });
-  });
-
-const createGame = (socket, name) =>
-  new Promise((resolve) =>
-    socket.emit("CREATE_GAME", { name, maxPlayers: 2 }, resolve),
-  );
-const joinGame = (socket, gameId, name) =>
-  new Promise((resolve) => socket.emit("JOIN_GAME", gameId, { name }, resolve));
+const createGame = (player, name) =>
+  player.request("CREATE_GAME", { name, maxPlayers: 2 });
+const joinGame = (player, gameId, name) =>
+  player.request("JOIN_GAME", gameId, { name });
 
 try {
-  const alice = await connect("203.0.113.1");
-  const bob = await connect("203.0.113.2");
-  const charlie = await connect("203.0.113.3");
-  const dana = await connect("203.0.113.1");
+  const alice = await connect("Alice", "203.0.113.1");
+  const bob = await connect("Bob", "203.0.113.2");
+  const charlie = await connect("Charlie", "203.0.113.3");
+  const dana = await connect("Dana", "203.0.113.1");
 
   console.log("\nGame allocation is bounded:");
   const aliceGame = await createGame(alice, "Alice");
@@ -90,7 +68,7 @@ try {
     capacity.message,
   );
 
-  alice.emit("PLAYER_ACTION", { type: "LEAVE_GAME" });
+  alice.act("LEAVE_GAME");
   await sleep(50);
   const reconnectEvasion = await createGame(dana, "Dana");
   check(
@@ -103,11 +81,11 @@ try {
   console.log("\nHigh-frequency event work is bounded:");
   const errors = [];
   const chats = [];
-  bob.on("ERROR_MESSAGE", (error) => errors.push(error.message));
-  bob.on("NEW_CHAT_MESSAGE", (message) => chats.push(message.message));
+  bob.socket.on("ERROR_MESSAGE", (error) => errors.push(error.message));
+  bob.socket.on("NEW_CHAT_MESSAGE", (message) => chats.push(message.message));
 
   for (let i = 0; i < 4; i++) {
-    bob.emit("PLAYER_ACTION", { type: "DECLARE_LOBBY_READY" });
+    bob.act("DECLARE_LOBBY_READY");
   }
   await sleep(50);
   check(
@@ -117,7 +95,7 @@ try {
   );
 
   for (let i = 0; i < 3; i++) {
-    bob.emit("SEND_CHAT_MESSAGE", { message: `message ${i}` });
+    bob.socket.emit("SEND_CHAT_MESSAGE", { message: `message ${i}` });
   }
   await sleep(50);
   check(
@@ -131,7 +109,7 @@ try {
     JSON.stringify(errors),
   );
 
-  const eve = await connect("203.0.113.4");
+  const eve = await connect("Eve", "203.0.113.4");
   const joins = [];
   for (let i = 0; i < 4; i++) {
     joins.push(await joinGame(eve, "NOPE1", "Eve"));
@@ -145,34 +123,31 @@ try {
 
   check(
     "Engine.IO uses the configured inbound message ceiling",
-    io.engine.opts.maxHttpBufferSize === 1024,
-    `bytes=${io.engine.opts.maxHttpBufferSize}`,
+    server.io.engine.opts.maxHttpBufferSize === 1024,
+    `bytes=${server.io.engine.opts.maxHttpBufferSize}`,
   );
 
-  const frank = await connect("203.0.113.5");
+  const frank = await connect("Frank", "203.0.113.5");
   const closedForOversizeMessage = new Promise((resolve) => {
-    frank.once("disconnect", () => resolve(true));
+    frank.socket.once("disconnect", () => resolve(true));
     setTimeout(() => resolve(false), 1000);
   });
-  frank.emit("SEND_CHAT_MESSAGE", { message: "x".repeat(2048) });
+  frank.socket.emit("SEND_CHAT_MESSAGE", { message: "x".repeat(2048) });
   check(
     "an oversized inbound message closes the transport",
     await closedForOversizeMessage,
   );
 } finally {
-  for (const socket of sockets) socket.close();
-  await new Promise((resolve) => httpServer.close(resolve));
+  await server.close();
 }
 
-if (failures > 0) {
-  console.error(`
+finish({
+  passed: () =>
+    "\nGame allocation and socket work stay within explicit limits.",
+  failed: (failures) => `
 ${failures} resource-limit check${failures === 1 ? "" : "s"} failed.
 
 One client must not be able to allocate unbounded game actors or make the
 server process an unlimited event stream. Treat a failure here as a production
-availability regression.`);
-  process.exit(1);
-}
-
-console.log("\nGame allocation and socket work stay within explicit limits.");
-process.exit(0);
+availability regression.`,
+});

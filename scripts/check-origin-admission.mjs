@@ -7,11 +7,14 @@
 
 import { spawnSync } from "node:child_process";
 
-process.env.NODE_ENV = "production";
-process.env.PORT = "8233";
-process.env.CORS_ORIGIN = "https://official.example";
+import { createReport } from "./lib/report.mjs";
+import { startServer } from "./lib/server.mjs";
 
-const missingConfigEnv = { ...process.env, PORT: "8234" };
+const OFFICIAL = "https://official.example";
+const server = await startServer({ CORS_ORIGIN: OFFICIAL });
+const { check, finish } = createReport();
+
+const missingConfigEnv = { ...process.env, PORT: "0" };
 delete missingConfigEnv.CORS_ORIGIN;
 const missingConfig = spawnSync(process.execPath, ["server/dist/index.js"], {
   cwd: process.cwd(),
@@ -20,37 +23,20 @@ const missingConfig = spawnSync(process.execPath, ["server/dist/index.js"], {
   timeout: 3_000,
 });
 
-const { io: ioc } = await import("socket.io-client");
-const { httpServer } = await import("../server/dist/index.js");
-
-const URL = "http://127.0.0.1:8233";
-let failures = 0;
-const check = (name, passed, detail = "") => {
-  console.log(
-    `  ${passed ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`,
-  );
-  if (!passed) failures++;
+const attemptConnection = async (origin) => {
+  const player = server.player("Origin check", { origin });
+  try {
+    await player.connected();
+    return "connected";
+  } catch {
+    return "rejected";
+  } finally {
+    player.disconnect();
+  }
 };
 
-const attemptConnection = (origin) =>
-  new Promise((resolve) => {
-    const socket = ioc(URL, {
-      transports: ["websocket"],
-      reconnection: false,
-      timeout: 2_000,
-      ...(origin ? { extraHeaders: { Origin: origin } } : {}),
-    });
-    const settle = (result) => {
-      socket.removeAllListeners();
-      socket.close();
-      resolve(result);
-    };
-    socket.once("connect", () => settle("connected"));
-    socket.once("connect_error", () => settle("rejected"));
-  });
-
 console.log("\nProduction origin admission:");
-const allowed = await attemptConnection("https://official.example");
+const allowed = await attemptConnection(OFFICIAL);
 check("the configured frontend can connect", allowed === "connected", allowed);
 
 const unlisted = await attemptConnection("https://fork.example");
@@ -60,7 +46,7 @@ check(
   unlisted,
 );
 
-const missing = await attemptConnection();
+const missing = await attemptConnection(null);
 check(
   "a production handshake without Origin is rejected",
   missing === "rejected",
@@ -76,18 +62,16 @@ check(
   `status=${missingConfig.status} signal=${missingConfig.signal ?? "none"}`,
 );
 
-await new Promise((resolve) => httpServer.close(resolve));
+await server.close();
 
-if (failures > 0) {
-  console.error(`
+finish({
+  passed: () =>
+    "\nProduction admits only explicitly configured browser origins.",
+  failed: (failures) => `
 ${failures} origin-admission check${failures === 1 ? "" : "s"} failed.
 
 Production must fail closed: only an explicitly listed browser Origin may
 finish the Engine.IO handshake, and the server must not start without that
 list. Treat a failure here as the official backend being open to forked web
-frontends.`);
-  process.exit(1);
-}
-
-console.log("\nProduction admits only explicitly configured browser origins.");
-process.exit(0);
+frontends.`,
+});
