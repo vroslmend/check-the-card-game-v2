@@ -10,106 +10,32 @@
 // Drives the real compiled gameMachine. Run from the repo root, after
 // npm run build:server-deps.
 
-process.env.NODE_ENV = "production";
-process.env.PEEK_DURATION_MS = "20";
-process.env.MATCHING_STAGE_DURATION_MS = "20";
-process.env.TURN_TIMER_MS = "45000";
-process.env.LOBBY_DISCONNECT_TIMEOUT_MS = "60000";
-process.env.HOST_DISCONNECT_GRACE_MS = "1200";
-process.env.SCORING_DURATION_MS = "300";
-
-const { gameMachine } = await import("../server/dist/game-machine.js");
-const { createActor } = await import("xstate");
+import { loadGame, sleep } from "./lib/game.mjs";
+import { createReport } from "./lib/report.mjs";
 
 const GRACE_MS = 1200;
+
+const { openTable } = await loadGame({
+  PEEK_DURATION_MS: 20,
+  MATCHING_STAGE_DURATION_MS: 20,
+  TURN_TIMER_MS: 45_000,
+  LOBBY_DISCONNECT_TIMEOUT_MS: 60_000,
+  HOST_DISCONNECT_GRACE_MS: GRACE_MS,
+  SCORING_DURATION_MS: 300,
+});
+
 const PAST_GRACE_MS = GRACE_MS + 600;
 const [HOST, B, C] = ["host", "player-b", "player-c"];
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const newTable = (label) => {
-  const actor = createActor(gameMachine, {
-    input: { gameId: `CHECK-HOST-${label}`, seed: 149 },
-  });
-  const errors = [];
-  actor.subscribe({ error: (error) => errors.push(error) });
-  actor.start();
-  const context = () => actor.getSnapshot().context;
-  const send = (event) => actor.send(event);
-  const waitFor = async (predicate, what, timeoutMs = 20_000) => {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      if (predicate(context())) return;
-      await sleep(10);
-    }
-    throw new Error(
-      `${label}: timed out waiting for ${what} (stage=${context().gameStage})`,
-    );
-  };
-
-  [HOST, B, C].forEach((playerId, index) =>
-    send({
-      type: "PLAYER_JOIN_REQUEST",
-      playerSetupData: { name: `P${index + 1}`, socketId: `s-${playerId}` },
-      playerId,
-    }),
-  );
-  [HOST, B, C].forEach((playerId) =>
-    send({ type: "DECLARE_LOBBY_READY", playerId }),
-  );
-
-  const startRound = async () => {
-    send({ type: "START_GAME", playerId: HOST });
-    await waitFor((c) => c.gameStage === "INITIAL_PEEK", "initial peek");
-    [HOST, B, C].forEach((playerId) =>
-      send({ type: "DECLARE_READY_FOR_PEEK", playerId }),
-    );
-    await waitFor(
-      (c) => c.gameStage === "PLAYING" && c.currentTurnSegment === "DRAW",
-      "playing",
-    );
-  };
-
-  // onScoring runs once, as soon as SCORING is entered.
-  const playToGameover = async (onScoring = () => {}) => {
-    send({ type: "CALL_CHECK", playerId: context().currentPlayerId });
-    let scoringSeen = false;
-    const deadline = Date.now() + 30_000;
-    while (context().gameStage !== "GAMEOVER" && Date.now() < deadline) {
-      const c = context();
-      if (c.gameStage === "SCORING" && !scoringSeen) {
-        scoringSeen = true;
-        onScoring();
-      } else if (c.currentTurnSegment === "DRAW" && c.currentPlayerId) {
-        send({ type: "DRAW_FROM_DECK", playerId: c.currentPlayerId });
-      } else if (c.currentTurnSegment === "DISCARD" && c.currentPlayerId) {
-        send({ type: "DISCARD_DRAWN_CARD", playerId: c.currentPlayerId });
-      } else if (c.currentTurnSegment === "MATCHING") {
-        for (const playerId of c.matchingOpportunity?.remainingPlayerIDs ??
-          []) {
-          send({ type: "PASS_ON_MATCH_ATTEMPT", playerId });
-        }
-      } else if (c.currentTurnSegment === "ABILITY") {
-        const ability = c.abilityStack.at(-1);
-        if (ability) {
-          send({
-            type: "USE_ABILITY",
-            playerId: ability.playerId,
-            payload: { action: "skip" },
-          });
-        }
-      }
-      await sleep(10);
-    }
-    await waitFor((c) => c.gameStage === "GAMEOVER", "game over");
-  };
-
-  return { actor, context, send, waitFor, startRound, playToGameover, errors };
+const playToResults = async (t, onScoring) => {
+  t.callCheck();
+  await t.playUntil("GAMEOVER", { onScoring });
 };
 
 const scenarios = {
   async scoringDepartures(t, check) {
-    await t.startRound();
-    await t.playToGameover(() => {
+    await t.startRound(HOST);
+    await playToResults(t, () => {
       t.send({ type: "LEAVE_GAME", playerId: B });
       t.send({ type: "PLAYER_DISCONNECTED", playerId: C });
     });
@@ -124,8 +50,8 @@ const scenarios = {
   },
 
   async hostLeavesResults(t, check) {
-    await t.startRound();
-    await t.playToGameover();
+    await t.startRound(HOST);
+    await playToResults(t);
     t.send({ type: "LEAVE_GAME", playerId: HOST });
     const successor = t.context().gameMasterId;
     check(
@@ -143,8 +69,8 @@ const scenarios = {
   },
 
   async hostBlip(t, check) {
-    await t.startRound();
-    await t.playToGameover();
+    await t.startRound(HOST);
+    await playToResults(t);
     t.send({ type: "PLAYER_DISCONNECTED", playerId: HOST });
     check(
       "a host whose connection drops keeps the seat during the grace",
@@ -165,8 +91,8 @@ const scenarios = {
   },
 
   async hostStaysAway(t, check) {
-    await t.startRound();
-    await t.playToGameover();
+    await t.startRound(HOST);
+    await playToResults(t);
     t.send({ type: "PLAYER_DISCONNECTED", playerId: HOST });
     await sleep(PAST_GRACE_MS);
     const successor = t.context().gameMasterId;
@@ -188,9 +114,9 @@ const scenarios = {
   },
 
   async hostDropsDuringScoring(t, check) {
-    await t.startRound();
+    await t.startRound(HOST);
     let droppedAt = 0;
-    await t.playToGameover(() => {
+    await playToResults(t, () => {
       droppedAt = Date.now();
       t.send({ type: "PLAYER_DISCONNECTED", playerId: HOST });
     });
@@ -203,7 +129,7 @@ const scenarios = {
   },
 
   async hostLeavesMidRound(t, check) {
-    await t.startRound();
+    await t.startRound(HOST);
     t.send({ type: "LEAVE_GAME", playerId: HOST });
     check(
       "a host who leaves mid-round hands the seat on at once",
@@ -213,8 +139,8 @@ const scenarios = {
   },
 
   async everyoneAwayThenBack(t, check) {
-    await t.startRound();
-    await t.playToGameover();
+    await t.startRound(HOST);
+    await playToResults(t);
     t.send({ type: "PLAYER_DISCONNECTED", playerId: B });
     t.send({ type: "PLAYER_DISCONNECTED", playerId: C });
     t.send({ type: "PLAYER_DISCONNECTED", playerId: HOST });
@@ -240,8 +166,8 @@ const scenarios = {
   },
 
   async hostLeavesAnEmptyTable(t, check) {
-    await t.startRound();
-    await t.playToGameover();
+    await t.startRound(HOST);
+    await playToResults(t);
     t.send({ type: "PLAYER_DISCONNECTED", playerId: B });
     t.send({ type: "PLAYER_DISCONNECTED", playerId: C });
     t.send({ type: "LEAVE_GAME", playerId: HOST });
@@ -265,40 +191,37 @@ const scenarios = {
   },
 };
 
-const results = await Promise.all(
+const report = createReport();
+
+// The scenarios run at once, so each reports into its own buffer.
+const scenarioReports = await Promise.all(
   Object.entries(scenarios).map(async ([label, run]) => {
-    const lines = [];
-    let failed = 0;
-    const check = (name, passed, detail = "") => {
-      lines.push(
-        `  ${passed ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`,
-      );
-      if (!passed) failed++;
-    };
-    const table = newTable(label);
+    const scenarioReport = createReport({ buffered: true });
+    const table = openTable({
+      gameId: `CHECK-HOST-${label}`,
+      seed: 149,
+      players: [HOST, B, C],
+      label,
+    });
+    table.readyLobby();
     try {
-      await run(table, check);
+      await run(table, scenarioReport.check);
     } catch (error) {
-      check(`${label} ran to the end`, false, error.message);
+      scenarioReport.check(`${label} ran to the end`, false, error.message);
     }
-    check(`${label}: the actor never errored`, table.errors.length === 0);
-    table.actor.stop();
-    return { lines, failed };
+    scenarioReport.check(
+      `${label}: the actor never errored`,
+      table.errors.length === 0,
+    );
+    table.stop();
+    return scenarioReport;
   }),
 );
+for (const scenarioReport of scenarioReports) report.absorb(scenarioReport);
 
-let failures = 0;
-let checks = 0;
-for (const { lines, failed } of results) {
-  for (const line of lines) console.log(line);
-  failures += failed;
-  checks += lines.length;
-}
-
-if (failures > 0) {
-  console.error(
+report.finish({
+  passed: (checks) =>
+    `Host and scoring departures are handled (${checks} checks).`,
+  failed: (failures) =>
     `\n${failures} host departure check${failures === 1 ? "" : "s"} failed.`,
-  );
-  process.exit(1);
-}
-console.log(`Host and scoring departures are handled (${checks} checks).`);
+});

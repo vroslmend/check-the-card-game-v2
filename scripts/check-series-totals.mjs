@@ -13,42 +13,27 @@
 //
 // Run from the repo root, after npm run build:server-deps.
 
-process.env.NODE_ENV = "production";
-process.env.PEEK_DURATION_MS = "80";
-process.env.MATCHING_STAGE_DURATION_MS = "120";
-process.env.TURN_TIMER_MS = "220";
-process.env.SCORING_DURATION_MS = "300";
+import { loadGame } from "./lib/game.mjs";
+import { createReport } from "./lib/report.mjs";
 
-const { gameMachine } = await import("../server/dist/game-machine.js");
-const { createActor } = await import("xstate");
+const { openTable } = await loadGame({
+  PEEK_DURATION_MS: 80,
+  MATCHING_STAGE_DURATION_MS: 120,
+  TURN_TIMER_MS: 220,
+  SCORING_DURATION_MS: 300,
+});
 
 const P1 = "player-1";
 const P2 = "player-2";
 
-const actor = createActor(gameMachine, { input: { gameId: "CHECK-TOTALS" } });
-actor.subscribe({ error: (err) => console.log("actor error:", err) });
-actor.start();
-
-const ctx = () => actor.getSnapshot().context;
-const send = (e) => actor.send(e);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const waitFor = async (predicate, what, ms = 15000) => {
-  const until = Date.now() + ms;
-  while (Date.now() < until) {
-    if (predicate(ctx())) return true;
-    await sleep(25);
-  }
-  throw new Error(`timed out waiting for ${what} (stage=${ctx().gameStage})`);
-};
-
-let failures = 0;
-let ran = 0;
-const check = (name, ok, detail = "") => {
-  console.log(`  ${ok ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`);
-  ran++;
-  if (!ok) failures++;
-};
+const { check, finish } = createReport();
+const table = openTable({
+  gameId: "CHECK-TOTALS",
+  seed: 109,
+  players: [P1, P2],
+});
+const { send, waitFor } = table;
+const ctx = table.context;
 
 const playRound = async (n) => {
   await waitFor((c) => c.gameStage === "PLAYING", `round ${n} to start`);
@@ -63,18 +48,7 @@ const playRound = async (n) => {
   );
 };
 
-send({
-  type: "PLAYER_JOIN_REQUEST",
-  playerSetupData: { name: "P1", socketId: "s1" },
-  playerId: P1,
-});
-send({
-  type: "PLAYER_JOIN_REQUEST",
-  playerSetupData: { name: "P2", socketId: "s2" },
-  playerId: P2,
-});
-send({ type: "DECLARE_LOBBY_READY", playerId: P1 });
-send({ type: "DECLARE_LOBBY_READY", playerId: P2 });
+table.readyLobby();
 send({ type: "START_GAME", playerId: P1 });
 
 const round1 = await playRound(1);
@@ -93,9 +67,9 @@ for (const id of [P1, P2]) {
   );
 }
 
-// Play Again resets the round and not the series. SCORING holds for a few
-// seconds so the sheet can be read, and PLAY_AGAIN before that is ignored
-// rather than refused, so waiting for GAMEOVER is not optional here.
+// Play Again resets the round and not the series. SCORING holds before
+// GAMEOVER, and PLAY_AGAIN before that is ignored rather than refused, so
+// waiting for GAMEOVER is not optional here.
 await waitFor((c) => c.gameStage === "GAMEOVER", "the end screen to settle");
 const epochBefore = ctx().roundEpoch;
 const host = ctx().gameMasterId ?? P1;
@@ -112,8 +86,7 @@ check(
   Object.values(ctx().players).every((p) => p.score === 0),
 );
 
-send({ type: "DECLARE_LOBBY_READY", playerId: P1 });
-send({ type: "DECLARE_LOBBY_READY", playerId: P2 });
+table.readyLobby();
 send({ type: "START_GAME", playerId: host });
 
 const round2 = await playRound(2);
@@ -132,16 +105,14 @@ check(
   JSON.stringify(totals2),
 );
 
-actor.stop();
+table.stop();
 
-if (failures > 0) {
-  console.error(`
+finish({
+  passed: (checks) => `Series totals accumulate correctly (${checks} checks).`,
+  failed: (failures) => `
 ${failures} series total check${failures === 1 ? "" : "s"} failed.
 
 playerTotals is accumulated in server/src/game-machine.ts and read by the
 standing in the round summary. A total that is wrong is not visible in a single
-round, only across a series, which is why this runs rather than being played.`);
-  process.exit(1);
-}
-
-console.log(`Series totals accumulate correctly (${ran} checks).`);
+round, only across a series, which is why this runs rather than being played.`,
+});

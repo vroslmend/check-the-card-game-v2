@@ -87,7 +87,7 @@ npm test                                    # every check
 node scripts/check-host-departure.mjs       # one check
 ```
 
-To add a check, write `scripts/check-<what-it-guards>.mjs`. Print a PASS or FAIL line for each thing it asserts, and exit non-zero if any failed. `npm test` finds it by its name, so it runs in CI the day it lands. Run it against `main` before your fix and make sure it fails there. The machine reads its timings from the environment once, when it is imported, so set them before the import.
+To add a check, write `scripts/check-<what-it-guards>.mjs`. Print a PASS or FAIL line for each thing it asserts, and exit non-zero if any failed. `npm test` finds it by its name, so it runs in CI the day it lands. Run it against `main` before your fix and make sure it fails there. For a check that drives the game machine, `loadGame` in `scripts/lib/game.mjs` sets its timings before importing it, which matters because they are read once at import, and seats, starts and plays a round. `createReport` in `scripts/lib/report.mjs` prints the PASS and FAIL lines and sets the exit code.
 
 Wider coverage, invariants checked after every event and a scripted full game, is tracked in [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36).
 
