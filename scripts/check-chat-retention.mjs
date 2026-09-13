@@ -20,6 +20,7 @@ process.env.NODE_ENV = "production";
 process.env.PEEK_DURATION_MS = "80";
 process.env.MATCHING_STAGE_DURATION_MS = "120";
 process.env.TURN_TIMER_MS = "220";
+process.env.SCORING_DURATION_MS = "300";
 
 const { gameMachine } = await import("../server/dist/game-machine.js");
 const { createActor } = await import("xstate");

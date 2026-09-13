@@ -10,6 +10,7 @@ process.env.NODE_ENV = "production";
 process.env.PEEK_DURATION_MS = "20";
 process.env.MATCHING_STAGE_DURATION_MS = "20";
 process.env.TURN_TIMER_MS = "45000";
+process.env.SCORING_DURATION_MS = "300";
 
 const { gameMachine } = await import("../server/dist/game-machine.js");
 const { generatePlayerView } = await import("../server/dist/state-redactor.js");

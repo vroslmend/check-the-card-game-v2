@@ -14,6 +14,7 @@ process.env.MATCHING_STAGE_DURATION_MS = "20";
 // the same timer path as production. This is intentionally short enough to
 // make the old 120s recovery pause observable as a timeout.
 process.env.TURN_TIMER_MS = "1100";
+process.env.SCORING_DURATION_MS = "300";
 
 const { gameMachine } = await import("../server/dist/game-machine.js");
 const { createActor } = await import("xstate");
