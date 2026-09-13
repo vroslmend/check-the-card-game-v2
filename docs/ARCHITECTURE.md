@@ -119,7 +119,7 @@ The integrity of the game relies on the well-defined structures in `shared-types
 
 ## 7. Testing Strategy
 
-There is no unit or state machine suite. An earlier Vitest suite covering the game machine, the state redactor and the deck utilities was removed and has not been replaced, so rules verification is manual against `GAME_RULES.md`. Restoring it is tracked in issue [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36).
+An earlier Vitest suite covering the game machine, the state redactor and the deck utilities was removed. Its place has been taken, one bug at a time, by the game checks in `scripts/check-*.mjs`, which `npm test` runs inside `npm run verify`. Most drive a real game machine and some a real server over sockets, always the compiled build. Nothing yet plays a full game while checking invariants after every event, which is tracked in issue [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36).
 
 The architecture supports that well: the game machine is pure and configured by input, and `generatePlayerView` is a pure function, so both can be exercised without a socket or a browser.
 
