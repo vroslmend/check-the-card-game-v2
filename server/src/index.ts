@@ -284,8 +284,9 @@ export const io = new SocketIOServer<
   // Both sides notice a dead link after pingInterval + pingTimeout, so the
   // engine.io defaults (25s + 20s) leave a player staring at a frozen board
   // for 45 seconds. Getting it wrong in this direction is the cheap mistake:
-  // recovery and the reconnect grace both run for minutes, so a premature
-  // disconnect costs a brief reconnecting flash and heals itself.
+  // connection-state recovery runs for two minutes and a dropped player keeps
+  // their ordinary turn window, so a premature disconnect costs a brief
+  // reconnecting flash and heals itself.
   pingInterval: parseInt(process.env.SOCKET_PING_INTERVAL_MS || "10000", 10),
   pingTimeout: parseInt(process.env.SOCKET_PING_TIMEOUT_MS || "8000", 10),
   // Game-state broadcasts are repetitive JSON that deflates 5-10×; slow
@@ -415,10 +416,10 @@ io.on("connection", (socket: Socket) => {
     });
   };
 
-  // A socket restored by connection-state recovery keeps its id (and, with
-  // R5.1b, its retained session) — but the machine flagged the player
-  // disconnected when the transport dropped. Heal it server-side right away
-  // instead of waiting for the client's ATTEMPT_REJOIN round-trip.
+  // A socket restored by connection-state recovery keeps its id, and its
+  // session is still held for SESSION_RETENTION_MS, but the machine flagged the
+  // player disconnected when the transport dropped. Heal it server-side right
+  // away instead of waiting for the client's ATTEMPT_REJOIN round-trip.
   if ((socket as { recovered?: boolean }).recovered) {
     const recoveredSession = socketSessionMap.get(socket.id);
     if (recoveredSession) {

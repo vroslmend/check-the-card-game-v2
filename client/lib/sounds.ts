@@ -3,7 +3,7 @@
 // files decode to silent no-ops so a partial asset set never breaks play.
 //
 // Assets: Kenney "Casino Audio" (CC0, kenney.nl/assets/casino-audio),
-// transcoded to mp3 — see round-12-plan-execution.md R12.3 for the manifest.
+// transcoded to mp3.
 const SPRITES = {
   deal: "/sounds/deal.mp3",
   draw: "/sounds/draw.mp3",

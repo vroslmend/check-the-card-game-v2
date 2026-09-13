@@ -8,10 +8,12 @@ Fixes #
 
 ## How it was verified
 
-<!-- What you actually ran and looked at. There is no automated test suite yet, so this section is the verification.
+<!-- What you actually ran and looked at. CI runs npm run verify, which includes the game checks in npm test, but those only cover what they assert, so say what else you checked.
 
 What CI will run, so you can fail it locally first:
   npm run verify
+
+If you fixed a bug a check could have caught, add the check, and say that it failed before your fix.
 
 If you touched game rules, say which rule you played through and with how many players. -->
 

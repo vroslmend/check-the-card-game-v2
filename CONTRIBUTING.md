@@ -10,7 +10,7 @@ Be decent to people in issues and pull requests. That is the whole code of condu
 
 - **Play it and report what breaks.** Open an issue with what you did and what happened. For multiplayer problems, include the number of players and the game code if you still have it.
 - **Suggest a change.** Describe the problem you ran into rather than the solution you have in mind. It usually leads somewhere better.
-- **Improve the docs.** `docs/` holds the rules, architecture and setup notes.
+- **Improve the docs.** `docs/` holds the rules and the architecture.
 - **Write code.** Read the rest of this file first.
 
 ## How work is tracked
@@ -38,7 +38,7 @@ The templates apply the first three for you. Anything filed without a label gets
 
 ## Setting up
 
-Requirements, install steps and environment variables are in the [README](README.md). The short version:
+Install steps are in the [README](README.md), and every environment variable is documented in `client/.env.example` and `server/.env.example`. The short version:
 
 ```
 npm ci
@@ -54,7 +54,7 @@ The client hot reloads. The server does not: it runs from a build, so after chan
 ## Making a change
 
 - Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before you change anything, and [docs/GAME_RULES.md](docs/GAME_RULES.md) before you change anything about how the game plays. The rules document is the specification rather than a description of what the code currently does, so read it instead of inferring the rules from the state machine.
-- Branch off `main`. Main is protected, so a pull request is the only way in: CI must pass, one approving review, no direct commits, no force pushes.
+- Branch off `main`. Main is protected, so a pull request is the only way in: CI must pass, one approving review from the code owner, squash merges only, no direct commits, no force pushes.
 - Name the branch after the work: `fix/short-description`, `feat/short-description`, or `chore/short-description` for maintenance that is neither, such as tooling, formatting or dependencies. One branch per pull request, rather than one branch you keep reusing.
 - One issue, one pull request. If you find a second problem along the way, open a second issue for it. A small fix bundled with a large rewrite cannot be reviewed or reverted cleanly and will be sent back.
 - Stay inside the scope the issue describes. Where scope matters, the issue says what is out of bounds.
@@ -115,7 +115,7 @@ It is not part of `npm run verify` or CI, because it needs a browser and takes m
 - **Do not add `paths-ignore` to `.github/workflows/ci.yml`.** CI is a required check, and a workflow skipped by path filtering leaves that check pending forever, which blocks the pull request from merging with no obvious cause. Use a job level `if:` instead, since a skipped job reports success.
 - **`main` is protected by a repository ruleset, not classic branch protection.** `gh api repos/OWNER/REPO/branches/main/protection` returns 404 even though main is fully protected. Use `gh api repos/OWNER/REPO/rulesets`.
 - **A pull request preview cannot test a server change.** Vercel builds the client only, and that preview talks to a server that is already running rather than one built from your branch. A branch that adds a field to the broadcast will show a preview client reading it as missing, because the server sending that broadcast does not have it yet, and it looks exactly like a bug in your client code. Client changes are testable on a preview; server changes are testable locally against both halves, or on production once merged.
-- **If you touch `server/src/state-redactor.ts`, be careful.** That function is the boundary that keeps hidden cards hidden, and it has leaked a player's own hand once before. No face-down card's rank or suit should reach any client outside SCORING and GAMEOVER, including the card's owner. `docs/GAME_RULES.md` defines what each player is allowed to know.
+- **If you touch `server/src/state-redactor.ts`, be careful.** That function is the boundary that keeps hidden cards hidden, and it has leaked a player's own hand once before. No face-down card's rank or suit should reach any client outside SCORING and GAMEOVER, including the card's owner. `docs/GAME_RULES.md` defines what each player is allowed to know, and `npm run check:hidden` guards it, so run it after any change there.
 
 ## Opening a pull request
 
