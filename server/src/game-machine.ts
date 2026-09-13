@@ -62,6 +62,12 @@ const LOBBY_DISCONNECT_TIMEOUT_MS = parseInt(
   process.env.LOBBY_DISCONNECT_TIMEOUT_MS || "120000",
   10,
 );
+// A host whose connection drops after the game starts keeps the seat this long,
+// so a refresh or a network blip does not cost them the lobby.
+const HOST_DISCONNECT_GRACE_MS = parseInt(
+  process.env.HOST_DISCONNECT_GRACE_MS || "30000",
+  10,
+);
 const ABILITY_PEEK_VIEW_DURATION_MS = 5000;
 // Rules 7: a player whose hand reaches this size via failed-match penalties is
 // disqualified from the round (locked, revealed at scoring, cannot win).
@@ -86,6 +92,34 @@ const createLogEntry = (
   id: `log_${gameId}_${Date.now()}_${logEntrySeq++}`,
   timestamp: new Date().toISOString(),
   ...data,
+});
+
+// Only the host can start a round, so the seat must go to someone present,
+// preferring players still in this round over anyone else connected.
+const findPresentSuccessor = (
+  context: GameContext,
+  departingId: PlayerId,
+): PlayerId | undefined => {
+  const isPresent = (id: PlayerId) =>
+    id !== departingId && !!context.players[id]?.isConnected;
+  return (
+    context.turnOrder.find(
+      (id) => isPresent(id) && !context.players[id]!.forfeited,
+    ) ?? Object.keys(context.players).find(isPresent)
+  );
+};
+
+const handHostSeatTo = (context: GameContext, successorId: PlayerId) => ({
+  gameMasterId: successorId,
+  hostAwaySince: null,
+  log: [
+    ...context.log,
+    createLogEntry(context.gameId, {
+      message: `${getPlayerNameForLog(successorId, context.players)} is now the host.`,
+      type: "public",
+      tags: ["system-message"],
+    }),
+  ],
 });
 
 const cardScoreValues: Record<CardRank, number> = {
@@ -234,7 +268,8 @@ type GameEvent =
   | { type: "PLAYER_DISCONNECTED"; playerId: PlayerId }
   | PlayerActionEvents
   | { type: "TIMER.PEEK_TO_SWAP"; sourceCardId: string }
-  | { type: "LOBBY_DISCONNECT_TIMEOUT"; playerId: PlayerId };
+  | { type: "LOBBY_DISCONNECT_TIMEOUT"; playerId: PlayerId }
+  | { type: "HOST_AWAY_TIMEOUT"; since: number };
 
 type EmittedEvent =
   | { type: "BROADCAST_GAME_STATE" }
@@ -1716,7 +1751,9 @@ export const gameMachine = setup({
         log: [],
         // gameMasterId (the lobby host) is deliberately NOT reassigned here:
         // the host is stable for the lobby's lifetime and only changes when
-        // the host actually leaves (removePlayerAndHandleGM). It used to be
+        // the host leaves or stays away (removePlayerAndHandleGM in the lobby;
+        // handHostSeatTo and forfeitDisconnectedCurrentPlayer after the game
+        // starts). It used to be
         // overwritten with the rotated dealer, which handed the "Play Again"
         // control to the wrong player after round one.
         gameStage: GameStage.WAITING_FOR_PLAYERS,
@@ -1767,6 +1804,56 @@ export const gameMachine = setup({
             },
           }
         : {};
+    }),
+    // A host who presses Leave cannot rejoin, because the client deletes the
+    // reconnect token, so the seat moves now. With nobody present to take it,
+    // the grace is recorded as already spent so the first player back gets it.
+    handOffSeatOfLeavingHost: assign(({ context, event }) => {
+      assertEvent(event, PlayerActionType.LEAVE_GAME);
+      if (event.playerId !== context.gameMasterId) return {};
+      const successorId = findPresentSuccessor(context, event.playerId);
+      return successorId
+        ? handHostSeatTo(context, successorId)
+        : { hostAwaySince: Date.now() - HOST_DISCONNECT_GRACE_MS };
+    }),
+    markHostAway: enqueueActions(({ context, event, enqueue }) => {
+      assertEvent(event, "PLAYER_DISCONNECTED");
+      if (event.playerId !== context.gameMasterId) return;
+      const since = Date.now();
+      enqueue.assign({ hostAwaySince: since });
+      enqueue.raise(
+        { type: "HOST_AWAY_TIMEOUT", since },
+        { delay: HOST_DISCONNECT_GRACE_MS },
+      );
+    }),
+    // A host who returned and dropped again raised a second timer. `since`
+    // ties each timer to one absence, so the older one cannot cut the newer
+    // absence short.
+    handOffSeatOfAwayHost: assign(({ context, event }) => {
+      assertEvent(event, "HOST_AWAY_TIMEOUT");
+      const host = context.gameMasterId
+        ? context.players[context.gameMasterId]
+        : undefined;
+      if (!host || host.isConnected || context.hostAwaySince !== event.since) {
+        return {};
+      }
+      const successorId = findPresentSuccessor(context, host.id);
+      return successorId ? handHostSeatTo(context, successorId) : {};
+    }),
+    // Covers a grace that ran out while nobody else was connected: no timer is
+    // left to hand the seat on, so the first player back takes it.
+    settleHostSeatOnReturn: assign(({ context, event }) => {
+      assertEvent(event, "PLAYER_RECONNECTED");
+      if (typeof context.hostAwaySince !== "number") return {};
+      const host = context.gameMasterId
+        ? context.players[context.gameMasterId]
+        : undefined;
+      if (!host || host.isConnected) return { hostAwaySince: null };
+      if (Date.now() - context.hostAwaySince < HOST_DISCONNECT_GRACE_MS) {
+        return {};
+      }
+      const successorId = findPresentSuccessor(context, host.id);
+      return successorId ? handHostSeatTo(context, successorId) : {};
     }),
     // A dropped current player receives the same turn window as everyone else.
     // If they are still away when that window ends, freeze their hand and mark
@@ -2124,6 +2211,7 @@ export const gameMachine = setup({
     discardPile: [],
     turnOrder: [],
     gameMasterId: null,
+    hostAwaySince: null,
     currentPlayerId: null,
     currentTurnSegment: null,
     gameStage: GameStage.WAITING_FOR_PLAYERS,
@@ -2154,7 +2242,14 @@ export const gameMachine = setup({
     // Marking the player connected and re-broadcasting is sufficient; the
     // current turn continues on its already-running ordinary deadline.
     PLAYER_RECONNECTED: {
-      actions: ["markPlayerAsConnected", "broadcastGameState"] as const,
+      actions: [
+        "markPlayerAsConnected",
+        "settleHostSeatOnReturn",
+        "broadcastGameState",
+      ] as const,
+    },
+    HOST_AWAY_TIMEOUT: {
+      actions: ["handOffSeatOfAwayHost", "broadcastGameState"] as const,
     },
     [PlayerActionType.SEND_CHAT_MESSAGE]: {
       actions: enqueueActions(({ context, event, enqueue }) => {
@@ -2234,6 +2329,7 @@ export const gameMachine = setup({
           actions: [
             "setPlayerDisconnected",
             "addPlayerDisconnectedLog",
+            "handOffSeatOfLeavingHost",
             "broadcastGameState",
           ] as const,
         },
@@ -2241,6 +2337,7 @@ export const gameMachine = setup({
           actions: [
             "setPlayerDisconnected",
             "addPlayerDisconnectedLog",
+            "markHostAway",
             "broadcastGameState",
           ] as const,
         },
@@ -2261,6 +2358,7 @@ export const gameMachine = setup({
           actions: [
             "setPlayerDisconnected",
             "addPlayerDisconnectedLog",
+            "handOffSeatOfLeavingHost",
             "broadcastGameState",
           ] as const,
         },
@@ -2268,6 +2366,7 @@ export const gameMachine = setup({
           actions: [
             "setPlayerDisconnected",
             "addPlayerDisconnectedLog",
+            "markHostAway",
             "broadcastGameState",
           ] as const,
         },
@@ -2317,6 +2416,7 @@ export const gameMachine = setup({
             actions: [
               "setPlayerDisconnected",
               "addPlayerDisconnectedLog",
+              "handOffSeatOfLeavingHost",
               "broadcastGameState",
             ] as const,
           },
@@ -2326,6 +2426,7 @@ export const gameMachine = setup({
             actions: [
               "setPlayerDisconnected",
               "addPlayerDisconnectedLog",
+              "markHostAway",
               "broadcastGameState",
             ] as const,
           },
@@ -2376,6 +2477,7 @@ export const gameMachine = setup({
             actions: [
               "setPlayerDisconnected",
               "addPlayerDisconnectedLog",
+              "handOffSeatOfLeavingHost",
               "broadcastGameState",
             ] as const,
           },
@@ -2385,6 +2487,7 @@ export const gameMachine = setup({
             actions: [
               "setPlayerDisconnected",
               "addPlayerDisconnectedLog",
+              "markHostAway",
               "broadcastGameState",
             ] as const,
           },
@@ -2409,6 +2512,24 @@ export const gameMachine = setup({
         "broadcastGameState",
       ] as const,
       after: { 5000: GameStage.GAMEOVER },
+      on: {
+        [PlayerActionType.LEAVE_GAME]: {
+          actions: [
+            "setPlayerDisconnected",
+            "addPlayerDisconnectedLog",
+            "handOffSeatOfLeavingHost",
+            "broadcastGameState",
+          ] as const,
+        },
+        PLAYER_DISCONNECTED: {
+          actions: [
+            "setPlayerDisconnected",
+            "addPlayerDisconnectedLog",
+            "markHostAway",
+            "broadcastGameState",
+          ] as const,
+        },
+      },
     },
     [GameStage.GAMEOVER]: {
       entry: [
@@ -2429,6 +2550,7 @@ export const gameMachine = setup({
           actions: [
             "setPlayerDisconnected",
             "addPlayerDisconnectedLog",
+            "handOffSeatOfLeavingHost",
             "broadcastGameState",
           ] as const,
         },
@@ -2436,6 +2558,7 @@ export const gameMachine = setup({
           actions: [
             "setPlayerDisconnected",
             "addPlayerDisconnectedLog",
+            "markHostAway",
             "broadcastGameState",
           ] as const,
         },
