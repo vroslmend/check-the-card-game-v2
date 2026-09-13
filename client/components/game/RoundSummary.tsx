@@ -86,10 +86,12 @@ export const RoundSummary = ({
   const roundEpoch = useUISelector(selectRoundEpoch);
   const reduced = !!useReducedMotion();
 
-  // Rematch tally: how many of the non-host players want to play again. The
-  // host isn't counted (they start the round outright); the count drives both
-  // the host's "N waiting" hint and each non-host's toggle.
-  const nonHostCount = players.filter((p) => p.id !== gameMasterId).length;
+  // Rematch tally: how many of the non-host players still here want to play
+  // again. The host isn't counted (they start the round outright); the count
+  // drives both the host's "N waiting" hint and each non-host's toggle.
+  const nonHostCount = players.filter(
+    (p) => p.id !== gameMasterId && p.isConnected,
+  ).length;
   const rematchCount = rematchVotes.filter((id) => id !== gameMasterId).length;
   const localWantsRematch = rematchVotes.includes(localPlayerId);
 

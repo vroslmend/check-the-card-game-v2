@@ -150,10 +150,11 @@ export const generatePlayerView = (
         ([id]) => !!fullGameContext.players[id],
       ),
     ),
-    // Filter to players still at the table so a voter who left doesn't inflate
-    // the tally (votes are also reset each new round).
+    // Filtered on presence, not membership: nobody leaves `players` once the
+    // game starts. The vote stays in context, so a voter who drops and returns
+    // counts again without voting twice.
     rematchVotes: fullGameContext.rematchVotes.filter(
-      (id) => !!fullGameContext.players[id],
+      (id) => !!fullGameContext.players[id]?.isConnected,
     ),
     roundEpoch: fullGameContext.roundEpoch ?? 0,
     log: clientLog.slice(-BROADCAST_LOG_TAIL),
