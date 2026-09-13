@@ -16,43 +16,24 @@
 //
 // Run from the repo root, after npm run build:server-deps.
 
-process.env.NODE_ENV = "production";
-process.env.PEEK_DURATION_MS = "80";
-process.env.MATCHING_STAGE_DURATION_MS = "120";
-process.env.TURN_TIMER_MS = "220";
-process.env.SCORING_DURATION_MS = "300";
+import { loadGame } from "./lib/game.mjs";
+import { createReport } from "./lib/report.mjs";
 
-const { gameMachine } = await import("../server/dist/game-machine.js");
-const { createActor } = await import("xstate");
+const { openTable } = await loadGame({
+  PEEK_DURATION_MS: 80,
+  MATCHING_STAGE_DURATION_MS: 120,
+  TURN_TIMER_MS: 220,
+  SCORING_DURATION_MS: 300,
+});
 
 const P1 = "player-1";
 const P2 = "player-2";
 const RETENTION_CAP = 200;
 
-const actor = createActor(gameMachine, { input: { gameId: "CHECK-CHAT" } });
-actor.subscribe({ error: (err) => console.log("actor error:", err) });
-actor.start();
-
-const ctx = () => actor.getSnapshot().context;
-const send = (e) => actor.send(e);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const waitFor = async (predicate, what, ms = 15000) => {
-  const until = Date.now() + ms;
-  while (Date.now() < until) {
-    if (predicate(ctx())) return true;
-    await sleep(25);
-  }
-  throw new Error(`timed out waiting for ${what} (stage=${ctx().gameStage})`);
-};
-
-let failures = 0;
-let ran = 0;
-const check = (name, ok, detail = "") => {
-  console.log(`  ${ok ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`);
-  ran++;
-  if (!ok) failures++;
-};
+const { check, finish } = createReport();
+const table = openTable({ gameId: "CHECK-CHAT", seed: 139, players: [P1, P2] });
+const { send, waitFor } = table;
+const ctx = table.context;
 
 const say = (playerId, name, message) =>
   send({
@@ -62,18 +43,7 @@ const say = (playerId, name, message) =>
 
 const said = () => ctx().chat.map((m) => m.message);
 
-send({
-  type: "PLAYER_JOIN_REQUEST",
-  playerSetupData: { name: "P1", socketId: "s1" },
-  playerId: P1,
-});
-send({
-  type: "PLAYER_JOIN_REQUEST",
-  playerSetupData: { name: "P2", socketId: "s2" },
-  playerId: P2,
-});
-send({ type: "DECLARE_LOBBY_READY", playerId: P1 });
-send({ type: "DECLARE_LOBBY_READY", playerId: P2 });
+table.readyLobby();
 send({ type: "START_GAME", playerId: P1 });
 
 await waitFor((c) => c.gameStage === "PLAYING", "round 1 to start");
@@ -90,8 +60,8 @@ await waitFor(
   "round 1 to score",
 );
 
-// SCORING holds for a few seconds so the sheet can be read, and PLAY_AGAIN
-// before that is ignored rather than refused, so waiting is not optional.
+// SCORING holds before GAMEOVER, and PLAY_AGAIN before that is ignored rather
+// than refused, so waiting is not optional.
 await waitFor((c) => c.gameStage === "GAMEOVER", "the end screen to settle");
 const epochBefore = ctx().roundEpoch;
 const roundOneLogIds = new Set(ctx().log.map((e) => e.id));
@@ -112,8 +82,7 @@ check(
   `carried=${ctx().log.filter((e) => roundOneLogIds.has(e.id)).length}`,
 );
 
-send({ type: "DECLARE_LOBBY_READY", playerId: P1 });
-send({ type: "DECLARE_LOBBY_READY", playerId: P2 });
+table.readyLobby();
 send({ type: "START_GAME", playerId: host });
 await waitFor((c) => c.gameStage === "PLAYING", "round 2 to start");
 
@@ -143,17 +112,16 @@ check(
   new Set(chat.map((m) => m.id)).size === chat.length,
 );
 
-actor.stop();
+table.stop();
 
-if (failures > 0) {
-  console.error(`
+finish({
+  passed: (checks) =>
+    `Chat survives the round, the log does not (${checks} checks).`,
+  failed: (failures) => `
 ${failures} chat retention check${failures === 1 ? "" : "s"} failed.
 
 resetForNewRound in server/src/game-machine.ts clears the round's log. It must
 not clear context.chat, and the client half must merge chat across the roundEpoch
 bump rather than replacing it (client/machines/uiMachine.ts). Both halves are
-needed: the server keeping chat is invisible if the client drops its own copy.`);
-  process.exit(1);
-}
-
-console.log(`Chat survives the round, the log does not (${ran} checks).`);
+needed: the server keeping chat is invisible if the client drops its own copy.`,
+});

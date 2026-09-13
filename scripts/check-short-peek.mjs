@@ -19,56 +19,38 @@
 //
 // Run from the repo root, after npm run build:server-deps.
 
-process.env.NODE_ENV = "production";
-process.env.PEEK_DURATION_MS = "150";
-process.env.MATCHING_STAGE_DURATION_MS = "300";
-process.env.ABILITY_PEEK_VIEW_DURATION_MS = "300";
-// Long enough that a missing stage flip cannot be mistaken for an ability that
-// simply fizzled first, which needs it well above the peek view window.
-process.env.TURN_TIMER_MS = "20000";
+import { loadGame, sleep } from "./lib/game.mjs";
+import { createReport } from "./lib/report.mjs";
 
-const { gameMachine } = await import("../server/dist/game-machine.js");
-const { createActor } = await import("xstate");
+const ABILITY_PEEK_VIEW_DURATION_MS = 300;
 
-const ABILITY_PEEK_VIEW_DURATION_MS = Number(
-  process.env.ABILITY_PEEK_VIEW_DURATION_MS,
-);
+const { openTable } = await loadGame({
+  PEEK_DURATION_MS: 150,
+  MATCHING_STAGE_DURATION_MS: 300,
+  ABILITY_PEEK_VIEW_DURATION_MS,
+  // Long enough that a missing stage flip cannot be mistaken for an ability
+  // that simply fizzled first, which needs it well above the peek view window.
+  TURN_TIMER_MS: 20_000,
+});
+
 const P1 = "player-1";
 const P2 = "player-2";
 
-let failures = 0;
-const check = (name, passed, detail = "") => {
-  console.log(
-    `  ${passed ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`,
-  );
-  if (!passed) failures++;
-};
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { check, finish } = createReport();
 
 // Plays a seeded round until its first peek capable ability, spends it at
 // `mode` targets, then reports what the ability did next.
 async function playToPeek(mode, seed) {
-  const actor = createActor(gameMachine, {
-    input: { gameId: `CHECK-SHORTPEEK-${mode}`, seed },
+  const table = openTable({
+    gameId: `CHECK-SHORTPEEK-${mode}`,
+    seed,
+    players: [P1, P2],
   });
-  actor.start();
-  const snap = () => actor.getSnapshot();
-  const send = (e) => actor.send(e);
+  const snap = table.snapshot;
+  const send = table.send;
   const top = () => snap().context.abilityStack.at(-1) ?? null;
 
-  send({
-    type: "PLAYER_JOIN_REQUEST",
-    playerSetupData: { name: "P1", socketId: "s1" },
-    playerId: P1,
-  });
-  send({
-    type: "PLAYER_JOIN_REQUEST",
-    playerSetupData: { name: "P2", socketId: "s2" },
-    playerId: P2,
-  });
-  send({ type: "DECLARE_LOBBY_READY", playerId: P1 });
-  send({ type: "DECLARE_LOBBY_READY", playerId: P2 });
+  table.readyLobby();
   send({ type: "START_GAME", playerId: P1 });
 
   const result = {
@@ -199,7 +181,7 @@ async function playToPeek(mode, seed) {
     await sleep(10);
   }
 
-  actor.stop();
+  table.stop();
   return result;
 }
 
@@ -235,8 +217,9 @@ check(
   full.outcome,
 );
 
-if (failures > 0) {
-  console.error(`
+finish({
+  passed: () => "\nA peek confirmed short of its maximum still resolves.",
+  failed: (failures) => `
 ${failures} short peek failure${failures === 1 ? "" : "s"}.
 
 A player granted more peeks than the table can offer has to be able to spend
@@ -244,8 +227,5 @@ what is there and move on. An ability left in the peeking stage with peeks
 remaining cannot advance, so the player waits out the turn timer with nothing
 to press and loses the swap too. Treat a failure here as the game being wrong
 rather than this script, and check it against Special Card Abilities in
-docs/GAME_RULES.md.`);
-  process.exit(1);
-}
-
-console.log("\nA peek confirmed short of its maximum still resolves.");
+docs/GAME_RULES.md.`,
+});

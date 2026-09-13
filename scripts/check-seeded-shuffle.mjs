@@ -7,19 +7,15 @@
 //
 // Run from the repo root, after npm run build:server-deps.
 
+import { createReport } from "./lib/report.mjs";
+
 const { createDeck, shuffleDeck } =
   await import("../server/dist/lib/deck-utils.js");
 const { createSeededRng } = await import("../server/dist/lib/rng.js");
 const { gameMachine } = await import("../server/dist/game-machine.js");
 const { createActor } = await import("xstate");
 
-let failures = 0;
-const check = (name, passed, detail = "") => {
-  console.log(
-    `  ${passed ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`,
-  );
-  if (!passed) failures++;
-};
+const { check, finish } = createReport();
 
 const dealWith = (seed) => {
   const rng = createSeededRng(seed);
@@ -75,8 +71,7 @@ check(
   seq(seedOf({ gameId: "g4" })) !== seq(seedOf({ gameId: "g5" })),
 );
 
-if (failures > 0) {
-  console.error(`\n${failures} check(s) failed.`);
-  process.exit(1);
-}
-console.log("\nAll seeded randomness checks passed.");
+finish({
+  passed: () => "\nAll seeded randomness checks passed.",
+  failed: (failures) => `\n${failures} check(s) failed.`,
+});

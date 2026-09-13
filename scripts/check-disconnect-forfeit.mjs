@@ -7,17 +7,18 @@
 // Drives the real compiled gameMachine. Run from the repo root, after
 // npm run build:server-deps.
 
-process.env.NODE_ENV = "production";
-process.env.PEEK_DURATION_MS = "20";
-process.env.MATCHING_STAGE_DURATION_MS = "20";
-// The machine clamps timer delays to at least 1s so a short test still uses
-// the same timer path as production. This is intentionally short enough to
-// make the old 120s recovery pause observable as a timeout.
-process.env.TURN_TIMER_MS = "1100";
-process.env.SCORING_DURATION_MS = "300";
+import { loadGame, sleep } from "./lib/game.mjs";
+import { createReport } from "./lib/report.mjs";
 
-const { gameMachine } = await import("../server/dist/game-machine.js");
-const { createActor } = await import("xstate");
+const { openTable, tableFor, gameMachine, createActor } = await loadGame({
+  PEEK_DURATION_MS: 20,
+  MATCHING_STAGE_DURATION_MS: 20,
+  // The machine clamps timer delays to at least 1s so a short test still uses
+  // the same timer path as production. This is intentionally short enough to
+  // make the old 120s recovery pause observable as a timeout.
+  TURN_TIMER_MS: 1100,
+  SCORING_DURATION_MS: 300,
+});
 
 const PLAYERS = ["player-1", "player-2", "player-3"];
 const SCORE_BY_RANK = {
@@ -36,130 +37,16 @@ const SCORE_BY_RANK = {
   K: 13,
 };
 
-const actor = createActor(gameMachine, {
-  input: { gameId: "CHECK-DISCONNECT-FORFEIT", seed: 148 },
+const { check, finish } = createReport();
+const table = openTable({
+  gameId: "CHECK-DISCONNECT-FORFEIT",
+  seed: 148,
+  players: PLAYERS,
 });
-const errors = [];
-actor.subscribe({ error: (error) => errors.push(error) });
-actor.start();
+const { snapshot, context, send, waitFor } = table;
 
-const snapshot = () => actor.getSnapshot();
-const context = () => snapshot().context;
-const send = (event) => actor.send(event);
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const waitFor = async (predicate, what, timeoutMs = 15_000) => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate(context())) return;
-    await sleep(10);
-  }
-  throw new Error(
-    `Timed out waiting for ${what} (stage=${context().gameStage}, current=${context().currentPlayerId})`,
-  );
-};
-
-const waitForActor = async (
-  targetActor,
-  predicate,
-  what,
-  timeoutMs = 5_000,
-) => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const targetContext = targetActor.getSnapshot().context;
-    if (predicate(targetContext)) return;
-    await sleep(10);
-  }
-  const targetContext = targetActor.getSnapshot().context;
-  throw new Error(
-    `Timed out waiting for ${what} (stage=${targetContext.gameStage}, current=${targetContext.currentPlayerId})`,
-  );
-};
-
-let checks = 0;
-let failures = 0;
-const check = (name, passed, detail = "") => {
-  console.log(
-    `  ${passed ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`,
-  );
-  checks++;
-  if (!passed) failures++;
-};
-
-const driveFinalTurnsToScoring = async () => {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const c = context();
-    if (c.gameStage === "SCORING" || c.gameStage === "GAMEOVER") return;
-
-    if (c.gameStage === "FINAL_TURNS") {
-      if (c.currentTurnSegment === "DRAW" && c.currentPlayerId) {
-        send({ type: "DRAW_FROM_DECK", playerId: c.currentPlayerId });
-      } else if (c.currentTurnSegment === "DISCARD" && c.currentPlayerId) {
-        send({ type: "DISCARD_DRAWN_CARD", playerId: c.currentPlayerId });
-      } else if (c.currentTurnSegment === "MATCHING") {
-        for (const playerId of c.matchingOpportunity?.remainingPlayerIDs ??
-          []) {
-          send({ type: "PASS_ON_MATCH_ATTEMPT", playerId });
-        }
-      } else if (c.currentTurnSegment === "ABILITY") {
-        const ability = c.abilityStack.at(-1);
-        if (ability) {
-          send({
-            type: "USE_ABILITY",
-            playerId: ability.playerId,
-            payload: { action: "skip" },
-          });
-        }
-      }
-    }
-    await sleep(10);
-  }
-  throw new Error(
-    `Timed out driving final turns (stage=${context().gameStage})`,
-  );
-};
-
-const driveConnectedTurn = () => {
-  const c = context();
-  if (c.currentTurnSegment === "DRAW" && c.currentPlayerId) {
-    send({ type: "DRAW_FROM_DECK", playerId: c.currentPlayerId });
-  } else if (c.currentTurnSegment === "DISCARD" && c.currentPlayerId) {
-    send({ type: "DISCARD_DRAWN_CARD", playerId: c.currentPlayerId });
-  } else if (c.currentTurnSegment === "MATCHING") {
-    for (const playerId of c.matchingOpportunity?.remainingPlayerIDs ?? []) {
-      send({ type: "PASS_ON_MATCH_ATTEMPT", playerId });
-    }
-  } else if (c.currentTurnSegment === "ABILITY") {
-    const ability = c.abilityStack.at(-1);
-    if (ability) {
-      send({
-        type: "USE_ABILITY",
-        playerId: ability.playerId,
-        payload: { action: "skip" },
-      });
-    }
-  }
-};
-
-for (const [index, playerId] of PLAYERS.entries()) {
-  send({
-    type: "PLAYER_JOIN_REQUEST",
-    playerSetupData: { name: `P${index + 1}`, socketId: `socket-${index + 1}` },
-    playerId,
-  });
-}
-for (const playerId of PLAYERS) {
-  send({ type: "DECLARE_LOBBY_READY", playerId });
-}
-send({ type: "START_GAME", playerId: PLAYERS[0] });
-
-await waitFor((c) => c.gameStage === "INITIAL_PEEK", "initial peek");
-for (const playerId of PLAYERS) {
-  send({ type: "DECLARE_READY_FOR_PEEK", playerId });
-}
-await waitFor((c) => c.gameStage === "PLAYING", "playing round one");
+table.readyLobby();
+await table.startRound(PLAYERS[0]);
 
 const disconnectedId = context().currentPlayerId;
 const handBeforeForfeit = context().players[disconnectedId].hand.map(
@@ -225,12 +112,8 @@ check(
     !context().turnOrder.includes(disconnectedId),
 );
 
-send({ type: "CALL_CHECK", playerId: context().currentPlayerId });
-await driveFinalTurnsToScoring();
-await waitFor(
-  (c) => c.gameStage === "SCORING" || c.gameStage === "GAMEOVER",
-  "round one scoring",
-);
+table.callCheck();
+await table.playUntil("SCORING");
 
 const forfeitedScore = forfeited.hand.reduce(
   (sum, card) => sum + (card ? SCORE_BY_RANK[card.rank] : 0),
@@ -307,12 +190,8 @@ check(
     !context().turnOrder.includes(inactiveNextRoundId),
 );
 
-send({ type: "CALL_CHECK", playerId: context().currentPlayerId });
-await driveFinalTurnsToScoring();
-await waitFor(
-  (c) => c.gameStage === "SCORING" || c.gameStage === "GAMEOVER",
-  "round two scoring",
-);
+table.callCheck();
+await table.playUntil("SCORING");
 check(
   "an offline-at-deal seat cannot win or accrue a zero round total",
   !context().gameover?.winnerIds.includes(inactiveNextRoundId) &&
@@ -355,7 +234,7 @@ const driveUntilLaterForfeit = async () => {
     !context().players[disconnectedBeforeTurn].forfeited
   ) {
     if (context().currentPlayerId !== disconnectedBeforeTurn) {
-      driveConnectedTurn();
+      table.step();
     }
     await sleep(10);
   }
@@ -419,9 +298,9 @@ const scenarioActor = ({
     },
     status: "active",
   });
-  const targetActor = createActor(gameMachine, { snapshot: state });
-  targetActor.start();
-  return targetActor;
+  const scenario = tableFor(createActor(gameMachine, { snapshot: state }));
+  scenario.actor.start();
+  return scenario;
 };
 
 const matchingDropActor = scenarioActor({
@@ -441,11 +320,11 @@ const matchingDropActor = scenarioActor({
 matchingDropActor.send({ type: "DRAW_FROM_DECK", playerId: "host" });
 matchingDropActor.send({ type: "DISCARD_DRAWN_CARD", playerId: "host" });
 matchingDropActor.send({ type: "PLAYER_DISCONNECTED", playerId: "host" });
-for (const playerId of matchingDropActor.getSnapshot().context
-  .matchingOpportunity?.remainingPlayerIDs ?? []) {
+for (const playerId of matchingDropActor.snapshot().context.matchingOpportunity
+  ?.remainingPlayerIDs ?? []) {
   matchingDropActor.send({ type: "PASS_ON_MATCH_ATTEMPT", playerId });
 }
-const matchingDropContext = matchingDropActor.getSnapshot().context;
+const matchingDropContext = matchingDropActor.snapshot().context;
 check(
   "disconnecting during matching waits for the player's next decision window",
   !matchingDropContext.players.host.forfeited &&
@@ -467,25 +346,25 @@ const abilityDropActor = scenarioActor({
 });
 abilityDropActor.send({ type: "DRAW_FROM_DECK", playerId: "host" });
 abilityDropActor.send({ type: "DISCARD_DRAWN_CARD", playerId: "host" });
-for (const playerId of abilityDropActor.getSnapshot().context
-  .matchingOpportunity?.remainingPlayerIDs ?? []) {
+for (const playerId of abilityDropActor.snapshot().context.matchingOpportunity
+  ?.remainingPlayerIDs ?? []) {
   abilityDropActor.send({ type: "PASS_ON_MATCH_ATTEMPT", playerId });
 }
-const abilityDeadline = abilityDropActor.getSnapshot().context.turnDeadline;
+const abilityDeadline = abilityDropActor.snapshot().context.turnDeadline;
 const abilityDisconnectAt = Date.now();
 abilityDropActor.send({ type: "PLAYER_DISCONNECTED", playerId: "host" });
 await sleep(50);
 check(
   "disconnecting during an owned ability keeps its ordinary deadline armed",
-  !abilityDropActor.getSnapshot().context.players.host.forfeited &&
-    abilityDropActor.getSnapshot().context.currentTurnSegment === "ABILITY" &&
-    abilityDropActor.getSnapshot().context.turnDeadline === abilityDeadline,
-  `deadline=${abilityDropActor.getSnapshot().context.turnDeadline}`,
+  !abilityDropActor.snapshot().context.players.host.forfeited &&
+    abilityDropActor.snapshot().context.currentTurnSegment === "ABILITY" &&
+    abilityDropActor.snapshot().context.turnDeadline === abilityDeadline,
+  `deadline=${abilityDropActor.snapshot().context.turnDeadline}`,
 );
-await waitForActor(
-  abilityDropActor,
+await abilityDropActor.waitFor(
   (c) => c.players.host.forfeited === true,
   "ability owner to forfeit after the ordinary window",
+  5_000,
 );
 const abilityElapsed = Date.now() - abilityDisconnectAt;
 check(
@@ -509,7 +388,7 @@ const tieActor = scenarioActor({
   currentPlayerId: "score-a",
 });
 tieActor.send({ type: "CALL_CHECK", playerId: "score-a" });
-const tieContext = tieActor.getSnapshot().context;
+const tieContext = tieActor.snapshot().context;
 check(
   "a forfeited player cannot win a tied score",
   !tieContext.gameover?.winnerIds.includes("score-b") &&
@@ -530,12 +409,12 @@ const finalTurnHostActor = scenarioActor({
 finalTurnHostActor.send({ type: "CALL_CHECK", playerId: "other" });
 finalTurnHostActor.send({ type: "PLAYER_DISCONNECTED", playerId: "other" });
 finalTurnHostActor.send({ type: "PLAYER_DISCONNECTED", playerId: "host" });
-await waitForActor(
-  finalTurnHostActor,
+await finalTurnHostActor.waitFor(
   (c) => c.players.host.forfeited === true,
   "final-turn host to forfeit",
+  5_000,
 );
-const finalTurnHostContext = finalTurnHostActor.getSnapshot().context;
+const finalTurnHostContext = finalTurnHostActor.snapshot().context;
 check(
   "a forfeiting host stays recoverable when everyone is offline",
   finalTurnHostContext.gameMasterId === "host" &&
@@ -554,18 +433,16 @@ finalTurnHostActor.send({
 });
 check(
   "reconnecting after an all-offline forfeit leaves a game master in control",
-  finalTurnHostActor.getSnapshot().context.gameMasterId === "host",
+  finalTurnHostActor.snapshot().context.gameMasterId === "host",
 );
 finalTurnHostActor.stop();
 
-actor.stop();
+table.stop();
 
-check("the actor never entered an error state", errors.length === 0);
-if (failures > 0) {
-  console.error(
+check("the actor never entered an error state", table.errors.length === 0);
+finish({
+  passed: (checks) =>
+    `Disconnect/forfeit lifecycle is correct (${checks} checks).`,
+  failed: (failures) =>
     `\n${failures} disconnect/forfeit check${failures === 1 ? "" : "s"} failed.`,
-  );
-  process.exit(1);
-}
-
-console.log(`Disconnect/forfeit lifecycle is correct (${checks} checks).`);
+});

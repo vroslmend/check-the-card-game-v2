@@ -10,11 +10,12 @@
 //
 // Run from the repo root, after npm run build:server-deps.
 
-// Set before the import, because the logger picks its level at module load and
-// the redactor logs every view it builds at debug.
-process.env.NODE_ENV = "production";
+import { loadGame } from "./lib/game.mjs";
+import { createReport } from "./lib/report.mjs";
 
-const { generatePlayerView } = await import("../server/dist/state-redactor.js");
+// The redactor logs every view it builds at debug, which loadGame silences.
+const { generatePlayerView } = await loadGame();
+const { check, finish } = createReport();
 
 const card = (id, rank, suit) => ({ id, rank, suit });
 const Ahand = [
@@ -84,16 +85,6 @@ const hasFace = (c) =>
 const isFacedown = (c) =>
   !!c && c.facedown === true && !("rank" in c) && !("suit" in c);
 
-let failures = 0;
-let ran = 0;
-const check = (label, passed, detail = "") => {
-  console.log(
-    `  ${passed ? "PASS" : "FAIL"}  ${label}${detail && `  ${detail}`}`,
-  );
-  ran++;
-  if (!passed) failures++;
-};
-
 // The one that matters. A player's own face down cards are the memory the whole
 // game is played against, so leaking them to their owner is not a small leak.
 {
@@ -143,15 +134,13 @@ for (const stage of ["SCORING", "GAMEOVER"]) {
   );
 }
 
-if (failures > 0) {
-  console.error(`
+finish({
+  passed: (checks) => `Hidden cards stay hidden (${checks} checks).`,
+  failed: (failures) => `
 ${failures} hidden card check${failures === 1 ? "" : "s"} failed.
 
 generatePlayerView in server/src/state-redactor.ts is the only thing standing
 between a face down card and every connected client. Do not adjust this script
 to match the code without deciding, against docs/GAME_RULES.md, which of the two
-is wrong.`);
-  process.exit(1);
-}
-
-console.log(`Hidden cards stay hidden (${ran} checks).`);
+is wrong.`,
+});
