@@ -56,6 +56,18 @@ out so their empty hands cannot win or affect series totals. A reconnect during
 the round restores the socket but not participation until the following deal.
 Starting a rematch also requires at least two connected players.
 
+Once the game has started nobody is removed from `players`; leaving or dropping
+only marks the seat disconnected, in every stage including SCORING. Only the
+host can start a round, so the host seat follows the players who are present.
+A host who presses Leave hands it on at once, because the client deletes the
+reconnect token and they cannot come back. A host whose connection drops keeps
+it for `HOST_DISCONNECT_GRACE_MS` (30 seconds by default), then it passes to
+the first connected player still in the round, or failing that to anyone
+connected. If nobody is connected when that happens, the first player to return
+takes it. A host who comes back after the handoff returns as an ordinary
+player. In the lobby a disconnected seat is instead removed after
+`LOBBY_DISCONNECT_TIMEOUT_MS`, and the host seat moves with the removal.
+
 **Key Files/Modules**:
 
 - `server/src/index.ts`: The main server entry point. Manages the Socket.IO server, game instances, and all network communication patterns.

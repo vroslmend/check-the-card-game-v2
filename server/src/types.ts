@@ -45,6 +45,9 @@ export interface GameContext {
   discardPile: Card[];
   turnOrder: PlayerId[];
   gameMasterId: PlayerId | null;
+  /** When the host's connection dropped after the game started, or null while
+   *  the host is present. Server only: the redactor never copies it. */
+  hostAwaySince: number | null;
   currentPlayerId: PlayerId | null;
   currentTurnSegment: TurnPhase | null;
   gameStage: GameStage;
