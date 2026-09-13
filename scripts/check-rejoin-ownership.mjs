@@ -15,90 +15,61 @@
 //
 // Run from the repo root, after npm run build:server-deps.
 
-process.env.NODE_ENV = "production";
-process.env.PORT = "8153";
-process.env.CORS_ORIGIN = "http://localhost:3000";
-process.env.LOBBY_DISCONNECT_TIMEOUT_MS = "600000";
+import { sleep } from "./lib/game.mjs";
+import { createReport } from "./lib/report.mjs";
+import { startServer } from "./lib/server.mjs";
 
-const { io: ioc } = await import("socket.io-client");
-const { httpServer } = await import("../server/dist/index.js");
+const server = await startServer({ LOBBY_DISCONNECT_TIMEOUT_MS: 600_000 });
+const { check, finish } = createReport();
 
-const URL = "http://127.0.0.1:8153";
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const rejoinAs = (player, payload) => player.request("ATTEMPT_REJOIN", payload);
 
-let failures = 0;
-const check = (name, passed, detail = "") => {
-  console.log(
-    `  ${passed ? "PASS" : "FAIL"}  ${name}${detail && `  ${detail}`}`,
-  );
-  if (!passed) failures++;
-};
-
-const connect = () =>
-  new Promise((resolve) => {
-    const s = ioc(URL, {
-      transports: ["websocket"],
-      reconnection: false,
-      extraHeaders: { Origin: "http://localhost:3000" },
-    });
-    s.on("connect", () => resolve(s));
-  });
-
-const rejoinAs = (socket, payload) =>
-  new Promise((res) => socket.emit("ATTEMPT_REJOIN", payload, res));
-
-const alice = await connect();
-const bob = await connect();
+const alice = server.player("Alice");
+const bob = server.player("Bob");
 
 let aliceStates = 0;
-let bobLast = null;
-alice.on("GAME_STATE_UPDATE", () => aliceStates++);
-bob.on("GAME_STATE_UPDATE", (gs) => (bobLast = gs));
+alice.on(() => aliceStates++);
 
-const created = await new Promise((res) =>
-  alice.emit("CREATE_GAME", { name: "Alice", maxPlayers: 2 }, res),
-);
-const joined = await new Promise((res) =>
-  bob.emit("JOIN_GAME", created.gameId, { name: "Bob" }, res),
-);
+const gameId = await alice.createGame({ seats: 2 });
+await bob.joinGame(gameId);
 await sleep(250);
 
 console.log("\nSeats are issued a token that never appears in game state:");
-check("creating a game returns a reconnect token", !!created.reconnectToken);
-check("joining a game returns a reconnect token", !!joined.reconnectToken);
+check("creating a game returns a reconnect token", !!alice.reconnectToken);
+check("joining a game returns a reconnect token", !!bob.reconnectToken);
 check(
   "the token is not in any player view",
-  !JSON.stringify(bobLast ?? {}).includes(created.reconnectToken ?? "\u0000"),
+  !JSON.stringify(bob.state ?? {}).includes(
+    alice.reconnectToken ?? String.fromCharCode(0),
+  ),
 );
 
 console.log("\nA seat cannot be taken with a public id:");
 // Bob can read Alice's id from the state he is legitimately sent.
-const aliceId = Object.keys(bobLast?.players ?? {}).find(
-  (id) => id === created.playerId,
+const aliceId = Object.keys(bob.state?.players ?? {}).find(
+  (id) => id === alice.id,
 );
 check("another player's id is readable, as it always was", !!aliceId);
 
-const attacker = await connect();
+const attacker = server.player("Attacker");
+await attacker.connected();
 let attackerGotView = false;
-attacker.on("GAME_STATE_UPDATE", () => (attackerGotView = true));
+attacker.on(() => (attackerGotView = true));
 
-const noToken = await rejoinAs(attacker, {
-  gameId: created.gameId,
-  playerId: aliceId,
-});
+const noToken = await rejoinAs(attacker, { gameId, playerId: aliceId });
 check("a rejoin with no token is refused", noToken?.success !== true);
 
 const wrongToken = await rejoinAs(attacker, {
-  gameId: created.gameId,
+  gameId,
   playerId: aliceId,
   token: "not-the-right-token-000000000000",
 });
 check("a rejoin with a wrong token is refused", wrongToken?.success !== true);
 
 const borrowed = await rejoinAs(attacker, {
-  gameId: created.gameId,
+  gameId,
   playerId: aliceId,
-  token: joined.reconnectToken, // Bob's own token, someone else's seat
+  token: bob.reconnectToken, // Bob's own token, someone else's seat
 });
 check(
   "a rejoin with another seat's token is refused",
@@ -106,7 +77,7 @@ check(
 );
 
 const beforeProbe = aliceStates;
-bob.emit("PLAYER_ACTION", { type: "DECLARE_LOBBY_READY" });
+bob.act("DECLARE_LOBBY_READY");
 await sleep(400);
 check(
   "the targeted player still receives their own broadcasts",
@@ -117,15 +88,16 @@ check("the attacker never received a view", !attackerGotView);
 
 console.log("\nOrdinary reconnection still works:");
 // Alice drops and comes back on a fresh socket, the way a phone does.
-alice.close();
+alice.disconnect();
 await sleep(300);
-const aliceAgain = await connect();
+const aliceAgain = server.player("Alice");
+await aliceAgain.connected();
 let aliceAgainStates = 0;
-aliceAgain.on("GAME_STATE_UPDATE", () => aliceAgainStates++);
+aliceAgain.on(() => aliceAgainStates++);
 const legit = await rejoinAs(aliceAgain, {
-  gameId: created.gameId,
-  playerId: created.playerId,
-  token: created.reconnectToken,
+  gameId,
+  playerId: alice.id,
+  token: alice.reconnectToken,
 });
 check(
   "a rejoin with the right token is accepted",
@@ -134,11 +106,11 @@ check(
 );
 check(
   "it returns that player's own view",
-  legit?.gameState?.viewingPlayerId === created.playerId,
+  legit?.gameState?.viewingPlayerId === alice.id,
 );
 
 const beforeResume = aliceAgainStates;
-bob.emit("PLAYER_ACTION", { type: "DECLARE_LOBBY_UNREADY" });
+bob.act("DECLARE_LOBBY_UNREADY");
 await sleep(400);
 check(
   "broadcasts resume to the reconnected player",
@@ -147,35 +119,30 @@ check(
 );
 
 // The same token stays valid for a second reconnect: phones drop repeatedly.
-aliceAgain.close();
+aliceAgain.disconnect();
 await sleep(250);
-const aliceThird = await connect();
+const aliceThird = server.player("Alice");
+await aliceThird.connected();
 const legitTwice = await rejoinAs(aliceThird, {
-  gameId: created.gameId,
-  playerId: created.playerId,
-  token: created.reconnectToken,
+  gameId,
+  playerId: alice.id,
+  token: alice.reconnectToken,
 });
 check(
   "the token still works on a later reconnect",
   legitTwice?.success === true,
 );
 
-bob.close();
-attacker.close();
-aliceThird.close();
-httpServer.close();
+await server.close();
 
-if (failures > 0) {
-  console.error(`
+finish({
+  passed: () => "\nA seat can be reclaimed by its owner and by nobody else.",
+  failed: (failures) => `
 ${failures} rejoin ownership failure${failures === 1 ? "" : "s"}.
 
 A rejoin decides who a socket is allowed to be. If the takeover checks fail,
 any player at the table can silence another and play as them. If the ordinary
 reconnection checks fail, every screen-lock and wifi blip ends the game for
 that player instead of recovering it. Treat a failure here as the server being
-wrong rather than this script.`);
-  process.exit(1);
-}
-
-console.log("\nA seat can be reclaimed by its owner and by nobody else.");
-process.exit(0);
+wrong rather than this script.`,
+});

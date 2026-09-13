@@ -47,14 +47,22 @@ const waitFor = (player, predicate, label, timeoutMs = 15000) =>
   });
 
 export class HeadlessPlayer {
-  constructor(name) {
+  // The checks in scripts/ start their own server and connect as a production
+  // browser would, so they pass the address, an Origin header and no reconnect.
+  constructor(name, { url = SERVER, headers, reconnection = true } = {}) {
     this.name = name;
+    this.url = url;
     this.id = null;
     this.gameId = null;
+    this.reconnectToken = null;
     this.state = null;
     this.errors = [];
     this.listeners = new Set();
-    this.socket = io(SERVER, { transports: ["websocket"] });
+    this.socket = io(url, {
+      transports: ["websocket"],
+      reconnection,
+      ...(headers ? { extraHeaders: headers } : {}),
+    });
     this.socket.on("GAME_STATE_UPDATE", (state) => {
       this.state = state;
       for (const l of [...this.listeners]) l(state);
@@ -91,7 +99,7 @@ export class HeadlessPlayer {
     if (this.socket.connected) return;
     await new Promise((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error(`no connection to ${SERVER}`)),
+        () => reject(new Error(`no connection to ${this.url}`)),
         10000,
       );
       this.socket.once("connect", () => {
@@ -100,7 +108,22 @@ export class HeadlessPlayer {
       });
       this.socket.once("connect_error", (e) => {
         clearTimeout(timer);
-        reject(new Error(`connection to ${SERVER} refused: ${e.message}`));
+        reject(new Error(`connection to ${this.url} refused: ${e.message}`));
+      });
+    });
+  }
+
+  /** Sends an acknowledged request and resolves with whatever the server
+   *  answers, refusals included, for callers that assert on the refusal. */
+  request(event, ...args) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`${event} never acknowledged`)),
+        10000,
+      );
+      this.socket.emit(event, ...args, (response) => {
+        clearTimeout(timer);
+        resolve(response);
       });
     });
   }
@@ -113,6 +136,7 @@ export class HeadlessPlayer {
     });
     this.id = res.playerId;
     this.gameId = res.gameId;
+    this.reconnectToken = res.reconnectToken ?? null;
     return res.gameId;
   }
 
@@ -121,6 +145,7 @@ export class HeadlessPlayer {
     const res = await this.#emit("JOIN_GAME", gameId, { name: this.name });
     this.id = res.playerId;
     this.gameId = gameId;
+    this.reconnectToken = res.reconnectToken ?? null;
     return res.playerId;
   }
 
