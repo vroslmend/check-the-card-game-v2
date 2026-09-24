@@ -20,7 +20,11 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Users, ArrowRight, Check, Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/ui/BrandMark";
-import { Signature, secondSignature } from "@/components/ui/Signature";
+import {
+  Signature,
+  secondSignature,
+  thirdSignature,
+} from "@/components/ui/Signature";
 import { NewGameModal } from "@/components/modals/NewGameModal";
 import { JoinGameModal } from "@/components/modals/JoinGameModal";
 import { useDevice } from "@/context/DeviceContext";
@@ -384,17 +388,17 @@ const StorySection = ({
   </section>
 );
 
-/** Draws both signatures once their spot scrolls into view. */
+/** Draws each signature once their spot scrolls into view. */
 const SignatureInView = () => {
   const ref = useRef<HTMLSpanElement | null>(null);
   const inView = useInView(ref, { once: true, amount: 0.5 });
-  // The signatures are drawings with no text in them, so left alone the link
-  // they sit in announces as its only readable character, an ampersand.
+  // The signatures are drawings with no text in them, so the link they sit in
+  // has nothing of its own to announce. Its aria-label carries the names.
   return (
-    <span ref={ref} className="inline-flex items-center gap-2" aria-hidden>
+    <span ref={ref} className="inline-flex items-center gap-6" aria-hidden>
       <Signature isInView={inView} />
-      <span>&amp;</span>
       <Signature isInView={inView} data={secondSignature} />
+      <Signature isInView={inView} data={thirdSignature} />
     </span>
   );
 };
@@ -956,7 +960,7 @@ function HomePage() {
               href="https://github.com/vroslmend/check-the-card-game-v2"
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Ammar and Farhan, on GitHub"
+              aria-label="Ammar, Farhan and Jawad, on GitHub"
               className="inline-flex items-center transition-colors hover:text-accent"
               data-cursor-icon
             >
