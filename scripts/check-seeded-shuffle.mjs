@@ -46,6 +46,21 @@ check(
   new Set(a.map((x) => `${x.rank}${x.suit}`)).size === 52,
 );
 
+// Ids reach every client on face-down cards, so an id that belongs to the same
+// card in every seeded game names that card.
+const idsByCard = (seed) =>
+  new Map(
+    createDeck(createSeededRng(seed)).map((x) => [`${x.rank}${x.suit}`, x.id]),
+  );
+const seedOne = idsByCard(1);
+const seedTwo = idsByCard(2);
+const repeated = [...seedOne].filter(([card, id]) => seedTwo.get(card) === id);
+check(
+  "a card's id does not say which card it is",
+  repeated.length === 0,
+  `${repeated.length} of 52 ids repeat across seeds`,
+);
+
 // Unseeded is what production runs. If this ever starts passing, the default
 // stopped being random and every game deals the same cards.
 const u1 = fingerprint(shuffleDeck(createDeck()));

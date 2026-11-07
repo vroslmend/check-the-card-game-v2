@@ -29,16 +29,22 @@ export const systemRng: Rng = {
  * this has to become a seed plus a cursor that can survive a round trip.
  */
 export const createSeededRng = (seed: number): Rng => {
-  let state = seed >>> 0;
-  let cardCount = 0;
-
-  const float = () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  const mulberry32 = (start: number) => {
+    let state = start >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   };
 
-  return { float, id: () => `c${(cardCount++).toString(36)}` };
+  // createDeck issues ids in rank and suit order and clients see them on
+  // face-down cards, so a counter here would name every card. Ids get their own
+  // stream so that taking one does not move the shuffle.
+  const idFloat = mulberry32(seed ^ 0x9e3779b9);
+  const idPart = () => Math.floor(idFloat() * 2 ** 32).toString(36);
+
+  return { float: mulberry32(seed), id: () => `c${idPart()}${idPart()}` };
 };
