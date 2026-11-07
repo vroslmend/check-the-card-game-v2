@@ -25,7 +25,7 @@ import {
   SocketEventName,
   PlayerStatus,
 } from "shared-types";
-import { createDeck, shuffleDeck } from "./lib/deck-utils.js";
+import { createDeck, scoreHand, shuffleDeck } from "./lib/deck-utils.js";
 import { createSeededRng, systemRng } from "./lib/rng.js";
 import logger from "./lib/logger.js";
 // Side-effect import required so TS can name the machine's inferred guard
@@ -129,21 +129,6 @@ const handHostSeatTo = (context: GameContext, successorId: PlayerId) => ({
   ],
 });
 
-const cardScoreValues: Record<CardRank, number> = {
-  [CardRank.Ace]: -1,
-  [CardRank.Two]: 2,
-  [CardRank.Three]: 3,
-  [CardRank.Four]: 4,
-  [CardRank.Five]: 5,
-  [CardRank.Six]: 6,
-  [CardRank.Seven]: 7,
-  [CardRank.Eight]: 8,
-  [CardRank.Nine]: 9,
-  [CardRank.Ten]: 10,
-  [CardRank.Jack]: 11,
-  [CardRank.Queen]: 12,
-  [CardRank.King]: 13,
-};
 const specialRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
 const abilityRanks = new Set([CardRank.King, CardRank.Queen, CardRank.Jack]);
 
@@ -1650,11 +1635,7 @@ export const gameMachine = setup({
     calculateScores: assign(({ context }) => {
       const updatedPlayers = produce(context.players, (draft) => {
         for (const p of Object.values(draft)) {
-          const score = p.hand.reduce(
-            (acc, card) => acc + (card ? cardScoreValues[card.rank] : 0),
-            0,
-          );
-          p.score = score;
+          p.score = scoreHand(p.hand);
         }
       });
 
