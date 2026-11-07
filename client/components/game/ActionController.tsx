@@ -622,10 +622,12 @@ export const ActionController: React.FC<{ children?: React.ReactNode }> = ({
           sendEvent({ type: "TOGGLE_SIDE_PANEL" });
         return;
       }
-      if (/^[1-8]$/.test(e.key)) {
+      if (/^[1-9]$/.test(e.key)) {
         const index = Number(e.key) - 1;
         const hand = props.localPlayer?.hand;
-        if (!props.localPlayer || !hand || index >= hand.length) return;
+        // An empty slot is null. It takes no click, so it takes no key either: a
+        // match attempt on one is dropped and greys the bar out for the window.
+        if (!props.localPlayer || !hand?.[index]) return;
         // Same routing as clicking your own card: matching first, then
         // ability targeting, then the discard-phase swap.
         const canMatchNow =
