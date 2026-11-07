@@ -648,6 +648,13 @@ const baseTurnStateNode = {
       },
       always: [
         {
+          // Rules 7: this has to beat the turn ending, or the survivor can be
+          // penalised out in the same window and a round with a winner has none.
+          guard: "tooFewActivePlayers",
+          target: "endOfTurn",
+          actions: assign({ matchingOpportunity: null, abilityStack: [] }),
+        },
+        {
           guard: ({ context }: { context: GameContext }) =>
             (!context.matchingOpportunity ||
               context.matchingOpportunity.remainingPlayerIDs.length === 0) &&
@@ -951,6 +958,10 @@ export const gameMachine = setup({
         context.checkDetails.finalTurnOrder.length
       );
     },
+    tooFewActivePlayers: ({ context }) =>
+      !context.checkDetails &&
+      context.turnOrder.filter((id) => !context.players[id]!.isLocked).length <
+        2,
     isDeckEmpty: ({ context }) => context.deck.length === 0,
     isInvalidMatchAttempt: ({ context, event }) => {
       assertEvent(event, PlayerActionType.ATTEMPT_MATCH);
@@ -2449,10 +2460,7 @@ export const gameMachine = setup({
             // Disqualifications can leave fewer than two active players with
             // no Check in progress; the round ends immediately (the survivor
             // is the only player still eligible to win).
-            guard: ({ context }: { context: GameContext }) =>
-              !context.checkDetails &&
-              context.turnOrder.filter((id) => !context.players[id]!.isLocked)
-                .length < 2,
+            guard: "tooFewActivePlayers",
             target: `#game.${GameStage.SCORING}`,
           },
           {
