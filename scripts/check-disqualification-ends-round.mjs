@@ -51,7 +51,7 @@ const penaliseUpTo = (table, playerId, cards, rank) => {
 };
 
 const openGame = async (gameId, players) => {
-  const table = openTable({ gameId, seed: gameId, players, label: gameId });
+  const table = openTable({ gameId, seed: 7, players, label: gameId });
   table.readyLobby();
   await table.startRound(players[0]);
   return table;
