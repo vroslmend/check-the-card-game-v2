@@ -25,7 +25,12 @@ import {
   SocketEventName,
   PlayerStatus,
 } from "shared-types";
-import { createDeck, scoreHand, shuffleDeck } from "./lib/deck-utils.js";
+import {
+  createDeck,
+  rebuildDeck,
+  scoreHand,
+  shuffleDeck,
+} from "./lib/deck-utils.js";
 import { createSeededRng, systemRng } from "./lib/rng.js";
 import logger from "./lib/logger.js";
 // Side-effect import required so TS can name the machine's inferred guard
@@ -1896,11 +1901,8 @@ export const gameMachine = setup({
       };
     }),
     reshuffleDiscardIntoDeck: assign(({ context }) => {
-      const newDiscard = [...context.discardPile];
-      const topCard = newDiscard.pop();
       return {
-        deck: shuffleDeck(newDiscard, context.rng),
-        discardPile: topCard ? [topCard] : [],
+        ...rebuildDeck(context.discardPile, context.lockedCardIds, context.rng),
         log: [
           ...context.log,
           createLogEntry(context.gameId, {
@@ -1948,12 +1950,18 @@ export const gameMachine = setup({
 
       let tempDeck = [...context.deck];
       let tempDiscard = [...context.discardPile];
+      let tempLockedCardIds = context.lockedCardIds;
       let logMessageText = "";
 
       if (tempDeck.length === 0) {
-        const topCard = tempDiscard.pop();
-        tempDeck = shuffleDeck(tempDiscard, context.rng);
-        tempDiscard = topCard ? [topCard] : [];
+        const rebuilt = rebuildDeck(
+          context.discardPile,
+          context.lockedCardIds,
+          context.rng,
+        );
+        tempDeck = rebuilt.deck;
+        tempDiscard = rebuilt.discardPile;
+        tempLockedCardIds = rebuilt.lockedCardIds;
         logMessageText = `The discard pile was reshuffled. `;
       }
 
@@ -2015,6 +2023,7 @@ export const gameMachine = setup({
       return {
         deck: tempDeck,
         discardPile: tempDiscard,
+        lockedCardIds: tempLockedCardIds,
         players: updatedPlayers,
         // Highlight the slot the penalty card landed in for ALL players
         // (position only — the face stays hidden, like swaps/peeks). Clients
