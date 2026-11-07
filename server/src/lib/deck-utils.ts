@@ -42,3 +42,25 @@ export const shuffleDeck = (deck: Card[], rng: Rng = systemRng): Card[] => {
   }
   return deck;
 };
+
+// Every client saw the discard pile face up, ids included, so a card going back
+// into the deck needs a new id or it can be recognised on deckTop and in hands.
+// Locks are held by id, so each one has to follow its card to the new id.
+export const rebuildDeck = (
+  discardPile: Card[],
+  lockedCardIds: string[],
+  rng: Rng,
+) => {
+  const topCard = discardPile.at(-1);
+  const newIds = new Map<string, string>();
+  const returning = discardPile.slice(0, -1).map((card) => {
+    const id = rng.id();
+    newIds.set(card.id, id);
+    return { ...card, id };
+  });
+  return {
+    deck: shuffleDeck(returning, rng),
+    discardPile: topCard ? [topCard] : [],
+    lockedCardIds: lockedCardIds.map((id) => newIds.get(id) ?? id),
+  };
+};
