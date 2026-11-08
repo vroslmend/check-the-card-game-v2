@@ -12,6 +12,7 @@ export const RULES = {
   turnOrder: "the turn passes to the next unlocked seat",
   finalTurns: "one final turn for each player still unlocked",
   winner: "the lowest score that may win, wins",
+  discardDraw: "only a drawable discard top is drawn",
 };
 
 const IN_PLAY = new Set(["PLAYING", "FINAL_TURNS"]);
@@ -43,6 +44,7 @@ export const createInvariants = (generatePlayerView) => {
   let turnPlayer = null;
   let finalTurns = new Set();
   let scored = false;
+  let previous = null;
 
   return {
     observe(c) {
@@ -118,6 +120,21 @@ export const createInvariants = (generatePlayerView) => {
         }
       }
       segment = IN_PLAY.has(c.gameStage) ? c.currentTurnSegment : null;
+
+      // Section 2, Action 2, judged on the state the draw was made from.
+      for (const p of players) {
+        const drawn = p.pendingDrawnCard;
+        if (drawn?.source !== "discard" || !previous) continue;
+        if (previous.players[p.id]?.pendingDrawnCard) continue;
+        const top = previous.discardPile.at(-1);
+        const drawable =
+          !previous.discardPileIsSealed &&
+          top?.id === drawn.card.id &&
+          !previous.lockedCardIds.includes(top.id) &&
+          !["K", "Q", "J"].includes(top.rank);
+        if (!drawable) fail(RULES.discardDraw, `${p.id} drew ${drawn.card.id}`);
+      }
+      previous = c;
 
       if (c.gameover && !scored) {
         scored = true;

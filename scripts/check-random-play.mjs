@@ -3,6 +3,10 @@
 // judged: the machine refuses what the rules forbid, and the invariants decide
 // whether what it allowed was right.
 //
+// Players also drop and return at random points of the turn. One who has to
+// act is brought back first, so nothing waits on the turn timer running out.
+// check-disconnect-forfeit.mjs covers what happens when it does.
+//
 // A failure names its game, and rerunning plays the same game: the deal and
 // every move come from the seed, and no move waits on a timer short enough to
 // race it.
@@ -41,7 +45,11 @@ const seen = {
   abilities: 0,
   reshuffles: 0,
   disqualified: 0,
+  drops: 0,
+  returns: 0,
+  satOut: 0,
 };
+const UNDISTURBED = "a drop or a return leaves the turn as it was";
 
 const filled = (hand) => hand.flatMap((card, index) => (card ? [index] : []));
 const pick = (r, list) => list[Math.floor(r() * list.length)];
@@ -54,13 +62,32 @@ const shuffled = (r, list) => {
   return out;
 };
 
+const canMove = (c) => {
+  if (c.gameStage !== "PLAYING" && c.gameStage !== "FINAL_TURNS") return false;
+  if (c.currentTurnSegment === "MATCHING") return !!c.matchingOpportunity;
+  if (c.currentTurnSegment === "ABILITY") {
+    const ability = c.abilityStack.at(-1);
+    return !!ability && !(ability.stage === "peeking" && c.publicPeek);
+  }
+  return ["DRAW", "DISCARD"].includes(c.currentTurnSegment);
+};
+
 // Returns false, without drawing a number, when only a timer can move the game.
 // Drawing one while waiting would make the moves depend on how long the wait
 // took, and the seed would stop naming the game.
 const move = (table, c, r, style) => {
-  const send = (type, playerId, payload) =>
+  if (!canMove(c)) return false;
+  const send = (type, playerId, payload) => {
+    if (style.away.has(playerId)) style.setAway(playerId, false);
     table.send({ type, playerId, payload });
-  if (c.gameStage !== "PLAYING" && c.gameStage !== "FINAL_TURNS") return false;
+  };
+  const roll = r();
+  const present = Object.keys(c.players).filter((id) => !style.away.has(id));
+  if (roll < 0.04 && present.length > 1) {
+    style.setAway(pick(r, present), true);
+  } else if (roll > 0.96 && style.away.size) {
+    style.setAway(pick(r, [...style.away]), false);
+  }
   const id = c.currentPlayerId;
   const me = c.players[id];
 
@@ -119,7 +146,6 @@ const move = (table, c, r, style) => {
 
   if (c.currentTurnSegment === "ABILITY") {
     const ability = c.abilityStack.at(-1);
-    if (!ability || (ability.stage === "peeking" && c.publicPeek)) return false;
     const targets = Object.values(c.players)
       .filter((p) => !p.isLocked)
       .flatMap((p) =>
@@ -158,6 +184,56 @@ const playGame = async (count, seed) => {
     label: name,
   });
   const invariants = createInvariants(generatePlayerView);
+
+  // Only the connection may change. Anything else here moving means the drop or
+  // the return reset or advanced the turn in flight.
+  const turnState = (c) =>
+    JSON.stringify([
+      c.gameStage,
+      c.currentTurnSegment,
+      c.currentPlayerId,
+      c.turnDeadline,
+      c.abilityStack,
+      c.matchingOpportunity,
+      c.checkDetails,
+      c.deck,
+      c.discardPile,
+      Object.values(c.players).map((p) => [
+        p.hand,
+        p.pendingDrawnCard,
+        p.isLocked,
+        p.status,
+        p.forfeited,
+      ]),
+    ]);
+  const away = new Set();
+  let socketCount = 0;
+  const setAway = (playerId, gone) => {
+    const before = turnState(table.context());
+    table.send(
+      gone
+        ? { type: "PLAYER_DISCONNECTED", playerId }
+        : {
+            type: "PLAYER_RECONNECTED",
+            playerId,
+            newSocketId: `s-${playerId}-${++socketCount}`,
+          },
+    );
+    if (turnState(table.context()) !== before) {
+      const c = table.context();
+      breaks(
+        UNDISTURBED,
+        `${playerId} ${gone ? "dropped" : "returned"} at ${c.gameStage} ${c.currentTurnSegment}`,
+      );
+    }
+    if (gone) {
+      away.add(playerId);
+      seen.drops++;
+    } else {
+      away.delete(playerId);
+      seen.returns++;
+    }
+  };
   let deckSize = null;
   table.actor.subscribe((snapshot) => {
     const c = snapshot.context;
@@ -178,6 +254,8 @@ const playGame = async (count, seed) => {
       // Some games call Check early, some only once the deck has been rebuilt,
       // and some misplay often enough to reach disqualification.
       const style = {
+        away,
+        setAway,
         turns: 0,
         checkAfter: [0, 30, 120][seed % 3],
         misplay: [0.02, 0.1, 0.35][seed % 3],
@@ -207,6 +285,11 @@ const playGame = async (count, seed) => {
       ).length;
       if (c.checkDetails) seen.finalTurns++;
       if (round < ROUNDS) {
+        // Whoever is still away at the deal sits the round out (11.D). The host
+        // has to be present to deal, and so do two players.
+        if (away.has(c.gameMasterId)) setAway(c.gameMasterId, false);
+        while (count - away.size < 2) setAway([...away][0], false);
+        seen.satOut += away.size;
         table.send({ type: "PLAY_AGAIN", playerId: c.gameMasterId });
         await table.playThroughPeek();
       }
@@ -227,6 +310,7 @@ await Promise.all(games);
 
 const rules = [
   ...Object.values(RULES),
+  UNDISTURBED,
   "every round ends",
   "the machine raises no error",
 ];
