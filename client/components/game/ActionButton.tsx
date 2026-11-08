@@ -15,7 +15,9 @@ interface ActionButtonProps {
   action: Action;
 }
 
-const RING_RADIUS = 15.5;
+// The button clips to a circle of 18 in these units, so the stroke's outer edge
+// (radius plus half of the 3 unit stroke) has to stay inside it.
+const RING_RADIUS = 14;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 /**
@@ -156,7 +158,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             <circle
               cx="18"
               cy="18"
-              r="15.5"
+              r={RING_RADIUS}
               fill="none"
               stroke="hsl(var(--hairline))"
               strokeWidth="3"
@@ -164,7 +166,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             <motion.circle
               cx="18"
               cy="18"
-              r="15.5"
+              r={RING_RADIUS}
               fill="none"
               stroke="currentColor"
               strokeWidth="3"
@@ -192,7 +194,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ action }) => {
             // hover-capable devices, covering the old isTouchDevice check.
             className={cn(
               "relative flex h-10 shrink-0 select-none items-center justify-center overflow-hidden rounded-full transition enabled:hover:scale-110 enabled:active:scale-90 tiny:h-9",
-              icon ? "w-10" : "px-4",
+              icon ? "w-10 tiny:w-9" : "px-4",
               // One accent-filled primary; secondary label = hairline-outline
               // pill, secondary icon = bare ink-muted button.
               variant === "primary"
