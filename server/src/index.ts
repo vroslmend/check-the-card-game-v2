@@ -148,13 +148,15 @@ const newGameId = (): GameId => {
 
 const MAX_CHAT_MESSAGE_LENGTH = 500;
 const ABANDONED_GAME_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+// How long socket.io holds a dropped socket's id and missed packets for it.
+const RECOVERY_WINDOW_MS = 2 * 60 * 1000;
 // How long a disconnected socket's session entry survives. Must cover the
-// connectionStateRecovery window (2 min): a recovered socket returns with the
-// SAME socket id and must still find its session, or every action it sends is
-// dropped ("socket without a session"). Stale entries for sockets that never
-// return are deleted after this delay; registerSocketSession also sweeps a
-// player's old entries whenever they rejoin on a new socket.
-const SESSION_RETENTION_MS = 2 * 60 * 1000 + 30_000;
+// recovery window: a recovered socket returns with the SAME socket id and must
+// still find its session, or every action it sends is dropped ("socket without
+// a session"). Stale entries for sockets that never return are deleted after
+// this delay; registerSocketSession also sweeps a player's old entries
+// whenever they rejoin on a new socket.
+const SESSION_RETENTION_MS = RECOVERY_WINDOW_MS + 30_000;
 
 // Only client-originated player actions may be forwarded into a game machine.
 // Everything else (PLAYER_RECONNECTED, PLAYER_JOIN_REQUEST, timer events, ...)
@@ -276,7 +278,7 @@ export const io = new SocketIOServer<
     callback(null, allowed);
   },
   connectionStateRecovery: {
-    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes buffer
+    maxDisconnectionDuration: RECOVERY_WINDOW_MS,
     skipMiddlewares: true, // keep auth cost low during recovery
   },
   // Client messages are names, lobby codes and small action payloads. Keeping
