@@ -89,7 +89,7 @@ node scripts/check-host-departure.mjs       # one check
 
 To add a check, write `scripts/check-<what-it-guards>.mjs`. Print a PASS or FAIL line for each thing it asserts, and exit non-zero if any failed. `npm test` finds it by its name, so it runs in CI the day it lands. Run it against `main` before your fix and make sure it fails there. For a check that drives the game machine, `loadGame` in `scripts/lib/game.mjs` sets its timings before importing it, which matters because they are read once at import, and seats, starts and plays a round. For one that needs the real server over sockets, `startServer` in `scripts/lib/server.mjs` starts it on a free port and connects players through `HeadlessPlayer` from `tools/probe/player.mjs`, the same driver the probe uses. `createReport` in `scripts/lib/report.mjs` prints the PASS and FAIL lines and sets the exit code.
 
-Wider coverage, invariants checked after every event and a scripted full game, is tracked in [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36).
+A rule that should hold after every event of every game, rather than in one scenario, belongs in `scripts/lib/invariants.mjs`. `scripts/check-random-play.mjs` plays seeded random games against those rules, and a failure names the game, so running it again replays the same moves. What is left of wider coverage is tracked in [#36](https://github.com/vroslmend/check-the-card-game-v2/issues/36).
 
 ## If you touched the layout
 
