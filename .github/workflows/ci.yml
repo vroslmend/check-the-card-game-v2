@@ -66,3 +66,79 @@ jobs:
           EOF
           kill $pid 2>/dev/null || true
           exit 1
+
+  # Not a required check: a real browser is slower and flakier than the build,
+  # and it should report a layout or reachability problem, not block a merge.
+  probe:
+    name: Browser probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tools/probe/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci
+          npm ci --prefix tools/probe
+          cd tools/probe && npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npm run build:server-deps && npm run build:client
+
+      # The peek and matching waits go short so a scripted round does not sit
+      # through them. The turn timer goes long, because it is the one that fires
+      # unasked and would move the board while the probe measures it. Each probe
+      # run creates a game, which the default rate limit would refuse by the
+      # fourth.
+      - name: Start the server and the client
+        run: |
+          PEEK_DURATION_MS=200 MATCHING_STAGE_DURATION_MS=400 TURN_TIMER_MS=600000 \
+            CREATE_GAME_RATE_LIMIT=100 node server/dist/index.js > server.log 2>&1 &
+          npm start -w client > client.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health > /dev/null &&
+              curl -fsS http://localhost:3000 > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the server or the client did not come up within 60s"
+          tail -20 server.log client.log
+          exit 1
+
+      # Every stage at every device size in tools/probe/viewports.mjs, one in the
+      # light theme, and one watching for seats that move sideways when only the
+      # phase changes. The full --matrix sweep also tries heights below any
+      # device and takes minutes, so it stays a local tool.
+      - name: Probe each stage
+        run: |
+          failed=0
+          run=0
+          for spec in "lobby 6" "play 6 --shift" "play 2 --theme light" \
+            "drawn 2" "matching 4" "scoring 6"; do
+            set -- $spec
+            run=$((run + 1))
+            echo "::group::$spec"
+            npm run probe -- --at "$1" --players "$2" "${@:3}" \
+              --out ".probe/$run-$1-$2" || failed=1
+            echo "::endgroup::"
+          done
+          exit $failed
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: probe
+          path: .probe/
+          # The directory starts with a dot, which the action skips by default.
+          include-hidden-files: true
+          retention-days: 14
