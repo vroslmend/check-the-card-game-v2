@@ -28,6 +28,32 @@ import { PlayingCard } from "@/components/cards/PlayingCard";
 import type { Card } from "shared-types";
 import { Suit, CardRank } from "shared-types";
 import { AbilityTriptych, PileDiagram } from "@/app/rules/illustrations";
+import { SITE_DESCRIPTION, SITE_URL } from "@/lib/site";
+
+// Describes this page, so it renders here and not in the root layout, which
+// every route shares. A script tag because Next has no metadata field for
+// JSON-LD, and a client page still renders it into the server HTML.
+const gameSchema = {
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  name: "Check!",
+  // Trailing slash, so this agrees with the canonical and the sitemap entry.
+  url: `${SITE_URL}/`,
+  description: SITE_DESCRIPTION,
+  genre: "Card game",
+  gamePlatform: "Web browser",
+  applicationCategory: "GameApplication",
+  operatingSystem: "Any",
+  playMode: "MultiPlayer",
+  numberOfPlayers: { "@type": "QuantitativeValue", minValue: 2, maxValue: 6 },
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  isAccessibleForFree: true,
+  inLanguage: "en",
+};
+
+// Escaped and serialised once. A raw "<" in any field, most plausibly a future
+// edit to SITE_DESCRIPTION, would close the script element early.
+const gameSchemaJson = JSON.stringify(gameSchema).replace(/</g, "\\u003c");
 
 const NAV_ITEMS = [
   { label: "How it plays", href: "#how" },
@@ -970,5 +996,13 @@ function HomePage() {
 }
 
 export default function Home() {
-  return <HomePage />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: gameSchemaJson }}
+      />
+      <HomePage />
+    </>
+  );
 }
