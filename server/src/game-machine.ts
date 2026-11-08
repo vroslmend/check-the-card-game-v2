@@ -121,6 +121,53 @@ const findPresentSuccessor = (
   );
 };
 
+// A dropped player receives the same window as everyone else, on their turn or
+// for an ability they won by matching. If they are still away when it ends,
+// freeze their hand and mark them out for this round. The seat remains in
+// `players` so the results sheet and series history can still show it, and
+// resetForNewRound decides whether it is dealt back in from the player's
+// current connection state.
+const forfeitAwayPlayer = (
+  context: GameContext,
+  playerId: PlayerId | null | undefined,
+): Partial<GameContext> => {
+  const player = playerId ? context.players[playerId] : undefined;
+  if (!playerId || !player || player.isConnected || player.forfeited) {
+    return {};
+  }
+
+  const connectedSurvivor = context.turnOrder.find(
+    (id) =>
+      id !== playerId &&
+      context.players[id]?.isConnected &&
+      !context.players[id]?.forfeited,
+  );
+
+  return {
+    players: {
+      ...context.players,
+      [playerId]: {
+        ...player,
+        forfeited: true,
+        isLocked: true,
+      },
+    },
+    gameMasterId:
+      context.gameMasterId === playerId
+        ? (connectedSurvivor ?? context.gameMasterId)
+        : context.gameMasterId,
+    turnDeadline: null,
+    log: [
+      ...context.log,
+      createLogEntry(context.gameId, {
+        message: `${getPlayerNameForLog(playerId, context.players)} was away when their time ran out and forfeited this round.`,
+        type: "public",
+        tags: ["system-message"],
+      }),
+    ],
+  };
+};
+
 const handHostSeatTo = (context: GameContext, successorId: PlayerId) => ({
   gameMasterId: successorId,
   hostAwaySince: null,
@@ -490,17 +537,17 @@ const baseTurnStateNode = {
         })),
         "broadcastGameState",
       ],
-      // Turn timer: an unresolved ability fizzles. If its owner is the
-      // disconnected current player, that same ordinary deadline also marks
-      // the seat out for the round. Re-entering processes the next ability.
+      // Turn timer: an unresolved ability fizzles. If its owner is away, whether
+      // or not it is their turn, that same ordinary deadline also marks the
+      // seat out for the round. Re-entering processes the next ability.
       after: {
         turnTimer: [
           {
             target: "ability",
             reenter: true,
-            guard: "isCurrentAbilityOwnerDisconnected",
+            guard: "isAbilityOwnerDisconnected",
             actions: [
-              "forfeitDisconnectedCurrentPlayer",
+              "forfeitDisconnectedAbilityOwner",
               "fizzleTopAbility",
               "broadcastGameState",
             ],
@@ -514,10 +561,7 @@ const baseTurnStateNode = {
       },
       always: [
         {
-          guard: or([
-            "isAbilityOwnerLocked",
-            "isNonCurrentAbilityOwnerDisconnected",
-          ]),
+          guard: "isAbilityOwnerLocked",
           actions: ["fizzleTopAbility", "broadcastGameState"],
         },
         {
@@ -977,19 +1021,10 @@ export const gameMachine = setup({
       const owner = context.players[currentAbility.playerId];
       return !owner || owner.isLocked;
     },
-    isNonCurrentAbilityOwnerDisconnected: ({ context }) => {
-      const currentAbility = context.abilityStack.at(-1);
-      if (!currentAbility) return false;
-      return (
-        currentAbility.playerId !== context.currentPlayerId &&
-        !context.players[currentAbility.playerId]?.isConnected
-      );
-    },
-    isCurrentAbilityOwnerDisconnected: ({ context }) => {
+    isAbilityOwnerDisconnected: ({ context }) => {
       const currentAbility = context.abilityStack.at(-1);
       return (
         !!currentAbility &&
-        currentAbility.playerId === context.currentPlayerId &&
         !context.players[currentAbility.playerId]?.isConnected
       );
     },
@@ -1857,49 +1892,12 @@ export const gameMachine = setup({
       const successorId = findPresentSuccessor(context, host.id);
       return successorId ? handHostSeatTo(context, successorId) : {};
     }),
-    // A dropped current player receives the same turn window as everyone else.
-    // If they are still away when that window ends, freeze their hand and mark
-    // them out for this round. The seat remains in `players` so the results
-    // sheet and series history can still show it, and resetForNewRound decides
-    // whether it is dealt back in from the player's current connection state.
-    forfeitDisconnectedCurrentPlayer: assign(({ context }) => {
-      const playerId = context.currentPlayerId;
-      const player = playerId ? context.players[playerId] : undefined;
-      if (!playerId || !player || player.isConnected || player.forfeited) {
-        return {};
-      }
-
-      const connectedSurvivor = context.turnOrder.find(
-        (id) =>
-          id !== playerId &&
-          context.players[id]?.isConnected &&
-          !context.players[id]?.forfeited,
-      );
-
-      return {
-        players: {
-          ...context.players,
-          [playerId]: {
-            ...player,
-            forfeited: true,
-            isLocked: true,
-          },
-        },
-        gameMasterId:
-          context.gameMasterId === playerId
-            ? (connectedSurvivor ?? context.gameMasterId)
-            : context.gameMasterId,
-        turnDeadline: null,
-        log: [
-          ...context.log,
-          createLogEntry(context.gameId, {
-            message: `${getPlayerNameForLog(playerId, context.players)} was away when their turn expired and forfeited this round.`,
-            type: "public",
-            tags: ["system-message"],
-          }),
-        ],
-      };
-    }),
+    forfeitDisconnectedCurrentPlayer: assign(({ context }) =>
+      forfeitAwayPlayer(context, context.currentPlayerId),
+    ),
+    forfeitDisconnectedAbilityOwner: assign(({ context }) =>
+      forfeitAwayPlayer(context, context.abilityStack.at(-1)?.playerId),
+    ),
     reshuffleDiscardIntoDeck: assign(({ context }) => {
       return {
         ...rebuildDeck(context.discardPile, context.lockedCardIds, context.rng),
