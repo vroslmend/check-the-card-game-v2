@@ -223,7 +223,6 @@ export interface ServerToClientEvents {
   [SocketEventName.GAME_STATE_UPDATE]: (
     gameState: ClientCheckGameState,
   ) => void;
-  [SocketEventName.SERVER_LOG_ENTRY]: (logMessage: RichGameLogMessage) => void;
   [SocketEventName.INITIAL_PEEK_INFO]: (data: { hand: Card[] }) => void;
   [SocketEventName.ABILITY_PEEK_RESULT]: (payload: {
     /** Every card of one confirmed peek, in one message, so all its flips
@@ -235,7 +234,6 @@ export interface ServerToClientEvents {
       cardIndex: number;
     }>;
   }) => void;
-  [SocketEventName.INITIAL_LOGS]: (logs: RichGameLogMessage[]) => void;
   [SocketEventName.ERROR_MESSAGE]: (error: { message: string }) => void;
   [SocketEventName.NEW_CHAT_MESSAGE]: (chatMessage: ChatMessage) => void;
   [SocketEventName.SEAT_CLAIMED_ELSEWHERE]: () => void;
@@ -279,8 +277,6 @@ export enum SocketEventName {
   SEND_CHAT_MESSAGE = "SEND_CHAT_MESSAGE",
   INITIAL_PEEK_INFO = "INITIAL_PEEK_INFO",
   ABILITY_PEEK_RESULT = "ABILITY_PEEK_RESULT",
-  SERVER_LOG_ENTRY = "SERVER_LOG_ENTRY",
-  INITIAL_LOGS = "INITIAL_LOGS",
   NEW_CHAT_MESSAGE = "NEW_CHAT_MESSAGE",
   /** Sent to a client whose seat has just been claimed by another one, so it
    *  can say so instead of freezing. Only ever reaches a socket that is still
