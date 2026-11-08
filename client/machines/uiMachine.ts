@@ -61,7 +61,6 @@ const COLD_START_EXPLAIN_ID = "coldStartExplain";
 
 type ServerToClientEvents =
   | { type: "CLIENT_GAME_STATE_UPDATED"; gameState: ClientCheckGameState }
-  | { type: "NEW_GAME_LOG"; logMessage: RichGameLogMessage }
   | { type: "NEW_CHAT_MESSAGE"; chatMessage: ChatMessage }
   | { type: "INITIAL_PEEK_INFO"; hand: Card[] }
   | {
@@ -311,16 +310,6 @@ export const uiMachine = setup({
         return undefined;
       },
       pendingActionSince: () => null,
-    }),
-    addGameLog: assign({
-      currentGameState: ({ context, event }) => {
-        assertEvent(event, "NEW_GAME_LOG");
-        if (!context.currentGameState) return undefined;
-        return {
-          ...context.currentGameState,
-          log: [...context.currentGameState.log, event.logMessage],
-        };
-      },
     }),
     addChatMessage: assign({
       currentGameState: ({ context, event }) => {
@@ -940,7 +929,6 @@ export const uiMachine = setup({
           actions: ["setCurrentGameState", "syncAbilityContext"],
         },
         INITIAL_LOGS_RECEIVED: { actions: "setInitialLogs" },
-        NEW_GAME_LOG: { actions: "addGameLog" },
         NEW_CHAT_MESSAGE: { actions: "addChatMessage" },
         SUBMIT_CHAT_MESSAGE: { actions: "emitChatMessage" },
         ABILITY_PEEK_RESULT: {

@@ -21,7 +21,6 @@ import {
   type ChatMessage,
   type ClientCheckGameState,
   type ClientToServerEvents,
-  type RichGameLogMessage,
   type ServerToClientEvents,
 } from "shared-types";
 import { DeviceProvider } from "@/context/DeviceContext";
@@ -76,8 +75,6 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
       lastStateAt.current = Date.now();
       actor.send({ type: "CLIENT_GAME_STATE_UPDATED", gameState: g });
     };
-    const lg = (m: RichGameLogMessage) =>
-      actor.send({ type: "NEW_GAME_LOG", logMessage: m });
     const cm = (m: ChatMessage) =>
       actor.send({ type: "NEW_CHAT_MESSAGE", chatMessage: m });
     const pk = (d: { hand: Card[] }) =>
@@ -92,8 +89,6 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
         { error: err?.message ?? "connection error" },
         "Socket connection error",
       );
-    const il = (l: RichGameLogMessage[]) =>
-      actor.send({ type: "INITIAL_LOGS_RECEIVED", logs: l });
     const onConnect = () =>
       actor.send({
         type: "CONNECT",
@@ -116,13 +111,11 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
     };
 
     socket.on(SocketEventName.GAME_STATE_UPDATE, gs);
-    socket.on(SocketEventName.SERVER_LOG_ENTRY, lg);
     socket.on(SocketEventName.NEW_CHAT_MESSAGE, cm);
     socket.on(SocketEventName.INITIAL_PEEK_INFO, pk);
     socket.on(SocketEventName.ABILITY_PEEK_RESULT, pr);
     socket.on(SocketEventName.ERROR_MESSAGE, er);
     socket.on(SocketEventName.SEAT_CLAIMED_ELSEWHERE, sce);
-    socket.on(SocketEventName.INITIAL_LOGS, il);
     socket.on("connect", onConnect);
     socket.on("connect_error", ce);
     socket.on("disconnect", onDisconnect);
@@ -144,13 +137,11 @@ function UIMachineEffects({ actor }: { actor: UIMachineActorRef }) {
       socketSub.unsubscribe();
       navSub.unsubscribe();
       socket.off(SocketEventName.GAME_STATE_UPDATE, gs);
-      socket.off(SocketEventName.SERVER_LOG_ENTRY, lg);
       socket.off(SocketEventName.NEW_CHAT_MESSAGE, cm);
       socket.off(SocketEventName.INITIAL_PEEK_INFO, pk);
       socket.off(SocketEventName.ABILITY_PEEK_RESULT, pr);
       socket.off(SocketEventName.ERROR_MESSAGE, er);
       socket.off(SocketEventName.SEAT_CLAIMED_ELSEWHERE, sce);
-      socket.off(SocketEventName.INITIAL_LOGS, il);
       socket.off("connect", onConnect);
       socket.off("connect_error", ce);
       socket.off("disconnect", onDisconnect);
