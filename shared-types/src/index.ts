@@ -4,6 +4,12 @@
 export type PlayerId = string;
 export type GameId = string;
 
+// The table sizes a game can be created with. The server clamps to these, and the
+// seat picker and the landing page schema read them. Copy states the range by hand
+// in client/lib/site.ts, client/app/page.tsx and the rules page, so change it too.
+export const MIN_SEATS = 2;
+export const MAX_SEATS = 6;
+
 // ================================================================================================
 //                                      GAME ENUMERATIONS
 // ================================================================================================

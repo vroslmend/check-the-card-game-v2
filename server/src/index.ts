@@ -25,6 +25,8 @@ import {
   ServerToClientEvents,
   AttemptRejoinResponse,
   Card,
+  MAX_SEATS,
+  MIN_SEATS,
 } from "shared-types";
 
 type GameMachineActorRef = ActorRefFrom<typeof gameMachine>;
@@ -504,7 +506,7 @@ io.on("connection", (socket: Socket) => {
         // falls through to the machine's env default.
         const requestedSeats = Number(playerSetupData?.maxPlayers);
         const maxPlayers = Number.isInteger(requestedSeats)
-          ? Math.min(6, Math.max(2, requestedSeats))
+          ? Math.min(MAX_SEATS, Math.max(MIN_SEATS, requestedSeats))
           : undefined;
         const finalPlayerSetupData = {
           ...playerSetupData,
