@@ -142,8 +142,10 @@ const ActionBarComponent: React.FC = () => {
           ran three times the gap above it however the margins were tuned.
           Fixed height so it cannot reflow the row above. */}
       <div
-        // Two lines either way: the slot and the type shrink together, so a
-        // wrapping prompt still fits and does not clip.
+        // Two lines above the tiny tier, where the slot and the type shrink
+        // together so a wrapping prompt fits. At tiny the slot holds one line and
+        // truncate ends a long prompt in an ellipsis. Centred text that overflows
+        // is start-aligned, so the opening words stay rather than both ends.
         className="flex h-10 items-start justify-center short:h-8 tiny:h-5"
         aria-live="polite"
       >
