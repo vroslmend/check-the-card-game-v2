@@ -46,29 +46,6 @@ export const viewport: Viewport = {
   themeColor: "#121212",
 };
 
-// A script tag because Next has no metadata field for JSON-LD.
-const gameSchema = {
-  "@context": "https://schema.org",
-  "@type": "VideoGame",
-  name: "Check!",
-  // Trailing slash, so this agrees with the canonical and the sitemap entry.
-  url: `${SITE_URL}/`,
-  description: SITE_DESCRIPTION,
-  genre: "Card game",
-  gamePlatform: "Web browser",
-  applicationCategory: "GameApplication",
-  operatingSystem: "Any",
-  playMode: "MultiPlayer",
-  numberOfPlayers: { "@type": "QuantitativeValue", minValue: 2, maxValue: 6 },
-  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  isAccessibleForFree: true,
-  inLanguage: "en",
-};
-
-// Escaped and serialised once. A raw "<" in any field, most plausibly a future
-// edit to SITE_DESCRIPTION, would close the script element early.
-const gameSchemaJson = JSON.stringify(gameSchema).replace(/</g, "\\u003c");
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -77,10 +54,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={nunito.variable}>
       <body className="font-game antialiased">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: gameSchemaJson }}
-        />
         <Providers>{children}</Providers>
       </body>
     </html>
