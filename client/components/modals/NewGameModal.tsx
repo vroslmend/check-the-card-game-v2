@@ -12,6 +12,12 @@ import {
 import { useUIActorRef, useUISelector } from "@/context/GameUIContext";
 import { ColdStartWaitNotice } from "@/components/modals/ColdStartWaitNotice";
 import { cn } from "@/lib/utils";
+import { MAX_SEATS, MIN_SEATS } from "shared-types";
+
+const SEAT_CHOICES = Array.from(
+  { length: MAX_SEATS - MIN_SEATS + 1 },
+  (_, i) => MIN_SEATS + i,
+);
 
 interface NewGameModalProps {
   isModalOpen: boolean;
@@ -104,7 +110,7 @@ export function NewGameModal({
           >
             {/* Selection is ink-filled, not accent: the Create pill stays the
                 one accent action on this sheet. */}
-            {[2, 3, 4, 5, 6].map((n) => (
+            {SEAT_CHOICES.map((n) => (
               <button
                 key={n}
                 type="button"

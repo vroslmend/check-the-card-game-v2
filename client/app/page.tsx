@@ -26,7 +26,7 @@ import { JoinGameModal } from "@/components/modals/JoinGameModal";
 import { useDevice } from "@/context/DeviceContext";
 import { PlayingCard } from "@/components/cards/PlayingCard";
 import type { Card } from "shared-types";
-import { Suit, CardRank } from "shared-types";
+import { Suit, CardRank, MAX_SEATS, MIN_SEATS } from "shared-types";
 import { AbilityTriptych, PileDiagram } from "@/app/rules/illustrations";
 import { SITE_DESCRIPTION, SITE_URL } from "@/lib/site";
 
@@ -45,7 +45,11 @@ const gameSchema = {
   applicationCategory: "GameApplication",
   operatingSystem: "Any",
   playMode: "MultiPlayer",
-  numberOfPlayers: { "@type": "QuantitativeValue", minValue: 2, maxValue: 6 },
+  numberOfPlayers: {
+    "@type": "QuantitativeValue",
+    minValue: MIN_SEATS,
+    maxValue: MAX_SEATS,
+  },
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   isAccessibleForFree: true,
   inLanguage: "en",
