@@ -139,4 +139,6 @@ jobs:
         with:
           name: probe
           path: .probe/
+          # The directory starts with a dot, which the action skips by default.
+          include-hidden-files: true
           retention-days: 14
