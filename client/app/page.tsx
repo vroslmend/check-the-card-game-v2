@@ -563,7 +563,11 @@ function HomePage() {
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 1.2, ease: [0.6, 0.01, 0.05, 0.95] }}
-        className="fixed top-0 z-50 w-full border-b border-hairline bg-ground"
+        // width-before-scroll-bar is the class Radix's scroll lock looks for. A
+        // fixed header ignores the margin it puts on body when a dialog hides the
+        // scrollbar, so it needs the same margin itself, and inset-x-0 rather
+        // than w-full for the margin to narrow it.
+        className="width-before-scroll-bar fixed inset-x-0 top-0 z-50 border-b border-hairline bg-ground"
       >
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-8">
           <Link
