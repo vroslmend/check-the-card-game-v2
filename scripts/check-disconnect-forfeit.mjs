@@ -374,6 +374,57 @@ check(
 );
 abilityDropActor.stop();
 
+// Section 11.D holds for an ability won by matching too, which belongs to a
+// player other than the current one and sits on top of the current one's.
+const matchedDropActor = scenarioActor({
+  players: {
+    host: scenarioPlayer("host"),
+    other: scenarioPlayer("other", {
+      hand: [
+        { id: "other-jack", rank: "J", suit: "H" },
+        { id: "other-card", rank: "5", suit: "S" },
+      ],
+    }),
+  },
+  turnOrder: ["host", "other"],
+  gameMasterId: "host",
+  currentPlayerId: "host",
+  deck: [{ id: "ability-card", rank: "J", suit: "S" }],
+});
+matchedDropActor.send({ type: "DRAW_FROM_DECK", playerId: "host" });
+matchedDropActor.send({ type: "DISCARD_DRAWN_CARD", playerId: "host" });
+matchedDropActor.send({
+  type: "ATTEMPT_MATCH",
+  playerId: "other",
+  payload: { handCardIndex: 0 },
+});
+const matchedStack = () =>
+  matchedDropActor.snapshot().context.abilityStack.map((a) => a.playerId);
+const matchedDeadline = matchedDropActor.snapshot().context.turnDeadline;
+const matchedStackBefore = matchedStack().join();
+matchedDropActor.send({ type: "PLAYER_DISCONNECTED", playerId: "other" });
+check(
+  "a matcher who drops keeps their ability for the ordinary window",
+  matchedStackBefore === "host,other" &&
+    matchedStack().join() === "host,other" &&
+    matchedDropActor.snapshot().context.turnDeadline === matchedDeadline,
+  `stack before=${matchedStackBefore} after=${matchedStack().join()}`,
+);
+await matchedDropActor.waitFor(
+  (c) => c.players.other.forfeited === true,
+  "the matcher to forfeit after the ordinary window",
+  5_000,
+);
+const matchedAfter = matchedDropActor.snapshot().context;
+check(
+  "a matcher still away when it runs out sits out, and the turn goes on",
+  matchedStack().join() === "host" &&
+    !matchedAfter.players.host.forfeited &&
+    matchedAfter.currentTurnSegment === "ABILITY",
+  `stack=${matchedStack().join()} segment=${matchedAfter.currentTurnSegment}`,
+);
+matchedDropActor.stop();
+
 const tieActor = scenarioActor({
   players: {
     "score-a": scenarioPlayer("score-a"),
